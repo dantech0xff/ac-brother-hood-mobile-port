@@ -1,0 +1,80 @@
+{
+  "pack": "1",
+  "total_entries": 4,
+  "part_count": 1,
+  "part_starts": [
+    0
+  ],
+  "entries": [
+    {
+      "index": 0,
+      "part": "1",
+      "offset": 26,
+      "packed_size": 5549,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-000-marker-130.bin",
+      "decoded_size": 10871,
+      "sha256": "ba265af980651ed3e730118742419627ff6e274e30d1359a470a25b7f5c53256",
+      "detected_type": "Gameloft sprite binary",
+      "semantic_type": "Gameloft sprite binary",
+      "semantic_confidence": "proven",
+      "sprite_version": 1503,
+      "sprite_flags": 16843009,
+      "sprite_module_count": 6
+    },
+    {
+      "index": 1,
+      "part": "1",
+      "offset": 5575,
+      "packed_size": 2817,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-001-marker-130.bin",
+      "decoded_size": 7928,
+      "sha256": "29cf378fd46c461f4f2eccafd53986e508c952884c02063f3cba5d71c7df3da8",
+      "detected_type": "Gameloft sprite binary",
+      "semantic_type": "Gameloft sprite binary",
+      "semantic_confidence": "proven",
+      "sprite_version": 1503,
+      "sprite_flags": 16843009,
+      "sprite_module_count": 167
+    },
+    {
+      "index": 2,
+      "part": "1",
+      "offset": 8392,
+      "packed_size": 1222,
+      "marker": 3,
+      "marker_value": 3,
+      "compression": "none",
+      "file": "entry-002-marker-003.bin",
+      "decoded_size": 1221,
+      "sha256": "413ab8166cc39d912d4934b430a38f7331d59869bd182e2e3212d8e5ae523ecf",
+      "detected_type": "game-specific binary",
+      "semantic_type": "font Unicode-to-glyph hash table",
+      "semantic_confidence": "high",
+      "semantic_file": "entry-002-font-glyph-map.json"
+    },
+    {
+      "index": 3,
+      "part": "1",
+      "offset": 9614,
+      "packed_size": 3110,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-003-marker-130.bin",
+      "decoded_size": 7465,
+      "sha256": "afe7de505d93009a20abef513e24e6a879f19f99038967ae063f6df2c9bc9f4d",
+      "detected_type": "Gameloft sprite binary",
+      "semantic_type": "Gameloft sprite binary",
+      "semantic_confidence": "proven",
+      "sprite_version": 1503,
+      "sprite_flags": 16843009,
+      "sprite_module_count": 166
+    }
+  ]
+}

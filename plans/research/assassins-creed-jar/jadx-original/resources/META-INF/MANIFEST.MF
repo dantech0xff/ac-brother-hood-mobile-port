@@ -1,0 +1,17 @@
+Manifest-Version: 1.0
+Created-By: 1.4.2 (Sun Microsystems Inc.)
+MIDlet-Name: Assassin's Creed - Brotherhood
+MIDlet-Vendor: Gameloft SA
+MIDlet-Version: 1.2.7
+MIDlet-1: Assassin's Creed - Brotherhood, /icon.png, GloftASBR
+MIDlet-Icon: /icon.png
+MicroEdition-Profile: MIDP-2.0
+MicroEdition-Configuration: CLDC-1.0
+MIDlet-Touch-Support: True
+UseNativeTextButtons: false
+ReverseSoftkeys: True
+UseNativeCommands: false
+LGE-MIDlet-TargetLCD-Height: 400
+LGE-MIDlet-TargetLCD-Width: 240
+LGE-MIDlet-Indicator: Hide
+

@@ -1,0 +1,183 @@
+{
+  "format": "sprite module substitution table",
+  "record_count": 44,
+  "record_schema": "u16LE source_module, u16LE replacement_module",
+  "mappings": [
+    {
+      "source_module": 0,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 1,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 2,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 3,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 4,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 5,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 6,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 7,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 8,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 9,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 10,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 11,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 12,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 13,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 14,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 15,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 16,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 17,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 18,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 19,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 20,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 21,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 22,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 23,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 24,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 25,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 26,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 27,
+      "replacement_module": 178
+    },
+    {
+      "source_module": 34,
+      "replacement_module": 38
+    },
+    {
+      "source_module": 35,
+      "replacement_module": 39
+    },
+    {
+      "source_module": 36,
+      "replacement_module": 40
+    },
+    {
+      "source_module": 37,
+      "replacement_module": 41
+    },
+    {
+      "source_module": 42,
+      "replacement_module": 54
+    },
+    {
+      "source_module": 43,
+      "replacement_module": 55
+    },
+    {
+      "source_module": 44,
+      "replacement_module": 56
+    },
+    {
+      "source_module": 45,
+      "replacement_module": 57
+    },
+    {
+      "source_module": 46,
+      "replacement_module": 58
+    },
+    {
+      "source_module": 47,
+      "replacement_module": 59
+    },
+    {
+      "source_module": 48,
+      "replacement_module": 60
+    },
+    {
+      "source_module": 49,
+      "replacement_module": 61
+    },
+    {
+      "source_module": 50,
+      "replacement_module": 65
+    },
+    {
+      "source_module": 51,
+      "replacement_module": 62
+    },
+    {
+      "source_module": 52,
+      "replacement_module": 63
+    },
+    {
+      "source_module": 53,
+      "replacement_module": 64
+    }
+  ]
+}

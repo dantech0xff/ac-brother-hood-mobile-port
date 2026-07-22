@@ -1,0 +1,596 @@
+{
+  "consumed_to_eof": true,
+  "evidence": {
+    "basis": "direct translation of the loader and seven runtime pixel branches, plus an explicitly non-runtime 0x27f1 recovery derived from exact corpus dimensions, payload consumption, and palette bounds",
+    "confidence_scope": {
+      "loader_grammar_and_record_offsets": "proven",
+      "pixel_code_0x27f1_static_recovery": "high empirical/data-derived",
+      "seven_runtime_pixel_branches": "proven",
+      "unlisted_branch_values": "unsupported and preserved without image output"
+    },
+    "loader": {
+      "bytecode": "reconstructed-project/bytecode/b.javap.txt:1002",
+      "fallback_source": "reconstructed-project/src/fallback/b.java:114",
+      "method": "b.a(byte[], int)",
+      "simple_source": "reconstructed-project/src/simple/b.java:123",
+      "structured_source": "reconstructed-project/src/structured/b.java:123"
+    },
+    "pixel_decoder": {
+      "data_derived_static_recovery": {
+        "classification": "data-derived-static-recovery",
+        "confidence": "high",
+        "evidence_basis": "empirical-corpus-invariants",
+        "pixel_code": "0x27f1",
+        "runtime_bytecode_branch": false
+      },
+      "method": "b.a(byte[], int, int, int)",
+      "runtime_proven_codes": [
+        "0x0200",
+        "0x0400",
+        "0x1600",
+        "0x5602",
+        "0x56f2",
+        "0x64f0",
+        "0xa640"
+      ],
+      "structured_source": "reconstructed-project/src/structured/b.java:1371"
+    }
+  },
+  "format": "Gameloft sprite binary parsed by b",
+  "generated_pngs": [
+    {
+      "crc_validation": "passed",
+      "file": "module-0000-palette-00-24x7.png",
+      "height": 7,
+      "module_index": 0,
+      "palette_index": 0,
+      "sha256": "020d3b5edf334a7096b7df9ace6c66b80b2f7bfeb50acded27bb3dbe504ce17b",
+      "size": 99,
+      "width": 24
+    }
+  ],
+  "header": {
+    "confidence": "proven",
+    "flags_aD": 17155329,
+    "flags_aD_hex": "0x0105c501",
+    "magic_or_version": 1503,
+    "magic_or_version_hex": "0x05df",
+    "module_count_ab": 1,
+    "module_count_offset": 6,
+    "set_bits": [
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00000001"
+      },
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00000100"
+      },
+      {
+        "loader_effect": "ar/as and rectangle values use u16 LE storage",
+        "mask": "0x00000400"
+      },
+      {
+        "loader_effect": "ap/ar/as/aq records include one at byte",
+        "mask": "0x00004000"
+      },
+      {
+        "loader_effect": "am/an records and per-ai ao deltas are present",
+        "mask": "0x00008000"
+      },
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00010000"
+      },
+      {
+        "loader_effect": "ax/ay values use u16 LE storage instead of signed bytes",
+        "mask": "0x00040000"
+      },
+      {
+        "loader_effect": "palette, pixel-code, and per-module aB payload section may follow",
+        "mask": "0x01000000"
+      }
+    ],
+    "source_range": {
+      "end_exclusive": 8,
+      "end_exclusive_hex": "0x00000008",
+      "size": 8,
+      "start": 0,
+      "start_hex": "0x00000000"
+    }
+  },
+  "input_size": 89,
+  "limitations": [],
+  "module_pixel_results": [
+    {
+      "bytes_consumed": 15,
+      "classification": "runtime-proven",
+      "confidence": "proven",
+      "evidence_basis": "recovered-runtime-bytecode",
+      "height": 7,
+      "module_index": 0,
+      "palette_variants": 1,
+      "payload_size": 15,
+      "pixel_code": "0x64f0",
+      "pixel_count": 168,
+      "png_count": 1,
+      "produced_slots_before_crop": 168,
+      "runtime_bytecode_branch": true,
+      "status": "decoded",
+      "trailing_bytes": 0,
+      "width": 24
+    }
+  ],
+  "parse_end": 89,
+  "reference_observations": {
+    "interpretation": "Preserved as observations, not parse failures: b does not establish whether every stored record is drawn, and 0xff/0x3ff values occur in otherwise structurally valid assets.",
+    "items": [],
+    "status": "all-indexes-within-loaded-counts"
+  },
+  "schema_version": 1,
+  "sections": [
+    {
+      "confidence": "proven",
+      "count": 1,
+      "id": "modules",
+      "records": [
+        {
+          "aB_payload": {
+            "data_range": {
+              "end_exclusive": 89,
+              "end_exclusive_hex": "0x00000059",
+              "size": 15,
+              "start": 74,
+              "start_hex": "0x0000004a"
+            },
+            "length": 15,
+            "length_offset": 72,
+            "sha256": "958b6f88d1e0caaaec67ba89e59c9d19c42379ad9e8090834138ef0b21cf009e"
+          },
+          "ae_width": 24,
+          "af_height": 7,
+          "dimension_storage": "u8",
+          "index": 0,
+          "pixel_reconstruction": {
+            "bytes_consumed": 15,
+            "classification": "runtime-proven",
+            "confidence": "proven",
+            "evidence_basis": "recovered-runtime-bytecode",
+            "height": 7,
+            "palette_variants": 1,
+            "payload_size": 15,
+            "pixel_code": "0x64f0",
+            "pixel_count": 168,
+            "png_count": 1,
+            "produced_slots_before_crop": 168,
+            "runtime_bytecode_branch": true,
+            "status": "decoded",
+            "trailing_bytes": 0,
+            "width": 24
+          },
+          "runtime_type_aU": 0,
+          "source_range": {
+            "end_exclusive": 11,
+            "end_exclusive_hex": "0x0000000b",
+            "size": 3,
+            "start": 8,
+            "start_hex": "0x00000008"
+          },
+          "tag": 0
+        }
+      ],
+      "runtime_fields": [
+        "aU",
+        "aV",
+        "aW",
+        "ac",
+        "ad",
+        "ae",
+        "af",
+        "ag",
+        "ah"
+      ],
+      "source_range": {
+        "end_exclusive": 11,
+        "end_exclusive_hex": "0x0000000b",
+        "size": 3,
+        "start": 8,
+        "start_hex": "0x00000008"
+      }
+    },
+    {
+      "confidence": "proven",
+      "consumer_evidence": "b reconstructs an index from ap/aq; aq bit 0x10 selects recursive ai-frame drawing, otherwise the index selects a module",
+      "count": 1,
+      "count_offset": 11,
+      "id": "ap_ar_as_aq_records",
+      "records": [
+        {
+          "ap": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -11,
+            "raw_u16": 65525
+          },
+          "as": {
+            "java_i16": -3,
+            "raw_u16": 65533
+          },
+          "at": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "index": 0,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 0,
+          "source_range": {
+            "end_exclusive": 20,
+            "end_exclusive_hex": "0x00000014",
+            "size": 7,
+            "start": 13,
+            "start_hex": "0x0000000d"
+          },
+          "transform_bits": 0
+        }
+      ],
+      "runtime_fields": [
+        "ap",
+        "ar",
+        "as",
+        "at",
+        "aq"
+      ],
+      "source_range": {
+        "end_exclusive": 20,
+        "end_exclusive_hex": "0x00000014",
+        "size": 9,
+        "start": 11,
+        "start_hex": "0x0000000b"
+      }
+    },
+    {
+      "confidence": "proven",
+      "count": 1,
+      "count_offset": 20,
+      "id": "am_or_an_records",
+      "records": [
+        {
+          "index": 0,
+          "raw_values": [
+            65525,
+            65533,
+            24,
+            7
+          ],
+          "runtime_values": [
+            -11,
+            -3,
+            24,
+            7
+          ],
+          "source_range": {
+            "end_exclusive": 30,
+            "end_exclusive_hex": "0x0000001e",
+            "size": 8,
+            "start": 22,
+            "start_hex": "0x00000016"
+          },
+          "storage": "u16-le",
+          "value_order_from_consumer": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        }
+      ],
+      "runtime_fields": [
+        "am",
+        "an"
+      ],
+      "source_range": {
+        "end_exclusive": 30,
+        "end_exclusive_hex": "0x0000001e",
+        "size": 10,
+        "start": 20,
+        "start_hex": "0x00000014"
+      }
+    },
+    {
+      "ai_aj_ao_range": {
+        "end_exclusive": 36,
+        "end_exclusive_hex": "0x00000024",
+        "size": 6,
+        "start": 30,
+        "start_hex": "0x0000001e"
+      },
+      "ak_or_al_range": {
+        "end_exclusive": 44,
+        "end_exclusive_hex": "0x0000002c",
+        "size": 8,
+        "start": 36,
+        "start_hex": "0x00000024"
+      },
+      "ak_or_al_records": [
+        {
+          "index": 0,
+          "raw_values": [
+            65525,
+            65533,
+            24,
+            7
+          ],
+          "runtime_values": [
+            -11,
+            -3,
+            24,
+            7
+          ],
+          "source_range": {
+            "end_exclusive": 44,
+            "end_exclusive_hex": "0x0000002c",
+            "size": 8,
+            "start": 36,
+            "start_hex": "0x00000024"
+          },
+          "storage": "u16-le",
+          "value_order_from_accessors": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        }
+      ],
+      "ao_total": 1,
+      "confidence": "proven",
+      "count": 1,
+      "count_offset": 30,
+      "id": "ai_aj_ao_and_ak_or_al_records",
+      "records": [
+        {
+          "ai": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aj": {
+            "java_i16": 0,
+            "raw_u16": 0
+          },
+          "ao_delta": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "ao_end_exclusive": 1,
+          "ao_start": 0,
+          "ap_record_span": {
+            "count": 1,
+            "end_exclusive": 1,
+            "start": 0
+          },
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 36,
+            "end_exclusive_hex": "0x00000024",
+            "size": 4,
+            "start": 32,
+            "start_hex": "0x00000020"
+          }
+        }
+      ],
+      "runtime_fields": [
+        "ai",
+        "aj",
+        "ao",
+        "ak",
+        "al"
+      ],
+      "source_range": {
+        "end_exclusive": 44,
+        "end_exclusive_hex": "0x0000002c",
+        "size": 14,
+        "start": 30,
+        "start_hex": "0x0000001e"
+      }
+    },
+    {
+      "confidence": "proven",
+      "consumer_evidence": "b reconstructs an ai-frame index from av/i, then applies ax/ay and transform bits",
+      "count": 1,
+      "count_offset": 44,
+      "id": "av_aw_ax_ay_i_records",
+      "records": [
+        {
+          "av": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aw": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "ax": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "ay": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "i": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "index": 0,
+          "offset_storage": "u16-le",
+          "referenced_ai_frame_index": 0,
+          "source_range": {
+            "end_exclusive": 53,
+            "end_exclusive_hex": "0x00000035",
+            "size": 7,
+            "start": 46,
+            "start_hex": "0x0000002e"
+          },
+          "transform_bits": 0
+        }
+      ],
+      "runtime_fields": [
+        "av",
+        "aw",
+        "ax",
+        "ay",
+        "i"
+      ],
+      "source_range": {
+        "end_exclusive": 53,
+        "end_exclusive_hex": "0x00000035",
+        "size": 9,
+        "start": 44,
+        "start_hex": "0x0000002c"
+      }
+    },
+    {
+      "confidence": "proven",
+      "count": 1,
+      "count_offset": 53,
+      "id": "au_h_records",
+      "records": [
+        {
+          "au": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "av_record_span": {
+            "count": 1,
+            "end_exclusive": 1,
+            "start": 0
+          },
+          "h": {
+            "java_i16": 0,
+            "raw_u16": 0
+          },
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 58,
+            "end_exclusive_hex": "0x0000003a",
+            "size": 3,
+            "start": 55,
+            "start_hex": "0x00000037"
+          }
+        }
+      ],
+      "runtime_fields": [
+        "au",
+        "h"
+      ],
+      "source_range": {
+        "end_exclusive": 58,
+        "end_exclusive_hex": "0x0000003a",
+        "size": 5,
+        "start": 53,
+        "start_hex": "0x00000035"
+      }
+    },
+    {
+      "confidence": "proven",
+      "confidence_scope": "loader structure and source boundaries",
+      "id": "palette_pixel_code_and_aB_payloads",
+      "palette_count": 1,
+      "palette_format": {
+        "behavior": "u32 LE value copied directly to runtime ARGB int",
+        "hex": "0x8888",
+        "implemented_branch": true,
+        "offset": 58,
+        "value": 34952
+      },
+      "palette_size_byte": 2,
+      "palette_size_effective": 2,
+      "palettes": [
+        {
+          "argb": [
+            "0xff000000",
+            "0x00ff00ff"
+          ],
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 70,
+            "end_exclusive_hex": "0x00000046",
+            "size": 8,
+            "start": 62,
+            "start_hex": "0x0000003e"
+          }
+        }
+      ],
+      "payload_count": 1,
+      "payloads": [
+        {
+          "data_range": {
+            "end_exclusive": 89,
+            "end_exclusive_hex": "0x00000059",
+            "size": 15,
+            "start": 74,
+            "start_hex": "0x0000004a"
+          },
+          "length": 15,
+          "length_offset": 72,
+          "length_storage": "u16-le",
+          "module_index": 0,
+          "sha256": "958b6f88d1e0caaaec67ba89e59c9d19c42379ad9e8090834138ef0b21cf009e"
+        }
+      ],
+      "pixel_code": {
+        "behavior": "palette index plus run length in one byte",
+        "classification": "runtime-proven",
+        "confidence": "proven",
+        "evidence_basis": "recovered-runtime-bytecode",
+        "hex": "0x64f0",
+        "implemented_branch": true,
+        "offset": 70,
+        "runtime_bytecode_branch": true,
+        "value": 25840
+      },
+      "runtime_fields": [
+        "j",
+        "k",
+        "aG",
+        "aL",
+        "aB",
+        "aC"
+      ],
+      "source_range": {
+        "end_exclusive": 89,
+        "end_exclusive_hex": "0x00000059",
+        "size": 31,
+        "start": 58,
+        "start_hex": "0x0000003a"
+      }
+    }
+  ],
+  "source": {
+    "compression": "none",
+    "decoded_file": "pack-3/entry-042-marker-003.bin",
+    "decoded_size_actual": 89,
+    "decoded_size_recorded": 89,
+    "detected_type": "Gameloft sprite binary",
+    "entry_index": 42,
+    "marker": 3,
+    "marker_value": 3,
+    "metadata_file": "pack-3/metadata.json",
+    "pack": "3",
+    "pack_offset": 145931,
+    "packed_size": 90,
+    "part": "3.1",
+    "sha256_actual": "b80bb89824a536b354332b1ed2d5ce77a2158ea88837aade97865fd79a116c86",
+    "sha256_matches": true,
+    "sha256_recorded": "b80bb89824a536b354332b1ed2d5ce77a2158ea88837aade97865fd79a116c86",
+    "size_matches": true
+  },
+  "static_only": true,
+  "status": "success"
+}

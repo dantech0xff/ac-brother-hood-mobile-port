@@ -1,0 +1,203 @@
+Classfile assassins_creed_-_br_320x240_136711.jar!/GloftASBR.class
+  Last modified Sep 28, 2010; size 1134 bytes
+  SHA-256 checksum ee267985713214f63a2e5c7b41cb5b2c5f8f18c9c7d830638d2110a178b9ef34
+public class GloftASBR extends javax.microedition.midlet.MIDlet
+  minor version: 3
+  major version: 45
+  flags: (0x0021) ACC_PUBLIC, ACC_SUPER
+  this_class: #4                          // GloftASBR
+  super_class: #8                         // javax/microedition/midlet/MIDlet
+  interfaces: 0, fields: 3, methods: 4, attributes: 0
+Constant pool:
+   #1 = String             #41            // 0
+   #2 = String             #45            // HAS-BLOOD
+   #3 = String             #49            // MIDlet-Version
+   #4 = Class              #44            // GloftASBR
+   #5 = Class              #59            // java/lang/Exception
+   #6 = Class              #60            // java/lang/String
+   #7 = Class              #61            // javax/microedition/lcdui/Display
+   #8 = Class              #62            // javax/microedition/midlet/MIDlet
+   #9 = Class              #63            // k
+  #10 = Fieldref           #4.#24         // GloftASBR.a:Lk;
+  #11 = Fieldref           #4.#25         // GloftASBR.b:Ljava/lang/String;
+  #12 = Fieldref           #4.#27         // GloftASBR.c:LGloftASBR;
+  #13 = Fieldref           #9.#26         // k.bK:Z
+  #14 = Methodref          #6.#28         // java/lang/String.equals:(Ljava/lang/Object;)Z
+  #15 = Methodref          #7.#30         // javax/microedition/lcdui/Display.getDisplay:(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+  #16 = Methodref          #7.#33         // javax/microedition/lcdui/Display.setCurrent:(Ljavax/microedition/lcdui/Displayable;)V
+  #17 = Methodref          #8.#22         // javax/microedition/midlet/MIDlet."<init>":()V
+  #18 = Methodref          #8.#29         // javax/microedition/midlet/MIDlet.getAppProperty:(Ljava/lang/String;)Ljava/lang/String;
+  #19 = Methodref          #8.#31         // javax/microedition/midlet/MIDlet.notifyDestroyed:()V
+  #20 = Methodref          #8.#32         // javax/microedition/midlet/MIDlet.notifyPaused:()V
+  #21 = Methodref          #9.#23         // k."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+  #22 = NameAndType        #42:#34        // "<init>":()V
+  #23 = NameAndType        #42:#36        // "<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+  #24 = NameAndType        #51:#48        // a:Lk;
+  #25 = NameAndType        #52:#47        // b:Ljava/lang/String;
+  #26 = NameAndType        #53:#50        // bK:Z
+  #27 = NameAndType        #54:#46        // c:LGloftASBR;
+  #28 = NameAndType        #56:#35        // equals:(Ljava/lang/Object;)Z
+  #29 = NameAndType        #57:#37        // getAppProperty:(Ljava/lang/String;)Ljava/lang/String;
+  #30 = NameAndType        #58:#39        // getDisplay:(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+  #31 = NameAndType        #64:#34        // notifyDestroyed:()V
+  #32 = NameAndType        #65:#34        // notifyPaused:()V
+  #33 = NameAndType        #67:#38        // setCurrent:(Ljavax/microedition/lcdui/Displayable;)V
+  #34 = Utf8               ()V
+  #35 = Utf8               (Ljava/lang/Object;)Z
+  #36 = Utf8               (Ljava/lang/Object;Ljava/lang/Object;)V
+  #37 = Utf8               (Ljava/lang/String;)Ljava/lang/String;
+  #38 = Utf8               (Ljavax/microedition/lcdui/Displayable;)V
+  #39 = Utf8               (Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+  #40 = Utf8               (Z)V
+  #41 = Utf8               0
+  #42 = Utf8               <init>
+  #43 = Utf8               Code
+  #44 = Utf8               GloftASBR
+  #45 = Utf8               HAS-BLOOD
+  #46 = Utf8               LGloftASBR;
+  #47 = Utf8               Ljava/lang/String;
+  #48 = Utf8               Lk;
+  #49 = Utf8               MIDlet-Version
+  #50 = Utf8               Z
+  #51 = Utf8               a
+  #52 = Utf8               b
+  #53 = Utf8               bK
+  #54 = Utf8               c
+  #55 = Utf8               destroyApp
+  #56 = Utf8               equals
+  #57 = Utf8               getAppProperty
+  #58 = Utf8               getDisplay
+  #59 = Utf8               java/lang/Exception
+  #60 = Utf8               java/lang/String
+  #61 = Utf8               javax/microedition/lcdui/Display
+  #62 = Utf8               javax/microedition/midlet/MIDlet
+  #63 = Utf8               k
+  #64 = Utf8               notifyDestroyed
+  #65 = Utf8               notifyPaused
+  #66 = Utf8               pauseApp
+  #67 = Utf8               setCurrent
+  #68 = Utf8               startApp
+  #69 = Utf8               StackMap
+{
+  public static k a;
+    descriptor: Lk;
+    flags: (0x0009) ACC_PUBLIC, ACC_STATIC
+
+  public static java.lang.String b;
+    descriptor: Ljava/lang/String;
+    flags: (0x0009) ACC_PUBLIC, ACC_STATIC
+
+  public static GloftASBR c;
+    descriptor: LGloftASBR;
+    flags: (0x0009) ACC_PUBLIC, ACC_STATIC
+
+  public GloftASBR();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=1, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #17                 // Method javax/microedition/midlet/MIDlet."<init>":()V
+         4: aload_0
+         5: putstatic     #12                 // Field c:LGloftASBR;
+         8: return
+
+  public void pauseApp();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=1, locals=1, args_size=1
+         0: aload_0
+         1: invokevirtual #20                 // Method javax/microedition/midlet/MIDlet.notifyPaused:()V
+         4: return
+
+  public void startApp();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=4, locals=1, args_size=1
+         0: getstatic     #10                 // Field a:Lk;
+         3: ifnonnull     65
+         6: aload_0
+         7: ldc           #3                  // String MIDlet-Version
+         9: invokevirtual #18                 // Method javax/microedition/midlet/MIDlet.getAppProperty:(Ljava/lang/String;)Ljava/lang/String;
+        12: putstatic     #11                 // Field b:Ljava/lang/String;
+        15: goto          19
+        18: pop
+        19: aload_0
+        20: ldc           #2                  // String HAS-BLOOD
+        22: invokevirtual #18                 // Method javax/microedition/midlet/MIDlet.getAppProperty:(Ljava/lang/String;)Ljava/lang/String;
+        25: ldc           #1                  // String 0
+        27: invokevirtual #14                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+        30: ifne          37
+        33: iconst_1
+        34: goto          38
+        37: iconst_0
+        38: putstatic     #13                 // Field k.bK:Z
+        41: goto          49
+        44: pop
+        45: iconst_0
+        46: putstatic     #13                 // Field k.bK:Z
+        49: new           #9                  // class k
+        52: dup
+        53: aload_0
+        54: aload_0
+        55: invokestatic  #15                 // Method javax/microedition/lcdui/Display.getDisplay:(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+        58: invokespecial #21                 // Method k."<init>":(Ljava/lang/Object;Ljava/lang/Object;)V
+        61: putstatic     #10                 // Field a:Lk;
+        64: return
+        65: aload_0
+        66: invokestatic  #15                 // Method javax/microedition/lcdui/Display.getDisplay:(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+        69: getstatic     #10                 // Field a:Lk;
+        72: invokevirtual #16                 // Method javax/microedition/lcdui/Display.setCurrent:(Ljavax/microedition/lcdui/Displayable;)V
+        75: return
+      Exception table:
+         from    to  target type
+             6    15    18   Class java/lang/Exception
+            19    41    44   Class java/lang/Exception
+      StackMap: number_of_entries = 7
+        frame_type = 255 offset = 18
+          locals = [ class GloftASBR ]
+          stack = [ class java/lang/Exception ]
+        frame_type = 255 offset = 19
+          locals = [ class GloftASBR ]
+          stack = []
+        frame_type = 255 offset = 37
+          locals = [ class GloftASBR ]
+          stack = []
+        frame_type = 255 offset = 38
+          locals = [ class GloftASBR ]
+          stack = [ int ]
+        frame_type = 255 offset = 44
+          locals = [ class GloftASBR ]
+          stack = [ class java/lang/Exception ]
+        frame_type = 255 offset = 49
+          locals = [ class GloftASBR ]
+          stack = []
+        frame_type = 255 offset = 65
+          locals = [ class GloftASBR ]
+          stack = []
+
+  public void destroyApp(boolean);
+    descriptor: (Z)V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=2, locals=2, args_size=2
+         0: aload_0
+         1: invokestatic  #15                 // Method javax/microedition/lcdui/Display.getDisplay:(Ljavax/microedition/midlet/MIDlet;)Ljavax/microedition/lcdui/Display;
+         4: aconst_null
+         5: invokevirtual #16                 // Method javax/microedition/lcdui/Display.setCurrent:(Ljavax/microedition/lcdui/Displayable;)V
+         8: getstatic     #10                 // Field a:Lk;
+        11: ifnull        18
+        14: aconst_null
+        15: putstatic     #10                 // Field a:Lk;
+        18: aload_0
+        19: invokevirtual #19                 // Method javax/microedition/midlet/MIDlet.notifyDestroyed:()V
+        22: aconst_null
+        23: putstatic     #12                 // Field c:LGloftASBR;
+        26: return
+      StackMap: number_of_entries = 1
+        frame_type = 255 offset = 18
+          locals = [ class GloftASBR, int ]
+          stack = []
+}

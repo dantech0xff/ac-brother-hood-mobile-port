@@ -1,0 +1,341 @@
+Classfile assassins_creed_-_br_320x240_136711.jar!/c.class
+  Last modified Sep 28, 2010; size 954 bytes
+  SHA-256 checksum c72c5139996c65c154af016a58219fea9359c6ee4fafb70d71296d8e874fa325
+public final class c
+  minor version: 3
+  major version: 45
+  flags: (0x0031) ACC_PUBLIC, ACC_FINAL, ACC_SUPER
+  this_class: #1                          // c
+  super_class: #3                         // java/lang/Object
+  interfaces: 0, fields: 13, methods: 6, attributes: 0
+Constant pool:
+   #1 = Class              #45            // c
+   #2 = Class              #51            // i
+   #3 = Class              #53            // java/lang/Object
+   #4 = Fieldref           #1.#19         // c.a:I
+   #5 = Fieldref           #1.#21         // c.b:I
+   #6 = Fieldref           #1.#22         // c.c:S
+   #7 = Fieldref           #1.#23         // c.d:S
+   #8 = Fieldref           #1.#24         // c.e:B
+   #9 = Fieldref           #1.#25         // c.f:B
+  #10 = Fieldref           #1.#26         // c.g:S
+  #11 = Fieldref           #1.#27         // c.j:S
+  #12 = Fieldref           #1.#28         // c.k:S
+  #13 = Fieldref           #1.#29         // c.l:S
+  #14 = Fieldref           #1.#30         // c.m:[Lc;
+  #15 = Fieldref           #2.#20         // i.ak:I
+  #16 = Methodref          #1.#18         // c."<init>":()V
+  #17 = Methodref          #3.#18         // java/lang/Object."<init>":()V
+  #18 = NameAndType        #36:#31        // "<init>":()V
+  #19 = NameAndType        #42:#39        // a:I
+  #20 = NameAndType        #43:#39        // ak:I
+  #21 = NameAndType        #44:#39        // b:I
+  #22 = NameAndType        #45:#40        // c:S
+  #23 = NameAndType        #46:#40        // d:S
+  #24 = NameAndType        #47:#37        // e:B
+  #25 = NameAndType        #48:#37        // f:B
+  #26 = NameAndType        #49:#40        // g:S
+  #27 = NameAndType        #52:#40        // j:S
+  #28 = NameAndType        #54:#40        // k:S
+  #29 = NameAndType        #55:#40        // l:S
+  #30 = NameAndType        #56:#41        // m:[Lc;
+  #31 = Utf8               ()V
+  #32 = Utf8               (I)Lc;
+  #33 = Utf8               (Lc;Li;)V
+  #34 = Utf8               ([S)V
+  #35 = Utf8               <clinit>
+  #36 = Utf8               <init>
+  #37 = Utf8               B
+  #38 = Utf8               Code
+  #39 = Utf8               I
+  #40 = Utf8               S
+  #41 = Utf8               [Lc;
+  #42 = Utf8               a
+  #43 = Utf8               ak
+  #44 = Utf8               b
+  #45 = Utf8               c
+  #46 = Utf8               d
+  #47 = Utf8               e
+  #48 = Utf8               f
+  #49 = Utf8               g
+  #50 = Utf8               h
+  #51 = Utf8               i
+  #52 = Utf8               j
+  #53 = Utf8               java/lang/Object
+  #54 = Utf8               k
+  #55 = Utf8               l
+  #56 = Utf8               m
+  #57 = Utf8               StackMap
+{
+  int a;
+    descriptor: I
+    flags: (0x0000)
+
+  int b;
+    descriptor: I
+    flags: (0x0000)
+
+  private short k;
+    descriptor: S
+    flags: (0x0002) ACC_PRIVATE
+
+  short c;
+    descriptor: S
+    flags: (0x0000)
+
+  short d;
+    descriptor: S
+    flags: (0x0000)
+
+  byte e;
+    descriptor: B
+    flags: (0x0000)
+
+  byte f;
+    descriptor: B
+    flags: (0x0000)
+
+  short g;
+    descriptor: S
+    flags: (0x0000)
+
+  short h;
+    descriptor: S
+    flags: (0x0000)
+
+  short i;
+    descriptor: S
+    flags: (0x0000)
+
+  private static short l;
+    descriptor: S
+    flags: (0x000a) ACC_PRIVATE, ACC_STATIC
+
+  private static c[] m;
+    descriptor: [Lc;
+    flags: (0x000a) ACC_PRIVATE, ACC_STATIC
+
+  static short j;
+    descriptor: S
+    flags: (0x0008) ACC_STATIC
+
+  public c();
+    descriptor: ()V
+    flags: (0x0001) ACC_PUBLIC
+    Code:
+      stack=1, locals=1, args_size=1
+         0: aload_0
+         1: invokespecial #17                 // Method java/lang/Object."<init>":()V
+         4: return
+
+  static void a(short[]);
+    descriptor: ([S)V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=3, locals=2, args_size=1
+         0: new           #1                  // class c
+         3: dup
+         4: invokespecial #16                 // Method "<init>":()V
+         7: dup
+         8: astore_1
+         9: aload_0
+        10: iconst_1
+        11: saload
+        12: putfield      #12                 // Field k:S
+        15: aload_1
+        16: aload_0
+        17: iconst_2
+        18: saload
+        19: putfield      #4                  // Field a:I
+        22: aload_1
+        23: aload_0
+        24: iconst_3
+        25: saload
+        26: putfield      #5                  // Field b:I
+        29: aload_1
+        30: aload_0
+        31: iconst_4
+        32: saload
+        33: putfield      #6                  // Field c:S
+        36: aload_1
+        37: aload_0
+        38: iconst_5
+        39: saload
+        40: putfield      #7                  // Field d:S
+        43: aload_1
+        44: aload_0
+        45: bipush        6
+        47: saload
+        48: i2b
+        49: putfield      #8                  // Field e:B
+        52: aload_1
+        53: aload_0
+        54: bipush        7
+        56: saload
+        57: i2b
+        58: putfield      #9                  // Field f:B
+        61: aload_1
+        62: aload_0
+        63: bipush        8
+        65: saload
+        66: putfield      #10                 // Field g:S
+        69: getstatic     #14                 // Field m:[Lc;
+        72: getstatic     #13                 // Field l:S
+        75: aload_1
+        76: aastore
+        77: getstatic     #13                 // Field l:S
+        80: iconst_1
+        81: iadd
+        82: i2s
+        83: putstatic     #13                 // Field l:S
+        86: return
+
+  static void a(c, i);
+    descriptor: (Lc;Li;)V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=3, locals=3, args_size=2
+         0: new           #1                  // class c
+         3: dup
+         4: invokespecial #16                 // Method "<init>":()V
+         7: dup
+         8: astore_2
+         9: getstatic     #11                 // Field j:S
+        12: putfield      #12                 // Field k:S
+        15: getstatic     #11                 // Field j:S
+        18: iconst_1
+        19: iadd
+        20: i2s
+        21: putstatic     #11                 // Field j:S
+        24: aload_2
+        25: aload_0
+        26: getfield      #4                  // Field a:I
+        29: aload_1
+        30: getfield      #15                 // Field i.ak:I
+        33: iadd
+        34: putfield      #4                  // Field a:I
+        37: aload_2
+        38: aload_0
+        39: getfield      #5                  // Field b:I
+        42: putfield      #5                  // Field b:I
+        45: aload_2
+        46: aload_0
+        47: getfield      #6                  // Field c:S
+        50: putfield      #6                  // Field c:S
+        53: aload_2
+        54: aload_0
+        55: getfield      #7                  // Field d:S
+        58: putfield      #7                  // Field d:S
+        61: aload_2
+        62: aload_0
+        63: getfield      #8                  // Field e:B
+        66: putfield      #8                  // Field e:B
+        69: aload_2
+        70: aload_0
+        71: getfield      #9                  // Field f:B
+        74: putfield      #9                  // Field f:B
+        77: aload_2
+        78: aload_0
+        79: getfield      #10                 // Field g:S
+        82: putfield      #10                 // Field g:S
+        85: getstatic     #14                 // Field m:[Lc;
+        88: getstatic     #13                 // Field l:S
+        91: aload_2
+        92: aastore
+        93: getstatic     #13                 // Field l:S
+        96: iconst_1
+        97: iadd
+        98: i2s
+        99: putstatic     #13                 // Field l:S
+       102: return
+
+  static void a();
+    descriptor: ()V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=3, locals=1, args_size=0
+         0: iconst_0
+         1: istore_0
+         2: iload_0
+         3: getstatic     #14                 // Field m:[Lc;
+         6: arraylength
+         7: if_icmpge     22
+        10: getstatic     #14                 // Field m:[Lc;
+        13: iload_0
+        14: aconst_null
+        15: aastore
+        16: iinc          0, 1
+        19: goto          2
+        22: iconst_0
+        23: putstatic     #13                 // Field l:S
+        26: sipush        10000
+        29: putstatic     #11                 // Field j:S
+        32: return
+      StackMap: number_of_entries = 2
+        frame_type = 255 offset = 2
+          locals = [ int ]
+          stack = []
+        frame_type = 255 offset = 22
+          locals = [ int ]
+          stack = []
+
+  static c a(int);
+    descriptor: (I)Lc;
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=2, locals=2, args_size=1
+         0: iload_0
+         1: ifge          6
+         4: aconst_null
+         5: areturn
+         6: iconst_0
+         7: istore_1
+         8: iload_1
+         9: getstatic     #13                 // Field l:S
+        12: if_icmpge     47
+        15: getstatic     #14                 // Field m:[Lc;
+        18: iload_1
+        19: aaload
+        20: ifnull        41
+        23: getstatic     #14                 // Field m:[Lc;
+        26: iload_1
+        27: aaload
+        28: getfield      #12                 // Field k:S
+        31: iload_0
+        32: if_icmpne     41
+        35: getstatic     #14                 // Field m:[Lc;
+        38: iload_1
+        39: aaload
+        40: areturn
+        41: iinc          1, 1
+        44: goto          8
+        47: aconst_null
+        48: areturn
+      StackMap: number_of_entries = 4
+        frame_type = 255 offset = 6
+          locals = [ int ]
+          stack = []
+        frame_type = 255 offset = 8
+          locals = [ int, int ]
+          stack = []
+        frame_type = 255 offset = 41
+          locals = [ int, int ]
+          stack = []
+        frame_type = 255 offset = 47
+          locals = [ int, int ]
+          stack = []
+
+  static {};
+    descriptor: ()V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=1, locals=0, args_size=0
+         0: iconst_0
+         1: putstatic     #13                 // Field l:S
+         4: sipush        400
+         7: anewarray     #1                  // class c
+        10: putstatic     #14                 // Field m:[Lc;
+        13: sipush        10000
+        16: putstatic     #11                 // Field j:S
+        19: return
+}

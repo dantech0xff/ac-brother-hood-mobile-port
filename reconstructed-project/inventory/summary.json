@@ -1,0 +1,380 @@
+{
+  "analysis_mode": "static-only",
+  "game_execution_performed": false,
+  "class_count": 12,
+  "method_count": 666,
+  "field_count": 1009,
+  "instruction_count": 114642,
+  "call_site_count": 7154,
+  "internal_call_site_count": 5875,
+  "external_call_site_count": 1279,
+  "field_access_count": 25550,
+  "external_class_reference_count": 29,
+  "string_constant_count": 124,
+  "most_called_targets": [
+    {
+      "target": "i.i:(I)V",
+      "call_sites": 815
+    },
+    {
+      "target": "i.r:()Z",
+      "call_sites": 274
+    },
+    {
+      "target": "i.a:([I[I)Z",
+      "call_sites": 219
+    },
+    {
+      "target": "java.lang.StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;",
+      "call_sites": 191
+    },
+    {
+      "target": "k.v:(I)Z",
+      "call_sites": 181
+    },
+    {
+      "target": "java.lang.Math.abs:(I)I",
+      "call_sites": 133
+    },
+    {
+      "target": "i.G:()V",
+      "call_sites": 128
+    },
+    {
+      "target": "k.d:(II)Ljava/lang/String;",
+      "call_sites": 110
+    },
+    {
+      "target": "javax.microedition.lcdui.Graphics.setColor:(I)V",
+      "call_sites": 105
+    },
+    {
+      "target": "k.c:(Li;)V",
+      "call_sites": 105
+    },
+    {
+      "target": "java.lang.StringBuffer.toString:()Ljava/lang/String;",
+      "call_sites": 103
+    },
+    {
+      "target": "i.e:(II)I",
+      "call_sites": 102
+    },
+    {
+      "target": "java.lang.StringBuffer.<init>:()V",
+      "call_sites": 100
+    },
+    {
+      "target": "k.u:(I)Z",
+      "call_sites": 99
+    },
+    {
+      "target": "k.l:(I)V",
+      "call_sites": 98
+    },
+    {
+      "target": "k.q:(I)Li;",
+      "call_sites": 86
+    },
+    {
+      "target": "b.l:(I)V",
+      "call_sites": 84
+    },
+    {
+      "target": "b.a:(Ljavax/microedition/lcdui/Graphics;IIIIIII)V",
+      "call_sites": 80
+    },
+    {
+      "target": "k.A:(I)V",
+      "call_sites": 78
+    },
+    {
+      "target": "i.t:()[I",
+      "call_sites": 70
+    },
+    {
+      "target": "g.a:(I)V",
+      "call_sites": 63
+    },
+    {
+      "target": "k.z:(I)V",
+      "call_sites": 62
+    },
+    {
+      "target": "b.a:(Ljavax/microedition/lcdui/Graphics;Ljava/lang/String;III)V",
+      "call_sites": 59
+    },
+    {
+      "target": "java.lang.StringBuffer.append:(I)Ljava/lang/StringBuffer;",
+      "call_sites": 56
+    },
+    {
+      "target": "k.a:([BIS)I",
+      "call_sites": 52
+    },
+    {
+      "target": "java.lang.String.length:()I",
+      "call_sites": 49
+    },
+    {
+      "target": "j.b:(Ljavax/microedition/lcdui/Graphics;IIII)V",
+      "call_sites": 46
+    },
+    {
+      "target": "i.a:(IIILi;)V",
+      "call_sites": 45
+    },
+    {
+      "target": "j.a:(Ljavax/microedition/lcdui/Graphics;IIIIZ)V",
+      "call_sites": 43
+    },
+    {
+      "target": "i.ab:()Z",
+      "call_sites": 41
+    }
+  ],
+  "methods_with_most_calls": [
+    {
+      "method": "g.e:()V",
+      "call_sites": 618
+    },
+    {
+      "method": "k.a:()V",
+      "call_sites": 395
+    },
+    {
+      "method": "i.I:()V",
+      "call_sites": 302
+    },
+    {
+      "method": "i.aV:()V",
+      "call_sites": 252
+    },
+    {
+      "method": "k.b:(Z)V",
+      "call_sites": 201
+    },
+    {
+      "method": "i.aP:()V",
+      "call_sites": 132
+    },
+    {
+      "method": "k.b:(IIIZZ)V",
+      "call_sites": 120
+    },
+    {
+      "method": "i.F:()Z",
+      "call_sites": 112
+    },
+    {
+      "method": "i.bQ:()V",
+      "call_sites": 105
+    },
+    {
+      "method": "i.aJ:()V",
+      "call_sites": 102
+    },
+    {
+      "method": "k.Q:()V",
+      "call_sites": 102
+    },
+    {
+      "method": "k.R:()V",
+      "call_sites": 92
+    },
+    {
+      "method": "i.a:(I[BIII)I",
+      "call_sites": 89
+    },
+    {
+      "method": "f.b:(Ljavax/microedition/lcdui/Graphics;)V",
+      "call_sites": 81
+    },
+    {
+      "method": "i.bl:()V",
+      "call_sites": 78
+    },
+    {
+      "method": "i.bD:()V",
+      "call_sites": 75
+    },
+    {
+      "method": "k.M:()V",
+      "call_sites": 73
+    },
+    {
+      "method": "i.ba:()V",
+      "call_sites": 69
+    },
+    {
+      "method": "i.bb:()V",
+      "call_sites": 68
+    },
+    {
+      "method": "g.n:()V",
+      "call_sites": 66
+    },
+    {
+      "method": "k.c:(Z)V",
+      "call_sites": 64
+    },
+    {
+      "method": "i.bm:()V",
+      "call_sites": 62
+    },
+    {
+      "method": "j.<init>:(Ljava/lang/Object;Ljava/lang/Object;)V",
+      "call_sites": 62
+    },
+    {
+      "method": "k.G:(I)Z",
+      "call_sites": 62
+    },
+    {
+      "method": "i.bG:()V",
+      "call_sites": 60
+    },
+    {
+      "method": "f.e:()V",
+      "call_sites": 59
+    },
+    {
+      "method": "i.bC:()V",
+      "call_sites": 58
+    },
+    {
+      "method": "f.k:()V",
+      "call_sites": 55
+    },
+    {
+      "method": "f.d:(I)V",
+      "call_sites": 54
+    },
+    {
+      "method": "i.<init>:([S)V",
+      "call_sites": 53
+    }
+  ],
+  "largest_methods_by_instruction_count": [
+    {
+      "method": "g.e:()V",
+      "instructions": 6266
+    },
+    {
+      "method": "i.<init>:([S)V",
+      "instructions": 4131
+    },
+    {
+      "method": "i.aV:()V",
+      "instructions": 3757
+    },
+    {
+      "method": "i.I:()V",
+      "instructions": 3216
+    },
+    {
+      "method": "k.b:(Z)V",
+      "instructions": 2969
+    },
+    {
+      "method": "k.<clinit>:()V",
+      "instructions": 2719
+    },
+    {
+      "method": "k.a:()V",
+      "instructions": 2693
+    },
+    {
+      "method": "b.a:([BI)V",
+      "instructions": 2222
+    },
+    {
+      "method": "i.F:()Z",
+      "instructions": 2132
+    },
+    {
+      "method": "i.a:(I[BIII)I",
+      "instructions": 1757
+    },
+    {
+      "method": "i.aP:()V",
+      "instructions": 1751
+    },
+    {
+      "method": "i.bQ:()V",
+      "instructions": 1562
+    },
+    {
+      "method": "i.bD:()V",
+      "instructions": 1502
+    },
+    {
+      "method": "i.bl:()V",
+      "instructions": 1347
+    },
+    {
+      "method": "i.aa:()V",
+      "instructions": 1340
+    },
+    {
+      "method": "k.b:(IIIZZ)V",
+      "instructions": 1237
+    },
+    {
+      "method": "k.G:(I)Z",
+      "instructions": 1205
+    },
+    {
+      "method": "f.b:(Ljavax/microedition/lcdui/Graphics;)V",
+      "instructions": 1167
+    },
+    {
+      "method": "b.a:(Ljavax/microedition/lcdui/Graphics;IIII)V",
+      "instructions": 1119
+    },
+    {
+      "method": "g.n:()V",
+      "instructions": 1089
+    },
+    {
+      "method": "k.m:(I)V",
+      "instructions": 1080
+    },
+    {
+      "method": "i.bG:()V",
+      "instructions": 1045
+    },
+    {
+      "method": "i.aJ:()V",
+      "instructions": 942
+    },
+    {
+      "method": "i.t:()[I",
+      "instructions": 939
+    },
+    {
+      "method": "k.c:(Z)V",
+      "instructions": 893
+    },
+    {
+      "method": "i.bm:()V",
+      "instructions": 832
+    },
+    {
+      "method": "g.az:()V",
+      "instructions": 820
+    },
+    {
+      "method": "i.bu:()V",
+      "instructions": 802
+    },
+    {
+      "method": "g.au:()V",
+      "instructions": 781
+    },
+    {
+      "method": "i.bb:()V",
+      "instructions": 749
+    }
+  ]
+}

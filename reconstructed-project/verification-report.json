@@ -1,0 +1,177 @@
+{
+  "ok": true,
+  "checks": {
+    "analysis_mode": "static-only",
+    "game_execution_performed": false,
+    "jar_sha256": "711e0b1063725f99439f59579977f5001d0665c9bf9fe7f7615c0e10937aa383",
+    "decoder_transaction_artifacts": {
+      "patterns_checked": [
+        ".inventory.stage-*",
+        ".inventory.backup-*",
+        "resources/.static-resource-analysis.lock",
+        "resources/.decoded.stage-*",
+        "resources/.decoded.backup-*",
+        "resources/.sprites-decoded.sprite-decoder.lock",
+        "resources/.sprites-decoded.sprite-decoder-stage-*",
+        "resources/.sprites-decoded.sprite-decoder-backup-*",
+        "resources/.levels-decoded.level-decoder.lock",
+        "resources/.levels-decoded.level-decoder-stage-*",
+        "resources/.levels-decoded.level-decoder-backup-*",
+        "../.reconstructed-project.stage-*",
+        "../.reconstructed-project.backup-*"
+      ],
+      "stale_paths": []
+    },
+    "jar_entry_count": 37,
+    "code": {
+      "classes": 12,
+      "methods": 666,
+      "fields": 1009,
+      "instructions": 114642,
+      "code_bytes": 237112,
+      "call_sites": 7154,
+      "field_accesses": 25550,
+      "external_dependencies": 29,
+      "string_constants": 124,
+      "semantic_aliases": {
+        "classes": 12,
+        "methods": 31,
+        "fields": 41,
+        "normalized_sha256": "a9a5210ae2630784677341246df2d942e00423e717e2119ab092d06b5f7f4268"
+      },
+      "source_manifests": {
+        "structured": {
+          "file_count": 12,
+          "total_bytes": 1321148,
+          "sha256": "ecea8893bdb23d165f32aa6133237080f35f943446e6f9ef2e0aa4c6c80c5dd1"
+        },
+        "simple": {
+          "file_count": 12,
+          "total_bytes": 1150450,
+          "sha256": "755d8afe0df20680f80d9433b9851a9b28148b4658ab2a0daf51d4ac18b356a2"
+        },
+        "fallback": {
+          "file_count": 12,
+          "total_bytes": 3482215,
+          "sha256": "d580a917a98e6b5ac51264c28581f6f47f8245703c325dbac3afa64b23bddf2d"
+        }
+      },
+      "bytecode_manifest": {
+        "file_count": 12,
+        "total_bytes": 5623439,
+        "sha256": "f03f1a639358357ec17a8cf4d3eebf6fec16b4d6b05e1ada58f6841b15e07a5e"
+      },
+      "bytecode_reproducibility": {
+        "fresh_javap_matches": 12,
+        "expected_classes": 12,
+        "source": "pinned JAR"
+      }
+    },
+    "resources": {
+      "packs": 17,
+      "entries": 260,
+      "nonempty": 238,
+      "empty": 22,
+      "compression": {
+        "lzma-alone": 24,
+        "none": 214
+      },
+      "detected_types": {
+        "Gameloft UTF-8 string table": 9,
+        "Gameloft sprite binary": 84,
+        "MIDI audio": 13,
+        "RIFF/WAVE audio": 18,
+        "game-specific binary": 114
+      },
+      "semantic_types": {
+        "Gameloft UTF-8 string table": 9,
+        "Gameloft sprite binary": 84,
+        "MIDI audio": 13,
+        "RIFF/WAVE audio": 18,
+        "fixed-point cosine lookup table": 1,
+        "fixed-point sqrt lookup table": 1,
+        "font Unicode-to-glyph hash table": 1,
+        "level block/script descriptor stream": 8,
+        "level object/entity descriptor stream": 8,
+        "primary layer dimensions": 8,
+        "primary tile layer": 8,
+        "primary-layer packed 2-bit flag/transform plane (runtime-unused)": 8,
+        "quaternary/lower layer dimensions": 8,
+        "quaternary/lower tile layer": 8,
+        "quaternary/lower-layer packed 2-bit flags": 8,
+        "secondary layer dimensions": 6,
+        "secondary tile layer": 6,
+        "secondary-layer packed 2-bit flags": 6,
+        "sprite module substitution table": 5,
+        "tertiary layer dimensions": 8,
+        "tertiary tile layer": 8,
+        "tertiary-layer packed 2-bit flags": 8
+      },
+      "semantic_confidence": {
+        "high": 99,
+        "inferred": 8,
+        "proven": 131
+      },
+      "unclassified_semantic_entries": 0,
+      "strings": 265,
+      "sprite_modules": 4376
+    },
+    "resource_reproducibility": {
+      "fresh_extraction_matches": true,
+      "manifest": {
+        "file_count": 337,
+        "total_bytes": 2990610,
+        "sha256": "b1b6a1c07515a9eb0392d6223476c7af2c4b548f14d7170b05b3e3a095b234a6"
+      }
+    },
+    "sprites": {
+      "assets": 84,
+      "status": {
+        "partial": 1,
+        "success": 83
+      },
+      "modules": 4376,
+      "decoded_pixel_modules": 4371,
+      "non_output_modules": 5,
+      "pngs": 12102,
+      "managed_manifest": {
+        "file_count": 12186,
+        "total_bytes": 63940532,
+        "sha256": "bfc2298bbd774b21e75df88f3971d90f2375217bd7d825459b01a93c8f81abd9"
+      },
+      "rerun_verification": "passed",
+      "fresh_two_pass_regeneration_matches": true
+    },
+    "levels": {
+      "inventory": {
+        "entities": 4286,
+        "entity_bytes": 103336,
+        "events": 2366,
+        "groups": 144,
+        "instructions": 3705,
+        "lanes": 510,
+        "payloads": 16,
+        "payloads_exact_eof": 16,
+        "script_bytes": 27214
+      },
+      "group_meta_invariant": "144/144 passed",
+      "mode_3_at_parsed_positions": 0,
+      "opcodes_41_44_at_parsed_positions": 0,
+      "lane_meta_2_locations": [
+        [
+          9,
+          6,
+          5,
+          1011
+        ]
+      ],
+      "managed_tree": {
+        "file_count": 10,
+        "total_bytes": 34570387,
+        "sha256": "d2f71b3fbede3bc29c32df5bb666fcba46cb431b32e18bf17f66f665bbc2ff60"
+      },
+      "fresh_two_pass_regeneration_matches": true
+    }
+  },
+  "failures": []
+}

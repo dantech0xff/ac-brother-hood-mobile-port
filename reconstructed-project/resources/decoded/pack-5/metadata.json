@@ -1,0 +1,26 @@
+{
+  "pack": "5",
+  "total_entries": 1,
+  "part_count": 1,
+  "part_starts": [
+    0
+  ],
+  "entries": [
+    {
+      "index": 0,
+      "part": "5",
+      "offset": 14,
+      "packed_size": 105,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-000-marker-130.bin",
+      "decoded_size": 176,
+      "sha256": "9dc6e18bbf924280b76fc6f79c4f30d3e5db0b4138ea2f413d6ddd3893d3f5bc",
+      "detected_type": "game-specific binary",
+      "semantic_type": "sprite module substitution table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-000-module-remap.json"
+    }
+  ]
+}

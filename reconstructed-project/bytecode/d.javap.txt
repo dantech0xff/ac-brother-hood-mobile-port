@@ -1,0 +1,111 @@
+Classfile assassins_creed_-_br_320x240_136711.jar!/d.class
+  Last modified Sep 28, 2010; size 250 bytes
+  SHA-256 checksum 8d298f8ac19932209bbb55b40d5697c514e7249d0183fa1e3ed0189a5c3593ae
+interface d
+  minor version: 3
+  major version: 45
+  flags: (0x0600) ACC_INTERFACE, ACC_ABSTRACT
+  this_class: #1                          // d
+  super_class: #2                         // java/lang/Object
+  interfaces: 0, fields: 2, methods: 1, attributes: 0
+Constant pool:
+   #1 = Class              #13            // d
+   #2 = Class              #14            // java/lang/Object
+   #3 = Fieldref           #1.#5          // d.a:[I
+   #4 = Fieldref           #1.#6          // d.b:[I
+   #5 = NameAndType        #11:#10        // a:[I
+   #6 = NameAndType        #12:#10        // b:[I
+   #7 = Utf8               ()V
+   #8 = Utf8               <clinit>
+   #9 = Utf8               Code
+  #10 = Utf8               [I
+  #11 = Utf8               a
+  #12 = Utf8               b
+  #13 = Utf8               d
+  #14 = Utf8               java/lang/Object
+{
+  public static final int[] a;
+    descriptor: [I
+    flags: (0x0019) ACC_PUBLIC, ACC_STATIC, ACC_FINAL
+
+  public static final int[] b;
+    descriptor: [I
+    flags: (0x0019) ACC_PUBLIC, ACC_STATIC, ACC_FINAL
+
+  static {};
+    descriptor: ()V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=4, locals=0, args_size=0
+         0: bipush        10
+         2: newarray       int
+         4: dup
+         5: iconst_0
+         6: bipush        16
+         8: iastore
+         9: dup
+        10: iconst_1
+        11: bipush        15
+        13: iastore
+        14: dup
+        15: iconst_2
+        16: bipush        7
+        18: iastore
+        19: dup
+        20: iconst_3
+        21: bipush        17
+        23: iastore
+        24: dup
+        25: iconst_4
+        26: bipush        9
+        28: iastore
+        29: dup
+        30: iconst_5
+        31: bipush        8
+        33: iastore
+        34: dup
+        35: bipush        6
+        37: iconst_5
+        38: iastore
+        39: dup
+        40: bipush        7
+        42: bipush        14
+        44: iastore
+        45: dup
+        46: bipush        8
+        48: bipush        10
+        50: iastore
+        51: dup
+        52: bipush        9
+        54: bipush        33
+        56: iastore
+        57: putstatic     #3                  // Field a:[I
+        60: bipush        6
+        62: newarray       int
+        64: dup
+        65: iconst_0
+        66: bipush        10
+        68: iastore
+        69: dup
+        70: iconst_1
+        71: bipush        20
+        73: iastore
+        74: dup
+        75: iconst_2
+        76: bipush        20
+        78: iastore
+        79: dup
+        80: iconst_3
+        81: bipush        40
+        83: iastore
+        84: dup
+        85: iconst_4
+        86: bipush        35
+        88: iastore
+        89: dup
+        90: iconst_5
+        91: bipush        70
+        93: iastore
+        94: putstatic     #4                  // Field b:[I
+        97: return
+}

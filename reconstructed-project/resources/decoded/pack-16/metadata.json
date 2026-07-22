@@ -1,0 +1,42 @@
+{
+  "pack": "16",
+  "total_entries": 2,
+  "part_count": 1,
+  "part_starts": [
+    0
+  ],
+  "entries": [
+    {
+      "index": 0,
+      "part": "16",
+      "offset": 18,
+      "packed_size": 133,
+      "marker": 3,
+      "marker_value": 3,
+      "compression": "none",
+      "file": "entry-000-marker-003.bin",
+      "decoded_size": 132,
+      "sha256": "dce4c06647c514a2d6c86973a90ba872d3315cbcbdd2eb974ed29100aa9782e1",
+      "detected_type": "game-specific binary",
+      "semantic_type": "fixed-point cosine lookup table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-000-cosine-table.json"
+    },
+    {
+      "index": 1,
+      "part": "16",
+      "offset": 151,
+      "packed_size": 516,
+      "marker": 3,
+      "marker_value": 3,
+      "compression": "none",
+      "file": "entry-001-marker-003.bin",
+      "decoded_size": 515,
+      "sha256": "7db8a6c59cc30214bebf0bd85bb2b63ea36317a803bcc28e72efc65bcf1bd2ed",
+      "detected_type": "game-specific binary",
+      "semantic_type": "fixed-point sqrt lookup table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-001-sqrt-table.json"
+    }
+  ]
+}

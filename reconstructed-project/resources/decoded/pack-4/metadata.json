@@ -1,0 +1,74 @@
+{
+  "pack": "4",
+  "total_entries": 4,
+  "part_count": 1,
+  "part_starts": [
+    0
+  ],
+  "entries": [
+    {
+      "index": 0,
+      "part": "4",
+      "offset": 26,
+      "packed_size": 123,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-000-marker-130.bin",
+      "decoded_size": 332,
+      "sha256": "b34097c7ccfc834bf114e4b5d70096280a90e70d3f20c57620c6f963000c850b",
+      "detected_type": "game-specific binary",
+      "semantic_type": "sprite module substitution table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-000-module-remap.json"
+    },
+    {
+      "index": 1,
+      "part": "4",
+      "offset": 149,
+      "packed_size": 131,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-001-marker-130.bin",
+      "decoded_size": 368,
+      "sha256": "7042fe001ca76930b04d0aedea9acb9c3b3bf5ebe16cf5e46dbcd421403c4028",
+      "detected_type": "game-specific binary",
+      "semantic_type": "sprite module substitution table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-001-module-remap.json"
+    },
+    {
+      "index": 2,
+      "part": "4",
+      "offset": 280,
+      "packed_size": 77,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-002-marker-130.bin",
+      "decoded_size": 132,
+      "sha256": "f553a437456663ea36af12f7acf241a7145a332c90e244d37d90863f100a6fe4",
+      "detected_type": "game-specific binary",
+      "semantic_type": "sprite module substitution table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-002-module-remap.json"
+    },
+    {
+      "index": 3,
+      "part": "4",
+      "offset": 357,
+      "packed_size": 99,
+      "marker": 130,
+      "marker_value": 3,
+      "compression": "lzma-alone",
+      "file": "entry-003-marker-130.bin",
+      "decoded_size": 220,
+      "sha256": "d068b36d2d287ca44acf409530e1bf664d28564e80b0aa52f93bde802b202bda",
+      "detected_type": "game-specific binary",
+      "semantic_type": "sprite module substitution table",
+      "semantic_confidence": "proven",
+      "semantic_file": "entry-003-module-remap.json"
+    }
+  ]
+}

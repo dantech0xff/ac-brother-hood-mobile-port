@@ -1,0 +1,1859 @@
+{
+  "consumed_to_eof": true,
+  "evidence": {
+    "basis": "direct translation of the loader and seven runtime pixel branches, plus an explicitly non-runtime 0x27f1 recovery derived from exact corpus dimensions, payload consumption, and palette bounds",
+    "confidence_scope": {
+      "loader_grammar_and_record_offsets": "proven",
+      "pixel_code_0x27f1_static_recovery": "high empirical/data-derived",
+      "seven_runtime_pixel_branches": "proven",
+      "unlisted_branch_values": "unsupported and preserved without image output"
+    },
+    "loader": {
+      "bytecode": "reconstructed-project/bytecode/b.javap.txt:1002",
+      "fallback_source": "reconstructed-project/src/fallback/b.java:114",
+      "method": "b.a(byte[], int)",
+      "simple_source": "reconstructed-project/src/simple/b.java:123",
+      "structured_source": "reconstructed-project/src/structured/b.java:123"
+    },
+    "pixel_decoder": {
+      "data_derived_static_recovery": {
+        "classification": "data-derived-static-recovery",
+        "confidence": "high",
+        "evidence_basis": "empirical-corpus-invariants",
+        "pixel_code": "0x27f1",
+        "runtime_bytecode_branch": false
+      },
+      "method": "b.a(byte[], int, int, int)",
+      "runtime_proven_codes": [
+        "0x0200",
+        "0x0400",
+        "0x1600",
+        "0x5602",
+        "0x56f2",
+        "0x64f0",
+        "0xa640"
+      ],
+      "structured_source": "reconstructed-project/src/structured/b.java:1371"
+    }
+  },
+  "format": "Gameloft sprite binary parsed by b",
+  "generated_pngs": [
+    {
+      "crc_validation": "passed",
+      "file": "module-0000-palette-00-20x20.png",
+      "height": 20,
+      "module_index": 0,
+      "palette_index": 0,
+      "sha256": "d48ffc201fffb74793f7504fa5b54914ee1f5a973dc1a6cf7a007517515d7e9c",
+      "size": 116,
+      "width": 20
+    },
+    {
+      "crc_validation": "passed",
+      "file": "module-0001-palette-00-20x20.png",
+      "height": 20,
+      "module_index": 1,
+      "palette_index": 0,
+      "sha256": "c99ce9fad80ea32630fa5c3474c949ff2907a92dff5ee62810569754e3da44e0",
+      "size": 120,
+      "width": 20
+    },
+    {
+      "crc_validation": "passed",
+      "file": "module-0002-palette-00-20x20.png",
+      "height": 20,
+      "module_index": 2,
+      "palette_index": 0,
+      "sha256": "678d2e695c5205028e5b9b1f5a24504182f81542fdb6374e453a9a9219cbcf47",
+      "size": 86,
+      "width": 20
+    }
+  ],
+  "header": {
+    "confidence": "proven",
+    "flags_aD": 17138945,
+    "flags_aD_hex": "0x01058501",
+    "magic_or_version": 1503,
+    "magic_or_version_hex": "0x05df",
+    "module_count_ab": 3,
+    "module_count_offset": 6,
+    "set_bits": [
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00000001"
+      },
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00000100"
+      },
+      {
+        "loader_effect": "ar/as and rectangle values use u16 LE storage",
+        "mask": "0x00000400"
+      },
+      {
+        "loader_effect": "am/an records and per-ai ao deltas are present",
+        "mask": "0x00008000"
+      },
+      {
+        "loader_effect": "set in input; no byte-read effect in b.a(byte[], int)",
+        "mask": "0x00010000"
+      },
+      {
+        "loader_effect": "ax/ay values use u16 LE storage instead of signed bytes",
+        "mask": "0x00040000"
+      },
+      {
+        "loader_effect": "palette, pixel-code, and per-module aB payload section may follow",
+        "mask": "0x01000000"
+      }
+    ],
+    "source_range": {
+      "end_exclusive": 8,
+      "end_exclusive_hex": "0x00000008",
+      "size": 8,
+      "start": 0,
+      "start_hex": "0x00000000"
+    }
+  },
+  "input_size": 388,
+  "limitations": [],
+  "module_pixel_results": [
+    {
+      "bytes_consumed": 40,
+      "classification": "runtime-proven",
+      "confidence": "proven",
+      "evidence_basis": "recovered-runtime-bytecode",
+      "height": 20,
+      "module_index": 0,
+      "palette_variants": 1,
+      "payload_size": 40,
+      "pixel_code": "0x64f0",
+      "pixel_count": 400,
+      "png_count": 1,
+      "produced_slots_before_crop": 400,
+      "runtime_bytecode_branch": true,
+      "status": "decoded",
+      "trailing_bytes": 0,
+      "width": 20
+    },
+    {
+      "bytes_consumed": 37,
+      "classification": "runtime-proven",
+      "confidence": "proven",
+      "evidence_basis": "recovered-runtime-bytecode",
+      "height": 20,
+      "module_index": 1,
+      "palette_variants": 1,
+      "payload_size": 37,
+      "pixel_code": "0x64f0",
+      "pixel_count": 400,
+      "png_count": 1,
+      "produced_slots_before_crop": 400,
+      "runtime_bytecode_branch": true,
+      "status": "decoded",
+      "trailing_bytes": 0,
+      "width": 20
+    },
+    {
+      "bytes_consumed": 4,
+      "classification": "runtime-proven",
+      "confidence": "proven",
+      "evidence_basis": "recovered-runtime-bytecode",
+      "height": 20,
+      "module_index": 2,
+      "palette_variants": 1,
+      "payload_size": 4,
+      "pixel_code": "0x64f0",
+      "pixel_count": 400,
+      "png_count": 1,
+      "produced_slots_before_crop": 400,
+      "runtime_bytecode_branch": true,
+      "status": "decoded",
+      "trailing_bytes": 0,
+      "width": 20
+    }
+  ],
+  "parse_end": 388,
+  "reference_observations": {
+    "interpretation": "Preserved as observations, not parse failures: b does not establish whether every stored record is drawn, and 0xff/0x3ff values occur in otherwise structurally valid assets.",
+    "items": [],
+    "status": "all-indexes-within-loaded-counts"
+  },
+  "schema_version": 1,
+  "sections": [
+    {
+      "confidence": "proven",
+      "count": 3,
+      "id": "modules",
+      "records": [
+        {
+          "aB_payload": {
+            "data_range": {
+              "end_exclusive": 343,
+              "end_exclusive_hex": "0x00000157",
+              "size": 40,
+              "start": 303,
+              "start_hex": "0x0000012f"
+            },
+            "length": 40,
+            "length_offset": 301,
+            "sha256": "99c36e0251bb5dcbcdd1f8521319e49458158d20c539966a827648485d7de337"
+          },
+          "ae_width": 20,
+          "af_height": 20,
+          "dimension_storage": "u8",
+          "index": 0,
+          "pixel_reconstruction": {
+            "bytes_consumed": 40,
+            "classification": "runtime-proven",
+            "confidence": "proven",
+            "evidence_basis": "recovered-runtime-bytecode",
+            "height": 20,
+            "palette_variants": 1,
+            "payload_size": 40,
+            "pixel_code": "0x64f0",
+            "pixel_count": 400,
+            "png_count": 1,
+            "produced_slots_before_crop": 400,
+            "runtime_bytecode_branch": true,
+            "status": "decoded",
+            "trailing_bytes": 0,
+            "width": 20
+          },
+          "runtime_type_aU": 0,
+          "source_range": {
+            "end_exclusive": 11,
+            "end_exclusive_hex": "0x0000000b",
+            "size": 3,
+            "start": 8,
+            "start_hex": "0x00000008"
+          },
+          "tag": 0
+        },
+        {
+          "aB_payload": {
+            "data_range": {
+              "end_exclusive": 382,
+              "end_exclusive_hex": "0x0000017e",
+              "size": 37,
+              "start": 345,
+              "start_hex": "0x00000159"
+            },
+            "length": 37,
+            "length_offset": 343,
+            "sha256": "7b6bf14fb61513fd67f59133a253f20fa29364a26c9fffd9a9713e7e19e04913"
+          },
+          "ae_width": 20,
+          "af_height": 20,
+          "dimension_storage": "u8",
+          "index": 1,
+          "pixel_reconstruction": {
+            "bytes_consumed": 37,
+            "classification": "runtime-proven",
+            "confidence": "proven",
+            "evidence_basis": "recovered-runtime-bytecode",
+            "height": 20,
+            "palette_variants": 1,
+            "payload_size": 37,
+            "pixel_code": "0x64f0",
+            "pixel_count": 400,
+            "png_count": 1,
+            "produced_slots_before_crop": 400,
+            "runtime_bytecode_branch": true,
+            "status": "decoded",
+            "trailing_bytes": 0,
+            "width": 20
+          },
+          "runtime_type_aU": 0,
+          "source_range": {
+            "end_exclusive": 14,
+            "end_exclusive_hex": "0x0000000e",
+            "size": 3,
+            "start": 11,
+            "start_hex": "0x0000000b"
+          },
+          "tag": 0
+        },
+        {
+          "aB_payload": {
+            "data_range": {
+              "end_exclusive": 388,
+              "end_exclusive_hex": "0x00000184",
+              "size": 4,
+              "start": 384,
+              "start_hex": "0x00000180"
+            },
+            "length": 4,
+            "length_offset": 382,
+            "sha256": "e04126939d5e69a8f763aa4713da0747d2b549c0141fbe196a912d44de74fd29"
+          },
+          "ae_width": 20,
+          "af_height": 20,
+          "dimension_storage": "u8",
+          "index": 2,
+          "pixel_reconstruction": {
+            "bytes_consumed": 4,
+            "classification": "runtime-proven",
+            "confidence": "proven",
+            "evidence_basis": "recovered-runtime-bytecode",
+            "height": 20,
+            "palette_variants": 1,
+            "payload_size": 4,
+            "pixel_code": "0x64f0",
+            "pixel_count": 400,
+            "png_count": 1,
+            "produced_slots_before_crop": 400,
+            "runtime_bytecode_branch": true,
+            "status": "decoded",
+            "trailing_bytes": 0,
+            "width": 20
+          },
+          "runtime_type_aU": 0,
+          "source_range": {
+            "end_exclusive": 17,
+            "end_exclusive_hex": "0x00000011",
+            "size": 3,
+            "start": 14,
+            "start_hex": "0x0000000e"
+          },
+          "tag": 0
+        }
+      ],
+      "runtime_fields": [
+        "aU",
+        "aV",
+        "aW",
+        "ac",
+        "ad",
+        "ae",
+        "af",
+        "ag",
+        "ah"
+      ],
+      "source_range": {
+        "end_exclusive": 17,
+        "end_exclusive_hex": "0x00000011",
+        "size": 9,
+        "start": 8,
+        "start_hex": "0x00000008"
+      }
+    },
+    {
+      "confidence": "proven",
+      "consumer_evidence": "b reconstructs an index from ap/aq; aq bit 0x10 selects recursive ai-frame drawing, otherwise the index selects a module",
+      "count": 36,
+      "count_offset": 17,
+      "id": "ap_ar_as_aq_records",
+      "records": [
+        {
+          "ap": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 42,
+            "raw_u16": 42
+          },
+          "as": {
+            "java_i16": 29,
+            "raw_u16": 29
+          },
+          "index": 0,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 0,
+          "source_range": {
+            "end_exclusive": 25,
+            "end_exclusive_hex": "0x00000019",
+            "size": 6,
+            "start": 19,
+            "start_hex": "0x00000013"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 42,
+            "raw_u16": 42
+          },
+          "as": {
+            "java_i16": 49,
+            "raw_u16": 49
+          },
+          "index": 1,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 1,
+          "source_range": {
+            "end_exclusive": 31,
+            "end_exclusive_hex": "0x0000001f",
+            "size": 6,
+            "start": 25,
+            "start_hex": "0x00000019"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 22,
+            "raw_u16": 22
+          },
+          "as": {
+            "java_i16": -11,
+            "raw_u16": 65525
+          },
+          "index": 2,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 0,
+          "source_range": {
+            "end_exclusive": 37,
+            "end_exclusive_hex": "0x00000025",
+            "size": 6,
+            "start": 31,
+            "start_hex": "0x0000001f"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 22,
+            "raw_u16": 22
+          },
+          "as": {
+            "java_i16": 9,
+            "raw_u16": 9
+          },
+          "index": 3,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 1,
+          "source_range": {
+            "end_exclusive": 43,
+            "end_exclusive_hex": "0x0000002b",
+            "size": 6,
+            "start": 37,
+            "start_hex": "0x00000025"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 22,
+            "raw_u16": 22
+          },
+          "as": {
+            "java_i16": 49,
+            "raw_u16": 49
+          },
+          "index": 4,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 49,
+            "end_exclusive_hex": "0x00000031",
+            "size": 6,
+            "start": 43,
+            "start_hex": "0x0000002b"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 22,
+            "raw_u16": 22
+          },
+          "as": {
+            "java_i16": 29,
+            "raw_u16": 29
+          },
+          "index": 5,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 55,
+            "end_exclusive_hex": "0x00000037",
+            "size": 6,
+            "start": 49,
+            "start_hex": "0x00000031"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": -51,
+            "raw_u16": 65485
+          },
+          "index": 6,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 0,
+          "source_range": {
+            "end_exclusive": 61,
+            "end_exclusive_hex": "0x0000003d",
+            "size": 6,
+            "start": 55,
+            "start_hex": "0x00000037"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": -31,
+            "raw_u16": 65505
+          },
+          "index": 7,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 1,
+          "source_range": {
+            "end_exclusive": 67,
+            "end_exclusive_hex": "0x00000043",
+            "size": 6,
+            "start": 61,
+            "start_hex": "0x0000003d"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": -91,
+            "raw_u16": 65445
+          },
+          "index": 8,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 0,
+          "source_range": {
+            "end_exclusive": 73,
+            "end_exclusive_hex": "0x00000049",
+            "size": 6,
+            "start": 67,
+            "start_hex": "0x00000043"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": -71,
+            "raw_u16": 65465
+          },
+          "index": 9,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 1,
+          "source_range": {
+            "end_exclusive": 79,
+            "end_exclusive_hex": "0x0000004f",
+            "size": 6,
+            "start": 73,
+            "start_hex": "0x00000049"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": 49,
+            "raw_u16": 49
+          },
+          "index": 10,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 85,
+            "end_exclusive_hex": "0x00000055",
+            "size": 6,
+            "start": 79,
+            "start_hex": "0x0000004f"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": 49,
+            "raw_u16": 49
+          },
+          "index": 11,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 91,
+            "end_exclusive_hex": "0x0000005b",
+            "size": 6,
+            "start": 85,
+            "start_hex": "0x00000055"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": 29,
+            "raw_u16": 29
+          },
+          "index": 12,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 97,
+            "end_exclusive_hex": "0x00000061",
+            "size": 6,
+            "start": 91,
+            "start_hex": "0x0000005b"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": 29,
+            "raw_u16": 29
+          },
+          "index": 13,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 103,
+            "end_exclusive_hex": "0x00000067",
+            "size": 6,
+            "start": 97,
+            "start_hex": "0x00000061"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": 9,
+            "raw_u16": 9
+          },
+          "index": 14,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 109,
+            "end_exclusive_hex": "0x0000006d",
+            "size": 6,
+            "start": 103,
+            "start_hex": "0x00000067"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": 9,
+            "raw_u16": 9
+          },
+          "index": 15,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 115,
+            "end_exclusive_hex": "0x00000073",
+            "size": 6,
+            "start": 109,
+            "start_hex": "0x0000006d"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 2,
+            "raw_u16": 2
+          },
+          "as": {
+            "java_i16": -11,
+            "raw_u16": 65525
+          },
+          "index": 16,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 121,
+            "end_exclusive_hex": "0x00000079",
+            "size": 6,
+            "start": 115,
+            "start_hex": "0x00000073"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": -11,
+            "raw_u16": 65525
+          },
+          "index": 17,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 127,
+            "end_exclusive_hex": "0x0000007f",
+            "size": 6,
+            "start": 121,
+            "start_hex": "0x00000079"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": -31,
+            "raw_u16": 65505
+          },
+          "index": 18,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 133,
+            "end_exclusive_hex": "0x00000085",
+            "size": 6,
+            "start": 127,
+            "start_hex": "0x0000007f"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -18,
+            "raw_u16": 65518
+          },
+          "as": {
+            "java_i16": -51,
+            "raw_u16": 65485
+          },
+          "index": 19,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 139,
+            "end_exclusive_hex": "0x0000008b",
+            "size": 6,
+            "start": 133,
+            "start_hex": "0x00000085"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 21,
+            "raw_u16": 21
+          },
+          "as": {
+            "java_i16": 23,
+            "raw_u16": 23
+          },
+          "index": 20,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 145,
+            "end_exclusive_hex": "0x00000091",
+            "size": 6,
+            "start": 139,
+            "start_hex": "0x0000008b"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 1,
+            "raw_u16": 1
+          },
+          "as": {
+            "java_i16": 23,
+            "raw_u16": 23
+          },
+          "index": 21,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 151,
+            "end_exclusive_hex": "0x00000097",
+            "size": 6,
+            "start": 145,
+            "start_hex": "0x00000091"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -19,
+            "raw_u16": 65517
+          },
+          "as": {
+            "java_i16": 23,
+            "raw_u16": 23
+          },
+          "index": 22,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 157,
+            "end_exclusive_hex": "0x0000009d",
+            "size": 6,
+            "start": 151,
+            "start_hex": "0x00000097"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -39,
+            "raw_u16": 65497
+          },
+          "as": {
+            "java_i16": 23,
+            "raw_u16": 23
+          },
+          "index": 23,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 163,
+            "end_exclusive_hex": "0x000000a3",
+            "size": 6,
+            "start": 157,
+            "start_hex": "0x0000009d"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 21,
+            "raw_u16": 21
+          },
+          "as": {
+            "java_i16": 3,
+            "raw_u16": 3
+          },
+          "index": 24,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 169,
+            "end_exclusive_hex": "0x000000a9",
+            "size": 6,
+            "start": 163,
+            "start_hex": "0x000000a3"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 1,
+            "raw_u16": 1
+          },
+          "as": {
+            "java_i16": 3,
+            "raw_u16": 3
+          },
+          "index": 25,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 175,
+            "end_exclusive_hex": "0x000000af",
+            "size": 6,
+            "start": 169,
+            "start_hex": "0x000000a9"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -19,
+            "raw_u16": 65517
+          },
+          "as": {
+            "java_i16": 3,
+            "raw_u16": 3
+          },
+          "index": 26,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 181,
+            "end_exclusive_hex": "0x000000b5",
+            "size": 6,
+            "start": 175,
+            "start_hex": "0x000000af"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -39,
+            "raw_u16": 65497
+          },
+          "as": {
+            "java_i16": 3,
+            "raw_u16": 3
+          },
+          "index": 27,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 187,
+            "end_exclusive_hex": "0x000000bb",
+            "size": 6,
+            "start": 181,
+            "start_hex": "0x000000b5"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 21,
+            "raw_u16": 21
+          },
+          "as": {
+            "java_i16": -17,
+            "raw_u16": 65519
+          },
+          "index": 28,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 193,
+            "end_exclusive_hex": "0x000000c1",
+            "size": 6,
+            "start": 187,
+            "start_hex": "0x000000bb"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 1,
+            "raw_u16": 1
+          },
+          "as": {
+            "java_i16": -17,
+            "raw_u16": 65519
+          },
+          "index": 29,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 199,
+            "end_exclusive_hex": "0x000000c7",
+            "size": 6,
+            "start": 193,
+            "start_hex": "0x000000c1"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -19,
+            "raw_u16": 65517
+          },
+          "as": {
+            "java_i16": -17,
+            "raw_u16": 65519
+          },
+          "index": 30,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 205,
+            "end_exclusive_hex": "0x000000cd",
+            "size": 6,
+            "start": 199,
+            "start_hex": "0x000000c7"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -39,
+            "raw_u16": 65497
+          },
+          "as": {
+            "java_i16": -17,
+            "raw_u16": 65519
+          },
+          "index": 31,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 211,
+            "end_exclusive_hex": "0x000000d3",
+            "size": 6,
+            "start": 205,
+            "start_hex": "0x000000cd"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 21,
+            "raw_u16": 21
+          },
+          "as": {
+            "java_i16": -37,
+            "raw_u16": 65499
+          },
+          "index": 32,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 217,
+            "end_exclusive_hex": "0x000000d9",
+            "size": 6,
+            "start": 211,
+            "start_hex": "0x000000d3"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": 1,
+            "raw_u16": 1
+          },
+          "as": {
+            "java_i16": -37,
+            "raw_u16": 65499
+          },
+          "index": 33,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 223,
+            "end_exclusive_hex": "0x000000df",
+            "size": 6,
+            "start": 217,
+            "start_hex": "0x000000d9"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -19,
+            "raw_u16": 65517
+          },
+          "as": {
+            "java_i16": -37,
+            "raw_u16": 65499
+          },
+          "index": 34,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 229,
+            "end_exclusive_hex": "0x000000e5",
+            "size": 6,
+            "start": 223,
+            "start_hex": "0x000000df"
+          },
+          "transform_bits": 0
+        },
+        {
+          "ap": {
+            "java_i8": 2,
+            "raw_u8": 2
+          },
+          "aq": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ar": {
+            "java_i16": -39,
+            "raw_u16": 65497
+          },
+          "as": {
+            "java_i16": -37,
+            "raw_u16": 65499
+          },
+          "index": 35,
+          "reference_target_from_aq_bit_0x10": "module_record",
+          "referenced_index": 2,
+          "source_range": {
+            "end_exclusive": 235,
+            "end_exclusive_hex": "0x000000eb",
+            "size": 6,
+            "start": 229,
+            "start_hex": "0x000000e5"
+          },
+          "transform_bits": 0
+        }
+      ],
+      "runtime_fields": [
+        "ap",
+        "ar",
+        "as",
+        "at",
+        "aq"
+      ],
+      "source_range": {
+        "end_exclusive": 235,
+        "end_exclusive_hex": "0x000000eb",
+        "size": 218,
+        "start": 17,
+        "start_hex": "0x00000011"
+      }
+    },
+    {
+      "confidence": "proven",
+      "count": 0,
+      "count_offset": 235,
+      "id": "am_or_an_records",
+      "records": [],
+      "runtime_fields": [
+        "am",
+        "an"
+      ],
+      "source_range": {
+        "end_exclusive": 237,
+        "end_exclusive_hex": "0x000000ed",
+        "size": 2,
+        "start": 235,
+        "start_hex": "0x000000eb"
+      }
+    },
+    {
+      "ai_aj_ao_range": {
+        "end_exclusive": 247,
+        "end_exclusive_hex": "0x000000f7",
+        "size": 10,
+        "start": 237,
+        "start_hex": "0x000000ed"
+      },
+      "ak_or_al_range": {
+        "end_exclusive": 263,
+        "end_exclusive_hex": "0x00000107",
+        "size": 16,
+        "start": 247,
+        "start_hex": "0x000000f7"
+      },
+      "ak_or_al_records": [
+        {
+          "index": 0,
+          "raw_values": [
+            65518,
+            65445,
+            80,
+            160
+          ],
+          "runtime_values": [
+            -18,
+            -91,
+            80,
+            160
+          ],
+          "source_range": {
+            "end_exclusive": 255,
+            "end_exclusive_hex": "0x000000ff",
+            "size": 8,
+            "start": 247,
+            "start_hex": "0x000000f7"
+          },
+          "storage": "u16-le",
+          "value_order_from_accessors": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        {
+          "index": 1,
+          "raw_values": [
+            65497,
+            65499,
+            80,
+            80
+          ],
+          "runtime_values": [
+            -39,
+            -37,
+            80,
+            80
+          ],
+          "source_range": {
+            "end_exclusive": 263,
+            "end_exclusive_hex": "0x00000107",
+            "size": 8,
+            "start": 255,
+            "start_hex": "0x000000ff"
+          },
+          "storage": "u16-le",
+          "value_order_from_accessors": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        }
+      ],
+      "ao_total": 0,
+      "confidence": "proven",
+      "count": 2,
+      "count_offset": 237,
+      "id": "ai_aj_ao_and_ak_or_al_records",
+      "records": [
+        {
+          "ai": {
+            "java_i8": 20,
+            "raw_u8": 20
+          },
+          "aj": {
+            "java_i16": 0,
+            "raw_u16": 0
+          },
+          "ao_delta": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ao_end_exclusive": 0,
+          "ao_start": 0,
+          "ap_record_span": {
+            "count": 20,
+            "end_exclusive": 20,
+            "start": 0
+          },
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 243,
+            "end_exclusive_hex": "0x000000f3",
+            "size": 4,
+            "start": 239,
+            "start_hex": "0x000000ef"
+          }
+        },
+        {
+          "ai": {
+            "java_i8": 16,
+            "raw_u8": 16
+          },
+          "aj": {
+            "java_i16": 20,
+            "raw_u16": 20
+          },
+          "ao_delta": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "ao_end_exclusive": 0,
+          "ao_start": 0,
+          "ap_record_span": {
+            "count": 16,
+            "end_exclusive": 36,
+            "start": 20
+          },
+          "index": 1,
+          "source_range": {
+            "end_exclusive": 247,
+            "end_exclusive_hex": "0x000000f7",
+            "size": 4,
+            "start": 243,
+            "start_hex": "0x000000f3"
+          }
+        }
+      ],
+      "runtime_fields": [
+        "ai",
+        "aj",
+        "ao",
+        "ak",
+        "al"
+      ],
+      "source_range": {
+        "end_exclusive": 263,
+        "end_exclusive_hex": "0x00000107",
+        "size": 26,
+        "start": 237,
+        "start_hex": "0x000000ed"
+      }
+    },
+    {
+      "confidence": "proven",
+      "consumer_evidence": "b reconstructs an ai-frame index from av/i, then applies ax/ay and transform bits",
+      "count": 2,
+      "count_offset": 263,
+      "id": "av_aw_ax_ay_i_records",
+      "records": [
+        {
+          "av": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "aw": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "ax": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "ay": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "i": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "index": 0,
+          "offset_storage": "u16-le",
+          "referenced_ai_frame_index": 0,
+          "source_range": {
+            "end_exclusive": 272,
+            "end_exclusive_hex": "0x00000110",
+            "size": 7,
+            "start": 265,
+            "start_hex": "0x00000109"
+          },
+          "transform_bits": 0
+        },
+        {
+          "av": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "aw": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "ax": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "ay": {
+            "raw": 0,
+            "runtime_signed": 0
+          },
+          "i": {
+            "java_i8": 0,
+            "raw_u8": 0
+          },
+          "index": 1,
+          "offset_storage": "u16-le",
+          "referenced_ai_frame_index": 1,
+          "source_range": {
+            "end_exclusive": 279,
+            "end_exclusive_hex": "0x00000117",
+            "size": 7,
+            "start": 272,
+            "start_hex": "0x00000110"
+          },
+          "transform_bits": 0
+        }
+      ],
+      "runtime_fields": [
+        "av",
+        "aw",
+        "ax",
+        "ay",
+        "i"
+      ],
+      "source_range": {
+        "end_exclusive": 279,
+        "end_exclusive_hex": "0x00000117",
+        "size": 16,
+        "start": 263,
+        "start_hex": "0x00000107"
+      }
+    },
+    {
+      "confidence": "proven",
+      "count": 2,
+      "count_offset": 279,
+      "id": "au_h_records",
+      "records": [
+        {
+          "au": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "av_record_span": {
+            "count": 1,
+            "end_exclusive": 1,
+            "start": 0
+          },
+          "h": {
+            "java_i16": 0,
+            "raw_u16": 0
+          },
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 284,
+            "end_exclusive_hex": "0x0000011c",
+            "size": 3,
+            "start": 281,
+            "start_hex": "0x00000119"
+          }
+        },
+        {
+          "au": {
+            "java_i8": 1,
+            "raw_u8": 1
+          },
+          "av_record_span": {
+            "count": 1,
+            "end_exclusive": 2,
+            "start": 1
+          },
+          "h": {
+            "java_i16": 1,
+            "raw_u16": 1
+          },
+          "index": 1,
+          "source_range": {
+            "end_exclusive": 287,
+            "end_exclusive_hex": "0x0000011f",
+            "size": 3,
+            "start": 284,
+            "start_hex": "0x0000011c"
+          }
+        }
+      ],
+      "runtime_fields": [
+        "au",
+        "h"
+      ],
+      "source_range": {
+        "end_exclusive": 287,
+        "end_exclusive_hex": "0x0000011f",
+        "size": 8,
+        "start": 279,
+        "start_hex": "0x00000117"
+      }
+    },
+    {
+      "confidence": "proven",
+      "confidence_scope": "loader structure and source boundaries",
+      "id": "palette_pixel_code_and_aB_payloads",
+      "palette_count": 1,
+      "palette_format": {
+        "behavior": "u32 LE value copied directly to runtime ARGB int",
+        "hex": "0x8888",
+        "implemented_branch": true,
+        "offset": 287,
+        "value": 34952
+      },
+      "palette_size_byte": 2,
+      "palette_size_effective": 2,
+      "palettes": [
+        {
+          "argb": [
+            "0xff000000",
+            "0x00ff00ff"
+          ],
+          "index": 0,
+          "source_range": {
+            "end_exclusive": 299,
+            "end_exclusive_hex": "0x0000012b",
+            "size": 8,
+            "start": 291,
+            "start_hex": "0x00000123"
+          }
+        }
+      ],
+      "payload_count": 3,
+      "payloads": [
+        {
+          "data_range": {
+            "end_exclusive": 343,
+            "end_exclusive_hex": "0x00000157",
+            "size": 40,
+            "start": 303,
+            "start_hex": "0x0000012f"
+          },
+          "length": 40,
+          "length_offset": 301,
+          "length_storage": "u16-le",
+          "module_index": 0,
+          "sha256": "99c36e0251bb5dcbcdd1f8521319e49458158d20c539966a827648485d7de337"
+        },
+        {
+          "data_range": {
+            "end_exclusive": 382,
+            "end_exclusive_hex": "0x0000017e",
+            "size": 37,
+            "start": 345,
+            "start_hex": "0x00000159"
+          },
+          "length": 37,
+          "length_offset": 343,
+          "length_storage": "u16-le",
+          "module_index": 1,
+          "sha256": "7b6bf14fb61513fd67f59133a253f20fa29364a26c9fffd9a9713e7e19e04913"
+        },
+        {
+          "data_range": {
+            "end_exclusive": 388,
+            "end_exclusive_hex": "0x00000184",
+            "size": 4,
+            "start": 384,
+            "start_hex": "0x00000180"
+          },
+          "length": 4,
+          "length_offset": 382,
+          "length_storage": "u16-le",
+          "module_index": 2,
+          "sha256": "e04126939d5e69a8f763aa4713da0747d2b549c0141fbe196a912d44de74fd29"
+        }
+      ],
+      "pixel_code": {
+        "behavior": "palette index plus run length in one byte",
+        "classification": "runtime-proven",
+        "confidence": "proven",
+        "evidence_basis": "recovered-runtime-bytecode",
+        "hex": "0x64f0",
+        "implemented_branch": true,
+        "offset": 299,
+        "runtime_bytecode_branch": true,
+        "value": 25840
+      },
+      "runtime_fields": [
+        "j",
+        "k",
+        "aG",
+        "aL",
+        "aB",
+        "aC"
+      ],
+      "source_range": {
+        "end_exclusive": 388,
+        "end_exclusive_hex": "0x00000184",
+        "size": 101,
+        "start": 287,
+        "start_hex": "0x0000011f"
+      }
+    }
+  ],
+  "source": {
+    "compression": "none",
+    "decoded_file": "pack-3/entry-037-marker-003.bin",
+    "decoded_size_actual": 388,
+    "decoded_size_recorded": 388,
+    "detected_type": "Gameloft sprite binary",
+    "entry_index": 37,
+    "marker": 3,
+    "marker_value": 3,
+    "metadata_file": "pack-3/metadata.json",
+    "pack": "3",
+    "pack_offset": 60085,
+    "packed_size": 389,
+    "part": "3.1",
+    "sha256_actual": "360d0373035d58db46bea82dacff4962c12552d1f33a2d3e9c6fa6994d6beb42",
+    "sha256_matches": true,
+    "sha256_recorded": "360d0373035d58db46bea82dacff4962c12552d1f33a2d3e9c6fa6994d6beb42",
+    "size_matches": true
+  },
+  "static_only": true,
+  "status": "success"
+}

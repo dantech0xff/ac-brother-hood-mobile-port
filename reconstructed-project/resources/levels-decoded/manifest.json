@@ -1,0 +1,57 @@
+{
+  "decoder": "decode-gameloft-level-records.py",
+  "files": [
+    {
+      "path": "pack-6/records.json",
+      "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+      "size": 5421736
+    },
+    {
+      "path": "pack-7/records.json",
+      "sha256": "20571870a41c40819fe79b6ac0ba47dc5e9c1a0b5f04e36deba0dbbc74cfde97",
+      "size": 1354199
+    },
+    {
+      "path": "pack-8/records.json",
+      "sha256": "a3f50dc3be69a5e0a3b38382eb3d7fa318130631d71cbc3e4fe0b0af5015dd6c",
+      "size": 4897848
+    },
+    {
+      "path": "pack-9/records.json",
+      "sha256": "b307914d7ee25f51c88a0349ad3abd9442fd4f1b368c76c8a301060a12e821a4",
+      "size": 8269889
+    },
+    {
+      "path": "pack-10/records.json",
+      "sha256": "0f8df8a2d2e3c73c9781bd2443f59090485c86376d05fa80279c4fe7e9984a51",
+      "size": 1274509
+    },
+    {
+      "path": "pack-11/records.json",
+      "sha256": "596ce37a8021c9402ce6f2ca99c8cd9ddc5c9031e1ded7bd1be335c497b12df5",
+      "size": 4964849
+    },
+    {
+      "path": "pack-12/records.json",
+      "sha256": "9a59e10b7f798e0b3cdff15577039e76e76372b3ceebbbbdcf682e08c80b986e",
+      "size": 5345788
+    },
+    {
+      "path": "pack-13/records.json",
+      "sha256": "407311143b12e8c501d3372c7f514afb962436d435564b0c9a5e0ca275f3647e",
+      "size": 3032065
+    },
+    {
+      "path": "summary.json",
+      "sha256": "89b000fa5f8e76c6f2cf0f1bb1afc437737b55a1d53380b2ac8d9dd619b895dc",
+      "size": 7631
+    }
+  ],
+  "input_contract": "decoded pack metadata plus extracted slot-0/slot-7 .bin entries; no JAR/class input",
+  "managed_aggregate_sha256_excluding_manifest": "8168a556ce52c787d2087d7bfa315fb68b12638f7102a7c731757c466d977c84",
+  "managed_file_count_excluding_manifest": 9,
+  "managed_total_bytes_excluding_manifest": 34568514,
+  "schema_version": 1,
+  "self_excluded_from_files": true,
+  "static_only": true
+}

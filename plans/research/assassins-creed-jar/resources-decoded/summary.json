@@ -1,0 +1,142 @@
+{
+  "jar": "assassins_creed_-_br_320x240_136711.jar",
+  "packs": [
+    {
+      "pack": "1",
+      "entries": 4,
+      "parts": 1
+    },
+    {
+      "pack": "2",
+      "entries": 6,
+      "parts": 1
+    },
+    {
+      "pack": "3",
+      "entries": 75,
+      "parts": 3
+    },
+    {
+      "pack": "4",
+      "entries": 4,
+      "parts": 1
+    },
+    {
+      "pack": "5",
+      "entries": 1,
+      "parts": 1
+    },
+    {
+      "pack": "6",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "7",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "8",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "9",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "10",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "11",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "12",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "13",
+      "entries": 14,
+      "parts": 1
+    },
+    {
+      "pack": "14",
+      "entries": 9,
+      "parts": 1
+    },
+    {
+      "pack": "15",
+      "entries": 13,
+      "parts": 1
+    },
+    {
+      "pack": "16",
+      "entries": 2,
+      "parts": 1
+    },
+    {
+      "pack": "17",
+      "entries": 34,
+      "parts": 1
+    }
+  ],
+  "skipped": [],
+  "decode_errors": [],
+  "auxiliary": {
+    "mime_types": [
+      "audio/x-wav",
+      "audio/midi",
+      "audio/x-amr"
+    ],
+    "catalog_entries": 20,
+    "catalog_sizes_match": true,
+    "data_igp_printable_runs": 880,
+    "data_igp_pngs": 29
+  },
+  "classification": {
+    "detected_types": {
+      "Gameloft UTF-8 string table": 9,
+      "Gameloft sprite binary": 84,
+      "MIDI audio": 13,
+      "RIFF/WAVE audio": 18,
+      "game-specific binary": 114
+    },
+    "semantic_types": {
+      "Gameloft UTF-8 string table": 9,
+      "Gameloft sprite binary": 84,
+      "MIDI audio": 13,
+      "RIFF/WAVE audio": 18,
+      "fixed-point cosine lookup table": 1,
+      "fixed-point sqrt lookup table": 1,
+      "font Unicode-to-glyph hash table": 1,
+      "level block/script descriptor stream": 8,
+      "level object/entity descriptor stream": 8,
+      "primary layer dimensions": 8,
+      "primary tile layer": 8,
+      "primary-layer packed 2-bit flag/transform plane (runtime-unused)": 8,
+      "quaternary/lower layer dimensions": 8,
+      "quaternary/lower tile layer": 8,
+      "quaternary/lower-layer packed 2-bit flags": 8,
+      "secondary layer dimensions": 6,
+      "secondary tile layer": 6,
+      "secondary-layer packed 2-bit flags": 6,
+      "sprite module substitution table": 5,
+      "tertiary layer dimensions": 8,
+      "tertiary tile layer": 8,
+      "tertiary-layer packed 2-bit flags": 8
+    },
+    "semantic_confidence": {
+      "high": 99,
+      "inferred": 8,
+      "proven": 131
+    },
+    "unclassified_nonempty_entries": 0
+  }
+}

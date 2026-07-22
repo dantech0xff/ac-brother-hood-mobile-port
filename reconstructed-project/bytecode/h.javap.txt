@@ -1,0 +1,174 @@
+Classfile assassins_creed_-_br_320x240_136711.jar!/h.class
+  Last modified Sep 28, 2010; size 374 bytes
+  SHA-256 checksum af1d0341053d79b19cb2779ab77e777fc3fb7cb6ee2df79a22f6a0054dac2d55
+public interface h
+  minor version: 3
+  major version: 45
+  flags: (0x0601) ACC_PUBLIC, ACC_INTERFACE, ACC_ABSTRACT
+  this_class: #2                          // h
+  super_class: #3                         // java/lang/Object
+  interfaces: 0, fields: 1, methods: 1, attributes: 0
+Constant pool:
+   #1 = Integer            38958
+   #2 = Class              #11            // h
+   #3 = Class              #12            // java/lang/Object
+   #4 = Fieldref           #2.#5          // h.a:[I
+   #5 = NameAndType        #10:#9         // a:[I
+   #6 = Utf8               ()V
+   #7 = Utf8               <clinit>
+   #8 = Utf8               Code
+   #9 = Utf8               [I
+  #10 = Utf8               a
+  #11 = Utf8               h
+  #12 = Utf8               java/lang/Object
+{
+  public static final int[] a;
+    descriptor: [I
+    flags: (0x0019) ACC_PUBLIC, ACC_STATIC, ACC_FINAL
+
+  static {};
+    descriptor: ()V
+    flags: (0x0008) ACC_STATIC
+    Code:
+      stack=4, locals=0, args_size=0
+         0: bipush        34
+         2: newarray       int
+         4: dup
+         5: iconst_0
+         6: ldc           #1                  // int 38958
+         8: iastore
+         9: dup
+        10: iconst_1
+        11: sipush        14569
+        14: iastore
+        15: dup
+        16: iconst_2
+        17: sipush        7449
+        20: iastore
+        21: dup
+        22: iconst_3
+        23: sipush        16958
+        26: iastore
+        27: dup
+        28: iconst_4
+        29: sipush        9682
+        32: iastore
+        33: dup
+        34: iconst_5
+        35: sipush        11837
+        38: iastore
+        39: dup
+        40: bipush        6
+        42: sipush        6964
+        45: iastore
+        46: dup
+        47: bipush        7
+        49: sipush        3435
+        52: iastore
+        53: dup
+        54: bipush        8
+        56: sipush        5340
+        59: iastore
+        60: dup
+        61: bipush        9
+        63: sipush        9010
+        66: iastore
+        67: dup
+        68: bipush        10
+        70: sipush        218
+        73: iastore
+        74: dup
+        75: bipush        11
+        77: sipush        310
+        80: iastore
+        81: dup
+        82: bipush        12
+        84: sipush        812
+        87: iastore
+        88: dup
+        89: bipush        13
+        91: sipush        665
+        94: iastore
+        95: dup
+        96: bipush        14
+        98: sipush        518
+       101: iastore
+       102: dup
+       103: bipush        15
+       105: sipush        502
+       108: iastore
+       109: dup
+       110: bipush        16
+       112: sipush        990
+       115: iastore
+       116: dup
+       117: bipush        17
+       119: sipush        2823
+       122: iastore
+       123: dup
+       124: bipush        18
+       126: sipush        621
+       129: iastore
+       130: dup
+       131: bipush        19
+       133: sipush        797
+       136: iastore
+       137: dup
+       138: bipush        20
+       140: sipush        1108
+       143: iastore
+       144: dup
+       145: bipush        21
+       147: sipush        1581
+       150: iastore
+       151: dup
+       152: bipush        22
+       154: sipush        385
+       157: iastore
+       158: dup
+       159: bipush        23
+       161: sipush        325
+       164: iastore
+       165: dup
+       166: bipush        24
+       168: sipush        517
+       171: iastore
+       172: dup
+       173: bipush        25
+       175: sipush        990
+       178: iastore
+       179: dup
+       180: bipush        26
+       182: sipush        665
+       185: iastore
+       186: dup
+       187: bipush        27
+       189: sipush        281
+       192: iastore
+       193: dup
+       194: bipush        28
+       196: sipush        1862
+       199: iastore
+       200: dup
+       201: bipush        29
+       203: sipush        251
+       206: iastore
+       207: dup
+       208: bipush        30
+       210: sipush        177
+       213: iastore
+       214: dup
+       215: bipush        31
+       217: sipush        930
+       220: iastore
+       221: dup
+       222: bipush        32
+       224: sipush        458
+       227: iastore
+       228: dup
+       229: bipush        33
+       231: sipush        236
+       234: iastore
+       235: putstatic     #4                  // Field a:[I
+       238: return
+}

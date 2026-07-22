@@ -1,0 +1,122 @@
+[
+  {
+    "file": "0",
+    "declared_size": 36,
+    "actual_size": 36,
+    "size_matches": true
+  },
+  {
+    "file": "1",
+    "declared_size": 12724,
+    "actual_size": 12724,
+    "size_matches": true
+  },
+  {
+    "file": "2",
+    "declared_size": 117292,
+    "actual_size": 117292,
+    "size_matches": true
+  },
+  {
+    "file": "3",
+    "declared_size": 291404,
+    "actual_size": 291404,
+    "size_matches": true
+  },
+  {
+    "file": "3.1",
+    "declared_size": 292425,
+    "actual_size": 292425,
+    "size_matches": true
+  },
+  {
+    "file": "3.2",
+    "declared_size": 138380,
+    "actual_size": 138380,
+    "size_matches": true
+  },
+  {
+    "file": "4",
+    "declared_size": 456,
+    "actual_size": 456,
+    "size_matches": true
+  },
+  {
+    "file": "5",
+    "declared_size": 119,
+    "actual_size": 119,
+    "size_matches": true
+  },
+  {
+    "file": "6",
+    "declared_size": 149375,
+    "actual_size": 149375,
+    "size_matches": true
+  },
+  {
+    "file": "7",
+    "declared_size": 105103,
+    "actual_size": 105103,
+    "size_matches": true
+  },
+  {
+    "file": "8",
+    "declared_size": 132695,
+    "actual_size": 132695,
+    "size_matches": true
+  },
+  {
+    "file": "9",
+    "declared_size": 230762,
+    "actual_size": 230762,
+    "size_matches": true
+  },
+  {
+    "file": "10",
+    "declared_size": 109597,
+    "actual_size": 109597,
+    "size_matches": true
+  },
+  {
+    "file": "11",
+    "declared_size": 206880,
+    "actual_size": 206880,
+    "size_matches": true
+  },
+  {
+    "file": "12",
+    "declared_size": 167080,
+    "actual_size": 167080,
+    "size_matches": true
+  },
+  {
+    "file": "13",
+    "declared_size": 49231,
+    "actual_size": 49231,
+    "size_matches": true
+  },
+  {
+    "file": "14",
+    "declared_size": 13568,
+    "actual_size": 13568,
+    "size_matches": true
+  },
+  {
+    "file": "15",
+    "declared_size": 184310,
+    "actual_size": 184310,
+    "size_matches": true
+  },
+  {
+    "file": "16",
+    "declared_size": 667,
+    "actual_size": 667,
+    "size_matches": true
+  },
+  {
+    "file": "17",
+    "declared_size": 139049,
+    "actual_size": 139049,
+    "size_matches": true
+  }
+]

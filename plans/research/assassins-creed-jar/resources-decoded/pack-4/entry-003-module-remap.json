@@ -1,0 +1,227 @@
+{
+  "format": "sprite module substitution table",
+  "record_count": 55,
+  "record_schema": "u16LE source_module, u16LE replacement_module",
+  "mappings": [
+    {
+      "source_module": 202,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 203,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 204,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 205,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 206,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 207,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 208,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 209,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 210,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 211,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 212,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 213,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 214,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 215,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 216,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 217,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 218,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 219,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 220,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 221,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 222,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 223,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 224,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 225,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 226,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 227,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 228,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 229,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 230,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 231,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 244,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 245,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 246,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 247,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 248,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 249,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 250,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 251,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 252,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 256,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 257,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 258,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 259,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 266,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 267,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 268,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 269,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 270,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 271,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 274,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 275,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 276,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 279,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 280,
+      "replacement_module": 253
+    },
+    {
+      "source_module": 282,
+      "replacement_module": 253
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "format": "tile layer dimensions",
+  "width": 44,
+  "height": 600,
+  "encoding": "u16LE width, u16LE height"
+}
