@@ -783,6 +783,7 @@ flowchart LR
     Parser --> EntityState["per-entity ca/cK/cL/cd timeline state"]
     EntityState --> NormalGate["i.I normal path calls ab()"]
     NormalGate --> Step["i.aa one normal step"]
+    Step -->|"all lanes exhausted"| Completion["i.bI completion"]
     EntityState --> Selected["k.C selects one entity for gated drain"]
     Selected --> DrainGate{"after camera: cd[2] and cd[1]?"}
     DrainGate -->|"yes"| Drain["while ab(), call aa()"]
@@ -808,6 +809,7 @@ flowchart LR
 | Timeline tick | `i.cK` | So với event tick `s16`; `i.java:17930–18476`. | `high-confidence` |
 | Lane cursors | `i.cL[]` | Mỗi lane tiến độc lập; `i.java:17930–18491`. | `high-confidence` |
 | Step/direct/extended executor | `i.aa()` / `i.a(...)` | Low opcode trong `aa`; extended opcode delegate sau `i.java:18499`. | `high-confidence` |
+| Completion | `i.bI:()V` | Direct completion writes và ordered helper boundaries sau timeline end; `structured/i.java:17851–17909`; `bytecode/i.javap.txt:64541–64744`. | `high-confidence` |
 
 `i.aa()` snapshot old `cK`, rồi mới increment có điều kiện theo latch,
 normal-time hoặc Java remainder slow gate. Mỗi lane parse/dispatch current event
@@ -815,8 +817,17 @@ trước due test; event tương lai vẫn vào handler boundary nhưng cursor c
 khi `event.tick <= oldTick`, tối đa một cursor/lane/call. Opcode branch đọc
 signed byte: raw `0..99`/`128..255` inline, `100..127` extended. Ở exact tick,
 helper cho `108`/`113` có thể trả âm và kết thúc method sau tick stage nhưng
-trước current cursor, later opcode/lane và completion writes (`proven`). Full
-opcode effect vẫn chưa được mô phỏng.
+trước current cursor, later opcode/lane và completion writes (`proven`).
+
+Host contract hiện model direct writes/return boundaries của `i.bI()`
+completion và toàn bộ extended opcodes `100..114` dưới dạng immutable state
+transitions. Các call legacy sang helper, lookup/removal, UI và audio được giữ
+theo đúng thứ tự dưới dạng intentions, không được thực thi. `108`/`113` tách rõ
+future poll, exact-tick branch và past-tick no-op. Exhaustive corpus oracle đếm
+`480` extended occurrences trong `3.705` instruction; `109` có `0` corpus
+occurrence nên chỉ được khóa bằng synthetic source-contract pin theo bytecode.
+Low-opcode direct effects và internal effects của recursive helpers vẫn ngoài
+contract.
 
 Mode `0/1/2` có consumer; mode `3` chỉ có framing parser. Opcode `41–44`,
 `group_meta`, `lane_meta` và một số operand semantics vẫn `unknown`.
@@ -1062,8 +1073,10 @@ không còn là candidate wording.
 | `i.aa()` | `stepTimelineScript` | `i.java:17930–18476`; `bytecode/i.javap.txt:64769` | `high-confidence` |
 | `i.ab()` | `isTimelineScriptActive` | `i.java:18914–18927` | `high-confidence` |
 | `k.s(int)` | `findScriptGroupIndex` | `k.java:5544–5550` | `high-confidence` |
+| `i.bI:()V` | `completeTimelineScript` | `structured/i.java:17851–17909`; `bytecode/i.javap.txt:64541–64744` | `high-confidence` |
+| `i.a:(I[BIII)I` | `executeExtendedTimelineOpcode` | `structured/i.java:18499–18912`; `bytecode/i.javap.txt:66643–68768` | `high-confidence` |
 
-Descriptor phải luôn đi cùng alias khi method bị overload. Tổng cộng 11 alias
+Descriptor phải luôn đi cùng alias khi method bị overload. Tổng cộng 13 alias
 liên quan parity đã được promoted vào canonical overlay; bảng đầy đủ nằm trong
 `docs/symbol-map.md`.
 
@@ -1086,6 +1099,10 @@ liên quan parity đã được promoted vào canonical overlay; bảng đầy �
   `100..127` extended.
 - Exact-tick `108`/`113` negative-return handling aborts sau tick-stage nhưng
   trước current cursor advance và later opcode/lane writes.
+- Direct completion writes của `i.bI()` và direct writes/return boundaries của
+  opcode `100..114`; helper/UI/audio calls giữ ordered intention boundary.
+- Corpus có `480` extended occurrences trong `3.705` instruction; opcode `109`
+  có `0` occurrence.
 - Audio slot count, RMS physical contract và external API footprint.
 
 ### `high-confidence`
@@ -1119,7 +1136,7 @@ liên quan parity đã được promoted vào canonical overlay; bảng đầy �
 |---:|---|---|
 | 1 | Sinh control-flow/state-transition graph từ bytecode `g.e()` | Đặt tên cụm player state, parkour/combat/death chính xác hơn. |
 | 2 | Lập bảng `entityType → constructor fields → update handler → sprite IDs` | Đổi type numeric thành semantic family dựa trên consumer và asset. |
-| 3 | Hoàn thiện opcode table từ `i.a(int,byte[],...)` | Dựng mission/cutscene DSL gần đầy đủ. |
+| 3 | Hoàn thiện low-opcode effects và internal behavior của recursive helpers | Nối direct-transition contract với mission/cutscene DSL đầy đủ hơn. |
 | 4 | Trích full stage map của `k.G(int)` | Khóa thứ tự load/unload và dependency từng pack entry. |
 | 5 | Cross-reference dialogue/tutorial với script IDs và entity UIDs | Gắn mission names vào graph mà không đoán theo genre. |
 | 6 | Tạo machine-readable architecture graph từ inventory | Cho phép query caller/state/resource provenance tự động. |

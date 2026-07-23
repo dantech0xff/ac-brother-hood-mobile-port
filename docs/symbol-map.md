@@ -2,7 +2,7 @@
 
 Tên `a`–`k` là symbol đã obfuscate. Alias dưới đây là tên làm việc dựa trên call
 site và data flow; chúng không được trình bày như tên gốc của Gameloft.
-Overlay hiện tại có 12 class, 42 method và 41 field; đây là working aliases,
+Overlay hiện tại có 12 class, 44 method và 41 field; đây là working aliases,
 không phải tên gốc.
 
 ## Class map
@@ -24,7 +24,7 @@ không phải tên gốc.
 
 ## Canonical parity method overlay
 
-Mười một method alias liên quan parity hiện là canonical overlay entries. Tám
+Mười ba method alias liên quan parity hiện là canonical overlay entries. Tám
 entry đầu:
 
 | Symbol | Alias | Confidence |
@@ -46,6 +46,13 @@ Ba timeline entry của Slice 2:
 | `i.ab:()Z` | `isTimelineScriptActive` | `high-confidence` |
 | `k.s:(I)I` | `findScriptGroupIndex` | `high-confidence` |
 
+Hai timeline entry của Slice 3:
+
+| Symbol | Alias | Confidence |
+|---|---|---|
+| `i.bI:()V` | `completeTimelineScript` | `high-confidence` |
+| `i.a:(I[BIII)I` | `executeExtendedTimelineOpcode` | `high-confidence` |
+
 ### Entity store và render ordering
 
 `k.b(i)`/`k.c(i)` giữ JVM object identity; token chỉ là fixture/trace label và
@@ -60,6 +67,20 @@ exact tie newest-first, giữ duplicate và không guard overflow.
 cursor advance. Signed `baload` làm raw `0..99`/`128..255` đi inline và
 `100..127` đi extended. Exact-tick `108`/`113` có negative-return boundary trước
 current cursor advance.
+
+### Timeline completion và extended executor
+
+`i.bI()` là completion boundary của timeline, canonical alias
+`completeTimelineScript`; `i.a:(I[BIII)I` là extended executor, canonical alias
+`executeExtendedTimelineOpcode`. Host contract biểu diễn direct writes của
+completion và opcode `100..114` bằng immutable state transitions. Legacy
+helper/UI/audio calls được giữ theo đúng thứ tự dưới dạng intentions, không
+được thực thi.
+
+Opcode `108`/`113` tách future poll, exact-tick branch và past-tick no-op.
+Corpus slot `7` có `480` extended occurrences trong `3.705` instruction;
+opcode `109` không xuất hiện trong corpus và chỉ có synthetic source-contract
+pin theo bytecode.
 
 ## Lifecycle và frame call graph
 

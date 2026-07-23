@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "analysis_mode": "static-only",
+  "static_only": true,
+  "target_code_execution": false,
+  "allowed_basis": [
+    "corpus",
+    "synthetic-source-contract"
+  ],
+  "corpus_oracle": {
+    "pack_order": [6, 7, 8, 9, 10, 11, 12, 13],
+    "opcode_order": [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114],
+    "operand_widths": [6, 2, 4, 2, 2, 4, 9, 2, 4, 8, 4, 9, 6, 4, 4],
+    "total_counts": [204, 1, 90, 7, 5, 59, 16, 30, 30, 0, 9, 25, 1, 1, 2],
+    "per_pack_counts": [
+      [13, 0, 14, 0, 1, 11, 4, 5, 5, 0, 2, 1, 0, 0, 1],
+      [6, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [47, 1, 11, 1, 1, 12, 0, 3, 3, 0, 0, 9, 1, 1, 0],
+      [47, 0, 24, 1, 0, 10, 10, 9, 9, 0, 4, 1, 0, 0, 0],
+      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [38, 0, 8, 1, 0, 6, 2, 4, 4, 0, 3, 1, 0, 0, 0],
+      [22, 0, 10, 4, 3, 10, 0, 3, 3, 0, 0, 1, 0, 0, 1],
+      [30, 0, 23, 0, 0, 7, 0, 6, 6, 0, 0, 12, 0, 0, 0]
+    ],
+    "instruction_count": 3705,
+    "extended_instruction_count": 480,
+    "maximum_opcode": 114,
+    "opcodes_above_127": 0
+  },
+  "fixtures": [
+    {
+      "id": "opcode-100-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 2,
+        "lane_index": 4,
+        "event_index": 0,
+        "instruction_index": 0,
+        "offset": 212,
+        "raw_hex": "64050001000400",
+        "operands_raw_hex": "050001000400"
+      },
+      "input": {"opcode": 100, "operands_hex": "050001000400"},
+      "expected": {
+        "width": 6,
+        "operand_layout": "3 * s16le (target/action/value)",
+        "operands": [
+          ["target", "s16le", 5],
+          ["action", "s16le", 1],
+          ["value", "s16le", 4]
+        ],
+        "effect_family": "entity-control"
+      }
+    },
+    {
+      "id": "opcode-101-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-8/records.json",
+        "sha256": "a3f50dc3be69a5e0a3b38382eb3d7fa318130631d71cbc3e4fe0b0af5015dd6c",
+        "slot_7_sha256": "ea6faed7a4aeb798ed8b02df5f2199324246d5ce738b4d8fd892326e441f223e",
+        "pack": 8,
+        "group_index": 15,
+        "lane_index": 0,
+        "event_index": 1,
+        "instruction_index": 0,
+        "offset": 2141,
+        "raw_hex": "655801",
+        "operands_raw_hex": "5801"
+      },
+      "input": {"opcode": 101, "operands_hex": "5801"},
+      "expected": {
+        "width": 2,
+        "operand_layout": "s16le script id",
+        "operands": [["script_id", "s16le", 344]],
+        "effect_family": "chained-script"
+      }
+    },
+    {
+      "id": "opcode-102-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 2,
+        "lane_index": 4,
+        "event_index": 1,
+        "instruction_index": 0,
+        "offset": 222,
+        "raw_hex": "6619000000",
+        "operands_raw_hex": "19000000"
+      },
+      "input": {"opcode": 102, "operands_hex": "19000000"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "2 * s16le",
+        "operands": [
+          ["value_0", "s16le", 25],
+          ["value_1", "s16le", 0]
+        ],
+        "effect_family": "screen-state"
+      }
+    },
+    {
+      "id": "opcode-103-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-8/records.json",
+        "sha256": "a3f50dc3be69a5e0a3b38382eb3d7fa318130631d71cbc3e4fe0b0af5015dd6c",
+        "slot_7_sha256": "ea6faed7a4aeb798ed8b02df5f2199324246d5ce738b4d8fd892326e441f223e",
+        "pack": 8,
+        "group_index": 17,
+        "lane_index": 0,
+        "event_index": 31,
+        "instruction_index": 0,
+        "offset": 2601,
+        "raw_hex": "670800",
+        "operands_raw_hex": "0800"
+      },
+      "input": {"opcode": 103, "operands_hex": "0800"},
+      "expected": {
+        "width": 2,
+        "operand_layout": "opaque ignored[2]",
+        "operands": [["opaque", "opaque", "0800"]],
+        "effect_family": "opaque-no-op"
+      }
+    },
+    {
+      "id": "opcode-104-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 4,
+        "lane_index": 0,
+        "event_index": 5,
+        "instruction_index": 1,
+        "offset": 588,
+        "raw_hex": "680500",
+        "operands_raw_hex": "0500"
+      },
+      "input": {"opcode": 104, "operands_hex": "0500"},
+      "expected": {
+        "width": 2,
+        "operand_layout": "s16le",
+        "operands": [["value", "s16le", 5]],
+        "effect_family": "audio"
+      }
+    },
+    {
+      "id": "opcode-105-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 3,
+        "lane_index": 0,
+        "event_index": 1,
+        "instruction_index": 0,
+        "offset": 265,
+        "raw_hex": "69051a0001",
+        "operands_raw_hex": "051a0001"
+      },
+      "input": {"opcode": 105, "operands_hex": "051a0001"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "u8 / u16le / u8",
+        "operands": [
+          ["byte_0", "u8", 5],
+          ["word_0", "u16le", 26],
+          ["byte_1", "u8", 1]
+        ],
+        "effect_family": "blocking-ui"
+      }
+    },
+    {
+      "id": "opcode-106-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 8,
+        "lane_index": 0,
+        "event_index": 1,
+        "instruction_index": 0,
+        "offset": 3651,
+        "raw_hex": "6a5c0216001600140000",
+        "operands_raw_hex": "5c0216001600140000"
+      },
+      "input": {"opcode": 106, "operands_hex": "5c0216001600140000"},
+      "expected": {
+        "width": 9,
+        "operand_layout": "4 * u16le / u8",
+        "operands": [
+          ["word_0", "u16le", 604],
+          ["word_1", "u16le", 22],
+          ["word_2", "u16le", 22],
+          ["word_3", "u16le", 20],
+          ["byte", "u8", 0]
+        ],
+        "effect_family": "dialogue-state"
+      }
+    },
+    {
+      "id": "opcode-107-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 4,
+        "lane_index": 0,
+        "event_index": 3,
+        "instruction_index": 1,
+        "offset": 566,
+        "raw_hex": "6b2000",
+        "operands_raw_hex": "2000"
+      },
+      "input": {"opcode": 107, "operands_hex": "2000"},
+      "expected": {
+        "width": 2,
+        "operand_layout": "u16le input mask",
+        "operands": [["input_mask", "u16le", 32]],
+        "effect_family": "single-prompt-setup"
+      }
+    },
+    {
+      "id": "opcode-108-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 4,
+        "lane_index": 0,
+        "event_index": 4,
+        "instruction_index": 0,
+        "offset": 572,
+        "raw_hex": "6c00001402",
+        "operands_raw_hex": "00001402"
+      },
+      "input": {"opcode": 108, "operands_hex": "00001402"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "2 * u16le branch ids",
+        "operands": [
+          ["branch_id_0", "u16le", 0],
+          ["branch_id_1", "u16le", 532]
+        ],
+        "effect_family": "single-prompt-poll-branch"
+      }
+    },
+    {
+      "id": "opcode-109-synthetic-source-contract",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "evidence": "reconstructed-project/bytecode/i.javap.txt",
+        "sha256": "499736645a49b9680f1b933bbd0968465fc75bcadf8a15fd329249b911130359",
+        "symbol": "i.a:(I[BIII)I",
+        "bytecode_pc": 1939,
+        "corpus_occurrences": 0,
+        "raw_hex": "6d0000010002000300",
+        "operands_raw_hex": "0000010002000300"
+      },
+      "input": {"opcode": 109, "operands_hex": "0000010002000300"},
+      "expected": {
+        "width": 8,
+        "operand_layout": "4 * u16le",
+        "operands": [
+          ["value_0", "u16le", 0],
+          ["value_1", "u16le", 1],
+          ["value_2", "u16le", 2],
+          ["value_3", "u16le", 3]
+        ],
+        "effect_family": "synthetic-vector-state"
+      }
+    },
+    {
+      "id": "opcode-110-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 2,
+        "lane_index": 4,
+        "event_index": 2,
+        "instruction_index": 1,
+        "offset": 235,
+        "raw_hex": "6e0500f900",
+        "operands_raw_hex": "0500f900"
+      },
+      "input": {"opcode": 110, "operands_hex": "0500f900"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "2 * u16le entity uids",
+        "operands": [
+          ["entity_uid_0", "u16le", 5],
+          ["entity_uid_1", "u16le", 249]
+        ],
+        "effect_family": "entity-link"
+      }
+    },
+    {
+      "id": "opcode-111-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 6,
+        "lane_index": 0,
+        "event_index": 22,
+        "instruction_index": 0,
+        "offset": 1460,
+        "raw_hex": "6f0000b21b9e0200c800",
+        "operands_raw_hex": "0000b21b9e0200c800"
+      },
+      "input": {"opcode": 111, "operands_hex": "0000b21b9e0200c800"},
+      "expected": {
+        "width": 9,
+        "operand_layout": "3 * u16le / u8 / u16le",
+        "operands": [
+          ["word_0", "u16le", 0],
+          ["word_1", "u16le", 7090],
+          ["word_2", "u16le", 670],
+          ["byte", "u8", 0],
+          ["word_3", "u16le", 200]
+        ],
+        "effect_family": "feature-gated-spawn"
+      }
+    },
+    {
+      "id": "opcode-112-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-8/records.json",
+        "sha256": "a3f50dc3be69a5e0a3b38382eb3d7fa318130631d71cbc3e4fe0b0af5015dd6c",
+        "slot_7_sha256": "ea6faed7a4aeb798ed8b02df5f2199324246d5ce738b4d8fd892326e441f223e",
+        "pack": 8,
+        "group_index": 17,
+        "lane_index": 0,
+        "event_index": 13,
+        "instruction_index": 0,
+        "offset": 2414,
+        "raw_hex": "7006000a000a00",
+        "operands_raw_hex": "06000a000a00"
+      },
+      "input": {"opcode": 112, "operands_hex": "06000a000a00"},
+      "expected": {
+        "width": 6,
+        "operand_layout": "3 * u16le",
+        "operands": [
+          ["value_0", "u16le", 6],
+          ["value_1", "u16le", 10],
+          ["value_2", "u16le", 10]
+        ],
+        "effect_family": "multi-prompt-setup"
+      }
+    },
+    {
+      "id": "opcode-113-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-8/records.json",
+        "sha256": "a3f50dc3be69a5e0a3b38382eb3d7fa318130631d71cbc3e4fe0b0af5015dd6c",
+        "slot_7_sha256": "ea6faed7a4aeb798ed8b02df5f2199324246d5ce738b4d8fd892326e441f223e",
+        "pack": 8,
+        "group_index": 17,
+        "lane_index": 0,
+        "event_index": 15,
+        "instruction_index": 0,
+        "offset": 2435,
+        "raw_hex": "7100003f02",
+        "operands_raw_hex": "00003f02"
+      },
+      "input": {"opcode": 113, "operands_hex": "00003f02"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "2 * u16le branch ids",
+        "operands": [
+          ["branch_id_0", "u16le", 0],
+          ["branch_id_1", "u16le", 575]
+        ],
+        "effect_family": "multi-prompt-poll-branch"
+      }
+    },
+    {
+      "id": "opcode-114-first-corpus-occurrence",
+      "kind": "extended-opcode-decode-effect-family",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "pack": 6,
+        "group_index": 3,
+        "lane_index": 0,
+        "event_index": 5,
+        "instruction_index": 1,
+        "offset": 304,
+        "raw_hex": "720b00a00f",
+        "operands_raw_hex": "0b00a00f"
+      },
+      "input": {"opcode": 114, "operands_hex": "0b00a00f"},
+      "expected": {
+        "width": 4,
+        "operand_layout": "2 * u16le",
+        "operands": [
+          ["value_0", "u16le", 11],
+          ["value_1", "u16le", 4000]
+        ],
+        "effect_family": "timed-text"
+      }
+    }
+  ]
+}

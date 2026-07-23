@@ -56,9 +56,9 @@ ALIAS_CONFIDENCE_VALUES = {
     "inferred",
     "unknown",
 }
-EXPECTED_SEMANTIC_ALIAS_COUNTS = {"classes": 12, "methods": 42, "fields": 41}
+EXPECTED_SEMANTIC_ALIAS_COUNTS = {"classes": 12, "methods": 44, "fields": 41}
 EXPECTED_SEMANTIC_ALIAS_SHA256 = (
-    "5b058581752405ad9309627d822210a06102d53aabc779505f72365fd88e9db2"
+    "f55e45be8d6b1c6f4ccfbba2f1b38df0cd53591a8ef898cf32e42049019c95b2"
 )
 
 

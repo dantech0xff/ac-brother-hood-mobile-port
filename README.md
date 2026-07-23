@@ -49,6 +49,8 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
   - bytecode inventory generator;
   - static integrity verifier;
   - host-side gameplay parity contracts (`scripts/gameplay_parity_contracts.py`) và `unittest` (`tests/test_gameplay_parity_contracts.py`).
+  - host-side timeline opcode/completion contracts (`scripts/timeline_opcode_contracts.py`),
+    manifest 15 fixture riêng và `unittest` (`tests/test_timeline_opcode_contracts.py`).
 
 ## Số liệu đã xác nhận
 
@@ -68,10 +70,14 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
   nhãn generic sau semantic pass
 - 4.286 entity record và 144 script group/510 lane/2.366 event/3.705 instruction
   level parse exact EOF; slot 3 được chứng minh runtime-unused
-- Semantic overlay: 12 class / 42 method / 41 field alias; đây là working names,
+- Semantic overlay: 12 class / 44 method / 41 field alias; đây là working names,
   không phải tên gốc
-- Parity harness: 30 fixture (12 corpus, 1 derived, 17 source-contract) và
-  30/30 test static-only pass
+- Gameplay parity Slice 1/2 historical: manifest 30 fixture không đổi
+  (12 corpus, 1 derived, 17 source-contract) và 30/30 test static-only pass
+- Timeline opcode/completion Slice 3: manifest riêng 15 fixture
+  (14 corpus, 1 synthetic-source-contract chỉ cho opcode `109` không xuất hiện
+  trong corpus), 27/27 focused test và 57/57 full unittest discovery pass
+- Extended timeline opcodes: 480 occurrence trên 3.705 instruction đã parse
 - level decoder output: 10 files / 34.570.387 byte / tree SHA `d2f71b3fbede3bc29c32df5bb666fcba46cb431b32e18bf17f66f665bbc2ff60` / manifest SHA `75ff246a5aa567a1f9cb7b8f2b58978305d88750f8bbef1589fe722c5f0f0648`
 
 ## Ràng buộc an toàn
@@ -105,3 +111,18 @@ Parity Slice 2 hiện được theo dõi tại
 - Phase 3: completed
 - Phase 4: completed
 - Harness hiện là static-only, với 30/30 tests pass và verifier `ok=true`
+
+## Trạng thái Slice 3
+
+Timeline Opcode and Completion Parity Slice 3 được theo dõi tại
+[`plans/260723-1820-timeline-opcode-completion-parity/`](plans/260723-1820-timeline-opcode-completion-parity/plan.md).
+Plan đã `completed`; cả bốn phase, kiểm định độc lập và tài liệu bàn giao đều
+đã được khóa sổ.
+
+- Contract mô hình hóa completion `i.bI:()V` và extended opcode `100..114`.
+- Direct field writes là immutable state transitions; lời gọi downstream được ghi
+  thành ordered effect intentions, không được thực thi.
+- 15 fixture riêng bao phủ 14 trường hợp corpus và opcode `109` synthetic-only.
+- 27/27 focused test, 57/57 full unittest discovery và verifier `ok=true`.
+- Toàn bộ kiểm chứng là static-only; không chạy target JAR, MIDlet, class,
+  emulator, simulator hay thiết bị.

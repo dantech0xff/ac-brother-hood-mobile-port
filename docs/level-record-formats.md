@@ -268,10 +268,11 @@ Các opcode `41-44` được partition trong parser nhưng không xuất hiện 
 - Byte opcode branch dùng signed `baload`:
   - raw `0..99` và `128..255` đi vào inline path;
   - raw `100..127` đi vào extended path.
-- Host contract exposes exact-tick opcodes `108` và `113` qua
-  `extended_dispatch_results` tường minh; legacy bytecode có thể trả `-1` từ
-  helper. Khi result âm, harness surface `execution_aborted=true` sau phase tick
-  nhưng trước khi advance current cursor hoặc ghi opcode/lane tiếp theo.
+- Legacy scheduler contract nhận `extended_dispatch_results` tường minh để cô
+  lập boundary; direct extended executor contract có thể compose return value
+  vào scheduler. Với `108`/`113`, result `-1` làm
+  `execution_aborted=true` sau phase tick nhưng trước khi advance current cursor
+  hoặc ghi opcode/lane tiếp theo.
 
 Observed low-opcode counts:
 
@@ -308,6 +309,25 @@ Tổng instruction của slot `7` trong corpus: `3705`.
 | `113` | `4` | `2 * u16` branch IDs | `1` |
 | `114` | `4` | `2 * u16` | `2` |
 
+Tổng cộng có `480` extended occurrences trong `3.705` instruction. Opcode
+`109` có đúng `0` occurrence trong corpus.
+
+### Host-side completion và extended opcode contract
+
+`scripts/timeline_opcode_contracts.py` cung cấp immutable host transitions cho
+direct writes/return boundaries của `i.bI()` completion và opcode `100..114`.
+Legacy helper, entity lookup/removal, UI, audio và media calls chỉ được ghi
+thành ordered intentions; target class/MIDlet không được thực thi.
+
+Manifest riêng
+[`timeline-opcode-contracts.json`](../tests/fixtures/timeline-opcode-contracts.json)
+gồm 15 fixtures: 14 corpus fixtures cho các opcode quan sát được và một
+`synthetic-source-contract` cho `109`, pin symbol `i.a:(I[BIII)I` cùng bytecode
+evidence. Oracle test quét đủ `3.705` instruction và xác nhận cả `480`
+extended occurrences. Opcode `108`/`113` được model theo ba phase: future poll,
+exact-tick branch và past-tick no-op. Validation hiện pass 27/27 focused tests
+và 57/57 full discovery tests.
+
 ### Bảng tổng hợp slot `7` theo pack
 
 | Pack | Container offset | Bytes | Groups | Lanes | Events | Instructions | Modes `0/1/2` | Max tick | First group | Last group |
@@ -329,7 +349,9 @@ cho thấy 0-lane IDs `89`, `97`, `112`.
 
 - `k.G(8)` đọc slot `7` rồi phân nó thành `by`, `bz`, `eH`.
 - `i.aa()` dùng `cK`, `cL`, `by` và `bz` để step event theo lane.
-- `i.a(int, byte[], int, int, int)` là executor opcode của event.
+- `i.a(int, byte[], int, int, int)` /
+  `executeExtendedTimelineOpcode` là executor opcode extended của event.
+- `i.bI()` / `completeTimelineScript` là completion boundary của timeline.
 - `k.s(int)` map script id sang chỉ số `eH`.
 - `i.h(...)`, `i.bJ()`, `i.k(...)` là các điểm phụ trợ quanh path script/entity.
 - `b.java` không có consumer trực tiếp cho `ek`/`by`/`bz`/`eH`; nó chỉ phục vụ parser sprite downstream.
@@ -342,5 +364,6 @@ cho thấy 0-lane IDs `89`, `97`, `112`.
 - nhánh `41-44` ở low opcode
 - các tên obfuscated gốc
 - nghĩa tổng quát của một số field type-specific ở slot `0`
-- chi tiết nội bộ của các helper ngoài phạm vi file được giao
+- direct effects của low opcode và chi tiết nội bộ của recursive helpers ngoài
+  ordered intention boundary
 - hành vi opaque của mask `23/24`

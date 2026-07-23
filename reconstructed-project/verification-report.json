@@ -35,9 +35,9 @@
       "string_constants": 124,
       "semantic_aliases": {
         "classes": 12,
-        "methods": 42,
+        "methods": 44,
         "fields": 41,
-        "normalized_sha256": "5b058581752405ad9309627d822210a06102d53aabc779505f72365fd88e9db2"
+        "normalized_sha256": "f55e45be8d6b1c6f4ccfbba2f1b38df0cd53591a8ef898cf32e42049019c95b2"
       },
       "source_manifests": {
         "structured": {

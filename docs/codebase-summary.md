@@ -14,9 +14,10 @@ không có giả định về runtime hay buildability.
 | `plans/260722-2335-game-architecture-inference/` | Plan và scout report cho kiến trúc legacy nội suy. |
 | `plans/260723-0852-semantic-registry-parity-harness/` | Follow-up track cho Semantic Registry và host-side gameplay parity contracts. |
 | `plans/260723-1342-entity-render-timeline-parity/` | Completed Slice 2 cho entity store, render ordering, slow-time và timeline scheduling. |
+| `plans/260723-1820-timeline-opcode-completion-parity/` | Completed Slice 3 cho timeline completion và extended opcode, gồm implementation, kiểm định độc lập và tài liệu bàn giao. |
 | `plans/reports/` | Báo cáo kỹ thuật tóm tắt kết quả reverse-engineering. |
 | `reconstructed-project/` | Artifact phục hồi, inventory và resource đã giải mã. |
-| `scripts/` | Bảy script Python cho pack/sprite/level decode, package build, inventory, verifier và parity contracts. |
+| `scripts/` | Tám script Python cho pack/sprite/level decode, package build, inventory, verifier và parity contracts. |
 | `tests/` | `unittest` static-only cho parity contracts và corpus oracle. |
 
 ## Artifact trọng tâm
@@ -49,12 +50,14 @@ không có giả định về runtime hay buildability.
 | `inventory-java-me-bytecode.py` | Đọc output `javap` để sinh inventory call/field/string/dependency. |
 | `verify-static-reconstruction.py` | Đối chiếu hash, ZIP entry, code views, inventory và mọi decoded payload mà không load class. |
 | `gameplay_parity_contracts.py` | Clean-room Python reference cho materialization/lookup, reference-identity store, render ordering, Java normal/slow integration, script activity và timeline scheduling/abort boundary. |
+| `timeline_opcode_contracts.py` | Clean-room static-only contract cho completion `i.bI:()V` và extended opcode `100..114`; direct field writes là immutable transitions, còn downstream calls là ordered effect intentions. |
 
 ### `tests/`
 
 | Test | Vai trò |
 |---|---|
-| `test_gameplay_parity_contracts.py` | Khóa 30-fixture manifest, corpus oracle, synthetic source-contracts, và toàn bộ parity contracts. |
+| `test_gameplay_parity_contracts.py` | Khóa manifest 30 fixture Slice 1/2 historical không đổi, corpus oracle, synthetic source-contracts, và gameplay parity contracts. |
+| `test_timeline_opcode_contracts.py` | Khóa manifest riêng 15 fixture Slice 3 (14 corpus, opcode `109` synthetic-source-contract), completion contract và extended opcode contracts. |
 
 ## Số liệu chính
 
@@ -74,9 +77,12 @@ không có giả định về runtime hay buildability.
 | Pixel module / PNG variant | 4.371 / 12.102 |
 | MIDI / WAV | 13 / 18 |
 | IGP PNG | 29 |
-| Semantic aliases | 12 class / 42 method / 41 field |
-| Gameplay parity fixtures | 30: 12 corpus / 1 derived / 17 source-contract |
-| Gameplay parity tests | 30/30 pass |
+| Semantic aliases | 12 class / 44 method / 41 field |
+| Gameplay parity fixtures Slice 1/2 historical | 30 không đổi: 12 corpus / 1 derived / 17 source-contract |
+| Timeline opcode fixtures Slice 3 | 15 riêng: 14 corpus / 1 synthetic-source-contract cho opcode `109` |
+| Extended timeline opcode occurrences | 480 trên 3.705 instruction |
+| Slice 3 focused tests | 27/27 pass |
+| Full unittest discovery | 57/57 pass |
 | Static verifier | `ok=true`, 0 failure, target execution false |
 | Payload có semantic family | 238/238 non-empty |
 | Signature-generic đã phân loại | 114/114 |
@@ -128,6 +134,9 @@ managed hash từ `reconstructed-project/resources/sprites-decoded/summary.json`
 `plans/260722-1922-assassins-creed-reconstruction/reports/final-verification.md`
 là audit result đối chiếu các
 nguồn này với pinned JAR, fresh `javap`, fresh inventory và fresh extraction.
-`scripts/gameplay_parity_contracts.py` và `tests/test_gameplay_parity_contracts.py`
-đóng vai trò harness static-only riêng cho 30 fixture contract đã pin; chúng
-không thay thế verifier tĩnh toàn kho và không chứng minh runtime parity.
+`scripts/gameplay_parity_contracts.py` giữ harness Slice 1/2 historical với
+manifest 30 fixture không đổi. `scripts/timeline_opcode_contracts.py` dùng
+manifest riêng 15 fixture cho Slice 3: direct writes được mô hình hóa thành
+immutable state transitions và downstream calls thành ordered intentions,
+không thực thi. Cả hai harness đều static-only, không thay thế verifier tĩnh
+toàn kho, không chạy target JAR/MIDlet/class và không chứng minh runtime parity.

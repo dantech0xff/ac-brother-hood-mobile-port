@@ -40,6 +40,20 @@ timeline scheduler.
 | 3 | Model Slow-Time and Timeline Scheduling | completed |
 | 4 | Verify Corpus Contracts and Update Documentation | completed |
 
+## Follow-up track 3: Timeline Opcode and Completion Parity Slice 3
+
+Track này được quản lý tại
+[`plans/260723-1820-timeline-opcode-completion-parity/`](../plans/260723-1820-timeline-opcode-completion-parity/plan.md).
+Plan đã `completed`; implementation, kiểm định độc lập và tài liệu bàn giao đã
+được khóa sổ.
+
+| Phase | Tên | Trạng thái |
+|---|---|---|
+| 1 | Canonical Aliases and Contract Schema | completed |
+| 2 | Timeline Completion Parity | completed |
+| 3 | Extended Opcode Effect Parity | completed |
+| 4 | Verification and Documentation | completed |
+
 ## Kết quả thực tế
 
 ### Đã hoàn tất
@@ -53,10 +67,23 @@ timeline scheduler.
 - Giao technical design Android/iOS, không triển khai hoặc chạy game.
 - Chạy audit cuối cho hash, counts, links, deterministic outputs và mọi claim;
   verifier đạt `ok: true`, `failures: []`.
-- Mở rộng registry alias canonical từ 31 lên 42 method và dựng harness parity
-  host-side cho materialization, lookup, render ordering, slow-time và timeline
-  scheduling.
-- Parity Slice 2 đã pass 30/30 tests; cả 4 phase và plan đã completed.
+- Trong Slice 2 historical, registry alias canonical đã mở rộng từ 31 lên 42
+  method và harness parity host-side đã bao phủ materialization, lookup, render
+  ordering, slow-time và timeline scheduling.
+- Parity Slice 2 historical đã pass 30/30 tests; manifest 30 fixture giữ nguyên
+  và cả 4 phase của track đó đã completed.
+- Slice 3 đã mở rộng overlay hiện tại lên 12 class / 44 method / 41 field,
+  mô hình hóa completion `i.bI:()V` và extended opcode `100..114`.
+- Contract Slice 3 biểu diễn direct field writes bằng immutable state
+  transitions và downstream calls bằng ordered effect intentions, không thực
+  thi chúng.
+- Manifest Slice 3 riêng có 15 fixture: 14 corpus và một
+  synthetic-source-contract cho opcode `109`, opcode duy nhất không xuất hiện
+  trong corpus. 480 extended opcode occurrence trên 3.705 instruction đã được
+  đối chiếu.
+- Slice 3 đạt 27/27 focused tests và 57/57 full unittest discovery bằng phân
+  tích static-only; không chạy target JAR, MIDlet, class, emulator, simulator
+  hay thiết bị. Cả bốn phase đã completed.
 
 ## Deliverables theo phase
 
@@ -75,6 +102,10 @@ timeline scheduler.
 | Slice 2 / Phase 2 | Entity-store lifecycle and render ordering contracts. |
 | Slice 2 / Phase 3 | Slow-time and timeline scheduler contracts. |
 | Slice 2 / Phase 4 | Corpus verification, review, reports, and documentation sync. |
+| Slice 3 / Phase 1 | Completion/extended-opcode aliases and contract schema; implementation verified. |
+| Slice 3 / Phase 2 | `i.bI:()V` completion contract; implementation verified. |
+| Slice 3 / Phase 3 | Opcode `100..114` contracts and separate 15-fixture manifest; implementation verified. |
+| Slice 3 / Phase 4 | Verification, final documentation and handoff; completed. |
 
 ## Quy tắc roadmap
 
@@ -88,5 +119,6 @@ timeline scheduler.
 1. Nếu bắt đầu viết lại game, dùng technical design làm đầu vào cho một plan
    implementation riêng; việc đó nằm ngoài bài tập hiện tại.
 2. Chỉ mở thêm vòng static research khi có evidence mới cho ba sprite module,
-   full opcode side effects/mode còn opaque, slot-3 semantics hoặc JAD gốc.
+   low-opcode effects, recursive helpers, mode `3`, opcode `41..44`, slot-3
+   semantics hoặc JAD gốc.
 3. Sau mọi thay đổi artifact, chạy lại toàn bộ static verifier trước khi công bố.

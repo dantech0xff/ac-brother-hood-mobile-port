@@ -298,6 +298,16 @@
       "confidence": "high-confidence"
     },
     {
+      "original": "i.bI:()V",
+      "alias": "completeTimelineScript",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "i.a:(I[BIII)I",
+      "alias": "executeExtendedTimelineOpcode",
+      "confidence": "high-confidence"
+    },
+    {
       "original": "i.ab:()Z",
       "alias": "isTimelineScriptActive",
       "confidence": "high-confidence"

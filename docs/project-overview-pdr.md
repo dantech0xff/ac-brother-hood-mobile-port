@@ -57,18 +57,23 @@ resource và script đã kiểm chứng. JAR không được thực thi dưới 
 | `docs/modern-mobile-technical-design.md` | Thiết kế viết lại cho Android/iOS; không phải implementation. |
 | `docs/project-roadmap.md` | Lộ trình theo phase hiện có. |
 | `docs/semantic-registry-and-parity-harness.md` | Authority, command và extension rules cho contract slice. |
-| `tests/` | `unittest` và fixture manifest cho các invariant tĩnh đã chọn. |
+| `tests/` | `unittest` cùng manifest 30 fixture Slice 1/2 historical và manifest 15 fixture riêng cho Slice 3. |
 | `reconstructed-project/` | Bộ artifact phục hồi và inventory machine-readable. |
 
 ## Tiêu chí chấp nhận
 
 - 12/12 class được bao phủ bởi structured, fallback và `javap`.
-- Canonical alias overlay hiện có 12 class, 42 method và 41 field.
+- Canonical alias overlay hiện có 12 class, 44 method và 41 field.
 - 666/666 method có mặt trong inventory và bytecode.
 - 37/37 JAR entry và 260/260 pack entry được kiểm kê.
 - Corpus oracle re-decode đủ 8 pack, 4.286 record và 16/16 payload exact EOF.
 - Parity Slice 2 giữ static-only, 30 fixtures, 30/30 tests pass và Phase 4 đã
   đóng sau verification/review.
+- Slice 3 implementation đã được kiểm chứng: manifest riêng 15 fixture
+  (14 corpus, opcode `109` synthetic-only), 27/27 focused tests, 57/57 full
+  unittest discovery và toàn bộ 480 extended opcode occurrence trên 3.705
+  instruction đã được đối chiếu. Cả bốn phase, kiểm định độc lập và tài liệu
+  bàn giao đã completed.
 - Tài liệu phải nêu rõ 1 stub structured ở `i.aV()` và đường fallback của nó.
 - Tài liệu kiến trúc phải tách rõ:
   - sự thật đã khôi phục từ legacy code,
@@ -92,13 +97,22 @@ cho level slot 0/7 output hiện tại.
 - Nguồn sự thật cho class/method/field counts là `javap` và inventory sinh từ `javap`.
 - Nguồn sự thật cho resource decode là metadata đã trích cùng hash file đầu ra.
 - `scripts/java-me-semantic-aliases.json` là overlay working names cho 12 class,
-  42 method và 41 field; các alias này không phải tên gốc.
+  44 method và 41 field; các alias này không phải tên gốc.
 - `scripts/gameplay_parity_contracts.py` là clean-room offline reference cho
   materialization/lookup, reference-identity entity store, render ordering,
   normal/slow integration, script activity và timeline scheduling/abort
   boundary. Current-event dispatch precedes due cursor advance; opcode branch
   dùng signed byte và exact-tick `108`/`113` có explicit abort outcome.
-  `tests/` khóa 30-fixture parity slice bằng `unittest`.
+  Manifest 30 fixture Slice 1/2 historical của module này giữ nguyên.
+- `scripts/timeline_opcode_contracts.py` là clean-room static-only contract cho
+  completion `i.bI:()V` và extended opcode `100..114`. Direct proven field
+  writes được biểu diễn bằng immutable state transitions; các lời gọi
+  downstream được ghi thành ordered effect intentions và không được thực thi.
+  Manifest 15 fixture riêng chứa 14 corpus fixture và một
+  synthetic-source-contract cho opcode `109`, opcode duy nhất không xuất hiện
+  trong corpus.
+- Không target JAR, MIDlet, class, emulator, simulator hay thiết bị nào được
+  chạy để tạo các bằng chứng parity này.
 
 ## Ghi chú trạng thái
 
