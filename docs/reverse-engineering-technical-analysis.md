@@ -19,7 +19,7 @@ MIDlet version `1.2.7`, MIDP 2.0 / CLDC 1.0. Bản khôi phục tĩnh bao phủ:
 - 17/17 resource pack, 260/260 slot;
 - 265 string, 84 sprite binary/4.376 module, 13 MIDI, 18 WAV và 29 PNG IGP;
 - 83 sprite asset full + 1 partial; 4.371 pixel module xuất thành 12.102 PNG
-  palette variant, bảy module không xuất ảnh được account rõ;
+  palette variant, năm module không xuất ảnh được account rõ;
 - semantic family cho 238/238 payload không rỗng; 114/114 payload từng chỉ có
   signature generic đã được phân loại (106 trực tiếp/cao, 8 suy luận);
 - full simple/fallback/bytecode body cho hard case `i.aV()`.
@@ -434,7 +434,8 @@ pool/call inventory. `f` chỉ chuyển URL quảng cáo lịch sử qua
 ### Save
 
 - RMS store `/ASBR`, record 1, buffer cố định 512 byte.
-- IGP store riêng `igp19`.
+- IGP chỉ open/create/close store `igp19` như namespace/existence marker; không
+  có thao tác record payload.
 - In-memory entity resume snapshot dùng 22 byte/entity, không phải toàn RMS.
 
 Byte map, reset/corruption behavior và phần reserved được mô tả tại
@@ -444,7 +445,8 @@ Byte map, reset/corruption behavior và phần reserved được mô tả tại
 
 - 34 slot; `0..9` music, `10..33` SFX.
 - 13 MIDI, 18 WAV PCM mono 8-bit/8 kHz, 3 empty.
-- Một Java ME `Player` tại một thời điểm, loop count 1.
+- Một static tracked Java ME `Player` reference, normal path thay tuần tự và
+  loop count 1; stop/close exception có thể phá active-player exclusivity.
 - `h` giữ duration millisecond cho từng slot.
 
 ### Debug/cheat
@@ -482,7 +484,7 @@ correlation string order; loader chỉ chứng minh sequence tám pack.
 
 - đọc `/dataIGP`;
 - render catalog quảng cáo;
-- lưu state `igp19`;
+- probe `igp19` bằng open/create/close, không đọc hoặc ghi record;
 - gọi `platformRequest()` khi người dùng chọn item.
 
 Static scan tách 29 PNG và 880 printable run. Không thấy credential, secret,

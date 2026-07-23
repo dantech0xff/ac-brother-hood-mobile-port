@@ -11,6 +11,11 @@ Hai phần này không được nhập nhằng với nhau.
 
 ## 1. Kiến trúc legacy đã khôi phục
 
+Phân tích chi tiết 12 class, coupling vật lý, screen/entity/script FSM, staged
+loading và các sơ đồ runtime nằm trong
+[`inferred-legacy-game-architecture.md`](./inferred-legacy-game-architecture.md).
+Alias trong tài liệu đó là tên làm việc có confidence, không phải tên source gốc.
+
 ### Khởi động
 
 `GloftASBR.startApp()` khởi tạo MIDlet, đọc property, rồi tạo controller/game canvas.
@@ -30,20 +35,22 @@ bytecode và decompile, không phải suy đoán.
 | `f` | IGP/cross-promotion và `platformRequest()`. |
 | `e` | Audio manager. |
 | `a` | Animation state/frames/loop/timekeeping. |
-| `c` | Marker/object registry. |
-| `d` | Gameplay constants. |
+| `c` | Ordered mutable waypoint/node runtime store tối đa 400 phần tử. |
+| `d` | Hai combat/balance table; nghĩa domain chi tiết còn suy luận. |
 | `h` | Duration table cho audio slots. |
 
-### Dòng dữ liệu runtime
+### Dòng dữ liệu phục hồi tĩnh (offline)
 
 ```text
-JAR/class bytes
-  -> structured/simple/fallback sources
-  -> inventory + javap
-  -> resource packs
-  -> decoded text/sprite/audio/PNG metadata
-  -> reconstructed-project/
+Pinned JAR
+  ├─ class entries -> structured/simple/fallback + javap + inventory
+  └─ numeric/data resources -> static pack/sprite/level decoders
+                                  -> decoded text/sprite/audio/PNG/JSON
+  -> reconstructed-project/ forensic package
 ```
+
+Đây là pipeline phân tích của repository, không phải flow khi MIDlet chạy.
+Runtime pack-to-world flow nằm trong dossier chi tiết được liên kết ở đầu mục.
 
 ### Resource pipeline
 

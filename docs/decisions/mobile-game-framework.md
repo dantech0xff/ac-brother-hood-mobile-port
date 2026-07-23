@@ -7,10 +7,13 @@
 
 ## Context
 
-Game recovered là 2D action-platformer offline, logic/state machine lớn, target
-logic khoảng 62 ms/tick, viewport 400×240, custom sprite/font/level packs, 34
-audio slot và save 512 byte. Bản mới phải dùng chung gameplay code trên Android
-và iOS, chuyển đổi resource offline và giữ deterministic behavior.
+Game recovered là 2D action-platformer offline, logic/state machine lớn, nominal
+scheduler cadence khoảng 62 ms nhưng update theo accepted paint với mixed
+frame-count/wall-delta semantics, viewport 400×240, custom sprite/font/level
+packs, 34 audio slot và save 512 byte. Bản mới phải dùng chung gameplay code
+trên Android và iOS, chuyển đổi resource offline và giữ deterministic behavior.
+Fixed-step 62 ms là intentional rewrite decision cần parity fixtures, không phải
+fact rằng runtime gốc đã có fixed simulation tick.
 
 Đây không phải ứng dụng UI-heavy hoặc project 3D. Framework cần cho phép kiểm
 soát loop/render/input/data pipeline trực tiếp, không buộc chuyển gameplay sang

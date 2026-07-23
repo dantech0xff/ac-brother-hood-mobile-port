@@ -15,6 +15,7 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 - [Tóm tắt codebase](docs/codebase-summary.md)
 - [Chuẩn mã nguồn và tài liệu](docs/code-standards.md)
 - [Kiến trúc hệ thống](docs/system-architecture.md)
+- [Dossier kiến trúc legacy nội suy và sơ đồ runtime](docs/inferred-legacy-game-architecture.md)
 - [Lộ trình dự án](docs/project-roadmap.md)
 - [Đặc tả tài nguyên đã dịch ngược](docs/resource-formats.md)
 - [Schema entity/script record của level](docs/level-record-formats.md)
@@ -42,6 +43,7 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 - `scripts/`
   - extractor resource pack;
   - decoder sprite/module tĩnh;
+  - decoder entity/script record của level;
   - builder cho package/source/`javap`;
   - bytecode inventory generator;
   - static integrity verifier.
@@ -72,7 +74,13 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 - Không thêm hướng dẫn chạy MIDlet.
 - Không coi decompile hoặc resource decode là bằng chứng buildable cho một game hiện đại.
 
-## Trạng thái plan
+## Trạng thái plan reconstruction historical
+
+Đây là trạng thái của
+[`plans/260722-1922-assassins-creed-reconstruction/`](plans/260722-1922-assassins-creed-reconstruction/plan.md),
+không phải số phase của mọi đợt phân tích tiếp theo. Plan kiến trúc nội suy hiện
+được theo dõi riêng tại
+[`plans/260722-2335-game-architecture-inference/`](plans/260722-2335-game-architecture-inference/plan.md).
 
 - Phase 1: completed
 - Phase 2: completed

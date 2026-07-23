@@ -238,13 +238,13 @@ hai stream này nằm tại [`level-record-formats.md`](./level-record-formats.m
 | Slot | Nhãn semantic mạnh nhất | Consumer | Độ tin cậy |
 |---:|---|---|---|
 | `0` | Object/entity descriptor stream (`ek`) | `k.G(8)`, rồi `k.G(9)`/`k.d(boolean)` phân record và bật sprite/entity cần dùng. | Cao |
-| `1` | Primary tile layer (`et`) | `k.H(1)`, `k.g(x,y)`. | Cao |
+| `1` | Collision/logical tile plane (`et`); normal-render absent | `k.H(1)`, `k.g(x,y)` collision queries; chỉ vẽ bởi debug flag `dc`. | Cao |
 | `2` | Width/height của slot `1` | `k.H(1)`: hai `u16 LE`, luôn dài 4 byte. | Cao |
-| `3` | Packed 2-bit flag/transform plane của primary layer, runtime-unused | Không có `j.e(3)`, field giữ lại hay downstream read; mỗi payload dài chính xác `ceil(slot1.length/4)`. | Không dùng: chứng minh; nghĩa transform: suy luận |
+| `3` | Packed 2-bit companion plane của collision layer, runtime-unused | Không có `j.e(3)`, field giữ lại hay downstream read; mỗi payload dài chính xác `ceil(slot1.length/4)`. | Không dùng: chứng minh; nghĩa transform: suy luận |
 | `4` | Secondary tile layer (`ep`) | `k.H(4)`, renderer layer. | Cao |
 | `5` | Width/height của slot `4` | `k.H(4)`, luôn 4 byte. | Cao |
 | `6` | Packed 2-bit flags của slot `4` (`eq`) | Truy cập `eq[index >> 2]`. | Cao |
-| `7` | Level block/script descriptor stream | `k.G(8)` phân thành `by`, `bz`, `eH`. | Cao |
+| `7` | Timeline group/lane/event/instruction stream | `k.G(8)` phân thành `by`, `bz`, `eH`; mỗi lane có cursor độc lập. | Cao |
 | `8` | Tertiary tile layer (`eu`) | `k.H(8)`, renderer layer. | Cao |
 | `9` | Width/height của slot `8` | `k.H(8)`, luôn 4 byte. | Cao |
 | `10` | Packed 2-bit flags của slot `8` (`ev`) | Truy cập `ev[index >> 2]`. | Cao |
@@ -349,8 +349,10 @@ IGP là cross-promotion cũ; thiết kế rewrite không nên đưa endpoint ho�
   nguồn gốc exporter/legacy của plane vẫn chưa thể đặt tên chắc chắn.
 - Tên chính thức của các sprite pixel codec không thể phục hồi từ symbol đã bị
   obfuscate.
-- Pixel code `0x27f1` không có nhánh fill trong method recovered; hai module dùng
-  nó được giữ raw/metadata nhưng không dựng ảnh. Một module khác thiếu optional
+- Pixel code `0x27f1` không có nhánh fill trong method runtime recovered. Offline
+  decoder vẫn dựng được bốn PNG từ hai module bằng data-derived recovery đã pin
+  provenance và gắn `runtime_bytecode_branch=false`; không được dùng kết quả đó
+  để suy ra một runtime codec branch. Một module khác thiếu optional
   palette/payload tail ngay trong artifact.
 - File JAD ngoài JAR có thể từng bổ sung property như `HAS-BLOOD`; artifact được
   giao không chứa JAD nên không thể chứng minh giá trị deployment ban đầu.

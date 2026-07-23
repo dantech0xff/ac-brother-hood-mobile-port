@@ -11,6 +11,7 @@ không có giả định về runtime hay buildability.
 | `README.md` | Entry point cấp workspace. |
 | `docs/` | Bộ tài liệu tổng quan và đặc tả resource. |
 | `plans/260722-1922-assassins-creed-reconstruction/` | Plan theo phase cho quá trình phục hồi tĩnh. |
+| `plans/260722-2335-game-architecture-inference/` | Plan và scout report cho kiến trúc legacy nội suy. |
 | `plans/reports/` | Báo cáo kỹ thuật tóm tắt kết quả reverse-engineering. |
 | `reconstructed-project/` | Artifact phục hồi, inventory và resource đã giải mã. |
 | `scripts/` | Sáu script Python tách pack, dựng sprite, dựng level records, dựng package, tạo inventory và kiểm chứng tĩnh. |
@@ -39,6 +40,7 @@ không có giả định về runtime hay buildability.
 |---|---|
 | `extract-java-me-resource-packs.py` | Trích pack, decode LZMA-alone, nhận dạng payload và xuất semantic schema/JSON, audio, PNG IGP, catalog. |
 | `decode-gameloft-sprites.py` | Parse 84 sprite binary, giữ section provenance và xuất/validate module PNG; không nhận JAR. |
+| `decode-gameloft-level-records.py` | Parse tĩnh slot entity `0` và script `7`, giữ offset/provenance, kiểm exact EOF và xuất JSON/summary. |
 | `build-static-reconstruction.py` | Sao chép ba view source, chạy `javap`, và sinh manifest package. |
 | `inventory-java-me-bytecode.py` | Đọc output `javap` để sinh inventory call/field/string/dependency. |
 | `verify-static-reconstruction.py` | Đối chiếu hash, ZIP entry, code views, inventory và mọi decoded payload mà không load class. |
@@ -89,6 +91,7 @@ không có giả định về runtime hay buildability.
 - [Báo cáo tổng quan dự án và PDR](./project-overview-pdr.md)
 - [Chuẩn mã nguồn và tài liệu](./code-standards.md)
 - [Kiến trúc hệ thống](./system-architecture.md)
+- [Dossier kiến trúc legacy nội suy](./inferred-legacy-game-architecture.md)
 - [Lộ trình dự án](./project-roadmap.md)
 - [Đặc tả tài nguyên đã dịch ngược](./resource-formats.md)
 - [Schema level entity/script records](./level-record-formats.md)

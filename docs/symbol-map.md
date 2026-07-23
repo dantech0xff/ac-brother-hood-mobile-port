@@ -9,18 +9,18 @@ không phải tên gốc.
 
 | Gốc | Alias đề xuất | Method / field | Vai trò | Confidence |
 |---|---|---:|---|---|
-| `GloftASBR` | `AssassinsCreedMidlet` | 4 / 3 | MIDlet lifecycle, property `MIDlet-Version`/`HAS-BLOOD`, tạo và restore canvas. | Cao |
-| `a` | `SpriteAnimationPlayer` | 14 / 14 | Animation/frame/timer/loop/transform và draw qua sprite `b`. | Cao |
-| `b` | `GloftSpriteAndBitmapFont` | 61 / 108 | Parser/render sprite Gameloft, palette/RLE/packed pixels, font mapping/wrap/draw. | Cao |
-| `c` | `Waypoint` + `WaypointRegistry` | 6 / 13 | Node ID, tọa độ, wait/speed/next và registry tối đa 400 node. | Cao |
-| `d` | `EnemyCombatTables` | 1 / 2 | Bảng chọn AI/animation và damage theo difficulty. | Suy luận |
-| `e` | `AudioManager` | 6 / 5 | Load 34 MIDI/WAV slot, single `Player`, play/stop, music/SFX gating. | Cao |
-| `f` | `IgpPromotionController` | 49 / 158 | Gameloft IGP 2.1, catalog UI, pointer input, RMS `igp19`, `platformRequest`. | Cao |
-| `g` | `PlayerActor` / `EzioController` | 57 / 71 | Kế thừa `i`; movement, combat, parkour, weapon, cheat/free-fly. | Cao |
-| `h` | `AudioDurationTable` | 1 / 1 | 34 duration theo millisecond. | Cao |
-| `i` | `ActorEntity` | 225 / 206 | Entity base/type dispatcher, fixed-point physics, collision, AI, trigger, attachment, draw. | Cao |
-| `j` | `GameCanvasRuntimeAndResourcePackReader` | 88 / 91 | Canvas loop 62 ms, timing/input/math/drawing, multipart pack, LZMA, object/string parser. | Cao |
-| `k` | `GameController` | 154 / 337 | Screen FSM, touch, level/entity loader, update/render/camera, UI/dialogue, save, audio, cheat, IGP. | Cao |
+| `GloftASBR` | `AssassinsCreedMidlet` | 4 / 3 | MIDlet lifecycle, property `MIDlet-Version`/`HAS-BLOOD`, tạo và restore canvas. | `high-confidence` |
+| `a` | `SpriteAnimationPlayer` | 14 / 14 | Animation/frame/timer/loop/transform và draw qua sprite `b`. | `high-confidence` |
+| `b` | `GloftSpriteAndBitmapFont` | 61 / 108 | Parser/render sprite Gameloft, palette/RLE/packed pixels, font mapping/wrap/draw. | `high-confidence` |
+| `c` | `Waypoint` + `WaypointRuntimeStore` | 6 / 13 | Ordered mutable registry tối đa 400 node, first-match lookup, relative clone ID từ 10000 và actor-driven position/aux mutation là `high-confidence`; wait/speed/behavior field names còn `inferred`. | `high-confidence` |
+| `d` | `EnemyCombatTables` | 1 / 2 | Canonical working alias hiện tại; consumer cho thấy rộng hơn là bảng action/state và damage theo difficulty. | `inferred` |
+| `e` | `AudioManager` | 6 / 5 | Load 34 MIDI/WAV slot, một static tracked `Player` reference, play/stop, music/SFX gating; exclusivity không bảo đảm nếu stop/close lỗi hoặc race. | `high-confidence` |
+| `f` | `IgpPromotionController` | 49 / 158 | Gameloft IGP 2.1, catalog UI, pointer input, existence-only RMS probe `igp19`, `platformRequest`; không có record payload I/O. | `high-confidence` |
+| `g` | `PlayerActor` | 57 / 71 | Kế thừa `i`; movement, combat, parkour, weapon, cheat/free-fly. Ezio association đến từ title/story strings; narrative meaning của raw type `25` vẫn `unknown`. | `high-confidence` |
+| `h` | `AudioDurationTable` | 1 / 1 | 34 duration theo millisecond. | `proven` |
+| `i` | `ActorEntity` | 225 / 206 | Entity base/type dispatcher, fixed-point physics, collision, AI, trigger, attachment, draw. | `high-confidence` |
+| `j` | `GameCanvasRuntimeAndResourcePackReader` | 88 / 91 | Canvas loop 62 ms, timing/input/math/drawing, multipart pack, LZMA, object/string parser. | `high-confidence` |
+| `k` | `GameController` | 154 / 337 | Screen FSM, touch, level/entity loader, update/render/camera, UI/dialogue, save, audio, cheat, IGP. | `high-confidence` |
 
 ## Lifecycle và frame call graph
 
@@ -36,14 +36,17 @@ GloftASBR.startApp()
   │                        └─ k.a()       // screen/frame dispatcher
   └─ resume: Display.setCurrent(k singleton)
 
-gameplay screen 8/21
+gameplay screen 8 hoặc screen 21 khi substate `u == 8`
   ├─ k.I()                 // world update
-  │    └─ for each entity: i.I()
-  │         ├─ fixed-point integration/collision
-  │         └─ switch i.ax
-  │              ├─ player type -> g.e()
-  │              ├─ trigger/controller type 10 -> i.aV()
-  │              └─ actor-specific handlers
+  │    ├─ for each ordinary bb slot: i.I()
+  │    │    ├─ fixed-point integration/collision
+  │    │    ├─ normal timeline step khi runnable
+  │    │    └─ type-specific actor/trigger handlers
+  │    ├─ player k.aS.I()
+  │    │    ├─ type 0 -> g.e()
+  │    │    └─ type 25 -> g.n()
+  │    ├─ marker/UI animation, rồi camera
+  │    └─ optional gated post-camera timeline drain
   └─ k.b(false)            // world renderer
        ├─ tile/background layers
        ├─ depth ordering
@@ -62,7 +65,7 @@ Các alias sau được xác định bởi read/write pattern trên nhiều hand
 | Symbol | Alias semantic | Kiểu/đơn vị |
 |---|---|---|
 | `i.ax` | `entityType` | int dispatch type. |
-| `i.aw` | `entityId` | ID duy nhất dùng lookup `k.q(id)`. |
+| `i.aw` | `entityLookupId` | Record UID/lookup ID; runtime không enforce uniqueness, helper entity có thể dùng `-1`. |
 | `i.S` | `state` | State/action/animation phụ thuộc entity type. |
 | `i.Q` | `previousState` | State trước transition. |
 | `i.T` | `animationFrame` | Frame index. |
@@ -128,10 +131,10 @@ control và return-to-play.
 
 | Symbol | Alias | Bằng chứng | Confidence |
 |---|---|---|---|
-| `k.u(mask)` | `isHeld(mask)` | Đọc current bitset. | Cao |
-| `k.v(mask)` | `wasPressed(mask)` | Edge press trong frame. | Cao |
-| `k.w(mask)` | `wasReleased(mask)` | Edge release. | Cao |
-| `k.x(mask)` | `wasRepeatedOrDouble(mask)` | Dựa trên recent/timer state. | Suy luận |
+| `k.u(mask)` | `isHeld(mask)` | Đọc current bitset. | `high-confidence` |
+| `k.v(mask)` | `wasPressed(mask)` | Edge press trong frame. | `high-confidence` |
+| `k.w(mask)` | `wasReleased(mask)` | Edge release. | `high-confidence` |
+| `k.x(mask)` | `wasRepeatedOrDouble(mask)` | Dựa trên recent/timer state. | `inferred` |
 
 `pointerPressed/Dragged/Released` biến đổi tọa độ portrait thành landscape:
 
@@ -153,13 +156,16 @@ j.paint(Graphics)
         -> camera k.O/k.P
         -> depth-sort entity arrays
         -> i.F() entity draw
-           -> a animation state
            -> b module/frame/palette draw
+
+a.c() UI/effect animation cursor
+  -> b module/frame/palette draw
 ```
 
 `b` kiêm hai trách nhiệm sprite và bitmap font. Để bảo toàn parity, converter
 ban đầu nên giữ một parser chung; runtime mobile có thể tách `SpriteAtlas` và
-`BitmapFont` sau khi có golden assets.
+`BitmapFont` sau khi có golden assets. Core entity giữ state/frame trực tiếp
+trong `i`; không đi qua một `a` instance khi `i.F()` draw.
 
 ## Resource/load symbol map
 
@@ -167,7 +173,7 @@ ban đầu nên giữ một parser chung; runtime mobile có thể tách `Sprite
 |---|---|---|
 | `j.a(String)` | `openPack(path)` | Đọc header, part starts và offset table. |
 | `j.m(I)I` | `seekPackEntry(index)` | Tìm part/entry đã chọn trong pack hiện tại. |
-| `j.n(I)V` | `decodeEntryLengthMarker(index)` | Đọc marker/LZMA flag và tiến cursor entry. |
+| `j.n(I)V` | `decodeEntryMarker(marker)` | Normalize marker đã đọc thành logical marker/type `ak` và compression flag `al`; refinement doc-only so với canonical alias cũ. |
 | `j.e(int)` | `readEntryBytes(index)` | Trả decoded payload. |
 | `j.f(int)` | `readTypedEntry(index)` | Parse typed-object tree. |
 | `j.a(String,int)` | `loadStringTable(pack,index)` | Parse/materialize string table. |
@@ -185,7 +191,8 @@ ví dụ `j.a(String)` khác hoàn toàn các overload draw/math.
 ### Audio
 
 - `e.a(String)` load pack/slot streams.
-- `e.a:(IZ)V` là `playAudioSlot(slot, allowRestart)`; `e.b()` stop/close current player.
+- `e.a:(IZ)V` là `playAudioSlot(slot, unusedLegacyFlag)`; bytecode không đọc
+  boolean thứ hai. `e.b()` stop/close current player.
 - Slot `0..9` được gate bởi music option `k.bE`; `10..33` bởi SFX option `k.bF`.
 - `h.a[index]` cung cấp duration để mô phỏng completion vì Java ME player API
   không được dùng như timeline authority.
@@ -193,11 +200,13 @@ ví dụ `j.a(String)` khác hoàn toàn các overload draw/math.
 ### Save
 
 - `k.e(boolean)` là load/save codec cho RMS store `/ASBR`.
-- Record `1` dài đúng 512 byte (`k.bA`).
+- Save luôn ghi 512 byte từ `k.bA`; loader dùng destination 512 byte nhưng không
+  validate returned record length.
 - `k.bf`, `1000 × 22` byte, là in-memory level-resume snapshot; không đồng nhất
   với RMS file và không sống qua process loss.
 - Byte map/reset/corruption contract đầy đủ: [`save-format.md`](./save-format.md).
-- IGP dùng RMS store riêng `igp19`.
+- IGP chỉ open/create/close RMS store `igp19` như namespace/existence marker;
+  không có `getRecord`, `addRecord` hoặc `setRecord` trong `f`.
 
 ### External/network
 
