@@ -513,6 +513,16 @@ có runtime consumer; ý nghĩa transform của plane này vẫn `inferred`.
 | `k.q(int)` | `findEntityById` | Lookup player trước, sau đó scan entity slots. | `k.java:4589–4602` | `high-confidence` |
 | `k.b(i)` / `k.c(i)` | `addEntity` / `removeEntity` | World membership. | `k.java:4544–4587` | `high-confidence` |
 
+`k.b(i)` luôn mutate cùng object reference bằng `as=-98`, sau đó ưu tiên pop
+`ea[--eb]` theo LIFO, nếu không thì append tại `bc`. Khi đầy, mutation đã xảy ra
+nhưng add bị drop im lặng. `k.c(i)` là null-noop; nó clear `ah` cùng `R/S/T/U`
+và `F` theo reference identity trước khi scan, không so UID/value. Chỉ identity
+match đầu tiên bị xóa; nếu `as != -98`, tombstone `bg[as]=-99` được ghi trước
+`i.p()`, rồi slot mới clear và index mới push vào free stack. `bc` không giảm và
+global reset vẫn tồn tại khi object không nằm trong store (`proven`). Host
+contract chỉ trace vị trí `i.p()` trên normal-return path, không tái hiện cleanup
+effects hay partial state nếu cleanup ném lỗi.
+
 Hai registry/working array `bb` và `bd` đều có capacity cố định 1.000
 (`proven`). Khi không còn free slot và `bc >= ba`, `k.b(i)` trả về im lặng;
 method là `void`, nên caller không biết entity đã bị drop. Ngược lại,
@@ -591,6 +601,12 @@ cuối tick kiểm tra tương tác với player.
 Integration diễn ra trước phần lớn player/AI FSM. Vì vậy velocity được handler
 chọn thường có hiệu lực vào tick kế tiếp, trừ branch snap/mutate position trực
 tiếp. Đảo thành input/AI-before-physics trong rewrite sẽ thay đổi timing.
+
+Slow branch của `i.I()` giữ nguyên reconcile order nhưng chia riêng old-velocity
+và acceleration contribution bằng `aI` trước khi cộng. Đây là Java `idiv`:
+truncate toward zero, `MIN_VALUE/-1` wrap, zero divisor vẫn reachable; mọi phép
+cộng tiếp tục wrap signed int. Sau đó acceleration clear và fixed position mới
+project ngược về pixel (`proven`).
 
 ### 6.4 RNG contract
 
@@ -784,14 +800,23 @@ flowchart LR
 
 | Thành phần | Symbol | Bằng chứng | Tin cậy |
 |---|---|---|---|
-| Script IDs | `k.eH` | `k.s(id)` map ID sang index; `k.java:5544–5550`. | `high-confidence` |
+| Script IDs | `k.eH` | `k.s(id)` first-match scan, trả index đầu hoặc `-1`; `k.java:5544–5550`. | `high-confidence` |
 | Lane blobs | `k.by[group][lane]` | Parser copy raw lane và gắn trailer cursor; `k.java:4833–4920`. | `high-confidence` |
 | Raw cursor lengths | `k.bz[group][lane]` | Bytecode PCs đã đối chiếu trong `level-record-formats.md:212–222`. | `proven` |
-| Active group | `i.ca` | `i.ab()` yêu cầu `ca >= 0`; `i.java:18914–18927`. | `high-confidence` |
+| Active group | `i.ca` | `i.ab()` đúng bằng `ca >= 0 && !cd[0] && cK >= 0`; `i.java:18914–18927`. | `high-confidence` |
 | Selected post-camera drain entity | `k.C` | Chỉ gated drain sau camera dùng singleton reference; normal step vẫn nằm trong từng `i.I()`. `k.java:2642–2650`; `i.java:9811–9816`. | `high-confidence` |
 | Timeline tick | `i.cK` | So với event tick `s16`; `i.java:17930–18476`. | `high-confidence` |
 | Lane cursors | `i.cL[]` | Mỗi lane tiến độc lập; `i.java:17930–18491`. | `high-confidence` |
 | Step/direct/extended executor | `i.aa()` / `i.a(...)` | Low opcode trong `aa`; extended opcode delegate sau `i.java:18499`. | `high-confidence` |
+
+`i.aa()` snapshot old `cK`, rồi mới increment có điều kiện theo latch,
+normal-time hoặc Java remainder slow gate. Mỗi lane parse/dispatch current event
+trước due test; event tương lai vẫn vào handler boundary nhưng cursor chỉ advance
+khi `event.tick <= oldTick`, tối đa một cursor/lane/call. Opcode branch đọc
+signed byte: raw `0..99`/`128..255` inline, `100..127` extended. Ở exact tick,
+helper cho `108`/`113` có thể trả âm và kết thúc method sau tick stage nhưng
+trước current cursor, later opcode/lane và completion writes (`proven`). Full
+opcode effect vẫn chưa được mô phỏng.
 
 Mode `0/1/2` có consumer; mode `3` chỉ có framing parser. Opcode `41–44`,
 `group_meta`, `lane_meta` và một số operand semantics vẫn `unknown`.
@@ -803,7 +828,7 @@ flowchart TD
     Screen["k.a screen dispatch"] --> WorldDraw["k.b(boolean)"]
     WorldDraw --> Tiles["background/tile layers"]
     WorldDraw --> Queue["rebuild k.bd render/interaction list"]
-    Queue --> Sort["sort by depth az, then world Y"]
+    Queue --> Sort["ordered insert: az, then world Y"]
     Sort --> EntityDraw["i.F entity draw"]
     EntityDraw --> Animation["state/frame/transform"]
     Animation --> Sprite["b module/palette renderer"]
@@ -1027,26 +1052,20 @@ làm mất ordering và global side effects.
 từ render trước cho contextual/combat targeting. Đây là shared cross-frame state
 giữa simulation và presentation, không phải render queue thuần.
 
-## 14. Candidate method aliases bổ sung
+## 14. Canonical timeline aliases
 
-Các alias dưới đây phù hợp để đọc code, nhưng chưa tự động ghi vào canonical
-semantic alias JSON trong lần phân tích này.
+Các alias timeline dưới đây đã được canonize vào overlay machine-readable. Chúng
+không còn là candidate wording.
 
-| Symbol | Alias đề xuất | Evidence anchor | Tin cậy |
+| Symbol | Alias canonical | Evidence anchor | Tin cậy |
 |---|---|---|---|
-| `k.d(boolean)` | `materializeLevelEntities(restoreSnapshot)` | `bytecode/k.javap.txt:22641`; `k.java:4625–4705` | `high-confidence` |
-| `k.b(i)` | `addEntity` | `k.java:4544–4561` | `high-confidence` |
-| `k.c(i)` | `removeEntity` | `k.java:4563–4587` | `high-confidence` |
-| `k.q(int)` | `findEntityById` | `k.java:4589–4602` | `high-confidence` |
-| `k.d(i)` | `insertIntoRenderInteractionList` | `k.java:2492–2504`; `g.java:5502–5540` | `high-confidence` |
-| `i.u()` | `updateCameraDistanceTier` | `i.java:575–629` | `high-confidence` |
-| `i.s()` | `advanceAnimationFrame` | `i.java:293–333` | `high-confidence` |
-| `i.t()` | `rebuildFrameBounds` | `i.java:336–517` | `high-confidence` |
 | `i.aa()` | `stepTimelineScript` | `i.java:17930–18476`; `bytecode/i.javap.txt:64769` | `high-confidence` |
 | `i.ab()` | `isTimelineScriptActive` | `i.java:18914–18927` | `high-confidence` |
 | `k.s(int)` | `findScriptGroupIndex` | `k.java:5544–5550` | `high-confidence` |
 
-Descriptor phải luôn đi cùng alias khi method bị overload.
+Descriptor phải luôn đi cùng alias khi method bị overload. Tổng cộng 11 alias
+liên quan parity đã được promoted vào canonical overlay; bảng đầy đủ nằm trong
+`docs/symbol-map.md`.
 
 ## 15. Điều đã biết, nội suy và chưa biết
 
@@ -1057,8 +1076,16 @@ Descriptor phải luôn đi cùng alias khi method bị overload.
 - Screen state owner/dispatcher/transition gateway.
 - Entity record grammar, constructor routing và exact-EOF corpus.
 - 8.8 fixed-point integration, 20-pixel tile probes và rectangle collision.
-- Script grammar, lane cursor mechanics và executor entry points.
+- Script grammar, lane cursor mechanics, executor entry points; current event
+  được dispatch trước due gate và cursor chỉ advance khi
+  `event.tick <= evaluated_tick`.
+- `k.s(int)` là first-match scan và trả `-1` khi không khớp.
+- `i.ab()` đúng bằng `ca >= 0 && cd[0] != 1 && cK >= 0`.
 - Render ordering theo `az`/Y và draw chain tới `b`.
+- Signed `baload` opcode branching: raw `0..99` và `128..255` inline,
+  `100..127` extended.
+- Exact-tick `108`/`113` negative-return handling aborts sau tick-stage nhưng
+  trước current cursor advance và later opcode/lane writes.
 - Audio slot count, RMS physical contract và external API footprint.
 
 ### `high-confidence`

@@ -12,9 +12,12 @@ không có giả định về runtime hay buildability.
 | `docs/` | Bộ tài liệu tổng quan và đặc tả resource. |
 | `plans/260722-1922-assassins-creed-reconstruction/` | Plan theo phase cho quá trình phục hồi tĩnh. |
 | `plans/260722-2335-game-architecture-inference/` | Plan và scout report cho kiến trúc legacy nội suy. |
+| `plans/260723-0852-semantic-registry-parity-harness/` | Follow-up track cho Semantic Registry và host-side gameplay parity contracts. |
+| `plans/260723-1342-entity-render-timeline-parity/` | Completed Slice 2 cho entity store, render ordering, slow-time và timeline scheduling. |
 | `plans/reports/` | Báo cáo kỹ thuật tóm tắt kết quả reverse-engineering. |
 | `reconstructed-project/` | Artifact phục hồi, inventory và resource đã giải mã. |
-| `scripts/` | Sáu script Python tách pack, dựng sprite, dựng level records, dựng package, tạo inventory và kiểm chứng tĩnh. |
+| `scripts/` | Bảy script Python cho pack/sprite/level decode, package build, inventory, verifier và parity contracts. |
+| `tests/` | `unittest` static-only cho parity contracts và corpus oracle. |
 
 ## Artifact trọng tâm
 
@@ -33,6 +36,7 @@ không có giả định về runtime hay buildability.
 | `resources/levels-decoded/` | JSON level records cho 8 pack, cộng summary và managed manifest. |
 | `reconstruction-manifest.json` | Hash, counts, coverage, class metrics và resource totals. |
 | `final-verification.md` | Audit tĩnh lịch sử, gồm code/resource/sprite managed-manifest checks. |
+| `verification-report.json` | Kết quả verifier tĩnh hiện tại, gồm `ok`, `failures`, và cờ `game_execution_performed`. |
 
 ### `scripts/`
 
@@ -44,6 +48,13 @@ không có giả định về runtime hay buildability.
 | `build-static-reconstruction.py` | Sao chép ba view source, chạy `javap`, và sinh manifest package. |
 | `inventory-java-me-bytecode.py` | Đọc output `javap` để sinh inventory call/field/string/dependency. |
 | `verify-static-reconstruction.py` | Đối chiếu hash, ZIP entry, code views, inventory và mọi decoded payload mà không load class. |
+| `gameplay_parity_contracts.py` | Clean-room Python reference cho materialization/lookup, reference-identity store, render ordering, Java normal/slow integration, script activity và timeline scheduling/abort boundary. |
+
+### `tests/`
+
+| Test | Vai trò |
+|---|---|
+| `test_gameplay_parity_contracts.py` | Khóa 30-fixture manifest, corpus oracle, synthetic source-contracts, và toàn bộ parity contracts. |
 
 ## Số liệu chính
 
@@ -63,6 +74,10 @@ không có giả định về runtime hay buildability.
 | Pixel module / PNG variant | 4.371 / 12.102 |
 | MIDI / WAV | 13 / 18 |
 | IGP PNG | 29 |
+| Semantic aliases | 12 class / 42 method / 41 field |
+| Gameplay parity fixtures | 30: 12 corpus / 1 derived / 17 source-contract |
+| Gameplay parity tests | 30/30 pass |
+| Static verifier | `ok=true`, 0 failure, target execution false |
 | Payload có semantic family | 238/238 non-empty |
 | Signature-generic đã phân loại | 114/114 |
 | Structured lines | 38.887 |
@@ -77,6 +92,8 @@ không có giả định về runtime hay buildability.
 - `reconstructed-project/resources/levels-decoded/summary.json`: 10 files,
   34.570.387 bytes, tree SHA `d2f71b3fbede3bc29c32df5bb666fcba46cb431b32e18bf17f66f665bbc2ff60`,
   manifest SHA `75ff246a5aa567a1f9cb7b8f2b58978305d88750f8bbef1589fe722c5f0f0648`.
+- `reconstructed-project/verification-report.json`: `ok=true`, `failures=[]`,
+  `analysis_mode=static-only`, `game_execution_performed=false`.
 
 ## Quan sát về nội dung
 
@@ -98,6 +115,7 @@ không có giả định về runtime hay buildability.
 - [Đặc tả save RMS](./save-format.md)
 - [Technical analysis](./reverse-engineering-technical-analysis.md)
 - [Technical design Android/iOS](./modern-mobile-technical-design.md)
+- [Semantic registry và gameplay parity harness](./semantic-registry-and-parity-harness.md)
 - [Báo cáo kiểm định cuối](../plans/260722-1922-assassins-creed-reconstruction/reports/final-verification.md)
 - [Bản reconstruction package](../reconstructed-project/README.md)
 
@@ -110,3 +128,6 @@ managed hash từ `reconstructed-project/resources/sprites-decoded/summary.json`
 `plans/260722-1922-assassins-creed-reconstruction/reports/final-verification.md`
 là audit result đối chiếu các
 nguồn này với pinned JAR, fresh `javap`, fresh inventory và fresh extraction.
+`scripts/gameplay_parity_contracts.py` và `tests/test_gameplay_parity_contracts.py`
+đóng vai trò harness static-only riêng cho 30 fixture contract đã pin; chúng
+không thay thế verifier tĩnh toàn kho và không chứng minh runtime parity.

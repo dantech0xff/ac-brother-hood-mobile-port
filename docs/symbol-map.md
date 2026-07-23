@@ -2,7 +2,7 @@
 
 Tên `a`–`k` là symbol đã obfuscate. Alias dưới đây là tên làm việc dựa trên call
 site và data flow; chúng không được trình bày như tên gốc của Gameloft.
-Overlay hiện tại có 12 class, 31 method và 41 field; đây là working aliases,
+Overlay hiện tại có 12 class, 42 method và 41 field; đây là working aliases,
 không phải tên gốc.
 
 ## Class map
@@ -22,6 +22,45 @@ không phải tên gốc.
 | `j` | `GameCanvasRuntimeAndResourcePackReader` | 88 / 91 | Canvas loop 62 ms, timing/input/math/drawing, multipart pack, LZMA, object/string parser. | `high-confidence` |
 | `k` | `GameController` | 154 / 337 | Screen FSM, touch, level/entity loader, update/render/camera, UI/dialogue, save, audio, cheat, IGP. | `high-confidence` |
 
+## Canonical parity method overlay
+
+Mười một method alias liên quan parity hiện là canonical overlay entries. Tám
+entry đầu:
+
+| Symbol | Alias | Confidence |
+|---|---|---|
+| `i.u:()V` | `updateCameraDistanceTier` | `high-confidence` |
+| `i.s:()V` | `advanceAnimationFrame` | `high-confidence` |
+| `i.t:()[I` | `rebuildFrameBounds` | `high-confidence` |
+| `k.d:(Z)V` | `materializeLevelEntities` | `high-confidence` |
+| `k.b:(Li;)V` | `addEntity` | `high-confidence` |
+| `k.c:(Li;)V` | `removeEntity` | `high-confidence` |
+| `k.q:(I)Li;` | `findEntityById` | `high-confidence` |
+| `k.d:(Li;)V` | `insertIntoRenderInteractionList` | `high-confidence` |
+
+Ba timeline entry của Slice 2:
+
+| Symbol | Alias | Confidence |
+|---|---|---|
+| `i.aa:()V` | `stepTimelineScript` | `high-confidence` |
+| `i.ab:()Z` | `isTimelineScriptActive` | `high-confidence` |
+| `k.s:(I)I` | `findScriptGroupIndex` | `high-confidence` |
+
+### Entity store và render ordering
+
+`k.b(i)`/`k.c(i)` giữ JVM object identity; token chỉ là fixture/trace label và
+UID là data. Free slot reuse theo LIFO; remove chỉ xóa identity match đầu tiên,
+tombstone trước cleanup; full add drop im lặng. `k.d(i)` insert tăng `(az, al)`,
+exact tie newest-first, giữ duplicate và không guard overflow.
+
+### Timeline scheduler boundary
+
+`k.s(int)` trả first match hoặc `-1`; `i.ab()` là
+`ca >= 0 && !cd[0] && cK >= 0`. `i.aa()` dispatch current event trước due-gated
+cursor advance. Signed `baload` làm raw `0..99`/`128..255` đi inline và
+`100..127` đi extended. Exact-tick `108`/`113` có negative-return boundary trước
+current cursor advance.
+
 ## Lifecycle và frame call graph
 
 ```text
@@ -40,7 +79,7 @@ gameplay screen 8 hoặc screen 21 khi substate `u == 8`
   ├─ k.I()                 // world update
   │    ├─ for each ordinary bb slot: i.I()
   │    │    ├─ fixed-point integration/collision
-  │    │    ├─ normal timeline step khi runnable
+  │    │    ├─ i.aa(): current-event dispatch trước due cursor gate
   │    │    └─ type-specific actor/trigger handlers
   │    ├─ player k.aS.I()
   │    │    ├─ type 0 -> g.e()
@@ -49,7 +88,7 @@ gameplay screen 8 hoặc screen 21 khi substate `u == 8`
   │    └─ optional gated post-camera timeline drain
   └─ k.b(false)            // world renderer
        ├─ tile/background layers
-       ├─ depth ordering
+       ├─ k.d(i): tăng (az, al), exact tie newest-first
        └─ i.F() -> b sprite/module renderer
 ```
 

@@ -21,6 +21,7 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 - [Schema entity/script record của level](docs/level-record-formats.md)
 - [Đặc tả save RMS `/ASBR`](docs/save-format.md)
 - [Semantic symbol map](docs/symbol-map.md)
+- [Semantic registry and gameplay parity harness](docs/semantic-registry-and-parity-harness.md)
 - [Khôi phục method `i.aV()`](docs/i-av-reconstruction.md)
 - [Báo cáo mức độ hoàn chỉnh](docs/reconstruction-completeness.md)
 - [Technical analysis và hướng dẫn tái lập](docs/reverse-engineering-technical-analysis.md)
@@ -46,7 +47,8 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
   - decoder entity/script record của level;
   - builder cho package/source/`javap`;
   - bytecode inventory generator;
-  - static integrity verifier.
+  - static integrity verifier;
+  - host-side gameplay parity contracts (`scripts/gameplay_parity_contracts.py`) và `unittest` (`tests/test_gameplay_parity_contracts.py`).
 
 ## Số liệu đã xác nhận
 
@@ -66,6 +68,10 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
   nhãn generic sau semantic pass
 - 4.286 entity record và 144 script group/510 lane/2.366 event/3.705 instruction
   level parse exact EOF; slot 3 được chứng minh runtime-unused
+- Semantic overlay: 12 class / 42 method / 41 field alias; đây là working names,
+  không phải tên gốc
+- Parity harness: 30 fixture (12 corpus, 1 derived, 17 source-contract) và
+  30/30 test static-only pass
 - level decoder output: 10 files / 34.570.387 byte / tree SHA `d2f71b3fbede3bc29c32df5bb666fcba46cb431b32e18bf17f66f665bbc2ff60` / manifest SHA `75ff246a5aa567a1f9cb7b8f2b58978305d88750f8bbef1589fe722c5f0f0648`
 
 ## Ràng buộc an toàn
@@ -88,3 +94,14 @@ không phải số phase của mọi đợt phân tích tiếp theo. Plan kiến
 - Phase 4: completed
 - Phase 5: completed
 - Phase 6: completed
+
+## Trạng thái Slice 2
+
+Parity Slice 2 hiện được theo dõi tại
+[`plans/260723-1342-entity-render-timeline-parity/`](plans/260723-1342-entity-render-timeline-parity/plan.md).
+
+- Phase 1: completed
+- Phase 2: completed
+- Phase 3: completed
+- Phase 4: completed
+- Harness hiện là static-only, với 30/30 tests pass và verifier `ok=true`

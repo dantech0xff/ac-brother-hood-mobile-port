@@ -293,6 +293,31 @@
       "confidence": "high-confidence"
     },
     {
+      "original": "i.aa:()V",
+      "alias": "stepTimelineScript",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "i.ab:()Z",
+      "alias": "isTimelineScriptActive",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "i.u:()V",
+      "alias": "updateCameraDistanceTier",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "i.s:()V",
+      "alias": "advanceAnimationFrame",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "i.t:()[I",
+      "alias": "rebuildFrameBounds",
+      "confidence": "high-confidence"
+    },
+    {
       "original": "g.e:()V",
       "alias": "updatePlayer",
       "confidence": "high-confidence"
@@ -395,6 +420,36 @@
     {
       "original": "k.I:()V",
       "alias": "updateWorld",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.d:(Z)V",
+      "alias": "materializeLevelEntities",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.b:(Li;)V",
+      "alias": "addEntity",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.c:(Li;)V",
+      "alias": "removeEntity",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.q:(I)Li;",
+      "alias": "findEntityById",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.s:(I)I",
+      "alias": "findScriptGroupIndex",
+      "confidence": "high-confidence"
+    },
+    {
+      "original": "k.d:(Li;)V",
+      "alias": "insertIntoRenderInteractionList",
       "confidence": "high-confidence"
     },
     {

@@ -206,8 +206,10 @@ Ràng buộc:
 - `count8` và mọi `s16le` đều đọc theo Java sign semantics.
 - `group_meta` luôn bị bỏ qua; high byte quan sát được luôn `0`.
 - `lane_meta` phân bố: `0` xuất hiện `88` lần, `1` xuất hiện `421` lần, `2` xuất hiện `1` lần; runtime không dùng trực tiếp.
-- `script_id` map qua `k.s(...)` để lấy chỉ số `eH`.
+- `script_id` map qua `k.s(...)` để lấy chỉ số `eH`; `k.s` là first-match scan
+  và trả `-1` khi không khớp.
 - `tick` là `s16`, so với `cK`; corpus quan sát `0..438`.
+- `i.ab()` là guard timeline-active chính xác `ca >= 0 && cd[0] != 1 && cK >= 0`.
 
 ### Hiệu chỉnh bytecode cho `bz`
 
@@ -257,6 +259,19 @@ Bytecode tại [`k.javap.txt`](../reconstructed-project/bytecode/k.javap.txt#L23
 | `37,38,39` | `2/4/6` | `1/2/3` `u16`. |
 
 Các opcode `41-44` được partition trong parser nhưng không xuất hiện trong executor lẫn corpus.
+
+### Hành vi scheduler của slot `7`
+
+- Executor dispatch mọi current event của từng lane trước khi xét điều kiện due;
+  `event.tick <= evaluated_tick` chỉ gate việc advance cursor.
+- Per-handler time guards vẫn nằm trong handler opcode, không ở scheduler.
+- Byte opcode branch dùng signed `baload`:
+  - raw `0..99` và `128..255` đi vào inline path;
+  - raw `100..127` đi vào extended path.
+- Host contract exposes exact-tick opcodes `108` và `113` qua
+  `extended_dispatch_results` tường minh; legacy bytecode có thể trả `-1` từ
+  helper. Khi result âm, harness surface `execution_aborted=true` sau phase tick
+  nhưng trước khi advance current cursor hoặc ghi opcode/lane tiếp theo.
 
 Observed low-opcode counts:
 

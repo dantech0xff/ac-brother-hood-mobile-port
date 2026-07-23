@@ -1,0 +1,1073 @@
+{
+  "schema_version": 1,
+  "analysis_mode": "static-only",
+  "target_code_execution": false,
+  "allowed_basis": [
+    "corpus",
+    "synthetic-derived-from-corpus",
+    "synthetic-source-contract"
+  ],
+  "harness_parameters": {
+    "legacy_entity_capacity": 1000,
+    "fixture_entity_capacities": [2, 4],
+    "fixture_render_capacities": [3, 10],
+    "note": "Reduced capacities expose ordering and overflow deterministically; they do not replace the legacy 1000-slot constant."
+  },
+  "fixtures": [
+    {
+      "id": "materialize-pack-11-record-0-primary-player",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "high-confidence",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-11/records.json",
+        "sha256": "596ce37a8021c9402ce6f2ca99c8cd9ddc5c9031e1ded7bd1be335c497b12df5",
+        "slot_0_sha256": "48241f2c96d31925cb5e077c203b57866713ad31a85695cc90e83e2b0ddb8977",
+        "record_index": 0,
+        "raw_hex": "07000056002c004602000000000000"
+      },
+      "input": {
+        "fields": [0, 86, 44, 582, 0, 0, 0]
+      },
+      "expected": {
+        "raw_type": 0,
+        "runtime_type": 0,
+        "legacy_id": 86,
+        "pixel_x": 44,
+        "pixel_y": 582,
+        "fixed_x": 11264,
+        "fixed_y": 148992,
+        "subtype": 0,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "g.<init>:([S)V",
+        "world_destination": "player-singleton-if-empty",
+        "sprite_selector_raw_type": 0,
+        "sprite_selector_registry": "bi",
+        "sprite_selector_value": 0,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": "g.e:()V",
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-10-record-0-alternate-player",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "high-confidence",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-10/records.json",
+        "sha256": "0f8df8a2d2e3c73c9781bd2443f59090485c86376d05fa80279c4fe7e9984a51",
+        "slot_0_sha256": "5457b447f178495bc67b29d534cda0b11b0a819f7cf11d8a383a37a3a7d9901b",
+        "record_index": 0,
+        "raw_hex": "07190001001b017330000004000000"
+      },
+      "input": {
+        "fields": [25, 1, 283, 12403, 0, 4, 0]
+      },
+      "expected": {
+        "raw_type": 25,
+        "runtime_type": 25,
+        "legacy_id": 1,
+        "pixel_x": 283,
+        "pixel_y": 12403,
+        "fixed_x": 72448,
+        "fixed_y": 3175168,
+        "subtype": 4,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "g.<init>:([S)V",
+        "world_destination": "player-singleton-if-empty",
+        "sprite_selector_raw_type": 25,
+        "sprite_selector_registry": "bi",
+        "sprite_selector_value": 25,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": "g.n:()V",
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-11-record-180-remap-11-93",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-11/records.json",
+        "sha256": "596ce37a8021c9402ce6f2ca99c8cd9ddc5c9031e1ded7bd1be335c497b12df5",
+        "slot_0_sha256": "48241f2c96d31925cb5e077c203b57866713ad31a85695cc90e83e2b0ddb8977",
+        "record_index": 180,
+        "raw_hex": "140b002500350fdf0201005d00010006000100ffff0000000060ffc0ff40014800ffff6400ffffffff"
+      },
+      "input": {
+        "fields": [11, 37, 3893, 735, 1, 93, 1, 6, 1, -1, 0, 0, -160, -64, 320, 72, -1, 100, -1, -1]
+      },
+      "expected": {
+        "raw_type": 11,
+        "runtime_type": 47,
+        "legacy_id": 37,
+        "pixel_x": 3893,
+        "pixel_y": 735,
+        "fixed_x": 996608,
+        "fixed_y": 188160,
+        "subtype": 93,
+        "flags": 1,
+        "facing_bit_set": true,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 11,
+        "sprite_selector_registry": "bi",
+        "sprite_selector_value": 11,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": null,
+        "remap_applied": true
+      }
+    },
+    {
+      "id": "materialize-pack-11-record-211-remap-17-120",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-11/records.json",
+        "sha256": "596ce37a8021c9402ce6f2ca99c8cd9ddc5c9031e1ded7bd1be335c497b12df5",
+        "slot_0_sha256": "48241f2c96d31925cb5e077c203b57866713ad31a85695cc90e83e2b0ddb8977",
+        "record_index": 211,
+        "raw_hex": "0f1100e0004c31340300007800000000000000ffff00000000ffff6400ffff"
+      },
+      "input": {
+        "fields": [17, 224, 12620, 820, 0, 120, 0, 0, 0, -1, 0, 0, -1, 100, -1]
+      },
+      "expected": {
+        "raw_type": 17,
+        "runtime_type": 50,
+        "legacy_id": 224,
+        "pixel_x": 12620,
+        "pixel_y": 820,
+        "fixed_x": 3230720,
+        "fixed_y": 209920,
+        "subtype": 120,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 17,
+        "sprite_selector_registry": "bi",
+        "sprite_selector_value": 17,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": null,
+        "remap_applied": true
+      }
+    },
+    {
+      "id": "materialize-derived-remap-11-80",
+      "kind": "entity-materialization",
+      "basis": "synthetic-derived-from-corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-11/records.json",
+        "sha256": "596ce37a8021c9402ce6f2ca99c8cd9ddc5c9031e1ded7bd1be335c497b12df5",
+        "slot_0_sha256": "48241f2c96d31925cb5e077c203b57866713ad31a85695cc90e83e2b0ddb8977",
+        "record_index": 180,
+        "mutations": [
+          {"field_index": 5, "from": 93, "to": 80}
+        ],
+        "raw_hex": "140b002500350fdf0201005000010006000100ffff0000000060ffc0ff40014800ffff6400ffffffff"
+      },
+      "input": {
+        "fields": [11, 37, 3893, 735, 1, 80, 1, 6, 1, -1, 0, 0, -160, -64, 320, 72, -1, 100, -1, -1]
+      },
+      "expected": {
+        "raw_type": 11,
+        "runtime_type": 47,
+        "legacy_id": 37,
+        "pixel_x": 3893,
+        "pixel_y": 735,
+        "fixed_x": 996608,
+        "fixed_y": 188160,
+        "subtype": 80,
+        "flags": 1,
+        "facing_bit_set": true,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 11,
+        "sprite_selector_registry": "bi",
+        "sprite_selector_value": 11,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": null,
+        "remap_applied": true
+      }
+    },
+    {
+      "id": "materialize-pack-6-record-86-selector-bm-field-8",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_0_sha256": "1b8aae09e08bdb726ef4f22ff20a639de05005e590b1a979de760bd3246fe813",
+        "record_index": 86,
+        "raw_hex": "0907000c007505fa0100000000000000000100"
+      },
+      "input": {
+        "fields": [7, 12, 1397, 506, 0, 0, 0, 0, 1]
+      },
+      "expected": {
+        "raw_type": 7,
+        "runtime_type": 7,
+        "legacy_id": 12,
+        "pixel_x": 1397,
+        "pixel_y": 506,
+        "fixed_x": 357632,
+        "fixed_y": 129536,
+        "subtype": 0,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 7,
+        "sprite_selector_registry": "bm",
+        "sprite_selector_value": 1,
+        "sprite_selector_field_index": 8,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-6-record-220-selector-bn-field-8",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_0_sha256": "1b8aae09e08bdb726ef4f22ff20a639de05005e590b1a979de760bd3246fe813",
+        "record_index": 220,
+        "raw_hex": "0909006c002118f602000000000100ffff0100"
+      },
+      "input": {
+        "fields": [9, 108, 6177, 758, 0, 0, 1, -1, 1]
+      },
+      "expected": {
+        "raw_type": 9,
+        "runtime_type": 9,
+        "legacy_id": 108,
+        "pixel_x": 6177,
+        "pixel_y": 758,
+        "fixed_x": 1581312,
+        "fixed_y": 194048,
+        "subtype": 0,
+        "flags": 1,
+        "facing_bit_set": true,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 9,
+        "sprite_selector_registry": "bn",
+        "sprite_selector_value": 1,
+        "sprite_selector_field_index": 8,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-6-record-87-selector-bl-field-10",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_0_sha256": "1b8aae09e08bdb726ef4f22ff20a639de05005e590b1a979de760bd3246fe813",
+        "record_index": 87,
+        "raw_hex": "0d2e00160055098201000047010000000000000000010002000000"
+      },
+      "input": {
+        "fields": [46, 22, 2389, 386, 0, 327, 0, 0, 0, 0, 1, 2, 0]
+      },
+      "expected": {
+        "raw_type": 46,
+        "runtime_type": 46,
+        "legacy_id": 22,
+        "pixel_x": 2389,
+        "pixel_y": 386,
+        "fixed_x": 611584,
+        "fixed_y": 98816,
+        "subtype": 327,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 46,
+        "sprite_selector_registry": "bl",
+        "sprite_selector_value": 1,
+        "sprite_selector_field_index": 10,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-7-record-207-selector-bj-field-7",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-7/records.json",
+        "sha256": "20571870a41c40819fe79b6ac0ba47dc5e9c1a0b5f04e36deba0dbbc74cfde97",
+        "slot_0_sha256": "1f1c3f50c7f2e4aa0ee231287dc2d519830d77899ac69361e98b42e12c9a250d",
+        "record_index": 207,
+        "raw_hex": "1438009c008602ae290000020000000000ffff1e0000000000010001000100640005000100ecff0100"
+      },
+      "input": {
+        "fields": [56, 156, 646, 10670, 0, 2, 0, 0, -1, 30, 0, 0, 1, 1, 1, 100, 5, 1, -20, 1]
+      },
+      "expected": {
+        "raw_type": 56,
+        "runtime_type": 56,
+        "legacy_id": 156,
+        "pixel_x": 646,
+        "pixel_y": 10670,
+        "fixed_x": 165376,
+        "fixed_y": 2731520,
+        "subtype": 2,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 56,
+        "sprite_selector_registry": "bj",
+        "sprite_selector_value": 0,
+        "sprite_selector_field_index": 7,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-6-record-216-selector-bk-field-7",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_0_sha256": "1b8aae09e08bdb726ef4f22ff20a639de05005e590b1a979de760bd3246fe813",
+        "record_index": 216,
+        "raw_hex": "09430087002a1bd90200000000010009000000"
+      },
+      "input": {
+        "fields": [67, 135, 6954, 729, 0, 0, 1, 9, 0]
+      },
+      "expected": {
+        "raw_type": 67,
+        "runtime_type": 67,
+        "legacy_id": 135,
+        "pixel_x": 6954,
+        "pixel_y": 729,
+        "fixed_x": 1780224,
+        "fixed_y": 186624,
+        "subtype": 0,
+        "flags": 1,
+        "facing_bit_set": true,
+        "constructor_symbol": "i.<init>:([S)V",
+        "world_destination": "entity-slots",
+        "sprite_selector_raw_type": 67,
+        "sprite_selector_registry": "bk",
+        "sprite_selector_value": 9,
+        "sprite_selector_field_index": 7,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "materialize-pack-7-record-98-waypoint-registry",
+      "kind": "entity-materialization",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-7/records.json",
+        "sha256": "20571870a41c40819fe79b6ac0ba47dc5e9c1a0b5f04e36deba0dbbc74cfde97",
+        "slot_0_sha256": "1f1c3f50c7f2e4aa0ee231287dc2d519830d77899ac69361e98b42e12c9a250d",
+        "record_index": 98,
+        "raw_hex": "0937008e019d018b250000000000000200ffff"
+      },
+      "input": {
+        "fields": [55, 398, 413, 9611, 0, 0, 0, 2, -1]
+      },
+      "expected": {
+        "raw_type": 55,
+        "runtime_type": 55,
+        "legacy_id": 398,
+        "pixel_x": 413,
+        "pixel_y": 9611,
+        "fixed_x": 105728,
+        "fixed_y": 2460416,
+        "subtype": 0,
+        "flags": 0,
+        "facing_bit_set": false,
+        "constructor_symbol": "c.a:([S)V",
+        "world_destination": "waypoint-registry",
+        "sprite_selector_raw_type": null,
+        "sprite_selector_registry": null,
+        "sprite_selector_value": null,
+        "sprite_selector_field_index": null,
+        "player_fsm_symbol": null,
+        "remap_applied": false
+      }
+    },
+    {
+      "id": "lookup-negative-one-is-unconditional-null",
+      "kind": "entity-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.q:(I)Li;",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "legacy_id": -1,
+        "player": {"token": "player", "legacy_id": -1},
+        "slots": [{"token": "helper", "legacy_id": -1}],
+        "high_water": 1
+      },
+      "expected": null
+    },
+    {
+      "id": "lookup-player-precedes-slot-duplicate",
+      "kind": "entity-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.q:(I)Li;",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "legacy_id": 42,
+        "player": {"token": "player", "legacy_id": 42},
+        "slots": [{"token": "slot-duplicate", "legacy_id": 42}],
+        "high_water": 1
+      },
+      "expected": {"token": "player", "legacy_id": 42}
+    },
+    {
+      "id": "lookup-first-live-slot-wins",
+      "kind": "entity-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.q:(I)Li;",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "legacy_id": 42,
+        "player": {"token": "player", "legacy_id": 7},
+        "slots": [null, {"token": "first", "legacy_id": 42}, {"token": "second", "legacy_id": 42}],
+        "high_water": 3
+      },
+      "expected": {"token": "first", "legacy_id": 42}
+    },
+    {
+      "id": "lookup-null-hole-and-high-water-boundary",
+      "kind": "entity-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.q:(I)Li;",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "legacy_id": 99,
+        "player": null,
+        "slots": [null, {"token": "other", "legacy_id": 7}, {"token": "outside-high-water", "legacy_id": 99}],
+        "high_water": 2
+      },
+      "expected": null
+    },
+    {
+      "id": "integrate-normal-reconcile-before-motion",
+      "kind": "coordinate-integration",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "i.I:()V",
+        "evidence": "reconstructed-project/bytecode/i.javap.txt"
+      },
+      "input": {
+        "fixed_x": 2688,
+        "fixed_y": 5184,
+        "pixel_x": 11,
+        "pixel_y": 19,
+        "velocity_x": 300,
+        "velocity_y": -400,
+        "acceleration_x": 7,
+        "acceleration_y": -9
+      },
+      "expected": {
+        "fixed_x": 3244,
+        "fixed_y": 4528,
+        "pixel_x": 12,
+        "pixel_y": 17,
+        "velocity_x": 307,
+        "velocity_y": -409,
+        "acceleration_x": 0,
+        "acceleration_y": 0
+      }
+    },
+    {
+      "id": "store-lifo-reuse-then-append",
+      "kind": "entity-store-lifecycle",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbols": ["k.b:(Li;)V", "k.c:(Li;)V"],
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "entities": {
+          "A": {"token": "A", "legacy_id": 1, "snapshot_index": -98},
+          "B": {"token": "B", "legacy_id": 2, "snapshot_index": -98},
+          "C": {"token": "C", "legacy_id": 3, "snapshot_index": -98},
+          "D": {"token": "D", "legacy_id": 4, "snapshot_index": 7},
+          "E": {"token": "E", "legacy_id": 5, "snapshot_index": -98},
+          "F": {"token": "F", "legacy_id": 6, "snapshot_index": -98}
+        },
+        "state": {
+          "capacity": 4,
+          "slots": ["A", "B", "C", null],
+          "high_water": 3,
+          "free_slots": [],
+          "snapshot_status": [0, 0, 0, 0],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "operations": [
+          {"operation": "remove", "token": "A"},
+          {"operation": "remove", "token": "C"},
+          {"operation": "add", "token": "D"},
+          {"operation": "add", "token": "E"},
+          {"operation": "add", "token": "F"}
+        ]
+      },
+      "expected": {
+        "state": {
+          "capacity": 4,
+          "slots": ["E", "B", "D", "F"],
+          "high_water": 4,
+          "free_slots": [],
+          "snapshot_status": [0, 0, 0, 0],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "outcomes": [
+          {
+            "operation": "remove",
+            "token": "A",
+            "outcome": "removed",
+            "slot_index": 0,
+            "entity_snapshot_index": -98,
+            "trace": ["invoke-cleanup:i.p:()V:A", "clear-slot:0", "push-free-slot:0"]
+          },
+          {
+            "operation": "remove",
+            "token": "C",
+            "outcome": "removed",
+            "slot_index": 2,
+            "entity_snapshot_index": -98,
+            "trace": ["invoke-cleanup:i.p:()V:C", "clear-slot:2", "push-free-slot:2"]
+          },
+          {
+            "operation": "add",
+            "token": "D",
+            "outcome": "reused-free-slot",
+            "slot_index": 2,
+            "entity_snapshot_index": -98,
+            "trace": ["set-snapshot-index:D=-98", "pop-free-slot:2", "write-slot:2"]
+          },
+          {
+            "operation": "add",
+            "token": "E",
+            "outcome": "reused-free-slot",
+            "slot_index": 0,
+            "entity_snapshot_index": -98,
+            "trace": ["set-snapshot-index:E=-98", "pop-free-slot:0", "write-slot:0"]
+          },
+          {
+            "operation": "add",
+            "token": "F",
+            "outcome": "appended",
+            "slot_index": 3,
+            "entity_snapshot_index": -98,
+            "trace": ["set-snapshot-index:F=-98", "reserve-high-water:3", "write-slot:3"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "store-remove-tracked-global-and-tombstone",
+      "kind": "entity-store-lifecycle",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbols": ["k.c:(Li;)V", "k.n:()V", "i.p:()V"],
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "entities": {
+          "other": {"token": "other", "legacy_id": 42, "snapshot_index": -98},
+          "target": {"token": "target", "legacy_id": 42, "snapshot_index": 3}
+        },
+        "state": {
+          "capacity": 4,
+          "slots": ["other", "target", null, null],
+          "high_water": 2,
+          "free_slots": [],
+          "snapshot_status": [0, 0, 0, 0],
+          "active_tracking_token": "target",
+          "focus_token": "target",
+          "tracking_counters": [9, 8, 7, 6]
+        },
+        "operations": [
+          {"operation": "remove", "token": "target"}
+        ]
+      },
+      "expected": {
+        "state": {
+          "capacity": 4,
+          "slots": ["other", null, null, null],
+          "high_water": 2,
+          "free_slots": [1],
+          "snapshot_status": [0, 0, 0, -99],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "outcomes": [
+          {
+            "operation": "remove",
+            "token": "target",
+            "outcome": "removed",
+            "slot_index": 1,
+            "entity_snapshot_index": 3,
+            "trace": [
+              "reset-active-tracking:target",
+              "clear-focus:target",
+              "write-tombstone:3=-99",
+              "invoke-cleanup:i.p:()V:target",
+              "clear-slot:1",
+              "push-free-slot:1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "store-full-drop-then-free-slot-reuse",
+      "kind": "entity-store-lifecycle",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbols": ["k.b:(Li;)V", "k.c:(Li;)V"],
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "entities": {
+          "A": {"token": "A", "legacy_id": 1, "snapshot_index": -98},
+          "B": {"token": "B", "legacy_id": 2, "snapshot_index": -98},
+          "C": {"token": "C", "legacy_id": 3, "snapshot_index": 5},
+          "D": {"token": "D", "legacy_id": 4, "snapshot_index": -98}
+        },
+        "state": {
+          "capacity": 2,
+          "slots": ["A", "B"],
+          "high_water": 2,
+          "free_slots": [],
+          "snapshot_status": [0, 0],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "operations": [
+          {"operation": "add", "token": "C"},
+          {"operation": "remove", "token": "B"},
+          {"operation": "add", "token": "D"}
+        ]
+      },
+      "expected": {
+        "state": {
+          "capacity": 2,
+          "slots": ["A", "D"],
+          "high_water": 2,
+          "free_slots": [],
+          "snapshot_status": [0, 0],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "outcomes": [
+          {
+            "operation": "add",
+            "token": "C",
+            "outcome": "dropped-full",
+            "slot_index": null,
+            "entity_snapshot_index": -98,
+            "trace": ["set-snapshot-index:C=-98", "drop-full-store"]
+          },
+          {
+            "operation": "remove",
+            "token": "B",
+            "outcome": "removed",
+            "slot_index": 1,
+            "entity_snapshot_index": -98,
+            "trace": ["invoke-cleanup:i.p:()V:B", "clear-slot:1", "push-free-slot:1"]
+          },
+          {
+            "operation": "add",
+            "token": "D",
+            "outcome": "reused-free-slot",
+            "slot_index": 1,
+            "entity_snapshot_index": -98,
+            "trace": ["set-snapshot-index:D=-98", "pop-free-slot:1", "write-slot:1"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "store-remove-same-uid-different-identity",
+      "kind": "entity-store-lifecycle",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbols": ["k.c:(Li;)V", "k.n:()V"],
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "entities": {
+          "A": {"token": "A", "legacy_id": 42, "snapshot_index": -98},
+          "Probe": {"token": "Probe", "legacy_id": 42, "snapshot_index": -98}
+        },
+        "state": {
+          "capacity": 2,
+          "slots": ["A", null],
+          "high_water": 1,
+          "free_slots": [],
+          "snapshot_status": [0, 0],
+          "active_tracking_token": "Probe",
+          "focus_token": "Probe",
+          "tracking_counters": [1, 2, 3, 4]
+        },
+        "operations": [
+          {"operation": "remove", "token": "Probe"}
+        ]
+      },
+      "expected": {
+        "state": {
+          "capacity": 2,
+          "slots": ["A", null],
+          "high_water": 1,
+          "free_slots": [],
+          "snapshot_status": [0, 0],
+          "active_tracking_token": null,
+          "focus_token": null,
+          "tracking_counters": [0, 0, 0, 0]
+        },
+        "outcomes": [
+          {
+            "operation": "remove",
+            "token": "Probe",
+            "outcome": "not-found",
+            "slot_index": null,
+            "entity_snapshot_index": -98,
+            "trace": ["reset-active-tracking:Probe", "clear-focus:Probe", "return-not-found"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "render-rebuild-sorts-and-reverses-exact-ties",
+      "kind": "render-interaction-order",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.d:(Li;)V",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "capacity": 10,
+        "candidates": [
+          {"token": "A", "depth": 2, "world_y": 10},
+          {"token": "B", "depth": 1, "world_y": 99},
+          {"token": "C", "depth": 2, "world_y": 5},
+          {"token": "D", "depth": 2, "world_y": 10},
+          {"token": "A", "depth": 2, "world_y": 10}
+        ]
+      },
+      "expected": {
+        "tokens": ["B", "C", "A", "D", "A"],
+        "keys": [[1, 99], [2, 5], [2, 10], [2, 10], [2, 10]]
+      }
+    },
+    {
+      "id": "render-insert-overflows-at-fixed-capacity",
+      "kind": "render-interaction-order",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.d:(Li;)V",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "capacity": 3,
+        "candidates": [
+          {"token": "A", "depth": 1, "world_y": 1},
+          {"token": "B", "depth": 2, "world_y": 2},
+          {"token": "C", "depth": 3, "world_y": 3},
+          {"token": "D", "depth": 4, "world_y": 4}
+        ]
+      },
+      "expected": {"error": "IndexError"}
+    },
+    {
+      "id": "integrate-slow-divides-contributions-before-add",
+      "kind": "coordinate-integration",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "i.I:()V",
+        "evidence": "reconstructed-project/bytecode/i.javap.txt"
+      },
+      "input": {
+        "fixed_x": 2688,
+        "fixed_y": 5184,
+        "pixel_x": 11,
+        "pixel_y": 19,
+        "velocity_x": 300,
+        "velocity_y": -400,
+        "acceleration_x": 7,
+        "acceleration_y": -9,
+        "slow_divisor": 3
+      },
+      "expected": {
+        "fixed_x": 3044,
+        "fixed_y": 4795,
+        "pixel_x": 11,
+        "pixel_y": 18,
+        "velocity_x": 302,
+        "velocity_y": -403,
+        "acceleration_x": 0,
+        "acceleration_y": 0
+      }
+    },
+    {
+      "id": "integrate-slow-zero-divisor-is-reachable-error",
+      "kind": "coordinate-integration",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "i.I:()V",
+        "evidence": "reconstructed-project/bytecode/i.javap.txt"
+      },
+      "input": {
+        "fixed_x": 0,
+        "fixed_y": 0,
+        "pixel_x": 0,
+        "pixel_y": 0,
+        "velocity_x": 1,
+        "velocity_y": 1,
+        "acceleration_x": 0,
+        "acceleration_y": 0,
+        "slow_divisor": 0
+      },
+      "expected": {"error": "ZeroDivisionError"}
+    },
+    {
+      "id": "script-group-lookup-pack-6-corpus-hit",
+      "kind": "script-group-lookup",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "group_index": 8
+      },
+      "input": {
+        "script_id": 927,
+        "script_ids": [116, 47, 250, 300, 313, 532, 105, 104, 927, 579, 327, 938, 52]
+      },
+      "expected": 8
+    },
+    {
+      "id": "script-group-lookup-missing-id",
+      "kind": "script-group-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.s:(I)I",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "script_id": 99,
+        "script_ids": [5, 7, 11]
+      },
+      "expected": -1
+    },
+    {
+      "id": "script-group-lookup-first-duplicate-id",
+      "kind": "script-group-lookup",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "k.s:(I)I",
+        "evidence": "reconstructed-project/bytecode/k.javap.txt"
+      },
+      "input": {
+        "script_id": 5,
+        "script_ids": [5, 7, 5]
+      },
+      "expected": 0
+    },
+    {
+      "id": "timeline-activity-predicate-truth-table",
+      "kind": "timeline-activity",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "i.ab:()Z",
+        "evidence": "reconstructed-project/bytecode/i.javap.txt"
+      },
+      "input": {
+        "cases": [
+          {"active_group_index": 0, "paused": false, "current_tick": 0},
+          {"active_group_index": -1, "paused": false, "current_tick": 0},
+          {"active_group_index": 0, "paused": true, "current_tick": 0},
+          {"active_group_index": 0, "paused": false, "current_tick": -1}
+        ]
+      },
+      "expected": [true, false, false, false]
+    },
+    {
+      "id": "timeline-step-pack-6-group-0-event-0",
+      "kind": "timeline-scheduling",
+      "basis": "corpus",
+      "confidence": "proven",
+      "source": {
+        "path": "reconstructed-project/resources/levels-decoded/pack-6/records.json",
+        "sha256": "375f0bf6d378a516ae1933ddd5c5776a12d8aa1be4609ae9df260c9a60556721",
+        "slot_7_sha256": "689940c12cbd702c66f081a80eeef4d4e70bd746fb853f3dfe34a063085784dd",
+        "group_index": 0,
+        "group_raw_hex": "740001010000010100000001250100",
+        "lane_index": 0,
+        "event_index": 0,
+        "event_raw_hex": "000001250100"
+      },
+      "input": {
+        "state": {
+          "active_group_index": 0,
+          "paused": false,
+          "current_tick": 0,
+          "advance_latched": false,
+          "lane_event_indexes": [0]
+        },
+        "lanes": [
+          [{"tick": 0, "opcodes": [37]}]
+        ],
+        "slow_time_enabled": false,
+        "slow_divisor": 0,
+        "frame_counter": 0
+      },
+      "expected": {
+        "state": {
+          "active_group_index": 0,
+          "paused": false,
+          "current_tick": 1,
+          "advance_latched": false,
+          "lane_event_indexes": [1]
+        },
+        "evaluated_tick": 0,
+        "dispatches": [
+          {
+            "lane_index": 0,
+            "event_index": 0,
+            "tick": 0,
+            "opcode": 37,
+            "dispatch_path": "inline-low"
+          }
+        ],
+        "completion_requested": true,
+        "execution_aborted": false,
+        "trace": [
+          "evaluate-tick:0",
+          "advance-normal",
+          "dispatch-event:0:0@0",
+          "advance-cursor-due:0:0@0",
+          "request-completion:i.bI:()V"
+        ]
+      }
+    },
+    {
+      "id": "timeline-step-slow-hold-one-event-per-lane",
+      "kind": "timeline-scheduling",
+      "basis": "synthetic-source-contract",
+      "confidence": "proven",
+      "source": {
+        "symbol": "i.aa:()V",
+        "evidence": "reconstructed-project/bytecode/i.javap.txt"
+      },
+      "input": {
+        "state": {
+          "active_group_index": 0,
+          "paused": false,
+          "current_tick": 5,
+          "advance_latched": false,
+          "lane_event_indexes": [0, 0]
+        },
+        "lanes": [
+          [
+            {"tick": 4, "opcodes": [100]},
+            {"tick": 4, "opcodes": [37]}
+          ],
+          [{"tick": 6, "opcodes": [37]}]
+        ],
+        "slow_time_enabled": true,
+        "slow_divisor": 3,
+        "frame_counter": 4
+      },
+      "expected": {
+        "state": {
+          "active_group_index": 0,
+          "paused": false,
+          "current_tick": 5,
+          "advance_latched": false,
+          "lane_event_indexes": [1, 0]
+        },
+        "evaluated_tick": 5,
+        "dispatches": [
+          {
+            "lane_index": 0,
+            "event_index": 0,
+            "tick": 4,
+            "opcode": 100,
+            "dispatch_path": "extended"
+          },
+          {
+            "lane_index": 1,
+            "event_index": 0,
+            "tick": 6,
+            "opcode": 37,
+            "dispatch_path": "inline-low"
+          }
+        ],
+        "completion_requested": false,
+        "execution_aborted": false,
+        "trace": [
+          "evaluate-tick:5",
+          "hold-slow-gate",
+          "dispatch-event:0:0@4",
+          "advance-cursor-due:0:0@4",
+          "dispatch-event:1:0@6",
+          "hold-future-event:1:0@6"
+        ]
+      }
+    }
+  ]
+}

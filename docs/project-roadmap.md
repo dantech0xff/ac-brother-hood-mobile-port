@@ -15,6 +15,31 @@ giao cuối đã được kiểm định tĩnh.
 | 5 | Modern Mobile Technical Design | completed |
 | 6 | Verification and Final Handoff | completed |
 
+## Follow-up track: Semantic Registry and parity harness
+
+Track này giữ riêng với reconstruction historical ở trên. Nó không renumber các
+phase 1-6 cũ và chỉ mô tả slice static-only cho alias registry + host-side
+contracts.
+
+| Phase | Tên | Trạng thái |
+|---|---|---|
+| 1 | Canonical Semantic Registry | completed |
+| 2 | Executable Gameplay Parity Contracts | completed |
+| 3 | Verification and Documentation | completed |
+
+## Follow-up track 2: Entity/Render/Timeline Parity Slice 2
+
+Track này giữ riêng với reconstruction historical và parity harness cũ. Nó chỉ
+mô tả slice static-only cho entity store, render ordering, slow-time và
+timeline scheduler.
+
+| Phase | Tên | Trạng thái |
+|---|---|---|
+| 1 | Promote Timeline Semantic Aliases | completed |
+| 2 | Model Entity Store and Render Ordering | completed |
+| 3 | Model Slow-Time and Timeline Scheduling | completed |
+| 4 | Verify Corpus Contracts and Update Documentation | completed |
+
 ## Kết quả thực tế
 
 ### Đã hoàn tất
@@ -28,6 +53,10 @@ giao cuối đã được kiểm định tĩnh.
 - Giao technical design Android/iOS, không triển khai hoặc chạy game.
 - Chạy audit cuối cho hash, counts, links, deterministic outputs và mọi claim;
   verifier đạt `ok: true`, `failures: []`.
+- Mở rộng registry alias canonical từ 31 lên 42 method và dựng harness parity
+  host-side cho materialization, lookup, render ordering, slow-time và timeline
+  scheduling.
+- Parity Slice 2 đã pass 30/30 tests; cả 4 phase và plan đã completed.
 
 ## Deliverables theo phase
 
@@ -39,17 +68,25 @@ giao cuối đã được kiểm định tĩnh.
 | 4 | `docs/reverse-engineering-technical-analysis.md`, `docs/codebase-summary.md`, `README.md`. |
 | 5 | `docs/modern-mobile-technical-design.md` và decision record liên quan. |
 | 6 | Final handoff, kiểm chứng và đối soát toàn bộ artifact. |
+| Follow-up 1 | Canonical alias registry update, inventory pin, and overlay sync. |
+| Follow-up 2 | Gameplay parity contracts, fixture manifest, and `unittest` oracle. |
+| Follow-up 3 | Verification and documentation for the parity slice. |
+| Slice 2 / Phase 1 | Promote three timeline semantic aliases. |
+| Slice 2 / Phase 2 | Entity-store lifecycle and render ordering contracts. |
+| Slice 2 / Phase 3 | Slow-time and timeline scheduler contracts. |
+| Slice 2 / Phase 4 | Corpus verification, review, reports, and documentation sync. |
 
 ## Quy tắc roadmap
 
 - Không đánh dấu hoàn tất cho tài liệu chưa được tạo.
 - Không đổi trạng thái phase nếu chưa có artifact tương ứng.
 - Không ghi “buildable” khi mới chỉ có reverse-engineering hoặc design note.
+- Không gọi parity harness là proof of runtime execution hoặc MIDlet fidelity.
 
 ## Hậu bàn giao tùy chọn
 
 1. Nếu bắt đầu viết lại game, dùng technical design làm đầu vào cho một plan
    implementation riêng; việc đó nằm ngoài bài tập hiện tại.
 2. Chỉ mở thêm vòng static research khi có evidence mới cho ba sprite module,
-   opcode/mode còn opaque, slot-3 semantics hoặc JAD gốc.
+   full opcode side effects/mode còn opaque, slot-3 semantics hoặc JAD gốc.
 3. Sau mọi thay đổi artifact, chạy lại toàn bộ static verifier trước khi công bố.

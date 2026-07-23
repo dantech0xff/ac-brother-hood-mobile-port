@@ -137,10 +137,13 @@ Mỗi entity slot:
 | `17–20` | `i32 LE` | `bs` |
 | `21` | `u8 bool` | `av`, facing/orientation |
 
-`i.aY()`/`i.X()` populate snapshot qua `k.a(i,int)`; entity bị loại dùng sentinel
-`-99`. `k.d(true)` restore snapshot khi retry checkpoint. Không code nào copy
-`bf`/`bg` vào `bA` hoặc RMS. Do đó riêng file `/ASBR` không thể tái tạo exact
-world/entity state sau process loss.
+`i.aY()`/`i.X()` populate snapshot qua `k.a(i,int)`. `k.c(i)` so sánh bằng
+object identity, nên cùng UID nhưng khác object không bị loại. Khi entity
+được match và `as != -98`, delete path ghi `k.bg[as] = -99` trước `i.p()`,
+slot clear và free push. `k.b(...)` cũng reset `as` về `-98` trước append,
+slot reuse, hoặc silent full-drop khi store đầy. `k.d(true)` restore snapshot
+khi retry checkpoint. Không code nào copy `bf`/`bg` vào `bA` hoặc RMS. Do đó
+riêng file `/ASBR` không thể tái tạo exact world/entity state sau process loss.
 
 ## 5. Integrity và corruption behavior
 
