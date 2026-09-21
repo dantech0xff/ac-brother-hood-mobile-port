@@ -34,6 +34,7 @@ class Level0Renderer {
 
     private lateinit var fbo: FrameBuffer
     private lateinit var batch: SpriteBatch
+    private lateinit var white: Texture
 
     // module index -> TextureRegion, per pack id
     private val clipModules = HashMap<Int, Array<TextureRegion?>>()
@@ -44,6 +45,10 @@ class Level0Renderer {
         fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
         fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
+        Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
+            setColor(1f, 1f, 1f, 1f); fill()
+            white = Texture(this); dispose()
+        }
         clips = world.clips
         for ((packId, clip) in clips) {
             val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
@@ -173,6 +178,17 @@ class Level0Renderer {
         for (e in world.npcs) drawEntity(e, camX, camY)
         drawEntity(world.player, camX, camY)
 
+        // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
+        // reveals z[12] bar art; sprite undecoded → filled rect (inferred
+        // color) + thin track. FBO is y-up: y6-top bar → VIEW_H-6-20.
+        val mw = (world.player.x1 * 11) / 15
+        batch.setColor(0.1f, 0.1f, 0.1f, 0.8f)
+        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(), 66f, 20f)
+        batch.setColor(0.9f, 0.85f, 0.4f, 1f)
+        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
+                   mw.toFloat(), 20f)
+        batch.setColor(1f, 1f, 1f, 1f)
+
         batch.end()
         fbo.end()
 
@@ -207,6 +223,7 @@ class Level0Renderer {
 
     fun dispose() {
         fbo.dispose(); batch.dispose()
+        if (::white.isInitialized) white.dispose()
         clipModules.values.forEach { arr ->
             arr.filterNotNull().forEach { it.texture.dispose() }
         }
