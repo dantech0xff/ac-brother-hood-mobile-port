@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "output": "splash.png",
+      "output_bytes": 20412,
+      "output_sha256": "29003e8108fe3c17c0f3c82f70f017cb0579ff9fd80ed7a02977ae7088840022",
+      "role": "recovered title art, blit target in the 400x240 scene",
+      "source": "reconstructed-project/resources/sprites-decoded/pack-2/entry-000-marker-003/module-0002-palette-00-232x129.png",
+      "source_sha256": "29003e8108fe3c17c0f3c82f70f017cb0579ff9fd80ed7a02977ae7088840022",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "actor.png",
+      "output_bytes": 7807,
+      "output_sha256": "6f813c3b70949f6856a04649954b6fe088eaf4fc93acfa044e71d22a7398895c",
+      "role": "recovered character art, the moving entity visual",
+      "source": "reconstructed-project/resources/sprites-decoded/pack-2/entry-000-marker-003/module-0000-palette-00-83x155.png",
+      "source_sha256": "6f813c3b70949f6856a04649954b6fe088eaf4fc93acfa044e71d22a7398895c",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "sfx.wav",
+      "output_bytes": 9102,
+      "output_sha256": "5f951e42452a5b05601a1dfb0d24277899de43853acda4b71a84aaba773637dd",
+      "role": "converted SFX played on touch (pack 17 audio slot)",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-020-marker-000.wav",
+      "source_sha256": "5f951e42452a5b05601a1dfb0d24277899de43853acda4b71a84aaba773637dd",
+      "transform": "copy-v1"
+    }
+  ],
+  "provenance_version": 1
+}
