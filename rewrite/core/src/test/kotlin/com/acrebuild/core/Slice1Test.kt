@@ -288,4 +288,22 @@ class Level0WorldTest {
         assertTrue(s.aB <= 0 && corpse,
             "soldier should die to corpse S139 (aB=${s.aB}, S=${s.S})")
     }
+
+    @Test fun `bottom-zone tap swings the sword and can kill a soldier`() {
+        val w = world()
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        // walk the player to the soldier and tap attack (bottom-third zone)
+        w.player.setPositionPx(s.ak - 20, s.al)
+        w.tick(emptyList())
+        var sawSlash = false; var kill = false
+        repeat(600) {
+            if (s.aB <= 0) { kill = true; return@repeat }
+            w.player.setPositionPx(s.ak - 20, s.al)
+            w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                          InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+            if (w.player.S in intArrayOf(67, 68, 69, 112, 113, 114, 115, 81)) sawSlash = true
+        }
+        assertTrue(sawSlash, "tap should enter the sword combo (S=${w.player.S})")
+        assertTrue(kill, "combo hits should kill the soldier (aB=${s.aB}, S=${s.S})")
+    }
 }

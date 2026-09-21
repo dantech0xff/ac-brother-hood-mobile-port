@@ -52,5 +52,7 @@ class Pad {
         const val M_TAP_R = 8
         const val M_ACTION_FAMILY = 16398
         const val M_ANY_DIR = 94324
+        /** Context/attack key (proven: `v(65568)` drives combos + assassinate). */
+        const val M_CONTEXT = 65568
     }
 }

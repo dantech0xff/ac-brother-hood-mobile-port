@@ -54,6 +54,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var tc = 0; var uc = 0           // hitbox center px (a() writes t/u)
     var co = 0                       // consecutive-run-tick counter (S12 arm)
     var aC = 0                       // generic countdown (patrol leg timer etc.)
+    var R = -1                       // queued combo/finisher anim (g.R)
+    var cl = false                   // combo window flag (g.cl)
+    var gI = 1                       // weapon selector (g.I; 1=sword proven)
     var aF = 0
     var k = false                    // NPC patrol-active flag
     var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
