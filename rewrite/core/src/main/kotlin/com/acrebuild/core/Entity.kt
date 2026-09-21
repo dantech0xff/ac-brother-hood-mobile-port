@@ -439,4 +439,7 @@ interface LevelCellSource {
     fun collisionCell(cx: Int, cy: Int): Int
     fun isSolid(v: Int): Boolean
     fun isOneWay(v: Int): Boolean
+    /** `i.aN` — the single weakened-target lock (static field in the
+     *  original; scoped to the world here). */
+    var lockTarget: Entity?
 }

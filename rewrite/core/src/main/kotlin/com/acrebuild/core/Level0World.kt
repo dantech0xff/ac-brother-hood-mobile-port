@@ -37,9 +37,10 @@ class Level0World(
     override fun collisionCell(cx: Int, cy: Int): Int = level.collisionCell(cx, cy)
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
+    override var lockTarget: Entity? = null
 
     val pad = Pad()
-    val playerFsm = PlayerFsm(this)
+    val playerFsm = PlayerFsm(this, rng)
     val npcFsm = NpcFsm(this)
 
     var tickIndex: Long = 0L

@@ -51,6 +51,8 @@ class NpcFsm(private val world: LevelCellSource) {
         private val BU = intArrayOf(300, 400, 500)
         private val BW = intArrayOf(80, 80, 80)
         private val JD = intArrayOf(100, 100, 100)
+        /** `H[0]` — counter/weakened line (proven value, index au=0). */
+        private const val H0 = 50
         /** `g.b()` player-attack anim set (proven, L9/L10). */
         private val ATTACK_ANIMS = intArrayOf(
             67, 68, 69, 81, 112, 113, 114, 115,
@@ -159,6 +161,22 @@ class NpcFsm(private val world: LevelCellSource) {
                 e.P = e.P and -17
                 if (e.animFinished()) e.P = e.P or 32 or 64
             }
+            144 -> {
+                // C() weakened/block stance (i.java:1955): hold in place;
+                // the player tap now queues the 183/184 finisher.
+                e.ag = 0; e.ah = 0; e.P = e.P or 512; e.aA = 2
+                if (e.aB <= 0) e.setAnim(0)
+            }
+            106, 107 -> {
+                // victim of the assassination finisher (S183/184 player arm
+                // drags us). r() → corpse flags; the player's arm sets aB=0.
+                e.ag = 0; e.ah = 0; e.P = e.P or 512; e.aA = 2
+                if (e.animFinished() || e.aB <= 0) {
+                    e.P = e.P and -17; e.P = e.P or 32 or 64
+                    if (e.aB <= 0) e.setAnim(0)
+                    if (world.lockTarget === e) world.lockTarget = null
+                }
+            }
             0 -> {
                 // L633 dormant/death arm (live portion): a(true), G(), P|=512,
                 // ag=ah=0, aA=2. aB<=0 → corpse chain i(139) (proven L685).
@@ -180,8 +198,20 @@ class NpcFsm(private val world: LevelCellSource) {
         // aB -= dmg (216 insta-kill+launch, {183,184,217} J=100, else bw=80),
         // hit-react `i(85)`, aB<=0 → i(0) (death path goes through the L633
         // dormant arm → i(139) corpse on anim end).
+        // lock claim (j() L7-L18, proven): a weakened ax11 (Z[0]==2)
+        // registers itself as i.aN when no live target holds the lock
+        // lock claim (j() L7-L18 uses Z[0]==2; level-0 soldiers carry
+        // Z0==0 — inferred equivalent: HP at/below the H[au]=50 counter line)
+        if (e.ax == 11 && e.aB > 0 && e.aB <= H0 &&
+            (world.lockTarget == null || world.lockTarget!!.S == 18)) {
+            world.lockTarget = e
+        }
+        if (world.lockTarget === e && e.aB <= 0) world.lockTarget = null
         e.refreshBoxes(); player.refreshBoxes()
-        if (e.aB > 0 && player.X[0] != player.X[2] &&
+        // S144 = block stance: immune to normal melee until the finisher
+        // (inferred — that's the purpose of the counter-offer state)
+        val blocking = e.S == 144
+        if (!blocking && e.aB > 0 && player.X[0] != player.X[2] &&
             player.S in ATTACK_ANIMS && overlap(e.W, player.X)) {
             facePlayer(e, player)
             when (player.S) {
@@ -198,8 +228,17 @@ class NpcFsm(private val world: LevelCellSource) {
                 }
                 else -> e.aB -= BW[0]
             }
-            e.setAnim(85)        // hit/leap-react (a(8,50/59,…) floatie skipped)
+            // hit-react only for normal strikes; finisher anims (183/184/
+            // 216/217) keep the victim pinned in its own arm (106/107/launch)
+            if (player.S !in intArrayOf(183, 184, 216, 217)) e.setAnim(85)
             if (e.aB <= 0) e.setAnim(0)                          // aB<=0 → i(0)
+            // C() weakened offer (proven shape, i.java:1955 — original
+            // gates on Z[0]==1; level-0 soldiers use 0 → inferred same
+            // transition for the low-HP weakened state)
+            else if (e.ax == 11 && e.aB <= H0) {
+                e.Z[0] = 2
+                e.setAnim(144)
+            }
         }
         // `aB()` melee application (subset): non-degenerate attackbox X
         // overlapping the player's W → `k.aS.a(player-falling?20:4, l,0,this)`
