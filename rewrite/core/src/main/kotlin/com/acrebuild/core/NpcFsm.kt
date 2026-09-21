@@ -149,6 +149,19 @@ class NpcFsm(private val world: LevelCellSource) {
                 if (e.animFinished()) { e.setAnim(23); e.aC = 10 }
             }
             25 -> { /* fall — shared tail below */ }
+            9 -> {
+                // counter-stagger (from c(player)): decay the ±1536 knockback;
+                // anim end → weakened offer if at/below the counter line,
+                // else resume chase/patrol (arm shape inferred)
+                e.ag = (e.ag * 3) shr 2
+                if (e.animFinished()) {
+                    if (e.ax == 11 && e.aB <= H0 && e.aB > 0) {
+                        e.Z[0] = 2; e.setAnim(144)
+                    } else {
+                        e.setAnim(if (e.aA != 0) 4 else 3)
+                    }
+                }
+            }
             85 -> {
                 // hit-react (i.java j() `c(85,157)`); anim end → resume
                 // chase if alerted else patrol (subset of the real chain).
