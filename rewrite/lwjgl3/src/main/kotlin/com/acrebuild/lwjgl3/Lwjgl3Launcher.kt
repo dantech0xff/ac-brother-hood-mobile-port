@@ -1,6 +1,6 @@
 package com.acrebuild.lwjgl3
 
-import com.acrebuild.gdx.SpikeGame
+import com.acrebuild.gdx.Level0Game
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration
 
@@ -11,5 +11,5 @@ fun main() {
         setWindowedMode(1200, 720) // exact 3x of the 400x240 logical viewport
         useVsync(true)
     }
-    Lwjgl3Application(SpikeGame(), config)
+    Lwjgl3Application(Level0Game(), config)
 }

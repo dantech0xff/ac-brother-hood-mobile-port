@@ -1,7 +1,7 @@
 package com.acrebuild.spike
 
 import android.os.Bundle
-import com.acrebuild.gdx.SpikeGame
+import com.acrebuild.gdx.Level0Game
 import com.badlogic.gdx.backends.android.AndroidApplication
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration
 
@@ -15,6 +15,6 @@ class AndroidLauncher : AndroidApplication() {
             useGyroscope = false
             useImmersiveMode = true
         }
-        initialize(SpikeGame(), config)
+        initialize(Level0Game(), config)
     }
 }

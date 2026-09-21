@@ -1,0 +1,44 @@
+{
+ "source": "pack-6",
+ "cols": 627,
+ "rows": 55,
+ "worldPx": [
+  12540,
+  1100
+ ],
+ "entities": 637,
+ "layers": {
+  "et": {
+   "entry": 1,
+   "tileset": null,
+   "dims": [
+    627,
+    55
+   ]
+  },
+  "ep": {
+   "entry": 4,
+   "tileset": 11,
+   "dims": [
+    627,
+    55
+   ]
+  },
+  "eu": {
+   "entry": 8,
+   "tileset": 10,
+   "dims": [
+    21,
+    13
+   ]
+  },
+  "er": {
+   "entry": 11,
+   "tileset": 12,
+   "dims": [
+    627,
+    55
+   ]
+  }
+ }
+}
