@@ -144,3 +144,14 @@ theo dõi tại
   stack là đạt đủ gate cho port gameplay production.
 - Spike này không phải bản port game; entity FSM, timeline, collision và level
   loader chưa được chuyển.
+
+## Trạng thái gameplay mining
+
+Đào semantic gameplay phục vụ port, theo dõi tại
+[`plans/260921-0929-gameplay-mining/`](plans/260921-0929-gameplay-mining/plan.md):
+
+- [`docs/gameplay-mining/`](docs/gameplay-mining/): string corpus (toàn bộ
+  script 8 mission + UI + cheat), level atlas (entity histogram + mission
+  order), player mechanics, entity-type catalog, audio/sprite registry.
+- [`docs/gameplay-design-document.md`](docs/gameplay-design-document.md): GDD
+  tổng hợp — mission list, systems, content inventory cho rewrite.
