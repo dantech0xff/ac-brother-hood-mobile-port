@@ -355,4 +355,11 @@ class PlayerFsm(private val world: LevelCellSource) {
     private fun Entity.tick100(): Boolean = (tickCount % 100) == 0L
 
     var tickCount = 0L
+
+    companion object {
+        /** `g.b(S)` — "player mid-attack" table: anim indices seen at i.java
+         *  call sites ({6,150,203,204,216,217}); slice-3-reachable subset. */
+        fun isAttackState(s: Int): Boolean =
+            s == 6 || s == 150 || s == 203 || s == 204 || s == 216 || s == 217
+    }
 }

@@ -117,10 +117,19 @@ class NpcFsm(private val world: LevelCellSource) {
             4, 22 -> chaseArm(e, player)
             5 -> if (e.animFinished()) { e.setAnim(4); e.aC = 0 }
             23 -> {
+                // L444 windup-approach: ag=∓512 toward player; aF() done →
+                // strike anim 12 (the contact arm at L478 runs next).
                 facePlayer(e, player)
                 e.collideSides(world, true)
                 e.ag = if (e.av) -512 else 512
-                if (e.animFinished()) e.setAnim(4)
+                if (e.animFinished()) e.setAnim(12)
+            }
+            12 -> {
+                // L478 contact/counter arm (subset): while my X attackbox
+                // overlaps the player's W hitbox, apply the melee ops
+                // `aB()` issues — op 4 grounded / op 20 airborne. On anim end
+                // back to chase (i(23)+aC=10 re-approach in the original).
+                if (e.animFinished()) { e.setAnim(23); e.aC = 10 }
             }
             25 -> { /* fall — shared tail below */ }
             0 -> {
@@ -136,6 +145,13 @@ class NpcFsm(private val world: LevelCellSource) {
             else -> {
                 if (e.aA == 0 && e.animFinished()) e.setAnim(3)  // inferred
             }
+        }
+        // `aB()` melee application (subset): non-degenerate attackbox X
+        // overlapping the player's W → `k.aS.a(player-falling?20:4, l,0,this)`
+        player.refreshBoxes()
+        e.refreshBoxes()
+        if (e.X[0] != e.X[2] && overlap(player.W, e.X)) {
+            player.applyHit(if (player.S == 43) 20 else 4, e.l, e, world)
         }
         // L777 common tail (subset)
         if (e.standingOn == null && !h(e.ak / 20, e.al / 20) &&
