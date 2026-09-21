@@ -16,7 +16,8 @@ class InputQueueBridge(
 
     private fun toLogical(screenX: Int, screenY: Int): Pair<Int, Int> {
         val lx = (screenX - renderer.offsetX) / renderer.scale
-        val ly = (screenY - renderer.offsetY) / renderer.scale
+        // Screen Y is top-down; logical/world Y is bottom-up (renderer ortho).
+        val ly = (SpikeWorld.FIELD_H - 1) - (screenY - renderer.offsetY) / renderer.scale
         return lx.coerceIn(0, SpikeWorld.FIELD_W - 1) to ly.coerceIn(0, SpikeWorld.FIELD_H - 1)
     }
 
@@ -41,7 +42,8 @@ class InputQueueBridge(
     }
 
     override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
-        queue.post(InputQueue.Type.CANCEL, screenX, screenY)
+        val (x, y) = toLogical(screenX, screenY)
+        queue.post(InputQueue.Type.CANCEL, x, y)
         return true
     }
 }

@@ -59,7 +59,7 @@ class PixelRenderer {
         batch.projectionMatrix.setToOrtho2D(0f, 0f, SpikeWorld.FIELD_W.toFloat(), SpikeWorld.FIELD_H.toFloat())
         batch.begin()
         // Recovered title art, centered horizontally near the top.
-        batch.draw(splash, (SpikeWorld.FIELD_W - splash.width) / 2f, 8f)
+        batch.draw(splash, (SpikeWorld.FIELD_W - splash.width) / 2f, SpikeWorld.FIELD_H - splash.height - 8f)
         if (s != null) {
             val ax = FixedPoint.toPixels(s.posX) - SpikeWorld.ACTOR_W / 2f
             val ay = FixedPoint.toPixels(s.posY) - SpikeWorld.ACTOR_H / 2f
@@ -75,7 +75,7 @@ class PixelRenderer {
         // Tick marker: 1px per 8 ticks along the bottom edge.
         batch.setColor(0.2f, 0.8f, 0.4f, 1f)
         val t = ((s?.tickIndex ?: 0) / 8 % SpikeWorld.FIELD_W).toFloat()
-        batch.draw(pixel, t, SpikeWorld.FIELD_H - 2f, 2f, 2f)
+        batch.draw(pixel, t, 0f, 2f, 2f)
         batch.setColor(1f, 1f, 1f, 1f)
         batch.end()
         fbo.end()

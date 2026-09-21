@@ -28,7 +28,7 @@ class SpikeWorld(val rng: DeterministicRandom) {
     var posX: Int = FixedPoint.toFixed(FIELD_W / 2)
         private set
     // Spawn low-center so the actor stands clear of the title art on top.
-    var posY: Int = FixedPoint.toFixed(FIELD_H - ACTOR_H / 2 - 6)
+    var posY: Int = FixedPoint.toFixed(ACTOR_H / 2 + 6)
         private set
     var velX: Int = 0
         private set
