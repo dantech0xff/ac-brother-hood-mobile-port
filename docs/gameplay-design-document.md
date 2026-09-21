@@ -104,8 +104,8 @@ crawl 24 → exit 11. IGP promo: 25/27. Cheat seq → l(15)/l(13).
 | 13 audio files | decoded | `decoded/pack-17/` |
 | Entity dispatch table | mined | `entity-type-catalog.md` |
 | Player FSM/constants | mined | `player-mechanics.md` |
-| Enemy FSM semantics | partial — ~170 states, cần pass sâu hơn | `entity-type-catalog.md` + `i-av-reconstruction.md` |
-| Per-state animation↔sprite map | `unknown` — cần mine `i.i()`/`aa.b(S)` | next phase |
+| Enemy FSM semantics | mined — shared family + 4 dedicated handlers | `npc-fsm.md` |
+| Per-state animation↔sprite map | mined — S = clip-7 anim index; clip 0=393 anims, clip 7=201 | `state-animation-map.md` |
 
 ## 6. Rewrite contract implications
 
@@ -116,5 +116,6 @@ crawl 24 → exit 11. IGP promo: 25/27. Cheat seq → l(15)/l(13).
 - Entity catalog → port order theo phổ dụng: 67 (props) > 44 (doors) > 4
   (hitboxes) > 10 (triggers) > 2 (checkpoint) > 41/66/51 > NPC FSM family.
 - Level 1/4 flying mode là subsystem riêng (ax 25 player + 30/54/55/56/65).
-- `unknown` còn lại: per-state sprite/anim map, `au` difficulty→`bu/bw`
-  indexing contract chi tiết, chase-target FSM (bD) chi tiết.
+- `unknown` còn lại: `au` difficulty→`bu/bw` indexing contract chi tiết,
+  chase-target FSM (bD) chi tiết, helper tail (`V/M/P/t/v/ai`) cần đọc sâu,
+  `aJ()`/`aL()` tail arms.
