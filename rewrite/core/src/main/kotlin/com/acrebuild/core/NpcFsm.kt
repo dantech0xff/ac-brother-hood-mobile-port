@@ -44,6 +44,21 @@ class NpcFsm(private val world: LevelCellSource) {
 
     private val scratch = IntArray(4)
 
+    /**
+     * `au()` (i.java:7738, proven): a dead ax∈{11,17,73} teleports its
+     * `Z[21]`-linked entity onto the corpse and clears its P&32
+     * (inactive) flag — the drop pickup activates. One-shot via Z[21]=-1.
+     */
+    fun corpseDrop(e: Entity) {
+        if (e.ax != 11 && e.ax != 17 && e.ax != 73) return
+        if (e.aB > 0 || e.Z[21] == -1) return
+        val link = world.npcs.firstOrNull { it.aw == e.Z[21] }
+        if (link != null) {
+            link.ak = e.ak; link.al = e.al; link.P = link.P and -33
+        }
+        e.Z[21] = -1
+    }
+
     companion object {
         // i clinit difficulty tables (proven, i.java static{}):
         // bu = {300,400,500} max hp, bw = {80,80,80} normal-hit dmg,
@@ -78,6 +93,7 @@ class NpcFsm(private val world: LevelCellSource) {
         e.Z[11] = e.al + e.Z[16]
         e.Z[12] = e.al + e.Z[16] + e.Z[18]
         e.Z[19] = rf(18)
+        e.Z[21] = rf(19)              // corpse-drop linked uid (i.java:3061)
         e.setAnim(0)
     }
 
@@ -197,7 +213,7 @@ class NpcFsm(private val world: LevelCellSource) {
                 e.aA = 2
                 if (e.animFinished()) {
                     when {
-                        e.aB <= 0 -> e.setAnim(139)             // die (proven)
+                        e.aB <= 0 -> { e.setAnim(139); corpseDrop(e) }
                         else -> e.setAnim(3)                    // inferred activation
                     }
                 }

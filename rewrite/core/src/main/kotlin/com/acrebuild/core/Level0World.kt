@@ -48,7 +48,7 @@ class Level0World(
     var deaths = 0                     // knockout count (instrumentation)
 
     val player = Entity(0, clips[0]).apply { aw = -1 }
-    val npcs = ArrayList<Entity>()
+    override val npcs = ArrayList<Entity>()
     var camX = 0
         private set
     var camY = 0
