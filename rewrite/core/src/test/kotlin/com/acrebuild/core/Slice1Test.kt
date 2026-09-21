@@ -306,4 +306,28 @@ class Level0WorldTest {
         assertTrue(sawSlash, "tap should enter the sword combo (S=${w.player.S})")
         assertTrue(kill, "combo hits should kill the soldier (aB=${s.aB}, S=${s.S})")
     }
+
+    @Test fun `assassination finisher kills a weakened locked soldier`() {
+        val w = world()
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        repeat(5) { w.tick(emptyList()) }
+        // aB=120 → one 80-dmg slash leaves 40 (<=H=50 → weakened via C()),
+        // close enough for the X-arc to land the opening hit
+        s.aB = 120
+        w.player.setPositionPx(s.ak - 20, s.al)
+        w.tick(emptyList())
+        // lock claim + player mid-combo → tap → R=183|184 finisher
+        w.player.setAnim(67)
+        w.player.T = 0
+        var sawFinisher = false
+        for (i in 0 until 200) {
+            if (s.S == 139 || (s.aB <= 0 && s.S == 0)) break
+            if (w.player.S == 183 || w.player.S == 184) sawFinisher = true
+            w.player.setPositionPx(s.ak - 20, s.al)
+            w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                          InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        }
+        assertTrue(sawFinisher, "weakened lock + tap → finisher anim")
+        assertTrue(s.aB <= 0, "finisher should zero the victim (aB=${s.aB})")
+    }
 }

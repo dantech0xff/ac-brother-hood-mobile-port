@@ -49,7 +49,7 @@ package com.acrebuild.core
  * clamp (no barrier entity), climb `f()`/`i(6)` entry requires `ci`
  * climbable refs, and every interact/QTE/attack arm.
  */
-class PlayerFsm(private val world: LevelCellSource) {
+class PlayerFsm(private val world: LevelCellSource, private val rng: DeterministicRandom? = null) {
 
     var bn = false   // i.bn — blend/unlock flag (false in slice 2)
 
@@ -92,6 +92,7 @@ class PlayerFsm(private val world: LevelCellSource) {
             20, 22, 23, 25, 215 -> airFamily(p, pad)
             43 -> fallArm(p)
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
+            183, 184 -> assassinArm(p)                          // L413/L426
             else -> {
                 // attack anims play to completion then settle (inferred
                 // arm — the real per-state arms are unmined)
@@ -373,10 +374,48 @@ class PlayerFsm(private val world: LevelCellSource) {
      * assassination shortcut (R=183/184 via rand) is omitted — needs lock-on.
      */
     private fun comboArm(p: Entity, pad: Pad) {
-        if (pad.v(Pad.M_CONTEXT)) { comboMatch(p, CJ, true, pad); comboMatch(p, CK, false, pad) }
+        // L1355-L1373 (proven): tap 65568 in S67/68 with a weakened lock
+        // (ax11, Z0==2, aB<=bw) → R = rand%2 ? 184 : 183 finisher
+        val t = world.lockTarget
+        if (pad.v(Pad.M_CONTEXT) && (p.S == 67 || p.S == 68) &&
+            t != null && t.ax == 11 && t.Z[0] == 2 && t.aB <= BW_MOCK &&
+            t.aB > 0) {
+            p.cl = false
+            if (p.R == -1) p.R = if ((rng?.nextInt() ?: 0) % 2 != 0) 184 else 183
+        } else if (pad.v(Pad.M_CONTEXT)) {
+            comboMatch(p, CJ, true, pad); comboMatch(p, CK, false, pad)
+        }
         if (p.R != -1 && (p.cl || p.animFinished())) {
             p.setAnim(p.R); p.R = -1; p.cl = false
         } else if (p.animFinished()) {
+            p.setAnim(0)
+        }
+    }
+
+    /**
+     * Assassination finisher arm (L413 for S183, L426 for S184, proven):
+     * while playing, the locked victim is snapped beside the player and put
+     * into its stagger anim (106 for 183, 107 for 184); on `r()` end →
+     * `aN.aB=0`, `d(aN)` (kill), `aN=null`, `i(0)`. `k.p()`/`i.O()` cutscene
+     * hooks omitted.
+     */
+    private fun assassinArm(p: Entity) {
+        p.ag = 0; p.ah = 0
+        val t = world.lockTarget
+        if (t != null && t.S != 106 && t.S != 107 &&
+            kotlin.math.abs(t.al - p.al) < 20) {
+            t.setAnim(if (p.S == 183) 106 else 107)
+            t.ak = if (p.av) p.ak - if (p.S == 183) 30 else 35
+                   else p.ak + if (p.S == 183) 30 else 35
+            t.al = p.al
+        }
+        if (p.animFinished()) {
+            if (t != null) {
+                t.aB = 0
+                t.setAnim(139)                    // i.d(aN) → corpse
+                t.P = t.P and -17 or 32 or 64
+                world.lockTarget = null
+            }
             p.setAnim(0)
         }
     }
@@ -411,5 +450,7 @@ class PlayerFsm(private val world: LevelCellSource) {
          *  4 rows × {anim, then next-anim at +1, min-frame at +n, key at +2n}. */
         private val CJ = intArrayOf(67, 68, 69, 112, 6, 5, 100, 100, 65568, 65568, 65568, 65568)
         private val CK = intArrayOf(112, 113, 114, 115, 9, 5, 5, 100, 65568, 65568, 65568, 65568)
+        /** `bw[k.au]` normal-hit reference for the weaken check (au=0). */
+        private const val BW_MOCK = 80
     }
 }
