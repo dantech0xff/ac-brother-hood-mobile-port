@@ -44,10 +44,25 @@ class NpcFsm(private val world: LevelCellSource) {
 
     private val scratch = IntArray(4)
 
+    companion object {
+        // i clinit difficulty tables (proven, i.java static{}):
+        // bu = {300,400,500} max hp, bw = {80,80,80} normal-hit dmg,
+        // J = {100,100,100} assassin/heavy dmg, H = {50,50,50} counter line
+        private val BU = intArrayOf(300, 400, 500)
+        private val BW = intArrayOf(80, 80, 80)
+        private val JD = intArrayOf(100, 100, 100)
+        /** `g.b()` player-attack anim set (proven, L9/L10). */
+        private val ATTACK_ANIMS = intArrayOf(
+            67, 68, 69, 81, 112, 113, 114, 115,
+            183, 184, 216, 217, 286, 287)
+    }
+
     /** ax11/73 record init (L120). `f` = the entity record fields. */
     fun initSoldier(e: Entity, f: List<Int>) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
-        e.az = rf(17); e.aB = e.az
+        e.az = rf(17)
+        // original: aB = bu[k.au] — difficulty max HP (k.au unmined → index 0)
+        e.aB = BU[0]
         e.Z[14] = rf(4)
         e.Z[0] = rf(10)
         e.Z[1] = 0; e.Z[2] = -1
@@ -132,24 +147,62 @@ class NpcFsm(private val world: LevelCellSource) {
                 if (e.animFinished()) { e.setAnim(23); e.aC = 10 }
             }
             25 -> { /* fall — shared tail below */ }
+            85 -> {
+                // hit-react (i.java j() `c(85,157)`); anim end → resume
+                // chase if alerted else patrol (subset of the real chain).
+                e.ag = 0
+                if (e.animFinished()) e.setAnim(if (e.aA != 0) 4 else 3)
+            }
+            139 -> {
+                // corpse (proven L689): P&=~16 removes actor flag;
+                // P|=32|64 freezes the last frame
+                e.P = e.P and -17
+                if (e.animFinished()) e.P = e.P or 32 or 64
+            }
             0 -> {
                 // L633 dormant/death arm (live portion): a(true), G(), P|=512,
-                // ag=ah=0, aA=2. In the original the patrol activation comes
-                // from the mission director/script (unmined); inferred slice-2
-                // activation: a live soldier goes to patrol-walk i(2) once its
-                // idle anim completes.
+                // ag=ah=0, aA=2. aB<=0 → corpse chain i(139) (proven L685).
                 e.ag = 0; e.ah = 0; e.P = e.P or 512
                 e.aA = 2
-                if (e.aB > 0 && e.animFinished()) e.setAnim(3)   // inferred (S3 sets k)
+                if (e.animFinished()) {
+                    when {
+                        e.aB <= 0 -> e.setAnim(139)             // die (proven)
+                        else -> e.setAnim(3)                    // inferred activation
+                    }
+                }
             }
             else -> {
                 if (e.aA == 0 && e.animFinished()) e.setAnim(3)  // inferred
             }
         }
+        // `j()` player→NPC damage intake (subset): live NPC + player in an
+        // attack anim (`g.b()` set) + player X attackbox ∩ my W → Q() face +
+        // aB -= dmg (216 insta-kill+launch, {183,184,217} J=100, else bw=80),
+        // hit-react `i(85)`, aB<=0 → i(0) (death path goes through the L633
+        // dormant arm → i(139) corpse on anim end).
+        e.refreshBoxes(); player.refreshBoxes()
+        if (e.aB > 0 && player.X[0] != player.X[2] &&
+            player.S in ATTACK_ANIMS && overlap(e.W, player.X)) {
+            facePlayer(e, player)
+            when (player.S) {
+                // {183,184,216,217} assassin/heavy path: 216 launches and
+                // zeroes HP; J[au]=100 damage otherwise (proven).
+                216 -> {
+                    e.aB = 0
+                    e.ag = if (e.av) 5120 else -5120
+                    e.ai = if (e.av) -2560 else 2560
+                }
+                183, 184, 217 -> {
+                    e.aB -= JD[0]
+                    if (e.ax == 11 && e.Z[0] == 0) e.aB = 30   // L83 survive
+                }
+                else -> e.aB -= BW[0]
+            }
+            e.setAnim(85)        // hit/leap-react (a(8,50/59,…) floatie skipped)
+            if (e.aB <= 0) e.setAnim(0)                          // aB<=0 → i(0)
+        }
         // `aB()` melee application (subset): non-degenerate attackbox X
         // overlapping the player's W → `k.aS.a(player-falling?20:4, l,0,this)`
-        player.refreshBoxes()
-        e.refreshBoxes()
         if (e.X[0] != e.X[2] && overlap(player.W, e.X)) {
             player.applyHit(if (player.S == 43) 20 else 4, e.l, e, world)
         }
