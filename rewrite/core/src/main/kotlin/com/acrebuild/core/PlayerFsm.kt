@@ -91,6 +91,7 @@ class PlayerFsm(private val world: LevelCellSource) {
             21, 233 -> preJumpArm(p)          // L859
             20, 22, 23, 25, 215 -> airFamily(p, pad)
             43 -> fallArm(p)
+            67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
             else -> {
                 // attack anims play to completion then settle (inferred
                 // arm — the real per-state arms are unmined)
@@ -112,6 +113,13 @@ class PlayerFsm(private val world: LevelCellSource) {
                 // enterState + below-side probes — omitted this slice.
             }
             if (p.S == 11) p.ag = (p.ag shl 1) / 3
+            // ap() attack entry (proven subset): v(65568) tap + I==1 sword →
+            // ag=ah=aj=0 then i(67), or i(81) from crouch S79.
+            if (pad.v(Pad.M_CONTEXT) && p.gI == 1) {
+                p.ag = 0; p.ah = 0; p.aj = 0
+                p.setAnim(if (p.S == 79) 81 else 67)
+                return
+            }
             // u(33024)||!am() — am() stubbed false (no ledge-hang port)
             if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
             if (!l(p, pad)) {
@@ -356,17 +364,52 @@ class PlayerFsm(private val world: LevelCellSource) {
         }
     }
 
+    /**
+     * L1341 combo arm (subset of the g.java S67/68/69 + S112..115 arms):
+     * `aj()` runs the cj/ck matchers — while S==row.anim, a 65568 tap with
+     * `T >= row.minFrame` opens the window (`cl`) and queues `R = next anim`;
+     * the consumed `R` fires `i(R)` at the window/end boundary; otherwise the
+     * arm settles to `i(0)` (the `l()` call). The `i.aN` weakened-target
+     * assassination shortcut (R=183/184 via rand) is omitted — needs lock-on.
+     */
+    private fun comboArm(p: Entity, pad: Pad) {
+        if (pad.v(Pad.M_CONTEXT)) { comboMatch(p, CJ, true, pad); comboMatch(p, CK, false, pad) }
+        if (p.R != -1 && (p.cl || p.animFinished())) {
+            p.setAnim(p.R); p.R = -1; p.cl = false
+        } else if (p.animFinished()) {
+            p.setAnim(0)
+        }
+    }
+
+    /** `a(int[], boolean)` matcher (proven shape): rows r9 < n-1; the
+     *  `gateLast` (r7) variant refuses the last data row. */
+    private fun comboMatch(p: Entity, t: IntArray, gateLast: Boolean, pad: Pad): Boolean {
+        val n = t.size / 3
+        for (r9 in 0 until n - 1) {
+            if (gateLast && r9 >= n - 2) return false
+            if (p.R == -1 && !(p.S == t[r9] && pad.v(t[r9 + 2 * n]))) continue
+            p.cl = p.T >= t[r9 + n]
+            if (p.R != -1) return true
+            if (p.cl) return true
+            p.R = t[r9 + 1]
+            return true
+        }
+        return false
+    }
+
     // j.g%100 global frame counter — owned by the world tick
     private fun Entity.tick100(): Boolean = (tickCount % 100) == 0L
 
     var tickCount = 0L
 
     companion object {
-        /** `g.b(S)` — "player mid-attack" table: anim indices seen at i.java
-         *  call sites ({6,150,203,204,216,217}); slice-3-reachable subset. */
+        /** `g.b()` no-arg attack table (proven, L9→L10 in g.java). */
         private val ATTACK = intArrayOf(67, 68, 69, 81, 112, 113, 114, 115, 183, 184, 216, 217, 286, 287)
-        /** `g.b()` no-arg attack table (proven). */
-        fun isAttackState(s: Int): Boolean =
-            s in ATTACK
+        fun isAttackState(s: Int): Boolean = s in ATTACK
+
+        /** Combo chain tables `cj`/`ck` from g clinit (proven):
+         *  4 rows × {anim, then next-anim at +1, min-frame at +n, key at +2n}. */
+        private val CJ = intArrayOf(67, 68, 69, 112, 6, 5, 100, 100, 65568, 65568, 65568, 65568)
+        private val CK = intArrayOf(112, 113, 114, 115, 9, 5, 5, 100, 65568, 65568, 65568, 65568)
     }
 }

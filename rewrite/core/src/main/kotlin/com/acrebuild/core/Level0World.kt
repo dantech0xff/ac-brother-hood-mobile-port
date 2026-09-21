@@ -88,6 +88,9 @@ class Level0World(
                         Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)
                         Pad.M_RIGHT -> pad.queuePress(Pad.M_TAP_R)
                         Pad.M_UP -> pad.queuePress(Pad.M_UP)
+                        // bottom-third TAP = attack/context key 65568 edge;
+                        // holding the zone still maps to DOWN (inferred)
+                        Pad.M_DOWN -> pad.queuePress(Pad.M_CONTEXT)
                     }
                 }
                 InputQueue.Type.MOVE -> if (pointerDown) zoneMask = zoneFor(e.x, e.y)
