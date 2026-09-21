@@ -246,4 +246,20 @@ class Level0WorldTest {
         }
         assertTrue(alerted, "soldier should alert on player in zone (S=${s.S}, aA=${s.aA})")
     }
+
+    @Test fun `alerted soldier strikes the player in melee range`() {
+        val w = world()
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        repeat(5) { w.tick(emptyList()) }
+        // stand the player next to the soldier inside its alert box
+        w.player.setPositionPx(s.ak + 30, s.al)
+        var struck = false
+        repeat(200) {
+            w.tick(emptyList())
+            w.player.setPositionPx(s.ak + 30, s.al)   // keep in reach
+            if (w.player.hitsTaken > 0 || w.player.S == 43) struck = true
+        }
+        assertTrue(struck,
+            "soldier should land hits (S=${s.S}, hits=${w.player.hitsTaken})")
+    }
 }

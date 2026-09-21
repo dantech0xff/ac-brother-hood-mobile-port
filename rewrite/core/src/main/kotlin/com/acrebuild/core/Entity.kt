@@ -63,6 +63,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var az = 0
     var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
+    var l = 0                        // attack level fed to a(op,l,..)
+    var hitsTaken = 0                // slice-3 instrumentation (inferred counter)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -389,6 +391,42 @@ open class Entity(val ax: Int, var clip: Clip?) {
             }
         }
         O = al shl 8
+    }
+
+    /**
+     * `i.a(int r10, int r11, int r12, i r13)` — shared "effect" dispatcher
+     * (i.java:4446+; op subset reachable in slice 3, `proven` bodies,
+     * deferrals flagged):
+     *   4  melee-contact — rewrites to 18 when the target is mid-attack
+     *      (`g.b(S)`); `g.a()` blocking would counter via `c(attacker)` —
+     *      deferred (block input unmined); passive target falls through to
+     *      the `k.A(18)` hurt-mark (recorded on `hitsTaken`).
+     *   18 `i(43)` — hit interrupt into tumble.   20 `i(43)` — knockdown.
+     *   26 launch: `av=attacker.av; ag=±4096; ah=-4096; aj=1536; a(43,32)`
+     *   29 stumble: `av=attacker.av; i(10); ag=∓1536`
+     *   34 damage-mark: zero vel + `a(8,5,14,…)` floatie + `k.A(11)` sfx
+     *      (recorded on `hitsTaken`; floatie/sfx spawners deferred).
+     * Player HP field is unmined — no death check here yet.
+     */
+    fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
+        var r10 = op
+        if (r10 == 4 && PlayerFsm.isAttackState(S)) r10 = 18
+        when (r10) {
+            4 -> hitsTaken++
+            18, 20 -> setAnim(43)
+            26 -> {
+                if (attacker != null) av = attacker.av
+                ag = if (av) 4096 else -4096
+                ah = -4096; aj = 1536
+                enterStateMasked(43, 32, world)
+            }
+            29 -> {
+                if (attacker != null) av = attacker.av
+                setAnim(10)
+                ag = if (av) 1536 else -1536
+            }
+            34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+        }
     }
 }
 
