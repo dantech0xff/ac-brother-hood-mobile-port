@@ -124,6 +124,7 @@ class EntityFsmTest {
 class Level0WorldTest {
 
     private fun world(): Level0World {
+        // mirror of the game's conversion of decoded assets
         val level = LevelPack.load(asset("level0/level0.aclv"))
         val clips = mapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
@@ -185,9 +186,64 @@ class Level0WorldTest {
         val w = world()
         val x0 = w.player.ak
         val q = InputQueue()
-        q.post(InputQueue.Type.DOWN, 300, 200)
+        // middle-band right half -> held M_RIGHT (8256)
+        q.post(InputQueue.Type.DOWN, 300, 120)
         repeat(30) { w.tick(q.drainTo(q.headSequence())) }
         assertTrue(w.player.ak > x0, "player should have moved right")
-        assertTrue(w.player.ag <= Level0World.RUN_CAP)
+        // run cap ±2560 (proven literal from g.e()/ax())
+        assertTrue(w.player.ag <= 2560)
+    }
+
+    @Test fun `player run uses clip0 anim 12 after run-start`() {
+        val w = world()
+        val q = InputQueue()
+        q.post(InputQueue.Type.DOWN, 300, 120)
+        // run-start (32) then sustained run (12)
+        repeat(20) { w.tick(q.drainTo(q.headSequence())) }
+        assertTrue(w.player.S == 12 || w.player.S == 32,
+            "expected run anims 32/12, got ${w.player.S}")
+    }
+
+    @Test fun `tap top third jumps through 21-22-23-43-5 landing chain`() {
+        val w = world()
+        val q = InputQueue()
+        // settle first
+        repeat(10) { w.tick(emptyList()) }
+        q.post(InputQueue.Type.DOWN, 200, 30)
+        val seen = HashSet<Int>()
+        repeat(60) {
+            w.tick(q.drainTo(q.headSequence()))
+            if (it == 1) q.post(InputQueue.Type.UP, 200, 30)
+            seen += w.player.S
+        }
+        // jump chain: squat 21 -> rise 22/23 -> fall 43 -> land 5
+        assertTrue(21 in seen || 22 in seen || 23 in seen,
+            "expected jump anims, saw $seen")
+        assertTrue(43 in seen || 5 in seen,
+            "expected fall/land, saw $seen")
+    }
+
+    @Test fun `ax11 soldiers patrol off their home cell`() {
+        val w = world()
+        val soldiers = w.npcs.filter { it.ax == 11 }
+        assertTrue(soldiers.isNotEmpty(), "expected ax11 records in level 0")
+        val homes = soldiers.map { it.ak }
+        repeat(120) { w.tick(emptyList()) }
+        val moved = soldiers.zip(homes).count { (e, hx) -> kotlin.math.abs(e.ak - hx) > 8 }
+        assertTrue(moved > 0, "no soldier patrolled: ${soldiers.map { it.S }}")
+    }
+
+    @Test fun `soldier alerts and chases when player enters the zone box`() {
+        val w = world()
+        // park the player inside a soldier's Z[9..12] alert box
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        repeat(5) { w.tick(emptyList()) }
+        w.player.setPositionPx(s.Z[9] + 5, s.al)
+        var alerted = false
+        repeat(90) {
+            w.tick(emptyList())
+            if (s.aA != 0 || s.S == 5 || s.S == 4 || s.S == 23) alerted = true
+        }
+        assertTrue(alerted, "soldier should alert on player in zone (S=${s.S}, aA=${s.aA})")
     }
 }

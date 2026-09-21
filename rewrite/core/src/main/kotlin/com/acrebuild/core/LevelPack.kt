@@ -42,7 +42,9 @@ class LevelPack private constructor(
     fun collisionCell(cx: Int, cy: Int): Int {
         if (cx < 0 || cx >= et.cols || cy >= et.rows) return 20
         if (cy < 0) return 20
-        return et.cells[cy * et.cols + cx]
+        // original `k` load remaps 255 -> 0 (proven)
+        val v = et.cells[cy * et.cols + cx]
+        return if (v == 255) 0 else v
     }
 
     /** Pixel-space convenience: `k.g(x/20, y/20)`. */
