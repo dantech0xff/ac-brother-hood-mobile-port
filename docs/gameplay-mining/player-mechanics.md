@@ -131,3 +131,26 @@ Checkpoint (type 2, `aY()`) ghi vào `k.bA`: level pos, facing, `g.J`/`g.I`
 (weapon slots, `inferred`), `ap[0]` memory blocks, `ap[3]`, `ap[2]/16` score,
 `ap[4]` souls, `ap[5]` per-level best (`52+aj*2`), flags `aZ`/`bn`/`br[]`.
 Xem `save-format.md` cho byte map.
+
+## Player states nhìn từ phía NPC/boss (`proven` — `g.e()` arms)
+
+| S | Vai trò | Tác nhân gọi |
+|---:|---|---|
+| 8 | grabbed/staggered; slide ±1280, SFX 11, end→`P\|=64` | ax11 counter (S12/18), boss `aP` counter/grab, ax73 |
+| 89 | knockdown — zero vel, `h(1)` hurt | ax50 pounce, `aE()` ambush, ax47 S93 |
+| 183,184,205 | **assassination anims** — drive `i.aN` victim: `aN.i(106/107)`, `k.e(0,aw)` kill-count, `aN.S()` shake, snap `aN.al=al`, offset ±30 | ax11 S18 riposte, stealth `k()` |
+| 216,217 | heavy lunge attack ±5120 (frames 2-3), wall-check `aT/aU` | NPC `j()` incoming-hit deals `aB-=J[au]` vs these |
+| 243 | spring/launcher launch (±3328/−6656) | `aI()` stomp-pad, prop 67/69 |
+| 270 | **hostage pickup**: companion `g.i(133)`; r()→271 | ax11 hostage S133/145 |
+| 271 | **carrying**: companion `i(134)` mirror; drop-off `ae.S==8` | idem |
+| 287 | grabbed-by-guard struggle | ax73 S147 QTE |
+| 293 | post air-assassination recover (`au()`) | ax11 S169 |
+| 297 | lever/crank hold (và launcher); share arm 326/371 | trigger ax10, NPC S175 `aS.Q==297` check |
+| 310,311,312 | mount-QTE dismount/throw-off (311 success, 312 thrown ±1280) | ax11 S175 loop |
+| 370,371 | boss-grabbed intro/loop (370 r()→371) | `aP` S17 finisher, `aR` S12 overlay |
+| 374 | grab release (r()→376 hoặc `k.l(12)`) | `aR` S12 escape path |
+| 375 | trap-caught drag ±1280 →376 | `aR` S15 damage-trap |
+| 376 | escape recover | |
+
+Bi-directional refs: enemy `i.aN` = assassination-lock victim; `aN`/`bx`/`at`
+là các global lock; `g.E` = counter-window flag (set ở ax11 S12).

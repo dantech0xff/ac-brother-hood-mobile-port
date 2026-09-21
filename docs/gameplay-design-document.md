@@ -116,6 +116,7 @@ crawl 24 → exit 11. IGP promo: 25/27. Cheat seq → l(15)/l(13).
 - Entity catalog → port order theo phổ dụng: 67 (props) > 44 (doors) > 4
   (hitboxes) > 10 (triggers) > 2 (checkpoint) > 41/66/51 > NPC FSM family.
 - Level 1/4 flying mode là subsystem riêng (ax 25 player + 30/54/55/56/65).
-- `unknown` còn lại: `au` difficulty→`bu/bw` indexing contract chi tiết,
-  chase-target FSM (bD) chi tiết, helper tail (`V/M/P/t/v/ai`) cần đọc sâu,
-  `aJ()`/`aL()` tail arms.
+- `unknown` còn lại: `au` difficulty→`bu/bw/u` indexing contract chi tiết,
+  helper tail (`V/M/P/t/v/ai/u/O/aa/bI`), `bG()` follower internals,
+  `aJ()`/`aL()` tail arms. Boss/chase (`aP`/`aR`/`bD`) đã mined —
+  `chase-boss-directors.md`.
