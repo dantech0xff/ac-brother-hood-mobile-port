@@ -92,8 +92,13 @@ class PlayerFsm(private val world: LevelCellSource) {
             20, 22, 23, 25, 215 -> airFamily(p, pad)
             43 -> fallArm(p)
             else -> {
-                // unknown state → settle like the original default tail
-                if (p.animFinished()) p.setAnim(if (p.Q == 79) 79 else 0)
+                // attack anims play to completion then settle (inferred
+                // arm — the real per-state arms are unmined)
+                if (isAttackState(p.S)) {
+                    if (p.animFinished()) p.setAnim(if (p.aZ) 0 else 43)
+                } else if (p.animFinished()) {
+                    p.setAnim(if (p.Q == 79) 79 else 0)
+                }
             }
         }
     }
@@ -359,7 +364,9 @@ class PlayerFsm(private val world: LevelCellSource) {
     companion object {
         /** `g.b(S)` — "player mid-attack" table: anim indices seen at i.java
          *  call sites ({6,150,203,204,216,217}); slice-3-reachable subset. */
+        private val ATTACK = intArrayOf(67, 68, 69, 81, 112, 113, 114, 115, 183, 184, 216, 217, 286, 287)
+        /** `g.b()` no-arg attack table (proven). */
         fun isAttackState(s: Int): Boolean =
-            s == 6 || s == 150 || s == 203 || s == 204 || s == 216 || s == 217
+            s in ATTACK
     }
 }

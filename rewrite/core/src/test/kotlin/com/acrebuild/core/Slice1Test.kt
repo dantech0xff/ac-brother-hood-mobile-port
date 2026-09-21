@@ -262,4 +262,30 @@ class Level0WorldTest {
         assertTrue(struck,
             "soldier should land hits (S=${s.S}, hits=${w.player.hitsTaken})")
     }
+
+    @Test fun `player vault attack damages and kills a soldier`() {
+        val w = world()
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        repeat(5) { w.tick(emptyList()) }
+        val hp0 = s.aB
+        // pin player overlapping the soldier in an attack anim (67 sword combo)
+        var sawDamage = false
+        repeat(300) {
+            w.player.setPositionPx(s.ak, s.al)
+            if (w.player.S != 67) w.player.setAnim(67)
+            w.tick(emptyList())
+            if (s.aB < hp0) sawDamage = true
+        }
+        assertTrue(sawDamage, "player attacks should damage the soldier (aB=${s.aB})")
+        // enough hits → aB<=0 → i(0) → i(139) corpse
+        var corpse = false
+        repeat(400) {
+            w.player.setPositionPx(s.ak, s.al)
+            if (s.aB > 0 && w.player.S != 67) w.player.setAnim(67)
+            w.tick(emptyList())
+            if (s.S == 139) corpse = true
+        }
+        assertTrue(s.aB <= 0 && corpse,
+            "soldier should die to corpse S139 (aB=${s.aB}, S=${s.S})")
+    }
 }
