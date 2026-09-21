@@ -1,0 +1,16 @@
+<config>
+    <executableName>${app.executable}</executableName>
+    <mainClass>${app.mainclass}</mainClass>
+    <os>ios</os>
+    <arch>arm64</arch>
+    <target>ios</target>
+    <iosInfoPList>Info.plist.xml</iosInfoPList>
+    <resources>
+        <resource>
+            <directory>../generated</directory>
+        </resource>
+    </resources>
+    <forceLinkClasses>
+        <pattern>com.acrebuild.ios.IOSLauncher</pattern>
+    </forceLinkClasses>
+</config>

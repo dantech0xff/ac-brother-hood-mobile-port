@@ -54,6 +54,25 @@ Plan đã `completed`; implementation, kiểm định độc lập và tài li�
 | 3 | Extended Opcode Effect Parity | completed |
 | 4 | Verification and Documentation | completed |
 
+## Follow-up track 4: Rewrite toolchain spike
+
+Track tại
+[`plans/260921-0830-libgdx-toolchain-spike/`](../plans/260921-0830-libgdx-toolchain-spike/plan.md).
+Đây là slice implementation đầu tiên của bản rewrite: thực thi mandatory
+decision gate của ADR framework trên Kotlin + LibGDX `1.14.2`.
+
+|| Phase | Tên | Trạng thái |
+||---|---|---|
+|| 1 | Project Scaffold | completed |
+|| 2 | Core Simulation Slice | completed |
+|| 3 | Content Conversion Slice | completed |
+|| 4 | LibGDX Adapters and Launchers | completed |
+|| 5 | Gate Verification and Handoff | completed — iOS half của gate item 1 pending macOS |
+
+Kết quả gate:
+[`reports/gate-results.md`](../plans/260921-0830-libgdx-toolchain-spike/reports/gate-results.md)
+— Android + desktop pass trên mọi item; iOS pending; chưa phải bản port game.
+
 ## Kết quả thực tế
 
 ### Đã hoàn tất

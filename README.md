@@ -29,6 +29,8 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 - [ADR chọn framework mobile](docs/decisions/mobile-game-framework.md)
 - [Báo cáo kiểm định tĩnh cuối](plans/260722-1922-assassins-creed-reconstruction/reports/final-verification.md)
 - [Bản reconstruction package](reconstructed-project/README.md)
+- [Rewrite toolchain spike (Kotlin + LibGDX)](rewrite/README.md) và
+  [kết quả gate](plans/260921-0830-libgdx-toolchain-spike/reports/gate-results.md)
 
 ## Artifact chính
 
@@ -126,3 +128,19 @@ Plan đã `completed`; cả bốn phase, kiểm định độc lập và tài li
 - 27/27 focused test, 57/57 full unittest discovery và verifier `ok=true`.
 - Toàn bộ kiểm chứng là static-only; không chạy target JAR, MIDlet, class,
   emulator, simulator hay thiết bị.
+
+## Trạng thái rewrite track
+
+Toolchain spike theo mandatory decision gate của
+[`docs/decisions/mobile-game-framework.md`](docs/decisions/mobile-game-framework.md),
+theo dõi tại
+[`plans/260921-0830-libgdx-toolchain-spike/`](plans/260921-0830-libgdx-toolchain-spike/plan.md):
+
+- `rewrite/` chứa Gradle project Kotlin + LibGDX `1.14.2` (core pure-Kotlin,
+  adapters `gdx`, launchers `android`/`lwjgl3`, scaffold `ios` chỉ build trên
+  macOS, `tools` converter và `generated/` assets có provenance).
+- Gate items 2–6 pass trên Android emulator + desktop; core test 11/11.
+- Gate item 1 còn nửa iOS: cần session macOS (RoboVM + Xcode) trước khi gọi
+  stack là đạt đủ gate cho port gameplay production.
+- Spike này không phải bản port game; entity FSM, timeline, collision và level
+  loader chưa được chuyển.
