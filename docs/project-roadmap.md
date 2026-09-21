@@ -73,6 +73,26 @@ Kết quả gate:
 [`reports/gate-results.md`](../plans/260921-0830-libgdx-toolchain-spike/reports/gate-results.md)
 — Android + desktop pass trên mọi item; iOS pending; chưa phải bản port game.
 
+## Follow-up track 5: Gameplay mining
+
+Track tại
+[`plans/260921-0929-gameplay-mining/`](../plans/260921-0929-gameplay-mining/plan.md).
+Đào semantic gameplay từ artifact đã decode để làm content contract cho port:
+
+| | Phase | Tên | Trạng thái |
+|---|---|---|---|
+| 1 | String-table corpus | completed |
+| 2 | Level atlas | completed |
+| 3 | Player mechanics | completed |
+| 4 | Entity-type catalog | completed |
+| 5 | Audio và sprite usage | completed |
+| 6 | GDD synthesis | completed |
+
+Kết quả: [`docs/gameplay-mining/`](gameplay-mining/) (corpus, atlas, catalog,
+mechanics, audio/sprite) và [`docs/gameplay-design-document.md`](gameplay-design-document.md)
+— 8 mission, entity dispatch 0–80, player FSM, physics constants, cheat/audio
+tables.
+
 ## Kết quả thực tế
 
 ### Đã hoàn tất
