@@ -12,6 +12,14 @@ package com.acrebuild.core
  * - `S` = current anim (= FSM state), `T` = frame, `U` = tick-in-frame,
  *   `Q` = previous anim, `P` = flags (bit0 = `av` facing, bit6 = anim-hold).
  * - `V` = playback delay counter; `a` = anim elapsed counter.
+ *
+ * Slice-2 additions (all `proven` transcriptions of the simple decompile
+ * unless noted): hitbox `W`/attackbox `X` (`t()`, i.java `public final
+ * int[] t()`), the per-tick cell probe `x()` (i.java `public final int x()`),
+ * the wall pass `a(boolean)`, forward-wall check `y()`, air wall-resolve
+ * `av()` (g.java `void av()`), cell probe `e(cx,cy)` = `k.g`, landing
+ * `d(boolean)` (g.java `private void d(boolean)`), and the fall-entry
+ * `a(0)`/`a(int,int)` (i.java `final void a(int,int)` + g.java `void a(int)`).
  */
 open class Entity(val ax: Int, var clip: Clip?) {
 
@@ -29,10 +37,32 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var U: Int = 0                   // tick-in-frame
     var Q: Int = 0                   // previous anim
     var P: Int = 0                   // flag word
-    var av: Boolean = false          // facing (field6 bit0); true = mirrored
+    var av: Boolean = false          // facing (P bit0); true = faces/mirrors left
     var V: Int = 0                   // playback delay
     var a: Int = 0                   // anim elapsed ticks
-    val Z: IntArray = IntArray(8)    // per-type params (fields[7+])
+    val Z: IntArray = IntArray(22)   // per-type params (record fields[7+])
+
+    // -- probe results, filled by x()/a()/t() each tick --------------------
+    var aO = 0; var aP = 0; var aQ = 0; var aR = 0; var aS = 0
+    var aT = 0; var aU = 0; var aV = 0; var aW = 0; var aX = 0; var aY = 0
+    var aZ = false                   // standing flag (aR != 18 when probing feet)
+    var bd = false; var v = true     // x() status flags
+    var bb = false; var bc = false   // wall flags left/right (a(boolean))
+    var ba = false                   // unused third flag, kept for parity
+    val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
+    val X = IntArray(4)              // attackbox (t())
+    var tc = 0; var uc = 0           // hitbox center px (a() writes t/u)
+    var co = 0                       // consecutive-run-tick counter (S12 arm)
+    var aC = 0                       // generic countdown (patrol leg timer etc.)
+    var aF = 0
+    var k = false                    // NPC patrol-active flag
+    var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
+    var zz = true
+    var aA = 0                       // alert level (NPC) / turn-block (player)
+    var aB = 0                       // hp-ish stat (az = max)
+    var az = 0
+    var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
+    var platform: Entity? = null     // `s` — linked platform/rope (null here)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -113,4 +143,259 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun setPositionPx(x: Int, y: Int) {
         ak = x; al = y; N = x shl 8; O = y shl 8
     }
+
+    // ==================================================================
+    // `t()` — i.java `public final int[] t()` (proven transcription of the
+    // main path; ax66/13/21/60 special cases and the Y bounds rect omitted).
+    // W = clip rect(which=0) shifted by frame dx/dy, then + ak/al.
+    // X = same for which=1. Facing flips the dx sign.
+    // ==================================================================
+    fun refreshBoxes() {
+        val c = clip
+        if (c == null || S < 0 || T < 0) { W.fill(0); X.fill(0); return }
+        c.rect(S, T, 0, drawFlags(), W)
+        val fi = c.frameIndex(S, T)
+        val dx = c.frameDx[fi]
+        val dy = c.frameDy[fi]
+        if (av) W[0] -= dx else W[0] += dx
+        W[1] += dy
+        c.rect(S, T, 1, drawFlags(), X)
+        if (av) X[0] -= dx else X[0] += dx
+        X[1] += dy
+        W[0] += ak; W[2] += W[0]
+        W[1] += al; W[3] += W[1]
+        X[0] += ak; X[2] += X[0]
+        X[1] += al; X[3] += X[1]
+    }
+
+    /**
+     * `e(cx, cy)` = `k.g` — collision cell at grid coords (OOB -> 20).
+     * Delegated to the level via [world].
+     */
+    fun e(world: LevelCellSource, cx: Int, cy: Int): Int = world.collisionCell(cx, cy)
+
+    /**
+     * `x()` — i.java `public final int x()` (proven). Probes the cell column
+     * under the anchor: fills aO/aP (top row, +1), aR/aQ/aS (below feet,
+     * -1, +1), aV/aW (left/right of the feet cell), `aZ` (aR != 18), `bd`,
+     * and returns the pixel snap r8 for slope/edge adjustment. Callers in
+     * the original mostly use the side effects; the snap is consumed by the
+     * move code paths that re-call x() after mutating ak/al.
+     */
+    fun probeCells(world: LevelCellSource): Int {
+        refreshBoxes()
+        var r8 = 0
+        val r0 = W[1]
+        val r02 = W[3] + 1
+        aZ = false
+        bd = ah != 0
+        val cx = ak / 20
+        aO = e(world, cx, r0 / 20)
+        aP = e(world, cx, r0 / 20 + 1)
+        aR = e(world, cx, r02 / 20)
+        aQ = e(world, cx, r02 / 20 - 1)
+        aS = e(world, cx, r02 / 20 + 1)
+        aV = e(world, cx - 1, r02 / 20)
+        aW = e(world, cx + 1, r02 / 20)
+        if (aR < 10) {
+            // L9: only aR == 5 continues; others return early.
+            if (aR != 5) return r8
+            bd = false
+        }
+        r8 = r02 % 20
+        if (aO < 12 || aP < 12) {
+            // L16: shallow embed — step up a cell into the block above.
+            if (aQ >= 10) {
+                r8 += 20
+                aS = aR
+                aR = aQ
+                v = false
+            }
+        } else {
+            bd = false
+        }
+        if (aR != 18) aZ = true
+        if (aR in 14..17 || aR in 24..27) {
+            // slope family: sub-cell adjust (i.java x() L26-L52)
+            val r04 = (ak % 20) shr 1
+            when (aR) {
+                14, 24 -> r8 -= r04
+                15, 25 -> { r8 -= r04 + 10; if (ax == 11) r8 -= 1 }
+                16, 26 -> r8 -= (10 - r04) + 10
+                17, 27 -> r8 -= (10 - r04)
+            }
+            if (aR in 24..27) r8 -= 5
+            v = false
+            bd = true
+            return r8
+        }
+        when (aR) {
+            12 -> { r8 -= ak % 20; v = false }
+            13 -> { r8 -= 20 - (ak % 20); v = false }
+        }
+        return r8
+    }
+
+    /**
+     * `a(boolean)` — i.java `public final void a(boolean)` (proven). Side
+     * probes aT/aU (max cell value per hitbox side strip), wall flags bb/bc,
+     * and — when resolve=true — pushes `ak` out of walls and re-probes.
+     * Iterates hitbox rows from top (W[1]) down to W[3]-10 (feet excluded).
+     */
+    fun collideSides(world: LevelCellSource, resolve: Boolean) {
+        v = true
+        probeCells(world)
+        var r10 = W[0] - 1
+        var r11 = W[2] + 1
+        var r12 = W[1]
+        var r13 = W[3] - 10
+        bb = false; bc = false; ba = false; aT = 0; aU = 0
+        if (resolve && bd) {
+            // L16/L34: embedded — recompute then continue probes
+            refreshBoxes()
+            r10 = W[0] - 1; r11 = W[2] + 1; r12 = W[1]; r13 = W[3] - 10
+        }
+        val r02 = e(world, r10 / 20, r12 / 20 - 1)
+        val r03 = e(world, r11 / 20, r12 / 20 - 1)
+        var cy = r12 / 20
+        while (cy <= r13 / 20) {
+            val l = e(world, r10 / 20, cy)
+            if (l > aT) {
+                aT = l
+                if (aT >= 18) {
+                    aX = if (r02 < 18) (r13 / 20) - cy + 1
+                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    bb = true
+                }
+            }
+            val r = e(world, r11 / 20, cy)
+            if (r > aU) {
+                aU = r
+                if (aU >= 18) {
+                    aY = if (r03 < 18) (r13 / 20) - cy + 1
+                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    bc = true
+                }
+            }
+            if (bb || bc) break
+            cy++
+        }
+        if (resolve && v) {
+            if (bb == bc) {
+                bc = false; bb = false
+            } else if (ag > 0) {
+                // L75/L77: moving right — push left out of a right wall,
+                // else right out of a left wall (fallback).
+                if (bc) ak -= r11 % 20 else ak += (20 - ((r10 + 20) % 20)) - 1
+                probeCells(world)
+            } else {
+                // L69/L73: mirrored for leftward/still.
+                if (bb) ak += (20 - ((r10 + 20) % 20)) - 1 else ak -= r11 % 20
+                probeCells(world)
+            }
+        }
+        refreshBoxes()
+        tc = (W[0] + W[2]) shr 1
+        uc = (W[1] + W[3]) shr 1
+    }
+
+    /** `y()` — wall in the direction of motion/facing (i.java, proven). */
+    fun hitWall(): Boolean = when {
+        ag < 0 -> bb
+        ag > 0 -> bc
+        else -> if (av) bb else bc
+    }
+
+    /**
+     * `av()` — g.java `void av()` (proven). Air wall-resolve: probes one cell
+     * higher (head region), then pushes ak back ±10 when flying into a solid
+     * side cell at the feet row. Rope entity path (i.bq) not ported.
+     */
+    fun airWallResolve(world: LevelCellSource) {
+        al -= 20
+        probeCells(world)
+        al += 20
+        if (aO >= 20) { enterFall(); return }
+        if (ah >= 0) return
+        refreshBoxes()
+        val r0 = W[3]
+        val r02 = W[0] - 1
+        val r03 = W[2] + 1
+        if (ag > 0 && e(world, r03 / 20, r0 / 20) >= 20) {
+            ai = 0; ag = 0; ak -= 10
+        } else if (ag < 0 && e(world, r02 / 20, r0 / 20) >= 20) {
+            ai = 0; ag = 0; ak += 10
+        }
+    }
+
+    /**
+     * `a(int r7, int r8)` — i.java `final void a(int,int)` (proven): enter
+     * state r7 with position re-centering per the r8 mask. Only the bits used
+     * by slice-2 call sites are transcribed: bit5 (32) recentres `al` on the
+     * hitbox midline, and the bit0 ordering rule (i(r7) before adjusts when
+     * clear, after when set).
+     */
+    fun enterStateMasked(n: Int, mask: Int, world: LevelCellSource) {
+        if (mask and 1 == 0) { setAnim(n); refreshBoxes() }
+        if (mask and 2048 != 0) ak = W[0]
+        if (mask and 4096 != 0) ak = W[2]
+        if (mask and 4 != 0) ak += tc - ((W[0] + W[2]) shr 1)
+        if (mask and 8 != 0) ak -= (ak % 20) - 10
+        if (mask and 64 != 0) al = W[1]
+        else if (mask and 128 != 0) al = W[3]
+        else if (mask and 8192 != 0) al = ((W[3] / 20) * 20) - 1
+        else if (mask and 16384 != 0) al = (((W[3] + 10) / 20) * 20) - 1
+        else if (mask and 256 != 0) al = (((W[1] + 10) / 20) * 20) - 1
+        else if (mask and 512 != 0) al = (((W[1] / 20) + 1) * 20) - 1
+        else if (mask and 32 != 0) al += uc - ((W[1] + W[3]) shr 1)
+        else if (mask and 1024 != 0) al += al - W[1]
+        if (mask and 16 != 0) al -= (al % 20) - 10
+        if (mask and 1 != 0) setAnim(n)
+    }
+
+    /**
+     * `a(int)` — g.java `void a(int r5)` (proven): leave the ground into the
+     * shared fall state: `a(43,32); al += 10; ah = r5; aj = 1536`.
+     */
+    fun enterFall(vy: Int = 0, world: LevelCellSource? = null) {
+        if (world != null) enterStateMasked(43, 32, world) else setAnim(43)
+        al += 10
+        ah = vy
+        aj = 1536
+        standingOn = null
+        // ac = null (climbable ref) — unused in slice 2
+    }
+
+    /**
+     * `d(boolean)` — g.java `private void d(boolean)` (proven): land on the
+     * ground cell top. `al = ((W[3]+1)/20)*20 - 1`; variant enters S102
+     * (platform-4 land). r8=false path: S16/Q16 or S150 special-cased, else
+     * `i(5)` land-squat; the >20-cell fall-damage hook (`a(21,0,0,this)`)
+     * requires the damage-floatie spawner — flagged `inferred` and skipped.
+     */
+    fun land(world: LevelCellSource, platformVariant: Boolean) {
+        refreshBoxes()
+        al = ((W[3] + 1) / 20) * 20
+        al--
+        if (aS == 4 && aR < 12) al += 20   // L15 edge bump
+        ah = 1
+        if (platformVariant) {
+            aj = 0; ai = 0; ah = 0; ag = 0; aC = 18; setAnim(102)
+        } else {
+            when {
+                S == 16 || Q == 16 -> { setAnim(5); ag = 0 }
+                S == 150 -> setAnim(152)
+                else -> { setAnim(5); ag = 0 }
+            }
+        }
+        O = al shl 8
+    }
+}
+
+/** Minimal cell-source interface so `e()`/probes work against the level. */
+interface LevelCellSource {
+    val cellPx: Int
+    fun collisionCell(cx: Int, cy: Int): Int
+    fun isSolid(v: Int): Boolean
+    fun isOneWay(v: Int): Boolean
 }
