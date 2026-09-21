@@ -70,6 +70,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
     var l = 0                        // attack level fed to a(op,l,..)
     var hitsTaken = 0                // slice-3 instrumentation (inferred counter)
+    var gt = 0                       // g.t iframe timer: 10 after drain, 5 after
+                                     // volume hit, 100 after teleport; --/tick
+    var bh = 0                       // i.bh hit-flash counter (visual pending)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -427,20 +430,41 @@ open class Entity(val ax: Int, var clip: Clip?) {
         setAnim(9)
     }
 
+    /**
+     * `g.d(int)` meter drain (proven, g.java:3884): skips while `s`
+     * (cutscene, unported), `t != 0` iframes, `c()` linked-carry, or
+     * `S in {67,183,184,205}`; else `i.bh = 8` flash + `x[1] -= amt`
+     * clamped at 0; survival sets `t = 10`.
+     */
+    fun drainMeter(amt: Int) {
+        if (gt > 0 || S == 67 || S == 183 || S == 184 || S == 205) return
+        bh = 8
+        x1 = (x1 - amt).coerceAtLeast(0)
+        if (x1 > 0) gt = 10
+    }
+
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
         var r10 = op
-        if (r10 == 4 && PlayerFsm.isAttackState(S)) r10 = 18
+        // i.java:4446 head (proven): op4 upgraded to op18 when the struck
+        // entity is the player mid-attack-anim without iframes/cutscene;
+        // the upgrade also zeroes the victim's vx.
+        if (r10 == 4 && PlayerFsm.isAttackState(S) && gt == 0) {
+            r10 = 18; ag = 0
+        }
         when (r10) {
             // i.a(op4) L116-L131: struck while meter payable → c(attacker)
             // (auto-counter; u[au] meter cost), else hurt-mark k.A(18)
             4 -> {
                 val canCounter = attacker != null && x1 > 0 && S != 9 &&
+                    gt == 0 &&
                     attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61
-                if (canCounter) { x1 = (x1 - 5).coerceAtLeast(0); attacker.counteredBy(this) }
+                if (canCounter) { drainMeter(5); attacker.counteredBy(this) }
                 else hitsTaken++
             }
-            // op18 body calls g.a() first → pays u[au]=5 meter then i(43)
-            18 -> { x1 = (x1 - 5).coerceAtLeast(0); setAnim(43) }
+            // op18 body calls g.a() first → pays u[au]=5 meter then i(43);
+            // d() gates apply (e.g. S67 clash drains nothing but still
+            // knocks down — proven via the S∈{67,…} guard inside d())
+            18 -> { drainMeter(5); setAnim(43) }
             20 -> setAnim(43)
             26 -> {
                 if (attacker != null) av = attacker.av

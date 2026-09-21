@@ -352,12 +352,33 @@ class Level0WorldTest {
         val spawn = w.player.ak to w.player.al
         repeat(5) { w.tick(emptyList()) }
         w.player.setPositionPx(2000, 900)
-        // knockdowns drain the meter via g.a() (u[0]=5): 90/5 = 18 ops
-        repeat(20) { w.player.applyHit(18, 0, null, w) }
+        // knockdowns drain the meter via g.a() (u[0]=5): 90/5 = 18 ops;
+        // reset g.t iframes between hits (each drain sets t=10)
+        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
         assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
         w.tick(emptyList())
         assertEquals(90, w.player.x1, "respawn should refill the meter")
         assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
         assertEquals(1, w.deaths)
+    }
+
+    @Test fun `iframes block a second drain for 10 ticks`() {
+        val w = world()
+        repeat(3) { w.tick(emptyList()) }
+        w.player.applyHit(18, 0, null, w)
+        assertEquals(85, w.player.x1)
+        assertEquals(10, w.player.gt, "survived drain sets t=10")
+        assertTrue(w.player.bh > 0, "hit flash set")
+        // during iframes the op4->18 upgrade and drains are suppressed
+        w.player.applyHit(18, 0, null, w)
+        assertEquals(85, w.player.x1, "iframe blocks drain")
+        repeat(9) { w.tick(emptyList()) }
+        w.player.applyHit(18, 0, null, w)
+        assertEquals(85, w.player.x1, "still iframe-protected on last tick")
+        w.tick(emptyList())
+        assertEquals(0, w.player.gt)
+        w.player.setAnim(0)
+        w.player.applyHit(18, 0, null, w)
+        assertEquals(80, w.player.x1, "drains again after iframes expire")
     }
 }
