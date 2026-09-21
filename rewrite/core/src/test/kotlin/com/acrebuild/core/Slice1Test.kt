@@ -381,4 +381,17 @@ class Level0WorldTest {
         w.player.applyHit(18, 0, null, w)
         assertEquals(80, w.player.x1, "drains again after iframes expire")
     }
+
+    @Test fun `op21 fall damage scales with drop distance`() {
+        val w = world()
+        w.player.gy = 400            // apex marker
+        w.player.al = 400 + 20 * 20  // landed 20 cells lower
+        w.player.applyHit(21, 0, w.player, w)
+        assertEquals(0, w.player.x1, "20-cell fall: 105*(20)/20 = 105 dmg KO")
+        val w2 = world()
+        w2.player.gy = 400
+        w2.player.al = 400 + 10 * 20 // 10-cell fall → 52 dmg
+        w2.player.applyHit(21, 0, w2.player, w2)
+        assertEquals(90 - 52, w2.player.x1)
+    }
 }
