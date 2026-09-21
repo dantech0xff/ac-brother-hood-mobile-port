@@ -5,9 +5,27 @@ MIDlet **không bao giờ được chạy**: không `java -jar`, không emulator
 
 ## Mục tiêu
 
+**Mục tiêu cuối cùng: remake toàn bộ game trên LibGDX + Kotlin** — không chỉ
+là ví dụ/spike. Lấy đúng "core" của bản J2ME (tick 62ms, fixed-point 8.8,
+clip-as-FSM, entity dispatch, assets gốc đã decode) rồi dựng lại game chơi
+được đầy đủ: 8 mission, platforming + melee + stealth assassination, màn
+bay, chase mission, boss Cesare — trên Android và iOS.
+
+Các giai đoạn phục vụ mục tiêu đó:
+
+1. Khôi phục cấu trúc mã, tài nguyên và hành vi suy ra từ bytecode (xong).
+2. Đào semantic gameplay thành contract cho port — `docs/gameplay-mining/`
+   và `docs/gameplay-design-document.md` (xong).
+3. Rebuild trong `rewrite/` theo contract đó (đang thực hiện; Android spike
+   đã qua gate, iOS còn chờ macOS).
+
+Nguyên tắc xuyên suốt:
+
 - Khôi phục cấu trúc mã, tài nguyên và hành vi suy ra từ bytecode.
 - Giữ nguyên dấu vết provenance, hash và mức tin cậy cho từng kết luận.
 - Mô tả một hướng thiết kế mobile hiện đại mà không giả vờ đây là bản build sẵn.
+- Không xấp xỉ: cơ chế gameplay port theo semantic đã mine, asset dùng bản
+  decode gốc (không vẽ lại), timing giữ đúng tick/fixed-point gốc.
 
 ## Điểm vào nhanh
 
