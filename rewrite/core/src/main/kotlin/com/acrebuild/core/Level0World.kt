@@ -45,6 +45,7 @@ class Level0World(
 
     var tickIndex: Long = 0L
         private set
+    var deaths = 0                     // knockout count (instrumentation)
 
     val player = Entity(0, clips[0]).apply { aw = -1 }
     val npcs = ArrayList<Entity>()
@@ -122,6 +123,17 @@ class Level0World(
         player.advanceAnim()
 
         for (n in npcs) npcFsm.tick(n, player)
+
+        // player knockout (d() → x[1]<=0 → G()/H() detach + k.l(12) mission
+        // fail — checkpoint reload unmined): inferred respawn at spawn + meter
+        if (player.x1 <= 0) {
+            val spawn = level.playerSpawn() ?: (100 to 200)
+            player.setPositionPx(spawn.first, spawn.second)
+            player.x1 = 90
+            player.setAnim(0)
+            player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
+            deaths++
+        }
 
         camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
         camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))

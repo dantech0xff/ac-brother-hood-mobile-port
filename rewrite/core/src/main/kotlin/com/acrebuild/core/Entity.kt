@@ -57,7 +57,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var R = -1                       // queued combo/finisher anim (g.R)
     var cl = false                   // combo window flag (g.cl)
     var gI = 1                       // weapon selector (g.I; 1=sword proven)
-    var x1 = 100                     // g.x[1] stamina/counter meter (init inferred)
+    var x1 = 90                      // g.x[1] sync/health meter — init 90
+                                     // proven (g.e(90) at entity init L195)
     var aF = 0
     var k = false                    // NPC patrol-active flag
     var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
@@ -410,7 +411,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *   29 stumble: `av=attacker.av; i(10); ag=∓1536`
      *   34 damage-mark: zero vel + `a(8,5,14,…)` floatie + `k.A(11)` sfx
      *      (recorded on `hitsTaken`; floatie/sfx spawners deferred).
-     * Player HP field is unmined — no death check here yet.
+     * `d(int)` (g.java:3884) drains the meter: gates on busy/lock states,
+     * `x[1]-=r5` clamped at 0; at 0 (non-flying `bh[aj]!=3`) the player is
+     * knocked out: `bl=0; G(); H()` (detach links) or `E()` ground-snap —
+     * then `k.l(12)` mission-fail. Ported as `dead` flag → world respawn.
      */
     /**
      * `c(i attacker)` counter-stagger (proven, i.java:4379): face the
@@ -432,10 +436,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
             4 -> {
                 val canCounter = attacker != null && x1 > 0 && S != 9 &&
                     attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61
-                if (canCounter) { x1 -= 5; attacker.counteredBy(this) }
+                if (canCounter) { x1 = (x1 - 5).coerceAtLeast(0); attacker.counteredBy(this) }
                 else hitsTaken++
             }
-            18, 20 -> setAnim(43)
+            // op18 body calls g.a() first → pays u[au]=5 meter then i(43)
+            18 -> { x1 = (x1 - 5).coerceAtLeast(0); setAnim(43) }
+            20 -> setAnim(43)
             26 -> {
                 if (attacker != null) av = attacker.av
                 ag = if (av) 4096 else -4096

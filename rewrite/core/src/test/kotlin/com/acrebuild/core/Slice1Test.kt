@@ -334,7 +334,6 @@ class Level0WorldTest {
     @Test fun `npc strike on a metered player counters the attacker`() {
         val w = world()
         val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
-        w.player.x1 = 100
         // soldier mid-strike (S12 X-arc on frames 1-5), player grounded in it
         s.setAnim(12)
         var staggered = false
@@ -345,6 +344,20 @@ class Level0WorldTest {
             if (s.S == 9) { staggered = true; break }
         }
         assertTrue(staggered, "strike on metered player should counter → attacker S9")
-        assertTrue(w.player.x1 < 100, "counter should pay meter u[0]=5 (x1=${w.player.x1})")
+        assertTrue(w.player.x1 < 90, "counter should pay meter u[0]=5 (x1=${w.player.x1})")
+    }
+
+    @Test fun `player knocked out at zero meter respawns at spawn`() {
+        val w = world()
+        val spawn = w.player.ak to w.player.al
+        repeat(5) { w.tick(emptyList()) }
+        w.player.setPositionPx(2000, 900)
+        // knockdowns drain the meter via g.a() (u[0]=5): 90/5 = 18 ops
+        repeat(20) { w.player.applyHit(18, 0, null, w) }
+        assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
+        w.tick(emptyList())
+        assertEquals(90, w.player.x1, "respawn should refill the meter")
+        assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
+        assertEquals(1, w.deaths)
     }
 }
