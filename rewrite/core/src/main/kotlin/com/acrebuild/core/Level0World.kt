@@ -382,6 +382,8 @@ class Level0World(
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
+
+            else if (type == 13) npcFsm.initAx13(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -527,6 +529,7 @@ class Level0World(
     override val kAc: IntArray? get() = camRect
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
+    override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
     override fun clearLatches() { pad.clearLatches() }   // k.v()
     override fun padRearm() { pad.edge = pad.held }      // k.v = k.w
     override var kCO = 0                               // k.cO transition count
@@ -824,6 +827,8 @@ class Level0World(
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
+
+            else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
