@@ -68,6 +68,7 @@ class Level0Renderer {
                 26 -> "clips/clip26/modules"
                 10 -> "clips/clip10/modules"
                 48 -> "clips/clip48/modules"
+                45 -> "clips/clip45/modules"
                 else -> "level0/tileset-${-packId}/modules"  // negated keys
             }
             for (i in clip.moduleNames.indices) {
@@ -106,6 +107,7 @@ class Level0Renderer {
                 26 -> "clips/clip26/modules"
                 10 -> "clips/clip10/modules"
                 48 -> "clips/clip48/modules"
+                45 -> "clips/clip45/modules"
                 else -> "level0/tileset-${-pack}/modules"    // negated keys
             }
             val variant = clip.moduleNames[m]

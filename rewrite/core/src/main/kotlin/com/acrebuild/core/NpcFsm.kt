@@ -1671,6 +1671,175 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
+    // ============================================================ ax40 = bx()
+    // Rideable zipline/gondola (tick `bx()` i.java:17189, draw `by()`
+    // i.java:17360, record init L208 i.java:3259). Records carry
+    // `[40,uid,x,y,0,S,0,az,scriptEnt,startAnchor,endAnchor]`: the S0
+    // gondola hangs from a cable spanned by its two S2 endpoint records;
+    // `by()` draws the wire from the S2 record (two line segments to the
+    // player's hang point while ridden). Level 0 has two runs: gondola
+    // 935 (endpoints 936@7480 → 937@7947) and gondola 49 (endpoints
+    // 51@9137 → 50@9700).
+    //
+    // Z layout (int[7]): [0]=script-entity uid, [1]=cable y (home al),
+    // [2]/[3]=resolved travel endpoints (anchor ak), [4]/[5]=anchor uids
+    // (-1 = resolved or none), [6]=home ak.
+    //
+    // Horizontal travel is owned by the claim script — `ab()`→`aa()`
+    // runs `k.by` ops each tick while a claim is bound; `runClaimScript`
+    // is still a stub, so `ak` never advances and the gondola parks
+    // (inferred — bx() itself never writes `ak` except the S1 reset).
+    // `ah`/`aj` are the *vertical* departure-fall speed+gravity: once
+    // moving, `M()` probes the side cell until a wall ends the fall and
+    // `i(1)` resets the gondola to (Z[6], Z[1]).
+
+    /** ax40 record init — L208 arm (i.java:3259, proven) + the generic
+     *  `i(r8[5])` + `t()` tail. Z re-allocates to int[7]; the fixed
+     *  22-slot array is a superset. */
+    fun initAx40(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.Z[0] = rf(8)
+        e.Z[6] = e.ak
+        e.Z[1] = e.al
+        e.Z[2] = 0
+        e.Z[3] = 0
+        e.Z[4] = rf(9)
+        e.Z[5] = rf(10)
+        e.P = e.P or 16
+        e.az = rf(7)
+        e.setAnim(rf(5))                                     // L392
+        e.refreshBoxes()                                     // t()
+    }
+
+    /** `i.bx()` (i.java:17189, proven transcription). */
+    fun tickAx40(e: Entity, w: LevelCellSource, p: Entity) {
+        // ---- anchor resolution arms (run once each, then latch -1) --
+        if (e.Z[4] != -1 && e.S == 0) {                      // L7
+            val r0 = w.findByAw(e.Z[4])
+            if (r0 != null) { e.Z[2] = r0.ak; e.s = r0 }
+            e.Z[4] = -1
+        }
+        if (e.Z[5] != -1) {                                  // L11
+            val r02 = w.findByAw(e.Z[5])
+            if (r02 != null) e.Z[3] = r02.ak
+            e.Z[5] = -1
+        }
+        if (e.claimActive()) e.runClaimScript(w)             // L17 ab()→aa()
+        when (e.S) {
+            // -- L114: reset arm — wait out anim, respawn at start ----
+            1 -> {
+                e.aj = 0; e.ah = 0
+                if (!e.animFinished()) return
+                e.setAnim(0)
+                e.ak = e.Z[6]; e.al = e.Z[1]
+                e.claimLatchX = -1; e.scriptOps = null; e.cK = 0
+                return
+            }
+            0 -> {}                                          // → L22
+            else -> return                                   // L123 default
+        }
+        // ---- L22-L53 S0 ride/board head -----------------------------
+        if (Entity.overlapI(p.W, e.W) && e.ah == 0) {        // L22+L24
+            if (p.ac === e) {                                // riding
+                val hop = w.padHeld(16388) ||                // L28 context tap
+                    (p.av && w.padHeld(2)) ||                // L30 tap left
+                    (!p.av && w.padHeld(8))                  // L34 tap right
+                if (hop) {                                   // L37 dismount
+                    p.setAnim(157)
+                    p.al = p.W[1] - 20
+                    p.ag = (if (p.av) -1 else 1) shl 11
+                    p.ah = -2560
+                    p.ac = null                              // aS.a(null)
+                    e.eventDisarm(w)                         // O()
+                    e.releaseClaim(w)                        // bI()
+                    e.ca = -1
+                    e.ah = 512; e.aj = 1536
+                } else if (p.S != 43) {                      // L43 ride pin
+                    val r04 = Math.abs(e.ak - ((e.Z[3] + e.Z[2]) shr 1))
+                    val r05 = (e.Z[3] - e.Z[2]) shr 1
+                    e.al = e.Z[1] + (10 * (r05 - r04)) / r05 // catenary sag
+                    p.av = e.Z[2] >= e.Z[3]                  // L46/L47 dir
+                    if (p.S != 164) {                        // L49 mount anim
+                        p.aj = 0; p.ah = 0; p.ag = 0
+                        p.setAnim(164); p.refreshBoxes()
+                    }
+                    p.ak = e.ak                              // L51 pin
+                    p.al = (e.al + 25) + (p.W[3] - p.W[1])
+                }
+            }
+            // L53 — board arm (bound/moving/script-blocked → L64)
+            if (p.ac !== e && e.ah == 0 && e.cK != -2) {
+                val old = p.ac
+                if (old != null && old.ax == 40)             // L61 swap
+                    old.releaseClaim(w)
+                p.aj = 0; p.ah = 0; p.ag = 0                 // L63 bind
+                p.ac = e                                     // aS.a(this)
+                p.setAnim(164); p.refreshBoxes()
+                p.ak = e.ak
+                p.al = (e.al + 25) + (p.W[3] - p.W[1])
+                e.bindScript(w.kSIndex(e.Z[0]), w)           // h(k.s(Z[0]))
+                e.scriptKeyStep(e.ca, w)                     // k(ca)
+            }
+        }
+        gondolaTail(e, w, p)                                 // L64 tail
+    }
+
+    /** `bx()` L64-L113 tail (i.java:17261, proven): departure arm,
+     *  player walk-off unlink, gravity fall, side-wall reset and the
+     *  ax11 crush scan. Reached from every S0 path (riding or not). */
+    private fun gondolaTail(e: Entity, w: LevelCellSource, p: Entity) {
+        // L64/L70 — r7 = ak is past the far endpoint in the travel
+        // direction (Z2<Z3 → left→right; Z2>Z3 → right→left).
+        val r7 = if (e.Z[2] <= e.Z[3]) e.ak > e.Z[3] else e.ak < e.Z[3]
+        // L75 → L81: past the far end, or script-forced (cK == -2 while
+        // a claim is bound) → kick the departure fall and eject a rider
+        // still hanging in anim 164.
+        if (r7 || (e.ca != -1 && e.cK == -2)) {
+            if (e.ah == 0) {                                 // L81
+                e.ca = -1
+                e.ah = 512
+                if (p.ac === e && p.S == 164) {
+                    e.P = e.P and 256.inv()                  // aS.ac.P &= -257
+                    p.flingAirborne(0, w)                    // aS.a(0)
+                }
+            }
+        }
+        // L88 — player walked off the platform → unlink.
+        if (p.ac === e && !Entity.overlapI(p.W, e.W)) p.ac = null
+        // L93 — parked → done.
+        if (e.ah == 0) return
+        // L95 — departure fall: gravity, capped.
+        e.aj = 1536
+        if (e.ah > 2048) e.ah = 2048
+        // L99 — side-cell wall reached → reset arm.
+        if (frontCellBlocked(e, w)) { e.setAnim(1); return }
+        // L102 — crush any ax11 the falling gondola overlaps.
+        for (n in w.npcs) {
+            if (n.ax != 11) continue
+            if (!Entity.overlapI(n.W, e.W)) continue
+            killByType(n)                                    // d(k.bd[r8])
+            e.setAnim(1)
+            return
+        }
+    }
+
+    /** `i.M()` (i.java:7198, proven) + inner `h(cx,cy)` (i.java:7212):
+     *  probe the cell one column ahead in the `av` direction at the
+     *  entity's row; `e(cx,cy) >= 5` counts as blocking. */
+    private fun frontCellBlocked(e: Entity, w: LevelCellSource): Boolean {
+        val cx = e.ak / 20 + (if (e.av) -1 else 1)
+        return e.e(w, cx, e.al / 20) >= 5
+    }
+
+    /** `i.d(i)` (i.java:1642, proven): kill-by-type — ax11 → `i(0)`
+     *  (death chain), ax23 → `i(79)`; anything else is a no-op. */
+    private fun killByType(r: Entity) {
+        when (r.ax) {
+            11 -> r.setAnim(0)
+            23 -> r.setAnim(79)
+        }
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

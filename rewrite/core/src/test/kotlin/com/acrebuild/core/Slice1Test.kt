@@ -143,6 +143,7 @@ class Level0WorldTest {
             35 to Clip.load(asset("clips/clip35/clip.acpk")),
             10 to Clip.load(asset("clips/clip10/clip.acpk")),
             48 to Clip.load(asset("clips/clip48/clip.acpk")),
+            45 to Clip.load(asset("clips/clip45/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -3398,5 +3399,174 @@ class Level0WorldTest {
         w.npcFsm.tickAx27(e, w, p)
         assertEquals(0, e.S)
         assertNull(p.af)
+    }
+
+    // ---- slice 42 — ax40 bx() zipline gondola (i.java:17189) ----------
+
+    /** ax40 record fixture: `[40,uid,x,y,0,S,0,az,script,start,end]`. */
+    private fun ax40At(w: Level0World, uid: Int, x: Int, y: Int, s: Int,
+                       az: Int = 0, script: Int = -1, start: Int = -1,
+                       end: Int = -1): Entity {
+        val e = Entity(40, w.clips[45])
+        e.aw = uid
+        e.setPositionPx(x, y)
+        val f = listOf(40, uid, x, y, 0, s, 0, az, script, start, end)
+        w.npcFsm.initAx40(e, f)
+        w.npcs.add(e)
+        return e
+    }
+
+    /** Level-0's first zipline: gondola 935 + S2 endpoints 936/937. */
+    private fun gondolaRun(w: Level0World): Entity {
+        ax40At(w, 936, 7480, 328, 2, end = 937)
+        ax40At(w, 937, 7947, 333, 2)
+        return ax40At(w, 935, 7519, 339, 0, script = 938,
+                      start = 936, end = 937)
+    }
+
+    @Test fun `ax40 init arm loads L208 record fields`() {
+        val w = world()
+        val e = ax40At(w, 935, 7519, 339, 0, az = 3, script = 938,
+                       start = 936, end = 937)
+        assertEquals(938, e.Z[0], "Z[0] = script-entity uid")
+        assertEquals(7519, e.Z[6], "Z[6] = home ak")
+        assertEquals(339, e.Z[1], "Z[1] = cable y")
+        assertEquals(0, e.Z[2]); assertEquals(0, e.Z[3])
+        assertEquals(936, e.Z[4]); assertEquals(937, e.Z[5])
+        assertTrue(e.P and 16 != 0, "P|=16")
+        assertEquals(3, e.az)
+        assertEquals(0, e.S)
+    }
+
+    @Test fun `ax40 resolves anchor endpoints once`() {
+        val w = world(); w.npcs.clear()
+        val e = gondolaRun(w)
+        w.npcFsm.tickAx40(e, w, w.player)
+        assertEquals(7480, e.Z[2], "Z[2] = start anchor ak")
+        assertEquals(7947, e.Z[3], "Z[3] = end anchor ak")
+        assertEquals(-1, e.Z[4]); assertEquals(-1, e.Z[5])
+        val anchor = w.npcs.first { it.aw == 936 }
+        assertTrue(e.s === anchor, "s = start anchor entity")
+    }
+
+    /**
+     * Board the gondola the way a real frame does: the first overlap tick
+     * binds `aS.ac` then L88 unbinds it again — `aS.t()` refreshed `W` at
+     * the pre-hop position, so the stale box misses the gondola by 1px
+     * (faithful — i.java L53→L88). The player's per-frame `t()` (called
+     * by `collideSides` inside `w.tick`) then raises the box to the hang
+     * point and the next npc tick re-binds, this time overlapping.
+     */
+    private fun board(w: Level0World, e: Entity) {
+        val p = w.player
+        w.npcFsm.tickAx40(e, w, p)                       // anchor resolve
+        p.setPositionPx(e.ak, e.al); p.refreshBoxes()
+        w.npcFsm.tickAx40(e, w, p)                       // bind + transient unbind
+        p.refreshBoxes()                                 // player's frame t()
+        w.npcFsm.tickAx40(e, w, p)                       // re-bind, holds
+    }
+
+    @Test fun `ax40 overlap binds the player into anim 164`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = gondolaRun(w)
+        board(w, e)
+        assertTrue(p.ac === e, "k.aS.ac = gondola")
+        assertEquals(164, p.S, "player -> i(164) ride anim")
+        assertEquals(e.ak, p.ak, "player pinned to gondola x")
+        assertEquals(e.al + 25 + (p.W[3] - p.W[1]), p.al, "hang offset")
+    }
+
+    @Test fun `ax40 bind unbinds once then re-binds`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = gondolaRun(w)
+        w.npcFsm.tickAx40(e, w, p)
+        p.setPositionPx(e.ak, e.al); p.refreshBoxes()
+        w.npcFsm.tickAx40(e, w, p)                       // L53 bind → L88 unlink
+        assertNull(p.ac, "L88 unlink on the stale box (i.java:17239)")
+        assertEquals(164, p.S, "i(164) already set by the bind")
+        p.refreshBoxes()                                 // frame t() raises W
+        w.npcFsm.tickAx40(e, w, p)
+        assertTrue(p.ac === e, "re-bind holds once W reaches the gondola")
+    }
+
+    @Test fun `ax40 ride arm sags the cable catenary`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = gondolaRun(w)
+        board(w, e)
+        w.npcFsm.tickAx40(e, w, p)                  // ride tick
+        // ak=7519, Z2=7480, Z3=7947 → r04=194, r05=233 → al=339+1
+        assertEquals(340, e.al, "catenary sag near the start anchor")
+        assertFalse(p.av, "faces the travel direction (Z2<Z3)")
+        assertEquals(e.ak, p.ak)
+    }
+
+    @Test fun `ax40 context tap dismounts and kicks the fall`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = gondolaRun(w)
+        board(w, e)
+        w.pad.commit(16388)
+        w.npcFsm.tickAx40(e, w, p)
+        assertNull(p.ac, "aS.a(null) unlink")
+        assertEquals(157, p.S, "player -> i(157) hop-off anim")
+        assertEquals(2048, p.ag, "hop away +x (av=false)")
+        assertEquals(-2560, p.ah)
+        assertEquals(512, e.ah, "gondola departs")
+        assertEquals(1536, e.aj)
+        assertEquals(-1, e.ca)
+    }
+
+    @Test fun `ax40 S1 resets to the start anchor`() {
+        val w = world(); w.npcs.clear()
+        val e = ax40At(w, 935, 7519, 339, 1)
+        e.ak = 9999; e.ah = 100
+        var guard = 0
+        while (e.S == 1 && guard++ < 100) {
+            e.advanceAnim()
+            w.npcFsm.tickAx40(e, w, w.player)
+        }
+        assertEquals(0, e.S)
+        assertEquals(7519, e.ak, "respawned at Z[6]")
+        assertEquals(339, e.al, "respawned at Z[1]")
+        assertEquals(-1, e.claimLatchX)
+        assertNull(e.scriptOps)
+        assertEquals(0, e.cK)
+    }
+
+    @Test fun `ax40 past the far endpoint kicks the departure fall`() {
+        val w = world(); w.npcs.clear()
+        val e = gondolaRun(w)
+        w.npcFsm.tickAx40(e, w, w.player)
+        e.ak = e.Z[3] + 1                            // past 7947
+        w.npcFsm.tickAx40(e, w, w.player)
+        assertEquals(512, e.ah, "L81 departure kick")
+        assertEquals(-1, e.ca)
+    }
+
+    @Test fun `ax40 falling gondola crushes ax11s`() {
+        val w = world(); w.npcs.clear()
+        val e = gondolaRun(w)
+        w.npcFsm.tickAx40(e, w, w.player)
+        e.ah = 3000                                  // already falling
+        val s = Entity(11, w.clips[7])
+        s.setAnim(3); s.setPositionPx(e.ak, e.al); s.refreshBoxes()
+        w.npcs.add(s)
+        w.npcFsm.tickAx40(e, w, w.player)
+        assertEquals(0, s.S, "d(bd) → i(0) death chain")
+        assertEquals(1, e.S, "gondola -> reset arm")
+    }
+
+    @Test fun `ax40 unlinks a player who walked off`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = gondolaRun(w)
+        w.npcFsm.tickAx40(e, w, w.player)
+        p.ac = e
+        p.setPositionPx(e.ak + 400, e.al); p.refreshBoxes()
+        w.npcFsm.tickAx40(e, w, w.player)
+        assertNull(p.ac, "L88 walked-off unlink")
     }
 }

@@ -42,6 +42,7 @@ class Level0World(
             16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
             27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
+            40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
         )
     }
 
@@ -360,6 +361,7 @@ class Level0World(
             else if (type == 14) npcFsm.initPickup(e, f.toList())
             else if (type == 5) npcFsm.initMissionLogic(e, f.toList(), this)
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
+            else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -653,6 +655,7 @@ class Level0World(
             else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
             else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
+            else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
