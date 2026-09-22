@@ -40,7 +40,7 @@ import kotlin.math.abs
  * `aE()` assassination QTE, `j()`/`k()` damage/stealth-kill intake, `aD()`
  * platform links — omitted this slice.
  */
-class NpcFsm(private val world: LevelCellSource) {
+class NpcFsm(val world: LevelCellSource) {
 
     private val scratch = IntArray(4)
 
@@ -1073,4 +1073,525 @@ class NpcFsm(private val world: LevelCellSource) {
             else -> {}                   // L195 — inert
         }
     }
+}
+
+// =========================================================================
+// ax21 — `bD()` mission director (i.java:18054-18629, proven)
+// =========================================================================
+
+/** `c` (c.java, proven): mission-waypoint node — `k`=id, `a`/`b`=target
+ *  px, `c`=event-type, `d`=countdown nodes, `e`=per-node delay, `f`=arrive
+ *  tolerance+flags (bit7 = consumed), `g`=next node id, `h`/`i` spare. */
+class WaypointNode {
+    var id = 0            // c.k
+    var a = 0             // x px
+    var b = 0             // y px (waypoint space — +k.P in world)
+    var cFlag = 0         // c.c — node event 0..3
+    var d = 0             // c.d — `j` countdown (nodes to consume here)
+    var e = 0             // c.e — `aC` per-node delay
+    var f = 0             // c.f — byte: arrive tolerance | flag bits (&127)
+    var g = 0             // c.g — next node id (-1 end)
+}
+
+/** `c.m`/`c.l`/`c.j` (c.java): 400-slot pool; `c.a(short[])` parses a record
+ *  row; `c.a(c,i)` appends a derived node (`id=j++` from 10000, `a` off the
+ *  entity); `c.a(int)` finds by `k`; `c.a()` clears + resets `j=10000`. */
+class WaypointPool {
+    private val nodes = arrayOfNulls<WaypointNode>(400)
+    var count = 0                 // c.l
+    var nextDerived = 10000       // c.j
+
+    fun add(row: IntArray) {      // c.a(short[])
+        if (count >= nodes.size) return
+        val r0 = WaypointNode()
+        r0.id = row[1]; r0.a = row[2]; r0.b = row[3]
+        r0.cFlag = row[4]; r0.d = row[5]; r0.e = row[6]
+        r0.f = row[7]; r0.g = row[8]
+        nodes[count] = r0
+        count++
+    }
+
+    fun addDerived(src: WaypointNode, e: Entity) {   // c.a(c,i)
+        if (count >= nodes.size) return
+        val r0 = WaypointNode()
+        r0.id = nextDerived; nextDerived++
+        r0.a = src.a + e.ak; r0.b = src.b
+        r0.cFlag = src.cFlag; r0.d = src.d; r0.e = src.e
+        r0.f = src.f; r0.g = src.g
+        nodes[count] = r0
+        count++
+    }
+
+    fun find(id: Int): WaypointNode? {             // c.a(int)
+        if (id < 0) return null
+        for (i in 0 until count) {
+            val n = nodes[i]
+            if (n != null && n.id == id) return n
+        }
+        return null
+    }
+
+    fun reset() {                  // c.a()
+        nodes.fill(null)
+        count = 0
+        nextDerived = 10000
+    }
+}
+
+/** `i.bD()` (i.java:18054, proven): mission-phase director. `aA` = phase:
+ *  0 arm+attach, 1 single-pursuit monitor, 2→6, 3 dual-respawn+waypoint,
+ *  4 dual monitor, 5 single monitor Z[3], 6 kill-bitmap router,
+ *  7 finale (`k.l(15)` or floatie), 8 waypoint travel. The `L237` tail —
+ *  linked-entity anim watcher + attach-sync + charge gauge — runs every
+ *  tick the phase arm doesn't `return` early. */
+fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
+    val w = world
+    e.advanceAnim()
+    // pre-switch (L0-L6): chase-progress row while the player is airborne
+    if (player.al < 260) w.kAR = (w.kBu / 20 - 1) - player.al / 400
+    var tail = true
+    when (e.aA) {
+        // ---- L7-L50: arm + attach linked entities -------------------------
+        0 -> {
+            w.kAi = true
+            w.kR = -1
+            w.sfx(1)                                   // k.A(1)
+            for (r9 in 0 until 5) {
+                var r8 = if (e.Z[r9] == -1) null else w.findByAw(e.Z[r9])
+                if (r8 != null) {
+                    r8.P = e.P
+                    r8.aq = r8.ak - e.ak
+                    r8.ar = r8.al - e.al
+                    r8.az = e.az + 1
+                    r8.l = 0; r8.j = 0
+                    if (r9 != 4) r8.nl = 0
+                    else if (w.iBV > 0) r8.P = r8.P or 128
+                }
+            }
+            if (e.Z[15] != -1) {
+                val r0 = w.findByAw(e.Z[15])
+                if (r0 != null) {
+                    r0.P = e.P
+                    r0.aq = r0.ak - e.ak
+                    r0.ar = r0.al - e.al
+                    r0.az = e.az + 1
+                    r0.l = 0; r0.nl = 0; r0.j = 0
+                }
+            }
+            w.iCC = 0; w.iCD = -1; w.iCE = -1; w.dirWp = null
+            if (w.iBV > 0) {
+                // L30-L38: pursuit mode — respawner home-positions into
+                // Z[16..19] for later reuse
+                if (w.iBV == 1) e.l = e.l or 2
+                else if (w.iBV == 2) { e.l = e.l or 62; e.l = e.l and -17 }
+                val r02 = w.findByAw(e.Z[13])
+                if (r02 != null) {
+                    e.Z[16] = r02.Z[15]; e.Z[17] = r02.Z[16]; r02.bs = 0
+                }
+                val r03 = w.findByAw(e.Z[14])
+                if (r03 != null) {
+                    e.Z[18] = r03.Z[15]; e.Z[19] = r03.Z[16]; r03.bs = 0
+                }
+            } else {
+                w.dirWp = w.waypoints.find(e.Z[12])
+            }
+            // L44-L50: shared arming tail — cB set → waypoint chase (8),
+            // else the kill-bitmap router (6); bV>0 also lands on 6
+            if (w.dirWp != null) {
+                w.dirWp!!.f = w.dirWp!!.f and 127
+                e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
+                e.aA = 8
+            } else e.aA = 6
+            if (w.kAE > 0) w.kAH = 80
+            e.P = e.P or 16
+            w.iBT = true
+        }
+        // ---- L67-L83: single-pursuit monitor on Z[0] -----------------------
+        1 -> {
+            var r92 = false
+            val r04 = w.findByAw(e.Z[0])
+            if (r04 == null) {
+                r92 = true
+            } else if (r04.aB > 0) {
+                r04.respawnAttack(w)
+            } else if (r04.S == 16) {
+                r92 = true; r04.l = r04.l and -2
+            }
+            if (r92) { e.l = e.l or 2; e.aA = 6 }
+            else if (r04 != null && r04.cIDone && r04.cJDone) {
+                r04.cIDone = false; e.aA = 6
+            }
+        }
+        // ---- L83: phase-2 → 6 ----------------------------------------------
+        2 -> e.aA = 6
+        // ---- L84-L135: dual-respawn + waypoint travel ----------------------
+        3 -> {
+            for (r93 in 0 until 2) {
+                val r05 = w.findByAw(e.Z[93 + 13]) ?: continue
+                // L92 gate: P&16 set → respawn needs S10 && !v() && cC!=6
+                val gate = (r05.P and 16) == 0 ||
+                    (r05.S == 10 && !r05.inPlayV(w) && w.iCC != 6)
+                if (gate) {
+                    r05.setAnim(4)
+                    r05.ak = e.Z[(r93 shl 1) + 16]
+                    r05.al = w.kP + e.Z[(r93 shl 1) + 17]
+                    // `aG < 10000 → r05.aw()` — i.aw() unmined (inferred)
+                    r05.iE = false; r05.bs = 0
+                    r05.P = r05.P or 16
+                    r05.aC = r05.Z[6]
+                    r05.ad?.setAnim(1)
+                }
+            }
+            if (directorChase(e, true)) {
+                if (w.dirWp!!.g == -1) w.dirWp = null
+                else w.dirWp = w.waypoints.find(w.dirWp!!.g)
+                if (w.dirWp != null) {
+                    w.dirWp!!.f = w.dirWp!!.f and 127
+                    e.bY = e.aq; e.bZ = e.ar
+                    e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
+                    e.aC = w.dirWp!!.e; e.j = w.dirWp!!.d
+                }
+                if (w.dirWp == null) e.aA = 6
+                else if (w.dirWp!!.cFlag == 1) {
+                    // c==1 event node — skips the entity loop AND the
+                    // aA=6 route; L135: pv==aA -> aG++ + popup
+                    if (e.pv == e.aA) {
+                        e.aG++
+                        val aK = e.spawnChildFx(w, 19, 11, 17, e.az + 1)
+                        aK.ak = w.kO + w.jRand(80, 160)
+                        aK.al = w.kP - 20
+                        aK.ah = -5
+                        aK.az = 200
+                        w.queueInsert(aK)
+                    }
+                } else {
+                    for (r94 in 0 until 2) {
+                        val r08 = w.findByAw(e.Z[94 + 13]) ?: continue
+                        if (r08.S == 10) {
+                            r08.P = r08.P and -17
+                            r08.P = r08.P and -33
+                            r08.iE = false; r08.aC = 100
+                        } else if (r08.inPlayV(w)) {
+                            if (r08.bs < 4 && r08.Z[r08.bs + 1] != -1) r08.bs++
+                            r08.bs--
+                        }
+                    }
+                    e.aA = 6
+                }
+            }
+        }
+        // ---- L137-L163: dual-pursuit monitor on Z[1],Z[2] ------------------
+        4 -> {
+            var r95 = false
+            val r09 = w.findByAw(e.Z[1])
+            if (r09 == null) { e.l = e.l or 4; r95 = true }
+            else if (r09.aB > 0) {
+                r09.aG = 1
+                r09.respawnAttack(w)
+                if (r09.cIDone && r09.cJDone) {
+                    r09.cIDone = false; e.aA = 6
+                }
+            } else if (r09.S == 20) {
+                e.l = e.l or 4; r95 = true; r09.l = r09.l and -2
+            }
+            val r010 = w.findByAw(e.Z[2])
+            if (r010 == null) { e.l = e.l or 8; r95 = true }
+            else if (r010.aB > 0) {
+                r95 = false; r010.aG = 2; r010.respawnAttack(w)
+            } else if (r010.S == 20) {
+                e.l = e.l or 8; r95 = true; r010.l = r010.l and -2
+            }
+            if (r95) e.aA = 6
+            else if (r010 != null && r010.cIDone && r010.cJDone) {
+                r010.cIDone = false; e.aA = 6
+            }
+        }
+        // ---- L165-L181: single-pursuit monitor on Z[3] ----------------------
+        5 -> {
+            var r96 = false
+            val r011 = w.findByAw(e.Z[3])
+            if (r011 == null) r96 = true
+            else if (r011.aB > 0) r011.respawnAttack(w)
+            else if (r011.S == 26) r96 = true
+            if (r96) { e.l = e.l or 16; e.aA = 6 }
+            else if (r011 != null && r011.cIDone && r011.cJDone) {
+                r011.cIDone = false; e.aA = 6
+            }
+        }
+        // ---- L182-L226: kill-bitmap router ----------------------------------
+        6 -> {
+            e.k = true
+            val mask = e.l and 62
+            if (mask == 62) {
+                w.findByAw(e.Z[13])?.let { w.removeEntity(it) }
+                w.findByAw(e.Z[14])?.let { w.removeEntity(it) }
+                w.statTally(e.aw)                        // k.e(0,aw)
+                e.aA = 7
+            } else {
+                val cC = when (mask) {
+                    2, 14, 18 -> 6
+                    12 -> 2
+                    16 -> 3
+                    46 -> 5
+                    else -> w.iCC
+                }
+                w.iCC = cC
+                if (w.iCD != cC && (mask == 2 || mask == 46)) {
+                    w.iBW = true; w.iBX = cC
+                }
+                // L214 — waypoint-set on phase change
+                if (w.iCD != cC) {
+                    w.iCD = cC
+                    w.dirWp = null
+                    if (e.Z[5 + cC] != -1)
+                        w.dirWp = w.waypoints.find(e.Z[5 + cC])
+                    if (w.dirWp == null) { tail = false; return }
+                    w.dirWp!!.f = w.dirWp!!.f and 127
+                    e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
+                    e.aC = w.dirWp!!.e; e.j = w.dirWp!!.d
+                }
+                // L222 — monitor the Z[3] pursuer
+                val r015 = w.findByAw(e.Z[3])
+                if (r015 == null) directorChase(e, false)
+                // inferred: L225's `S!=22` fall-through lands on L237 (the
+                // physically-following L197 chain would re-run the router
+                // forever — a decompiler drop)
+            }
+        }
+        // ---- L227-L235: finale ----------------------------------------------
+        7 -> {
+            e.ag = 0; e.ah = 0; e.ad = null
+            w.iBj = true; w.iBT = false
+            player.ag = 0
+            if (e.inPlayV(w)) {
+                player.ah = w.kY
+                player.settleToGround(w)
+                if (player.inPlayV(w)) {
+                    val aK = e.spawnChildFx(w, 24, 40, 9, e.az + 1)
+                    aK.ag = 0; aK.ah = 0; aK.av = false
+                    aK.ak = (e.W[0] + e.W[2]) / 2
+                    aK.al = (e.W[1] + e.W[3]) / 2
+                    aK.P = aK.P or 16
+                    aK.af = player
+                    w.queueInsert(aK)
+                } else w.missionComplete()             // k.l(15)
+                return
+            }
+            // L230 — director off-play: `aS.ah = k.Y - 2560` then the
+            // L237 tail still runs
+            player.ah = w.kY - 2560
+        }
+        // ---- L52-L66: waypoint travel + next-node ---------------------------
+        8 -> {
+            if (directorChase(e, true)) {
+                if (w.dirWp!!.g == -1) w.dirWp = null
+                else w.dirWp = w.waypoints.find(w.dirWp!!.g)
+                if (w.dirWp == null) {
+                    e.aA = 6
+                    val r021 = w.findByAw(e.Z[13])
+                    if (r021 != null) {
+                        e.Z[16] = r021.ak; e.Z[17] = r021.al; r021.bs = 0
+                    }
+                    val r022 = w.findByAw(e.Z[14])
+                    if (r022 != null) {
+                        e.Z[18] = r022.ak; e.Z[19] = r022.al; r022.bs = 0
+                    }
+                } else {
+                    w.dirWp!!.f = w.dirWp!!.f and 127
+                    e.bY = e.aq; e.bZ = e.ar
+                    e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
+                    e.aC = w.dirWp!!.e; e.j = w.dirWp!!.d
+                }
+            }
+        }
+    }
+    if (!tail) return
+
+    // ===== L237 tail — every non-returning tick =============================
+    // linked-entity anim watcher (r10 = 0..4 over Z[0..4])
+    for (r10 in 0 until 5) {
+        val r016 = w.findByAw(e.Z[r10]) ?: continue
+        if (!r016.animFinished()) continue
+        when (r10) {
+            0 -> if (r016.aB > 0) r016.setAnim(13)
+                 else { r016.setAnim(16); e.l = e.l or 2 }
+            1 -> if (r016.aB > 0) r016.setAnim(17)
+                 else { r016.setAnim(20); e.l = e.l or 4 }
+            2 -> if (r016.aB > 0) r016.setAnim(17)
+                 else { r016.setAnim(20); e.l = e.l or 8 }
+            3 -> {
+                if (r016.aB <= 0) { r016.setAnim(26); e.l = e.l or 16 }
+                else if (r016.S == 22) { r016.setAnim(23); r016.k = true }
+                else if (((e.l.inv()) and 62) == 16 && r016.k) r016.setAnim(23)
+                else r016.setAnim(21)
+            }
+            4 -> {
+                if (r016.aB <= 0) { r016.setAnim(36); e.l = e.l or 32 }
+                else {
+                    if (e.k && (r016.P and 128) != 0) {
+                        r016.P = r016.P and -129
+                        r016.setAnim(37)
+                        e.k = false
+                    }
+                    if (r016.S == 37) r016.setAnim(33)
+                }
+            }
+        }
+    }
+    // L282-L307: 5th pursuer respawn/attack + attach position sync
+    val r017 = w.findByAw(e.Z[4])
+    if (r017 != null && (r017.P and 128) == 0 && r017.inPlayV(w)) {
+        if (r017.aB <= 0 && r017.S == 36) {
+            e.l = e.l or 32
+            if ((e.l and 62) == 14) e.aA = 6
+        }
+        when (r017.S) {
+            30, 31, 32 -> r017.respawnAttack(w)
+            33, 34, 35 -> {
+                if (r017.aC > 0) r017.setAnim(r017.pickAttackAnim(w))
+                else if (r017.aF > 0) r017.setAnim(r017.pickAttackAnim(w))
+                else { r017.respawnAttack(w); r017.aF = r017.nl }
+                r017.aC--; r017.aF--
+            }
+        }
+    }
+    // L307: attached entities ride the director (aq/ar offsets bound at arm)
+    for (r102 in 0 until 5) {
+        val r97 = if (e.Z[r102] == -1) null else w.findByAw(e.Z[r102])
+        if (r97 != null) {
+            r97.ak = e.ak + r97.aq
+            r97.al = e.al + r97.ar
+        }
+    }
+    if (e.Z[15] != -1) {
+        val r018 = w.findByAw(e.Z[15])
+        if (r018 != null) {
+            r018.ak = e.ak + r018.aq
+            r018.al = e.al + r018.ar
+            if (r018.S == 3 && r018.animFinished()) {
+                r018.P = r018.P and -17
+                r018.P = r018.P or 32
+                r018.P = r018.P or 128
+            }
+        }
+    }
+    e.syncAd(w)                                          // b(true)
+    // L326-L391: charge gauge — i.q mirrors linked hp / else sums it
+    if (w.iQ) {
+        val r019 = w.findByAw(e.Z[3]) ?: return
+        if (w.cFFlag) e.aB = r019.aB
+        else {
+            e.aB += 5
+            if (e.aB > w.iBU) { e.aB = w.iBU; w.cFFlag = true }
+        }
+    } else {
+        e.aB = 0
+        for (r103 in 0 until 5) {
+            if (r103 == 3) continue
+            e.aB += w.findByAw(e.Z[r103])?.aB ?: 0
+        }
+    }
+}
+
+/** `i.d(boolean)` (i.java:18717, proven): waypoint-chase movement for the
+ *  director — `|Δx|/|Δy|` vs node tolerance `|cB.f|`: both within → ARRIVED
+ *  (aC--, zero vel, snap `bY/bZ=aq/ar`, `bE()`); `flag=true` then skips the
+ *  node-event arm (caller advances `cB` itself) → `ah+=k.Y; bE()`.
+ *  `flag=false` → arrival runs the node-event arm: while `aC<0 && j>0`:
+ *  `j--; aC=cB.e; r7=cB.c` remapped (c==0&&l&2 → cC==5?3:2; then r7==3&&
+ *  cC!=5 → cC==2?0:2; cC==5 forces 3), `cB.c=r7` then `switch(cB.c)`:
+ *  0→aA=1+p(-2,-240)+((l&32)==0→p(0,-76)); 1→aA=3; 2→aA=4 + l-bit popups
+ *  (-22,-15)/(21,-15)/(0,-76); 3→aA=5+p(0,-180). `j<=0` → advance `cB` to
+ *  `c.a(cB.g)`. Otherwise velocity `±(f<<8)` on the major axis +
+ *  proportional `(minor<<8)/major·f` on the minor. */
+private fun NpcFsm.directorChase(e: Entity, flag: Boolean): Boolean {
+    val w = world
+    e.ag = 0; e.ah = 0
+    val r0 = e.aq - e.bY
+    val r02 = e.ar - e.bZ
+    val node = w.dirWp ?: return false
+    val r03 = node.f
+    val r04 = kotlin.math.abs(r0)
+    val r05 = kotlin.math.abs(r02)
+    val r06 = kotlin.math.abs(r03)
+    e.pv = e.aA
+    if (r04 <= r06 && r05 <= r06) {
+        // arrived
+        e.aC--
+        e.ag = 0; e.ah = 0
+        e.bY = e.aq; e.bZ = e.ar
+        e.posFromWaypoint(w)
+        if (flag) {
+            e.ah += w.kY
+            e.posFromWaypoint(w)
+            return true
+        }
+        // node-event arm (L9-L59)
+        if (e.aC < 0) {
+            if (e.j <= 0) {
+                // L59 — advance to the next node
+                val next = w.waypoints.find(node.g)
+                if (next != null) {
+                    w.dirWp = next
+                    next.f = next.f and 127
+                    e.bY = e.aq; e.bZ = e.ar
+                    e.aq = next.a; e.ar = next.b
+                    e.aC = next.e; e.j = next.d
+                }
+            } else {
+                e.j--
+                e.aC = node.e
+                var r7 = node.cFlag
+                if (r7 == 0 && (e.l and 2) != 0) r7 = if (w.iCC == 5) 3 else 2
+                if (r7 == 3 && w.iCC != 5) r7 = if (w.iCC == 2) 0 else 2
+                if (r7 != 1 && w.iCC == 5) r7 = 3
+                node.cFlag = r7
+                when (node.cFlag) {
+                        0 -> {
+                            e.aA = 1
+                            if (e.directorGate(e.aA, w)) {
+                                e.popupDmg(w, -2, -240)
+                                if ((e.l and 32) == 0) e.popupDmg(w, 0, -76)
+                            }
+                        }
+                        1 -> { e.aA = 3; e.directorGate(e.aA, w) }
+                        2 -> {
+                            e.aA = 4
+                            if (e.directorGate(e.aA, w)) {
+                                var r52 = false
+                                if ((e.l and 4) == 0) { e.popupDmg(w, -22, -15); r52 = true }
+                                if ((e.l and 8) == 0) { e.popupDmg(w, 21, -15); r52 = true }
+                                if (r52 && (e.l and 32) == 0) e.popupDmg(w, 0, -76)
+                            }
+                        }
+                        3 -> {
+                            e.aA = 5
+                            if (e.directorGate(e.aA, w)) e.popupDmg(w, 0, -180)
+                        }
+                }
+            }
+        }
+        e.ah += w.kY
+        e.posFromWaypoint(w)
+        return true
+    }
+    // movement — diagonal-limited: `±(f<<8)` major + proportional minor
+    if (r04 < r05) {
+        if (r05 > r06) e.ah = if (r02 >= 0) (r03 shl 8) else -(r03 shl 8)
+        else e.bZ = e.ar
+        var r53 = 0
+        if (e.ah != 0) r53 = (r04 shl 8) / r05
+        if (r04 <= (r53 shr 8)) e.bY = e.aq
+        else e.ag = if (r0 >= 0) r53 * r03 else -(r53 * r03)
+    } else {
+        if (r04 > r06) e.ag = if (r0 >= 0) (r03 shl 8) else -(r03 shl 8)
+        else e.bY = e.aq
+        var r54 = 0
+        if (e.ag != 0) r54 = (r05 shl 8) / r04
+        if (r05 <= (r54 shr 8)) e.bZ = e.ar
+        else e.ah = if (r02 >= 0) r54 * r03 else -(r54 * r03)
+    }
+    e.ah += w.kY                                   // L96 tail — all paths
+    e.posFromWaypoint(w)
+    return false
 }
