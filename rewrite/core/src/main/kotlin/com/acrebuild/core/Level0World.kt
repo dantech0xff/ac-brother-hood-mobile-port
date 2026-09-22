@@ -56,6 +56,8 @@ class Level0World(
             6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
             19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
             74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
+            80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
+                          // entry-057: J(57)=null → invisible/vestigial, proven)
         )
     }
 
@@ -403,6 +405,7 @@ class Level0World(
             else if (type == 72) npcFsm.initAx72(e, f.toList(), this)
             else if (type == 78) npcFsm.initAx78(e, f.toList(), this)
             else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
+            else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for

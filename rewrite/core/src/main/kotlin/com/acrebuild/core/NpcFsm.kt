@@ -4698,3 +4698,15 @@ fun NpcFsm.tickAx78(e: Entity, w: Level0World, p: Entity) {
         else -> {}                                         // L35
     }
 }
+
+
+/** ax80 init (L389 :2734→ :3636, proven): `az = r8[7]` + shared tail —
+ *  identical shape to ax7/ax78. Tick hits `default → L897` (:4986-4987),
+ *  i.e. static, never ticks. Records exist only in pack-12 (`S=4`,
+ *  `az=300`). */
+fun NpcFsm.initAx80(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
