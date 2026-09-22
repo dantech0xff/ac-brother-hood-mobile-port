@@ -171,6 +171,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // (8.8 x pos) already owns the JVM name
     var bM: Entity? = null         // i.bM — held-entity two-way link
                                    // (bI's ax13 arm clears it)
+    var bN = 0                     // i.bN — ax13 rope segment count
+    var bO = 0                     // i.bO — ax13 pendulum angular vel (8.8)
+    var bP = 0                     // i.bP — ax13 pendulum angle (8.8)
+    var ropeGrabSeg = 0            // i.bN write-target — the r04 grab
+                                   // segment chosen by aW()'s L89 chain
     var bl = 0                     // i.bl — foot-contact flag (cleared on
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
@@ -1442,6 +1447,120 @@ open class Entity(val ax: Int, var clip: Clip?) {
             23 -> setAnim(79)
         }
     }
+
+    /**
+     * `i.l(i)` (i.java:13369, proven): ax13 rope-arc placement — parks `t`
+     * at the rope's `bN`-segment arc tip and zeroes its velocity word.
+     * `bP` is the pendulum angle in 8.8; `r02 = bP>>8` in angle-256.
+     */
+    fun ropeArcPlace(t: Entity) {
+        val r0 = bN * 3072
+        val r02 = bP shr 8
+        val r03 = (r0 * Trig.sin(Trig.N - r02)) shr 8   // j.b(j.n-θ) = cos
+        val r04 = (r0 * Trig.sin(r02)) shr 8            // j.b(θ) = sin
+        t.N = N + r03
+        t.O = O + r04
+        t.ak = t.N shr 8
+        t.al = t.O shr 8
+        t.aj = 0; t.ai = 0; t.ah = 0; t.ag = 0
+    }
+
+    /**
+     * `g.j()` (g.java:4775, proven): rope release — dismount with the
+     * aG-variant arc: aG==1|4 → `i(23)` leap (aG4 `Z[3]!=0 → av=true`),
+     * facing ±2048 horizontal + `ah=-2560`; other aG → `i(43)` fall
+     * (±2048, `ah=-3840`, `y()` climb-check cancels ag). aG==2 also
+     * `k.aS.H()`. Unlinks `bM` both ways + `aA &= -65`.
+     */
+    fun releaseRope(w: LevelCellSource) {
+        val b = bM ?: return
+        if (b.aG == 1 || b.aG == 4) {
+            setAnim(23)
+            if (b.aG == 4) av = b.Z[3] != 0
+            ag = if (av) -2048 else 2048
+            ah = -2560
+        } else {
+            setAnim(43)
+            ag = if (av) -2048 else 2048
+            ah = -3840
+            if (climbCheck()) ag = 0                     // y()
+        }
+        if (b.aG == 2) consumeH()                                      // k.aS.H()
+        b.aA = 0; b.bM = null; bM = null
+        aA = aA and -65
+    }
+
+    /**
+     * `g.k()` (g.java:4821, proven): mounted-rope input handler — runs
+     * from the bound ax13's `aW()` tick (`bM == k.aS`), not the player
+     * loop. aG==4 → climb `i(82)`/`bN--` (`bN-2<0 → j()` dismount);
+     * else held-D-pad pumps the pendulum (±512 clamp ±1280, `/80` feed)
+     * with anim picks {84,85}; `u(16388)` zeroes the swing → `i(82)`→
+     * `r()→i(326)` hang; `u(65568) → i(86)` let-go cue; `u(2)/u(8)` →
+     * `av` + `j()`.
+     */
+    fun ropeInput(w: LevelCellSource) {
+        val r0 = bM ?: return
+        if (r0.aG == 4) {
+            if (r0.bN - 2 < 0) { releaseRope(w); return }
+            r0.bN--; setAnim(82); return
+        }
+        if (w.padDown(65568)) { setAnim(86); return }                 // u(65568)
+        if (w.padTap(4112)) { av = true; return }                     // x(4112)
+        if (w.padTap(8256)) { av = false; return }                    // x(8256)
+        if (w.padDown(2)) { av = true; releaseRope(w); return }       // u(2)
+        if (w.padDown(8)) { av = false; releaseRope(w); return }      // u(8)
+        if (w.padDown(8256)) {                                        // L38 pump
+            if (r0.bP <= 0 && r0.bO >= 0) {
+                if (r0.bP > -1280) r0.bP = -1280
+                r0.bP += 512
+                r0.bO += (20480 + r0.bP) / 80
+            }
+            setAnim(if (av) 85 else 84); return
+        }
+        if (w.padDown(4112)) {                                        // L57 pump
+            if (r0.bP >= 0 && r0.bO <= 0) {
+                if (r0.bP < 1280) r0.bP = 1280
+                r0.bP -= 512
+                r0.bO -= (20480 - r0.bP) / 80
+            }
+            setAnim(if (av) 84 else 85); return
+        }
+        if (w.padDown(16388)) {                                       // L76 climb
+            if (r0.bO != 0 || r0.bP != 0) { r0.bP = 0; r0.bO = 0; return }
+            if (S == 326 || S == 83 || (S == 82 && T == 0)) {
+                if (r0.bN - 2 < 0) { setAnim(326); return }           // L95
+                r0.bN--; setAnim(82); return                          // L92
+            }
+            if (S == 82) return                                       // mid-climb
+            if (!animFinished()) return
+            setAnim(326); return
+        }
+        if (w.padDown(33024)) {                                       // L103 descend
+            if (r0.bO != 0 || r0.bP != 0) { r0.bP = 0; r0.bO = 0; return }
+            if (r0.bN + 2 > r0.Z[1] - 2) {
+                setAnim(43); ag = 0; ah = 2560                        // L113
+                if (r0.aG == 2) consumeH()                                 // k.aS.H()
+                r0.aA = 0; r0.bM = null                               // bM kept — verbatim
+                aA = aA and -65
+                return
+            }
+            r0.bN++; setAnim(83); return
+        }
+        if (S == 326) return                                          // L119
+        if (!animFinished() && T != 0) return                         // L121
+        setAnim(326)                                                  // L124
+    }
+
+    /** `i.y()` (i.java:1211, proven): wall-side check — `ag<0→bb`,
+     *  `ag>0→bc`, `ag==0→av?bb:bc` (bb/bc = a(boolean) wall flags). */
+    fun climbCheck(): Boolean =
+        if (ag < 0) bb else if (ag > 0) bc else if (av) bb else bc
+
+    /** `i.bf()` (i.java:14608, proven): ax58 door-open query —
+     *  `S ∈ {1,3,4,6,8,10,12}`. */
+    fun isBf(): Boolean =
+        ax == 58 && S in intArrayOf(1, 3, 4, 6, 8, 10, 12)
 
     /**
      * `i.g(i)` (i.java:7758, proven): true when `r4` is on the side this
@@ -3850,6 +3969,8 @@ interface LevelCellSource {
     /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
      *  — distinct from `padHeld`/`k.v` which reads the edge set `bB`. */
     fun padDown(mask: Int): Boolean = false
+    /** `k.x(mask)` (k.java:7224, proven): double-tap-window edge (`eM`). */
+    fun padTap(mask: Int): Boolean = false
     /** `k.v()` (k.java:7260, proven): full input-latch reset. */
     fun clearLatches() {}
     /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at

@@ -4341,3 +4341,121 @@ fun NpcFsm.tickAx7(e: Entity, w: Level0World, p: Entity) {
         }
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// ax13 `aW()` (i.java:13182-13367) — swinging rope/vine entity.
+// `bO`/`bP` = pendulum velocity/angle (8.8); `bN` segments of `Z[1]` max;
+// `bM` = bound entity; aG variants {1 boost×4, 2 ab-marker, 4 door-spawner}.
+// ---------------------------------------------------------------------------
+
+/** Init arm: the shared `L111` record map + `i(r8[5])` + `t()` tail. */
+fun NpcFsm.initAx13(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)                    // L111
+    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.setAnim(rf(5))                                              // L395
+    e.refreshBoxes()                                              // t()
+}
+
+fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
+    // ---- pendulum integrator (L6) — runs while bO!=0 or bP!=0 ----
+    var integrated = false
+    if (e.bO != 0 || e.bP != 0) {                                   // L5→L6
+        val r0 = e.bO
+        e.bP += e.bO shl 1
+        e.bO -= Trig.sin(Trig.N - (e.bP shr 8)) shl 1               // j.b(n-θ)
+        integrated = true
+        if (e.aA == 1) {                                            // L9
+            if (e.bM === p && e.aG == 1 && r0 * e.bO < 0) {
+                p.av = e.bP < 0                                     // L17/L18
+                p.releaseRope(w)                                    // aS.j()
+            }
+        }
+    }
+    // L19: swing-side latch — sign flip of bP damps bO by 1/8
+    if (integrated) {
+        val r02 = e.j
+        e.j = if (e.bP > 0) 1 else -1                               // L22/L23
+        if (r02 != e.j) e.bO -= e.bO shr 3
+    }
+    // ---- L27: bound-side (aA==1) — drive input + park the rider ----
+    if (e.aA == 1) {
+        if (e.bM === p) p.ropeInput(w)                              // aS.k()
+        val b = e.bM
+        if (b != null) {
+            e.ropeArcPlace(b)                                       // l(bM)
+            if (e.aG == 2) {
+                // L40-41: (re)bind the player's ab marker to the rope tip
+                if (p.ab == null) {
+                    p.ab = p.spawnChildFx(w, 14, 9, 11, 302)      // a(14,9,11,302)
+                }
+                p.ab?.let { m ->
+                    m.al = (p.W[1] + p.W[3]) / 2
+                    m.ak = p.ak
+                    m.av = false
+                }
+            }
+        }
+    }
+    // ---- L43: grab-scan — player overlap on the swing-arc box ----
+    if (p.bM !== e && (p.aA and 64) == 0 && e.aA == 0 &&
+        Entity.GRABBABLE_STATES.contains(p.S) && p.O < e.O) {
+        val r05 = 3072 * e.Z[1]
+        var r04 = -1
+        if (p.N <= e.N + r05 && p.N >= e.N - r05 &&
+            p.O <= e.O + r05 + 16384) {                             // L53-60
+            p.refreshBoxes()                                        // r06 = r12.t()
+            val r06 = p.W
+            if (e.av) { r06[0] = (p.N shr 8) - 24; r06[2] = p.N shr 8 }
+            else      { r06[0] = p.N shr 8; r06[2] = (p.N shr 8) + 24 }
+            val r07 = 3072 * e.bN
+            val r122 = (3072 * (e.bN - 4)).coerceAtLeast(1)         // L66
+            val r09 = e.bP shr 8
+            val r010 = (r07 * Trig.sin(Trig.N - r09)) shr 8
+            val r011 = (r07 * Trig.sin(r09)) shr 8
+            val r012 = (r122 * Trig.sin(Trig.N - r09)) shr 8
+            val r013 = (r122 * Trig.sin(r09)) shr 8
+            if (r010 > 0) {
+                e.W[0] = ((e.N + r012) shr 8) - 4; e.W[2] = ((e.N + r010) shr 8) + 4
+            } else {
+                e.W[0] = ((e.N + r010) shr 8) - 4; e.W[2] = ((e.N + r012) shr 8) + 4
+            }
+            e.W[1] = (e.O + r013) shr 8
+            e.W[3] = ((e.O + r011) + r05 - r07) shr 8               // L73
+            if (Entity.overlapStrict(r06, e.W)) {                   // a(r06,W)
+                // L76-88: pick the grab segment r04 on the arc
+                var r8 = (p.O - e.O) / ((3072 * Trig.sin(r09)) shr 8)
+                if (r8 < 0) r8 = 0
+                if (r8 > e.Z[1] - 2) r8 = e.Z[1] - 2
+                if (r8 >= 0) r04 = if (r8 == 0) e.bN - 4 else r8 and 65534
+            }
+        }
+        if (r04 >= 0) {                                             // L89 latch
+            p.bindScript(1, w)                                      // aS.h(1)
+            w.clearLatches()                                        // k.v()
+            e.bN = r04; e.ropeGrabSeg = r04
+            e.aA = 1; e.bM = p; p.bM = e; p.az = 101
+            if (p.av) { e.bP -= 256; e.bO -= 512 }                  // L94
+            else      { e.bP += 256; e.bO += 512 }
+            if (e.aG == 1) { e.bP = e.bP shl 2; e.bO = e.bO shl 2 } // L96
+            else if (e.aG == 4) { e.bO = 0; e.bP = 0 }              // L99
+            e.ropeArcPlace(p)                                       // l(k.aS)
+            p.aA = p.aA or 64
+            p.setAnim(326)
+        }
+    }
+    // ---- L103: aG==4 door-linked segment spawner ----
+    if (e.aG == 4) {
+        val r015 = if (e.Z[6] != -1) w.findByAw(e.Z[6]) else null
+        if (e.Z[6] == -1 || (r015 != null && r015.isBf())) {
+            if (e.bN < e.Z[1]) e.bN++                               // L111
+        }
+    }
+    // ---- L114-126: angle clamp + zero-snap ----
+    if (e.bP < -20480) { e.bP = -20480; e.bO = 0 }
+    if (e.bP > 20480) { e.bP = 20480; e.bO = 0 }
+    if ((e.bP and -128) == 0 && (e.bO and -128) == 0) {
+        e.bO = 0; e.bP = 0                                          // L122
+    }
+}
