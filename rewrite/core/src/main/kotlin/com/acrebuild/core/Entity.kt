@@ -129,6 +129,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var g: Entity? = null          // g.g interact target (az() scan)
     var gJ = 0                      // g.J action-request bits (g.g(mask));
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
+    var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
     // -- g.c(i) grab-lunge state (g.java:4115) -----------------------------
     var F: Entity? = null         // g.F — grab/lunge target (c() sets, as() binds)
@@ -202,6 +203,176 @@ open class Entity(val ax: Int, var clip: Clip?) {
         e.ak = x; e.al = y
         if (indicatorIsHand(w)) { L = x; M = y }
         e.setAnim(if (w.touchNearView(e, 70)) 1 else 0)
+    }
+
+    // -- i.C() victim hit-react + g.ar() the interact action -----------------
+
+    /** `i.Q()` (i.java:7771, proven): face the player (`av = ak > aS.ak`). */
+    fun facePlayer(w: LevelCellSource) { av = ak > w.player.ak }
+
+    /** `i.aF()` (i.java:9192, proven): true when the facing side is free —
+     *  ak inside an ax51 `s`-link's ±20 edge band, or the facing-side edge
+     *  cell is neither 20-solid nor 5-one-way. */
+    private fun sideFree(w: LevelCellSource): Boolean {
+        s?.let {
+            if (it.ax == 51) {
+                if (it.W[2] - 20 < ak && ak < it.W[2]) return true
+                if (it.W[0] < ak && ak < it.W[0] + 20) return true
+            }
+        }
+        val c = w.collisionCell(
+            (if (av) W[2] / 20 + 1 else W[0] / 20 - 1), (W[3] + 10) / 20)
+        return c != 20 && c != 5
+    }
+
+    /** `i.c(int,int,int,int)` (i.java:9053, proven): hit-anim by type —
+     *  ax11 → i(r4), ax73 → i(r5) (-1 = keep); other ax → no-op. */
+    private fun hitAnimByType(a11: Int, a73: Int) {
+        when (ax) {
+            11 -> if (a11 >= 0) setAnim(a11)
+            73 -> if (a73 >= 0) setAnim(a73)
+        }
+    }
+
+    /** `i.g()` (i.java:1678, proven): zero h-velocity and push the victim
+     *  out of the player's box on the side the player faces; when the
+     *  landing cell is 20-solid or 0-void the snap reverts and a diagonal
+     *  `ag/ai` knockback fires instead. The `cell >= 12` arm gates on the
+     *  above-side cell. */
+    private fun resolvePush(w: LevelCellSource) {
+        ag = 0; ai = 0
+        if (sideFree(w)) return
+        if (w.collisionCell(ak / 20 + if (av) 1 else -1, al / 20 - 1) >= 12) return
+        val p = w.player
+        if (p.av) {
+            if (ak > p.ak) return
+            val r04 = ak
+            ak = p.X[0] - (W[2] - ak)
+            val c = w.collisionCell(ak / 20, al / 20)
+            if (c == 20 || c == 0) { ak = r04; ag = -2560; ai = 1280 }
+        } else {
+            if (ak < p.ak) return
+            val r03 = ak
+            ak = p.X[2] + (ak - W[0])
+            val c = w.collisionCell(ak / 20, al / 20)
+            if (c == 20 || c == 0) { ak = r03; ag = 2560; ai = -1280 }
+        }
+    }
+
+    /** `i.a(anim,x,y)` (i.java:9810, proven): spawn the clip-9 ax14 marker
+     *  `anim` into `ae` (occupied `ae` → no-op); az=302, av=false. */
+    fun spawnMarker(w: LevelCellSource, anim: Int, x: Int, y: Int) {
+        if (ae != null) return
+        ae = w.spawnPickup(anim, x, y).also { it.av = false }
+    }
+
+    /**
+     * `i.C()` (i.java:1955, proven): the victim hit-react dispatcher,
+     *  keyed on the attacker's anim `aS.S`. Dead arm first (`aB<=0`), then
+     *  the weaken line `aB <= bu[au]`, then per-type reacts. `k.E` (the
+     *  held-entity static at i.java:2767) is unported — ax73's `E.P|=128`
+     *  write is dropped (flagged inferred). */
+    fun hitReact(w: LevelCellSource): Boolean {
+        val p = w.player
+        if (aB <= 0) {
+            // L61: per-type death-flavor react (proven)
+            when (ax) {
+                11 -> { ab = null; setAnim(0); releaseAe() }
+                73 -> { setAnim(164); ah = 0; ag = 0; aj = 0; ai = 0 }
+                17 -> setAnim(69)
+                50 -> setAnim(129)
+                23 -> setAnim(78)
+            }
+            return true
+        }
+        if (ax == 11 && Z[0] == 1 && aB <= WEAPON_DMG[w.weaponSlot]) {
+            Z[0] = 2; setAnim(144)
+            p.spawnMarker(w, 45, ak, al - 85)   // aS.a(45, ak, al-85)
+            return true
+        }
+        if (ax == 73 && Z[0] == 0 && aB <= WEAPON_DMG[w.weaponSlot]) {
+            Z[0] = 3; facePlayer(w); setAnim(155)
+            aq = ak + if (av) -60 else 60
+            p.setAnim(8)
+            // k.E.P |= 128 — k.E held-entity link unported
+            return true
+        }
+        if (ax == 17) {
+            if (S == 68) return false
+            setAnim(68); w.sfx(13); return true
+        }
+        if (ax == 23) {
+            if (p.S == 69) {
+                p.ak = ak + if (av) -45 else 45
+                p.al = al
+            }
+            w.sfx(13); setAnim(73); return true
+        }
+        if (ax != 11 && ax != 73) return true   // L51→L86: other types no-op
+        // L29: ax11/73 live react by attacker anim (proven)
+        if (Z[0] == 2) { setAnim(6); return true }
+        when (p.S) {
+            67 -> { hitAnimByType(6, 156); w.sfx(13) }
+            68, 69, 286 -> { resolvePush(w); hitAnimByType(6, 156); w.sfx(13) }
+            287 -> {                             // falls into the L61 dead arm
+                when (ax) {
+                    11 -> { ab = null; setAnim(0); releaseAe() }
+                    73 -> { setAnim(164); ah = 0; ag = 0; aj = 0; ai = 0 }
+                }
+            }
+            else -> {}
+        }
+        return true
+    }
+
+    /**
+     * `g.ar()` (g.java:4030, proven): the 65568 standing interact action —
+     *  no `g` target → `i(0)` + `k.v()`; else `k.A(16)` sfx, zero velocity,
+     *  and (unless `S==364`) pick the reach anim by the 8.8 rise:run ratio
+     *  `r06/r05`: <=64 → 301, <=256 → 300, <=1024 → 299; target mid ≥20px
+     *  below own mid → 302; `r06==0` → 301. Then `K > 3` throws the knife
+     *  (`i.a(8,5,14,av,L,M,300)`) and applies the target effect: ax4 armed
+     *  `S30` → `i(29)`; ax58 lever `i(S+1)` on {0,5,7,9,11} / `i(3)` on 2;
+     *  else `g.aB -= (bu[au]<<1 · K)/6` damage + `g.C()` react. */
+    fun interactAction(w: LevelCellSource, pad: Pad) {
+        val t = g
+        if (t == null) {
+            setAnim(0)
+            pad.clearLatches()                   // k.v()
+            return
+        }
+        w.sfx(16)                                // k.A(16)
+        aj = 0; ai = 0; ah = 0; ag = 0
+        val r02 = (Y[1] + Y[3]) shr 1
+        val r04 = (t.Y[1] + t.Y[3]) shr 1
+        val r05 = kotlin.math.abs(t.ak - ak)
+        val r06 = kotlin.math.abs(r04 - r02) shl 8
+        if (S != 364) {
+            if (r05 <= 0 || r06 <= 0 || r04 - r02 >= 20) {
+                if (r04 - r02 > 20) setAnim(302)
+                else if (r06 == 0) setAnim(301)
+            } else {
+                val r08 = r06 / r05
+                if (r08 <= 64) setAnim(301)
+                else if (r08 <= 256) setAnim(300)
+                else if (r08 <= 1024) setAnim(299)
+            }
+        }
+        val r07 = WEAPON_DMG[w.weaponSlot] shl 1 // i.bu[k.au] << 1
+        if (K <= 3) return
+        w.spawnProjectile(av, L, M)              // i.a(8,5,14,av,L,M,300)
+        when {
+            t.ax == 4 -> if (t.S == 30) t.setAnim(29)
+            t.ax == 58 -> when (t.S) {
+                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                2 -> t.setAnim(3)
+                else -> {}
+            }
+            else -> {
+                t.aB -= (r07 * K) / 6
+                t.hitReact(w)                    // g.C()
+            }
+        }
     }
 
     // -- g.c(i) the grab lunge --------------------------------------------
@@ -1225,6 +1396,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     companion object {
         val ZERO_RECT = IntArray(4)
+        /** `i.bu[]` (i.java:22315, proven) — per-weapon damage table,
+         *  indexed by `k.au` (weapon slot). */
+        val WEAPON_DMG = intArrayOf(300, 400, 500)
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
         var at: Entity? = null
@@ -1351,4 +1525,12 @@ interface LevelCellSource {
     /** `i.a(int,int,int)` (i.java:9810): spawn an ax14 clip9 pickup
      *  indicator (anim `n`, az=302) and return it for `ae` binding. */
     fun spawnPickup(anim: Int, x: Int, y: Int): Entity
+
+    /** `k.aS` — the player entity (i.C()/i.g()/i.Q() read aS.S/ak/al/av/X). */
+    val player: Entity
+    /** `k.au` — current weapon slot, indexes `i.bu[]` = {300,400,500}. */
+    val weaponSlot: Int get() = 0
+    /** `i.a(_,5,14,av,x,y,300)` (i.java:6898, proven): the ax8 knife
+     *  projectile — clip5 anim14 az300, `P|=512`, `aw=-1, au=0`, `k.b`. */
+    fun spawnProjectile(av: Boolean, x: Int, y: Int): Entity
 }

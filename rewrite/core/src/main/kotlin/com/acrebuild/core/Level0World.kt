@@ -71,7 +71,7 @@ class Level0World(
     private var checkpointDead: Set<Int> = emptySet()  // br[]-equivalent
                                                        // dead at save time
 
-    val player = Entity(0, clips[0]).apply { aw = -1 }
+    override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
     // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
@@ -181,6 +181,20 @@ class Level0World(
             refreshBoxes()          // t() early-returns for ax14 → W zero
         }
         pendingInsert += e                        // k.b(aK)
+        return e
+    }
+
+    /** `i.a(_,5,14,av,x,y,300)` (i.java:6898, proven): the ax8 knife
+     *  projectile — aw=-1, au=0, clip5 anim14, az300, `P|=512`, `k.b`.
+     *  First arg unused in the original (ax hardcoded 8). */
+    override fun spawnProjectile(av: Boolean, x: Int, y: Int): Entity {
+        val e = Entity(8, clips[5]).apply {
+            aw = -1; au = 0; az = 300
+            setAnim(14); setPositionPx(x, y); this.av = av
+            P = P or 512
+            refreshBoxes()
+        }
+        pendingInsert += e                        // k.b(r0)
         return e
     }
 

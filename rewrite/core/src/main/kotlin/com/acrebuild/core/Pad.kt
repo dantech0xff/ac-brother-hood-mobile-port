@@ -41,6 +41,12 @@ class Pad {
     fun v(mask: Int): Boolean = edge and mask != 0
     fun x(mask: Int): Boolean = tap and mask != 0
 
+    /** `k.v()` (k.java:7260, proven): clear the held/edge words and the
+     *  accumulated press latches (`bC/bB` + `eK/eL/eM/eN`). */
+    fun clearLatches() {
+        held = 0; edge = 0; tap = 0; aA = 0; pendingPress = 0
+    }
+
     companion object {
         const val M_LEFT = 4112
         const val M_LEFT_ALT = 128
