@@ -1178,13 +1178,16 @@ class Level0WorldTest {
         val p = Entity(0, null)
         val mount = Entity(72, null)
         val req = Entity(16, null)
+        req.W[0] = 5; req.W[1] = 6; req.W[2] = 15; req.W[3] = 16
         mount.ab = req
         Entity.at = mount
         assertFalse(p.requestH(2), "J&2 not pending -> false")
         p.gJ = 2
         assertTrue(p.requestH(2), "pending bit -> consume path true (S!=38)")
         assertEquals(2, p.gI)
-        assertTrue(mount.consumedH, "i.at.H() ran — ab.ax==16")
+        // i.H(): ab.p() released the ax16 request entity, link dropped
+        assertNull(mount.ab, "i.at.H() cleared the ab link")
+        assertTrue(req.W.contentEquals(Entity.ZERO_RECT), "p() nulled W")
         Entity.at = null
     }
 

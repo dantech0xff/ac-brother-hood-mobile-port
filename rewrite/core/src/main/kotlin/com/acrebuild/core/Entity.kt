@@ -129,8 +129,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var g: Entity? = null          // g.g interact target (az() scan)
     var gJ = 0                      // g.J action-request bits (g.g(mask));
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
-    var consumedH = false         // i.H() consume marker (internals unmined)
-    fun consumeH() { consumedH = true }
+    var c: Entity? = null         // i.c carry link (released by p())
+    /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
+     *  the reference — the mount consume path (g.h calls i.at.H()). */
+    fun consumeH() {
+        ab?.releaseCascade()
+        ab = null
+    }
+
+    /** `i.p()` (i.java:214, proven): full release — clears the W/X/Y
+     *  boxes + ab, cascades ad.p(), drops ae/af/c, and flushes the cr
+     *  scratch grid (unmodeled — cr is not part of the port). */
+    fun releaseCascade() {
+        W.fill(0); X.fill(0); Y.fill(0)
+        ab = null
+        ad?.releaseCascade(); ad = null
+        ae = null; af = null; c = null
+    }
                                    // bit4 = mount request, producers unported
 
     /**
@@ -629,6 +644,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         t.consumeH()
         return false
     }
+
+    /**
+     * `g.E()` tail — the consume call after `i(91)`/`A(15)` in ax16's
+     *  hurt arms is `k.aS.E()` = `i.E()` = `settleToGround` (i.java:3760),
+     *  already ported below. Kept as a named alias for call-site clarity.
+     */
 
     /** `i.E()` (i.java:3760, proven shape): settle loop — sink `al` in
      *  10px steps until the below-feet cell is standable
