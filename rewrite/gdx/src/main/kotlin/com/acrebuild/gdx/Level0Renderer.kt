@@ -71,6 +71,8 @@ class Level0Renderer {
                 45 -> "clips/clip45/modules"
                 47 -> "clips/clip47/modules"
                 31 -> "clips/clip31/modules"
+                4 -> "clips/clip4/modules"
+                11 -> "clips/clip11/modules"
                 62 -> "clips/clip62/modules"
                 25 -> "clips/clip25/modules"
                 else -> "level0/tileset-${-packId}/modules"  // negated keys
@@ -102,22 +104,6 @@ class Level0Renderer {
         return pal.getOrPut(m or (palette shl 16)) {
             val clip = clips[-pack] ?: return base   // tilesets use neg keys
             val dir = when (pack) {
-                0 -> "clips/clip0/modules"
-                1 -> "clips/clip1/modules"
-                3 -> "clips/clip3/modules"
-                7 -> "clips/clip7/modules"
-                9 -> "clips/clip9/modules"
-                32 -> "clips/clip32/modules"
-                54 -> "clips/clip54/modules"
-                64 -> "clips/clip64/modules"
-                26 -> "clips/clip26/modules"
-                10 -> "clips/clip10/modules"
-                48 -> "clips/clip48/modules"
-                45 -> "clips/clip45/modules"
-                47 -> "clips/clip47/modules"
-                31 -> "clips/clip31/modules"
-                62 -> "clips/clip62/modules"
-                25 -> "clips/clip25/modules"
                 else -> "level0/tileset-${-pack}/modules"    // negated keys
             }
             val variant = clip.moduleNames[m]
