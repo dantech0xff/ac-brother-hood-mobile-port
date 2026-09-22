@@ -58,6 +58,7 @@ class Level0Renderer {
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
             val base = when (packId) {
                 0 -> "clips/clip0/modules"
+                1 -> "clips/clip1/modules"
                 3 -> "clips/clip3/modules"
                 7 -> "clips/clip7/modules"
                 9 -> "clips/clip9/modules"
@@ -94,6 +95,7 @@ class Level0Renderer {
             val clip = clips[-pack] ?: return base   // tilesets use neg keys
             val dir = when (pack) {
                 0 -> "clips/clip0/modules"
+                1 -> "clips/clip1/modules"
                 3 -> "clips/clip3/modules"
                 7 -> "clips/clip7/modules"
                 9 -> "clips/clip9/modules"

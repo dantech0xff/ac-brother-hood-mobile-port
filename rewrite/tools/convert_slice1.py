@@ -68,6 +68,7 @@ VISUAL_LAYERS = ["ep", "eu", "er"]
 
 CLIPS = {
     "clip0": ("pack-3", "entry-000-marker-130"),   # player (z[0])
+    "clip1": ("pack-3", "entry-001-marker-003"),   # ax5 mission logic (bi[5]=1)
     "clip3": ("pack-3", "entry-003-marker-003"),   # ax4 destructibles (bi[4]=3)
     "clip7": ("pack-3", "entry-007-marker-130"),   # shared NPC family
     "clip9": ("pack-3", "entry-009-marker-003"),   # k.c marker popup (ax14 S54)

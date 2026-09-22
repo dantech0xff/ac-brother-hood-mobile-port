@@ -34,6 +34,7 @@ class Level0World(
             11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
+            5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
             10 to 6,      // clip6 not converted yet — triggers spawn clipless
             14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
             16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
@@ -94,6 +95,10 @@ class Level0World(
                                      // clearClaim() (interface exposes set)
     override var claimed: Entity? = null  // k.L
     val claimPad = IntArray(4)       // k.cp
+    // Hoisted above `init`: `spawnEntities` reads it via kSIndex during
+    // ax5 record init — property order matters (backing field is null
+    // until the initializer runs).
+    override var kEh = IntArray(0)             // k.eH — script handles
     override fun claim(e: Entity, prio: Int, w: IntArray) {
         if (prio < 0 || prio >= 6) return
         if (prio >= claimPrio && !(prio == 1 && claimPrio == 1)) return
@@ -350,6 +355,7 @@ class Level0World(
             else if (type == 4) npcFsm.initDestructible(e, f.toList())
             else if (type == 67) npcFsm.initDecor(e, f.toList())
             else if (type == 14) npcFsm.initPickup(e, f.toList())
+            else if (type == 5) npcFsm.initMissionLogic(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -426,6 +432,14 @@ class Level0World(
     override var kX = 0                        // k.X
     override var kW = 0                        // k.W
     override var kAw = 0                       // k.aw
+    override var kAe: Entity? = null           // k.ae — player link entity
+    override var kAh: Entity? = null           // k.ah
+    override var kZ = false                    // k.Z
+    override var kAa = false                   // k.aa
+    override var kAb = false                   // k.ab
+    override val kAj = 0                       // k.aj — level index 0
+    override var kT: Int get() = boundMinY; set(v) { boundMinY = v }
+    override var kU: Int get() = boundMaxY; set(v) { boundMaxY = v }
     override var kAm = false                   // k.am
     override var kDd = false                   // k.dd
     override var gR = false                    // g.r — grab-QTE lock
@@ -438,6 +452,20 @@ class Level0World(
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun clearLatches() { pad.clearLatches() }   // k.v()
+    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. */
+    override fun kN() {
+        kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
+    }
+    /** `k.l(int)` — 12 mission-fail, 15 mission-complete. */
+    override fun screenL(n: Int) {
+        if (n == 12) missionFail() else if (n == 15) missionComplete()
+    }
+    /** `g.g()` (g.java:3939): player dead. */
+    override fun gG(): Boolean = player.x1 <= 0
+    /** `k.s(int)` (k.java:7149): index of uid in `k.eH[]` or -1. */
+    override fun kSIndex(x: Int): Int = kEh.indexOf(x)
+    /** `k.bz[ca]` — claim-script op table (unported → null). */
+    override fun claimOps(ca: Int): IntArray? = null
     override var gj = false                        // g.j context latch
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
@@ -614,6 +642,7 @@ class Level0World(
             else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
             else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
             else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
+            else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
