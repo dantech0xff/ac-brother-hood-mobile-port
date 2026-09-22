@@ -2889,6 +2889,17 @@ interface LevelCellSource {
     fun padDown(mask: Int): Boolean = false
     /** `k.v()` (k.java:7260, proven): full input-latch reset. */
     fun clearLatches() {}
+    /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at
+     *  k.java:4073 as `120*(Z[1]-Z[2])/Z[1]`). ax27 claims/releases it. */
+    var kAD: Entity? get() = null; set(_) {}
+    /** `k.aO` (k.java:181) — HUD message countdown, `aO -= j.f` per tick. */
+    var kAO: Int get() = 0; set(_) {}
+    /** `k.aP` (k.java:182) — HUD message string (drawn at 200,23). */
+    var kAP: String? get() = null; set(_) {}
+    /** `k.d(int,int)` (k.java:486, proven): `r3==0 → bU[r4]` global table;
+     *  else `j.g(r4)` — the per-level string table. Port signature takes
+     *  the resolved level index (1+k.aj) and record index. */
+    fun levelString(level: Int, idx: Int): String? = null
     /** `g.j` (g.java:15) — context latch, set on S145/S147 exits,
      *  cleared at g.java:6393 / k.java:6638. */
     var gj: Boolean get() = false; set(_) {}

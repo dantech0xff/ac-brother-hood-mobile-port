@@ -1405,6 +1405,272 @@ class NpcFsm(val world: LevelCellSource) {
         }                                                    //  + default
     }
 
+    // ============================================================ ax27 = bL()
+    // Timed/interactive prop (i.java:20843-21068, proven transcription):
+    // fuse barrel + message trigger family. `k.aD` = the HUD fuse-bar
+    // singleton (`120*(Z[1]-Z[2])/Z[1]` drawn at k.java:4078); `k.aO`/`k.aP`
+    // = HUD message countdown + string (`aO -= j.f` per tick, k.java:5527).
+    // Record init (L197, i.java:3213): az=1, aA=r8[7], aB=30,
+    // Z={r8[8], r8[9]*1000, 0, r8[10]}; S==4 → P|4096; S==15 falls into
+    // the L203 (ax29) arm → az=100, aB=800, aD=2, m=2, aC=30, aF=30,
+    // n=60, Z={r8[4],r8[7],r8[8],r8[9],r8[10]} + k.aU=this.
+    // Level-0 records: 4×S16 + 2×S18 (message display + hold arms).
+    // Clip: bi[27]=48 (k.java:8442).
+
+    /** `i.h(i)` (i.java:20791, proven): dangerous on-screen enemy —
+     *  `W ∩ k.ac` && (ax∈{17,50} → true; ax∈{11,73} → `!P() && aA>=1`). */
+    private fun enemyDanger(r3: Entity, w: LevelCellSource): Boolean {
+        if (!Entity.overlapI(r3.W, w.camRect)) return false
+        return when (r3.ax) {
+            17, 50 -> true
+            11, 73 -> !r3.deadRelease() && r3.aA >= 1
+            else -> false
+        }
+    }
+
+    /** `i.ae()` (i.java:20819, proven): `g.a != null` or any on-screen
+     *  dangerous ax∈{17,11,23,50,73} (ax23 always fails `h()`'s switch). */
+    private fun enemiesAlert(w: LevelCellSource, p: Entity): Boolean {
+        if (p.ga != null) return true
+        for (n in w.npcs) {
+            if (n.ax != 17 && n.ax != 11 && n.ax != 23 &&
+                n.ax != 50 && n.ax != 73) continue
+            if (enemyDanger(n, w)) return true
+        }
+        return false
+    }
+
+    /** `i.a(i,int,int[])` (i.java:15324, proven): when `P&4096` and
+     *  `r7.W ∩ r9`, push `r7` out of `this`'s rect — vertical exit when
+     *  entering from above/below (velocity-sign gated), else horizontal.
+     *  `ax==27` callers skip the vertical inner gates (fire entity). */
+    private fun pushApart(r7: Entity, P: Int, r9: IntArray, self: Entity) {
+        if (P and 4096 == 0) return                          // L5
+        if (!Entity.overlapI(r7.W, r9)) return               // L7
+        // L7 head → L11b: from-above landing runs when r7 rises or self
+        // falls; its W gates fall through to L24 on failure.
+        if (r7.ah > 0 || self.ah < 0) {
+            if (r7.W[1] < r9[1] && r7.W[3] < r9[3] &&
+                r7.ak > r9[0] && r7.ak < r9[2]) {
+                if (r7.ah > 0) { r7.aj = 0; r7.ah = 0 }      // L11b→L21
+                r7.al = r9[1] - 5                            // land on top
+                return
+            }
+        }
+        // L24 head → L28: from-below exit when r7 falls or self rises
+        if (r7.ah < 0 || self.ah > 0) {
+            if (r7.W[3] > r9[3] && r7.W[1] > r9[1] &&
+                r7.ak > r9[0] && r7.ak < r9[2]) {
+                if (r7.ah < 0) { r7.aj = 0; r7.ah = 0 }      // L39 head
+                if (!r7.aZ || self.ah <= 0) {                // L39/L41
+                    r7.al = r9[3] + (r7.al - r7.W[1]) + 5    // L43
+                    return
+                }
+            }
+        }
+        // L46 → L52 left-exit (r7 moving right into r9's left face, or
+        // self moving left; ax27 skips the velocity gate entirely)
+        if (r7.ag > 0 || self.ag < 0 || self.ax == 27) {
+            if (r7.W[2] < r9[2]) {                           // L52 head
+                if (r7.ag > 0) { r7.ai = 0; r7.ag = 0 }
+                r7.ak = r9[0] - (r7.W[2] - r7.ak) - 5        // L56
+                return
+            }                                                // else → L59
+        }
+        // L59 → L65/L67 right-exit
+        if (!(r7.ag < 0 || self.ag > 0 || self.ax == 27)) return
+        if (r7.W[0] <= r9[0]) return                         // L65 head
+        if (r7.ag < 0) { r7.ai = 0; r7.ag = 0 }              // L67
+        r7.ak = r9[2] + (r7.ak - r7.W[0]) + 5                // L69
+    }
+
+    /** ax27 record init — L197 arm (i.java:3213, proven) + the generic
+     *  `i(r8[5])` tail (L395) and `t()` box fill (L427). The `r8[5]==15`
+     *  record shares the L203 ax29 arm (`k.aU = this` — proven). */
+    fun initAx27(e: Entity, f: List<Int>, w: LevelCellSource) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = 1
+        e.aA = rf(7)
+        e.aB = 30
+        e.Z[0] = rf(8)
+        e.Z[1] = rf(9) * 1000
+        e.Z[2] = 0
+        e.Z[3] = rf(10)
+        if (rf(5) == 4) {
+            e.P = e.P or 4096                                // L201
+        } else if (rf(5) == 15) {                            // L200→L203
+            e.az = 100; e.aB = 800; e.aD = 2; e.m = 2
+            e.aC = 30; e.aF = 30; e.eventN = 60
+            // L203 reallocates Z to 5 slots; the fixed 22-slot array is a
+            // superset — values overwritten below are the only reads.
+            e.Z[0] = rf(4); e.Z[1] = rf(7); e.Z[2] = rf(8)
+            e.Z[3] = rf(9); e.Z[4] = rf(10)
+            if (rf(5) != 30) w.kAU = e                       // k.aU (shared)
+        }
+        e.setAnim(rf(5))                                     // L395
+        e.refreshBoxes()                                     // L427 t()
+    }
+
+    /** `i.bL()` (i.java:20843, proven transcription). */
+    fun tickAx27(e: Entity, w: LevelCellSource, p: Entity) {
+        when (e.S) {
+            // ---------- S0 — idle / interact-arm ----------
+            0 -> {                                           // L10/L12
+                var engage = false
+                if (p.S != 267) {
+                    if (p.S == 89 || p.S == 90) {            // L12→L20
+                    } else if (!Entity.overlapI(p.W, e.W)) {
+                    } else if (enemiesAlert(w, p)) {
+                    } else engage = true
+                }
+                if (!engage) { e.releaseAe(); fuseTail(e, w); return }
+                // L24 — tap 16388 (context) binds the entity to the player
+                if (w.padHeld(16388)) {
+                    p.af = e; p.ag = 0; p.ah = 0
+                    p.setAnim(267)
+                    e.releaseAe()
+                    w.clearLatches()
+                    fuseTail(e, w); return
+                }
+                // L27 — aA==1 arms the pickup marker at (ak, al-85)
+                if (e.aA != 1) { fuseTail(e, w); return }
+                if (e.ae == null) {
+                    e.releaseAe()                            // L32 G()
+                    e.spawnMarker(w, 7, e.ak, e.al - 85)     // a(7,…)
+                }
+                val ae = e.ae
+                if (ae != null && ae.S == 7) {               // L31→L33 pin
+                    ae.ak = e.ak; ae.al = e.al - 85
+                }
+            }
+            // ---------- S1/S21 — mount-in anim ----------
+            1, 21 -> {                                       // L35
+                e.releaseAe()                                // G()
+                if (e.animFinished()) {                      // L38→L41
+                    e.T = e.clip!!.frameCount(e.S) - 1; e.U = 0
+                    if (p.az == -2) { p.setAnim(269); p.az = 100 }
+                } else if (p.az == -2 && e.T == e.clip!!.frameCount(e.S) - 1) {
+                    // L38/L41 pin — falls into L58 below
+                } else { fuseTail(e, w); return }
+                fuseArm(e, w); fuseTail(e, w); return        // → L58 arm
+            }
+            // ---------- S2/S22 — hold player on the prop ----------
+            2, 22 -> {                                       // L45
+                if (!e.animFinished() &&
+                    e.T != e.clip!!.frameCount(e.S) - 1) {   // L45→L121
+                    fuseTail(e, w); return
+                }
+                if (p.af !== e) { e.setAnim(0); fuseTail(e, w); return } // L49
+                p.ak = e.ak                                  // L51 pin
+                e.T = e.clip!!.frameCount(e.S) - 1; e.U = 0
+            }
+            // ---------- S3 — release the player ----------
+            3 -> {                                           // L53
+                if (p.af === e) { p.af = null; p.az = 100 }  // L53 (decompiler
+                                                           // label garble:
+                                                           // release when af
+                                                           // IS this entity)
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                e.T = e.clip!!.frameCount(e.S) - 1; e.U = 0
+            }
+            // ---------- S4/S23 — active/fire arm (link watch) ----------
+            4, 23 -> fuseArm(e, w)                           // L58
+            // ---------- S5 — interpose → S15 ----------
+            5 -> {                                           // L100
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                e.setAnim(15)
+            }
+            // ---------- S6 — fuse tick ----------
+            6 -> {                                           // L78
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                e.P = e.P or 64; e.P = e.P and -4097         // L78/L82
+                if (e.Z[1] != 0) {
+                    e.Z[2] += 62                             // j.f
+                    if (e.Z[2] >= e.Z[1]) {
+                        e.setAnim(8); e.Z[2] = 0; w.sfx(23)  // k.A(23)
+                    }
+                }
+            }
+            // ---------- S7 — pin last frame ----------
+            7 -> {                                           // L5
+                if (e.animFinished() ||
+                    e.T == e.clip!!.frameCount(e.S) - 1) {
+                    e.T = e.clip!!.frameCount(e.S) - 1; e.U = 0
+                } else { fuseTail(e, w); return }
+            }
+            // ---------- S8/S20 — explode → S4 ----------
+            8, 20 -> {                                       // L85
+                e.P = e.P or 4096
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                if (w.kAD === e) w.kAD = null                // L90
+                e.setAnim(4)
+            }
+            // ---------- S12 — burn out ----------
+            12 -> {                                          // L103
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                if (w.kAD === e) w.kAD = null
+                e.setAnim(13)
+                e.P = e.P and -4097
+                e.P = e.P and -17
+            }
+            // ---------- S15 — damage arm ----------
+            15 -> {                                          // L91
+                e.P = e.P or 4096
+                if (p.X[0] != p.X[2] &&
+                    Entity.overlapI(e.W, p.X)) {             // L91-L94
+                    e.aB -= 10
+                    if (e.aB > 0) e.setAnim(5) else e.setAnim(12)
+                }
+            }
+            // ---------- S16 — load/show message ----------
+            16 -> {                                          // L110
+                if (w.kAO >= 0) {
+                    w.kAP =
+                        if (e.Z[3] < 0) null                 // L114
+                        else w.levelString(1 + w.kAj, e.Z[3])
+                } else w.kAP = null                          // L114
+            }
+            // ---------- S17 — wait → S18 ----------
+            17 -> {                                          // L119
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                e.setAnim(18)
+            }
+            // ---------- S19 — arm message timer ----------
+            19 -> {                                          // L116
+                if (!e.animFinished()) { fuseTail(e, w); return }
+                e.setAnim(16); w.kAO = 4000
+            }
+            else -> {}                                       // 9,10,11,13,14,
+        }                                                    // 18 → L121
+        fuseTail(e, w)
+    }
+
+    /** `bL()` L58 arm (S4/S23, i.java:20892): linked ax58 `k.q(Z[0])`
+     *  state gate → `i(6)` + `P|16` + claim `k.aD`. The decompiler's
+     *  odd-S/even-S switch collapses to `r0.S ∈ {1,4,6,8,10,12}` —
+     *  the even-state set. */
+    private fun fuseArm(e: Entity, w: LevelCellSource) {
+        e.P = e.P or 4096
+        if (e.Z[0] == -1 || e.Z[1] < 0) return               // L58 gates
+        val r0 = w.findByAw(e.Z[0]) ?: return
+        if (r0.ax != 58) return
+        if (r0.S !in intArrayOf(1, 4, 6, 8, 10, 12)) return  // L68 set
+        e.setAnim(6)
+        e.P = e.P or 16
+        if (w.kAD == null) w.kAD = e                         // L75
+    }
+
+    /** `bL()` L121 tail (i.java:20960): push overlapping ax11s out of
+     *  the entity's box while `P&4096` (the fire/hazard bit). `k.bd[]`
+     *  ↔ `w.npcs` filtered; `a(i,P,W)` = the push-apart routine. */
+    private fun fuseTail(e: Entity, w: LevelCellSource) {
+        for (n in w.npcs) {
+            if (n.ax != 11) continue
+            if (Math.abs(e.ak - n.ak) > 50) continue
+            pushApart(n, e.P, e.W, e)
+        }
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

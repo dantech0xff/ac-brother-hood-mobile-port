@@ -42,6 +42,7 @@ class Level0Game : ApplicationAdapter() {
         clips[64] = Clip.load(Gdx.files.internal("clips/clip64/clip.acpk").readBytes())
         clips[26] = Clip.load(Gdx.files.internal("clips/clip26/clip.acpk").readBytes())
         clips[10] = Clip.load(Gdx.files.internal("clips/clip10/clip.acpk").readBytes())
+        clips[48] = Clip.load(Gdx.files.internal("clips/clip48/clip.acpk").readBytes())
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space. Negated keys: entity
         // clips share this map via k.bi[] whose values 10/11 collide with
@@ -50,7 +51,13 @@ class Level0Game : ApplicationAdapter() {
             clips[-ts] = Clip.load(
                 Gdx.files.internal("level0/tileset-$ts/clip.acpk").readBytes())
         }
-        world = Level0World(level, clips, DeterministicRandom(SEED))
+        // `j.g` level-string table — line-delimited, `\n`-escaped inside.
+        val levelStrings = Gdx.files.internal("level0/strings-1.txt")
+            .readString("UTF-8").split("\n")
+            .filter { it.isNotEmpty() }
+            .map { it.replace("\\n", "\n") }
+        world = Level0World(level, clips, DeterministicRandom(SEED),
+            levelStrings = levelStrings)
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
