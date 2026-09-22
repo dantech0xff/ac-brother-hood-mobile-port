@@ -21,6 +21,8 @@ class Level0World(
     val level: LevelPack,
     val clips: Map<Int, Clip>,
     val rng: DeterministicRandom,
+    /** `j.g` level-string table (pack-14 entry-001 for level 0). */
+    val levelStrings: List<String> = emptyList(),
 ) : LevelCellSource {
 
     companion object {
@@ -39,6 +41,7 @@ class Level0World(
             14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
             16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
+            27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
         )
     }
 
@@ -356,6 +359,7 @@ class Level0World(
             else if (type == 67) npcFsm.initDecor(e, f.toList())
             else if (type == 14) npcFsm.initPickup(e, f.toList())
             else if (type == 5) npcFsm.initMissionLogic(e, f.toList(), this)
+            else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -438,6 +442,11 @@ class Level0World(
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
     override val kAj = 0                       // k.aj — level index 0
+    override var kAD: Entity? = null           // k.aD — HUD fuse entity
+    override var kAO = 0                       // k.aO — message countdown
+    override var kAP: String? = null           // k.aP — HUD message text
+    override fun levelString(level: Int, idx: Int): String? =
+        levelStrings.getOrNull(idx)
     override var kT: Int get() = boundMinY; set(v) { boundMinY = v }
     override var kU: Int get() = boundMaxY; set(v) { boundMaxY = v }
     override var kAm = false                   // k.am
@@ -643,6 +652,7 @@ class Level0World(
             else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
             else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
             else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
+            else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
@@ -655,6 +665,8 @@ class Level0World(
         }
         fireCheckpoints()
         fireScrollTriggers()
+        // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
+        if (kAO >= 0) kAO -= 62
 
         camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
         camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))
