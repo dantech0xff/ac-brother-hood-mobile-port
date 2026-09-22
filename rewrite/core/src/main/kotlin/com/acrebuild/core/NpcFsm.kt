@@ -4614,3 +4614,87 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
         e.bO = 0; e.bP = 0                                          // L122
     }
 }
+
+
+// =====================================================================
+// ax72 + ax78 + ax79 — the counterweight pair + palette prop
+// (i.java init L384/L153/L386; ax78 tick `bA()` :17525, proven).
+// =====================================================================
+
+/** ax72 init (L384 :3605, proven): `az=r8[7]` + `Z=int[5]` —
+ *  `Z[0]=r8[8]`, `Z[1]=r8[9]<<8` (fixed-point drop offset),
+ *  `Z[2]=r8[10]`, `Z[3]=r8[11]`, `Z[4]=r8[12]` (linked ax78's `aw`).
+ *  Tick dispatch `case 72 → L897` — static, never ticks. */
+fun NpcFsm.initAx72(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = rf(8); e.Z[1] = rf(9) shl 8; e.Z[2] = rf(10)
+    e.Z[3] = rf(11); e.Z[4] = rf(12)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax78 init (L153 :3114, proven): `az=r8[7]` + shared tail. */
+fun NpcFsm.initAx78(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax79 init (L386 :3630, proven): `Z=int[2]` — `Z[0]=r8[7]` (palette),
+ *  `Z[1]=r8[8]`; `aa.l(Z[0])` pins the palette when a clip is bound.
+ *  No tick arm — static. */
+fun NpcFsm.initAx79(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(7); e.Z[1] = rf(8)
+    e.palette = e.Z[0]
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax78 `bA()` (i.java:17525, proven): the suspended counterweight.
+ *  `r0` = support probe `h(ak/20,(al+10)/20)` — cell≥5 counts.
+ *  - S0: unsupported → `al+=2` settle; supported → `i(1)` armed.
+ *  - S1: supported → hold; unsupported → `aj=1536` gravity → `i(2)`.
+ *  - S2 falling: `bt()` crush-sweep; `T==4&&U==0` → `k.A(14)` whoosh;
+ *    supported → `a(true)` land + `i(3)` + zeroed vel; else sub-step
+ *    settle loop (halve `ah` until `h` clears → `i(3)`).
+ *  - S3: crushed/settled — `bt()` sweep + same land/drop logic. */
+fun NpcFsm.tickAx78(e: Entity, w: Level0World, p: Entity) {
+    fun sup(cx: Int, cy: Int): Boolean {                   // h(cx,cy) v>=5
+        val v = w.collisionCell(cx, cy)
+        return if (v < 12) v >= 5 else true
+    }
+    val r0 = sup(e.ak / 20, (e.al + 10) / 20)              // L5 head
+    when (e.S) {
+        0 -> { if (r0) e.setAnim(1) else e.al += 2 }         // L5/L8
+        1 -> {                                             // L11
+            if (r0) return
+            e.aj = 1536; e.setAnim(2)
+        }
+        2 -> {                                             // L14
+            e.sweepHostiles(w)
+            if (e.T == 4 && e.U == 0) w.sfx(14)
+            if (r0) {
+                e.collideSides(w, true); e.setAnim(3)
+                e.aj = 0; e.ah = 0; return
+            }
+            e.aj = 1536
+            var r7 = sup(e.ak / 20, (e.al + ((e.ah + e.aj) shr 8)) / 20)
+            while (r7) {                                   // L25 sub-settle
+                e.aj = 0; e.ah = e.ah / 2
+                r7 = sup(e.ak / 20, (e.al + (e.ah shr 8)) / 20)
+                e.setAnim(3)
+            }
+        }
+        3 -> {                                             // L28
+            e.sweepHostiles(w)
+            if (r0) {
+                e.collideSides(w, true); e.aj = 0; e.ah = 0; return
+            }
+            e.aj = 1536
+        }
+        else -> {}                                         // L35
+    }
+}
