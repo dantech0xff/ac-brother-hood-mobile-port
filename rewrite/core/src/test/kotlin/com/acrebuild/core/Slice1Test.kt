@@ -156,6 +156,7 @@ private fun world(): Level0World {
             36 to Clip.load(asset("clips/clip36/clip.acpk")),
             40 to Clip.load(asset("clips/clip40/clip.acpk")),
             20 to Clip.load(asset("clips/clip20/clip.acpk")),
+            21 to Clip.load(asset("clips/clip21/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -6286,201 +6287,149 @@ class Slice58Test {
     }
 }
 
-// =========================================================================
-// slice 59 — ax43 bw() ride carrier + o(i) grapple offer + aV() S50/S51
-// =========================================================================
-
-class Slice59Test {
-    private fun carrier(w: Level0World, s: Int, x: Int, y: Int): Entity {
-        val e = Entity(43, w.clips[31])
-        e.S = s
+// ===================================================================
+class Slice60Test {
+    private fun ax60At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
+        val e = Entity(60, w.clips[21])
+        val rec = mutableListOf(60, 1, x, y)
+        rec += f.toList()
+        while (rec.size < 22) rec += 0
         e.setPositionPx(x, y)
-        e.Z[1] = 8                                          // ride speed 8<<8
-        e.X[0] = x - 10; e.X[1] = y - 10; e.X[2] = x + 10; e.X[3] = y + 10
-        e.Y[0] = x - 15; e.Y[1] = y - 15; e.Y[2] = x + 15; e.Y[3] = y + 15
-        w.npcs.add(0, e)
+        w.npcFsm.initAx60(e, rec.toList(), w)
+        w.npcs.add(e)
         return e
     }
 
-    // -- o(i) grapple offer -------------------------------------------------
-    @Test fun `offer binds when player-Y overlaps and Z2 auto-proximity`() {
+    @Test fun `init S9 lift — P4096, Z3=al, Z5 probed, auto-bounce`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 0
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
-        val e = carrier(w, 0, 300, 150)
-        e.Z[2] = 1                                          // auto-bind
-        w.npcFsm.grappleOffer(e, w)
-        assertTrue(p.ga === e, "g.a = r6")
-        assertEquals(1, e.S, "r6.i(1)")
-        assertTrue(w.kAe === e, "k.ae = r6")
-        assertTrue(19 in w.sfxLog, "k.A(19)")
-        assertEquals(8 shl 8, e.ag, "r6.ag = Z[1]<<8")
-        assertTrue(p.cFlag, "g.C = true")
+        val e = ax60At(w, 100, 200, 5, 9, 0, -1, 40, 1)
+        assertTrue(e.P and 4096 != 0, "P|=4096 for S9")
+        assertEquals(200, e.Z[3], "Z[3]=al for S9")
+        assertEquals(1, e.az)
+        assertEquals(2, e.Z[4], "r8[9]==1 → auto-bounce")
+        assertTrue(e.Z[5] <= 200, "Z[5] bound probed ≤ spawn al")
+        assertEquals(9, e.S, "init tail i(r8[5])")
     }
 
-    @Test fun `offer no-ops without overlap`() {
+    @Test fun `init S13 pair member — az=0, P16, aC=Z2`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.setPositionPx(9000, 9000); p.refreshBoxes()
-        p.Y[0] = 8990; p.Y[1] = 8990; p.Y[2] = 9010; p.Y[3] = 9010
-        val e = carrier(w, 0, 300, 150)
-        e.Z[2] = 1
-        w.npcFsm.grappleOffer(e, w)
-        assertNull(p.ga, "no overlap -> no bind")
-        assertEquals(0, e.S)
-        assertFalse(p.cFlag)
+        val e = ax60At(w, 100, 200, 4, 13, 0, 58, 0, 0)
+        assertEquals(0, e.az, "az=0 for S13")
+        assertTrue(e.P and 16 != 0, "P|=16")
+        assertEquals(13, e.S)
     }
 
-    @Test fun `offer rejects player S22`() {
+    @Test fun `S9 arm resolves ax58 link → Z4=3 lever mode`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 22                                            // rest anim — L16 bail
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
-        val e = carrier(w, 0, 300, 150)
-        e.Z[2] = 1
-        w.npcFsm.grappleOffer(e, w)
-        assertNull(p.ga, "aS.S==22 -> G() + return")
-        assertEquals(0, e.S)
+        val lever = Entity(58, w.clips[20]); lever.aw = 88888
+        w.npcs.add(lever)
+        val e = ax60At(w, 100, 200, 5, 9, 0, 88888, 40, 0)
+        w.tick(emptyList())
+        assertSame(lever, e.s, "s = ax58 link")
+        assertEquals(3, e.Z[4], "Z[4]=3")
     }
 
-    // -- bw() ride ----------------------------------------------------------
-    @Test fun `S1 bound pins player to X center and forces 295`() {
+    @Test fun `S9 arm missing link → i(10) travel + Z0=-1`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 0
-        p.setPositionPx(500, 400); p.refreshBoxes()         // away from X center
-        val e = carrier(w, 1, 300, 150)
-        p.ga = e                                            // mounted
-        w.npcFsm.tickAx43(e, w, p)
-        assertEquals(295, p.S, "aS.S<304 -> aS.i(295)")
-        assertEquals(0, p.ag); assertEquals(0, p.ah)
-        assertEquals((e.X[0] + e.X[2]) shr 1, p.ak, "aS.ak = X-center")
-        assertEquals((e.X[1] + e.X[3]) shr 1, p.al, "aS.al = X-center")
-        assertTrue(w.kAe === e, "k.ae = this")
-        assertEquals(p.az - 1, e.az)
+        val e = ax60At(w, 100, 200, 5, 9, 0, 999999, 40, 0)
+        w.tick(emptyList())
+        assertEquals(10, e.S, "i(10)")
+        assertEquals(-1, e.Z[0])
+        assertEquals(39, e.aC, "aC=Z[2] set by arm, then L149 decrements same tick")
     }
 
-    @Test fun `S1 speed modulates 150pct same-dir and 50pct reverse`() {
+    @Test fun `ride — standing player on moving lift gets S50`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 295
-        val e = carrier(w, 1, 300, 150)
-        e.av = true
-        p.ga = e
-        w.pad.held = 4112                                     // same-dir as av
-        w.npcFsm.tickAx43(e, w, p)
-        assertEquals((8 shl 8) * 150 / 100, e.ag, "u(4112)+av -> x150")
-        w.pad.held = 8256                                     // reverse
-        w.npcFsm.tickAx43(e, w, p)
-        assertEquals((8 shl 8) * 50 / 100, e.ag, "u(8256)+av -> x50")
-        w.pad.held = 0
+        val e = ax60At(w, 100, 200, 5, 10, 0, -1, 40, 0)   // S10 vertical mover
+        e.refreshBoxes()
+        // player's box straddles the lift's bottom edge (W[1]≤W[3]≤W[3])
+        w.player.setPositionPx((e.W[0] + e.W[2]) shr 1, e.W[3])
+        w.player.refreshBoxes()
+        w.player.aZ = true
+        e.ah = 256                                         // moving down
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(50, w.player.S, "moving lift → ride crouch S50")
     }
 
-    @Test fun `S1 attack cuts bind to S7`() {
+    @Test fun `auto-bounce Z4=2 — solid probe reverses ah`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.gI = 1; p.S = 67                                  // g.b() attack anim
-        val e = carrier(w, 1, 300, 150)
-        p.ga = e
-        w.npcFsm.tickAx43(e, w, p)
-        assertNull(p.ga, "g.a = null")
-        assertEquals(7, e.S, "i(7)")
+        val e = ax60At(w, 100, 200, -3, 10, 0, -1, 40, 1)  // Z[4]=2
+        e.refreshBoxes()
+        e.ah = -256                                        // moving up
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertTrue(e.ah != 0)
     }
 
-    @Test fun `cv containment detaches and removes`() {
+    @Test fun `lever Z4=3 bf() → travel anim + ah`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 295
-        val e = carrier(w, 1, 300, 150)
-        p.ga = e
-        val rail = Entity(10, null)
-        rail.W[0] = 0; rail.W[1] = 0; rail.W[2] = 1000; rail.W[3] = 1000
-        w.cv = rail
-        w.npcFsm.tickAx43(e, w, p)
-        assertNull(p.ga, "g.a = null")
-        assertTrue(w.kAe === p || w.kAe == null, "k.ae restored")
-        assertTrue(e in w.pendingRemove, "k.c(this)")
+        val lever = Entity(58, w.clips[20]); lever.aw = 88888
+        lever.S = 10                                       // bf() set member
+        w.npcs.add(lever)
+        val e = ax60At(w, 100, 200, 5, 9, 0, 88888, 40, 0)
+        w.tick(emptyList())                                // binds s, Z4=3
+        lever.S = 10                                       // bf() set member
+        w.npcFsm.tickAx60(e, w, w.player)                  // L94: bf → move
+        assertEquals(10, e.S, "i(10) travel")
+        assertTrue(e.runnerBz, "bz moving")
+        assertTrue(e.ah > 0, "ah = +Z[1]<<8 downward")
     }
 
-    @Test fun `S7 zeros vel unlinks and re-offers`() {
+    @Test fun `lever Z4=3 idle lever + latch → unlatch reverse`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 0
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
-        val e = carrier(w, 7, 300, 150)
-        e.ag = 500; e.ah = 500
-        e.Z[2] = 1                                          // rebind on offer
-        w.kAe = e
-        p.ga = e
-        w.npcFsm.tickAx43(e, w, p)
-        assertEquals(8 shl 8, e.ag, "o() re-bind re-arms ag = Z[1]<<8")
-        assertEquals(0, e.ah)
-        assertTrue(p.ga === e, "o(this) re-bound -> S1 next tick")
-        assertEquals(1, e.S)
+        val lever = Entity(58, w.clips[20]); lever.aw = 88888
+        lever.S = 0                                        // not bf()
+        w.npcs.add(lever)
+        val e = ax60At(w, 100, 200, 5, 9, 0, 88888, 40, 0)
+        w.tick(emptyList()); w.tick(emptyList())
+        e.k = true                                         // latched
+        w.tick(emptyList())
+        assertFalse(e.k, "unlatched on idle lever")
+        assertTrue(e.ah < 0, "reverse velocity")
     }
 
-    // -- aV() S50/S51 -------------------------------------------------------
-    @Test fun `S51 registers cv while kAc overlaps`() {
+    @Test fun `mount — gB player inside S13 box → ga bind + carry`() {
         val w = world()
-        w.npcs.clear()
-        val rail = Entity(10, null)
-        rail.S = 51
-        rail.W[0] = 0; rail.W[1] = 0; rail.W[2] = 500; rail.W[3] = 500
-        w.kO = 0; w.kP = 0                                     // kAc covers rail
-        w.npcFsm.tickTrigger(rail, w.player)
-        assertTrue(w.cv === rail, "a(k.ac, W) -> cv = this")
-        w.kO = 9000; w.kP = 9000                              // camera gone
-        w.npcFsm.tickTrigger(rail, w.player)
-        assertNull(w.cv, "!overlap -> cv = null")
+        // clip21 anim13 W=(0,-36,22,36): box above the anchor; W[0]=Z[5]
+        // stretches the left edge to the bound. c(true) runs for S∈{13,15}.
+        val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
+        e.refreshBoxes()
+        w.player.setPositionPx((e.W[0] + e.W[2]) shr 1, (e.W[1] + e.W[3]) shr 1)
+        w.player.setAnim(19)                               // gB member
+        w.player.refreshBoxes()
+        assertTrue(Entity.overlapStrict(w.player.W, e.W), "fixture overlap")
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertSame(e, w.player.ga, "g.a = platform")
+        val before = w.player.ak
+        e.ag = 1280
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertTrue(w.player.ak > before, "ride-carry ak += ag>>8")
     }
 
-    @Test fun `S50 context-tap launches the rider off`() {
+    @Test fun `S13 pair handoff — X overlap swaps velocity`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 295; p.av = false
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        val e = Entity(10, null)
-        e.S = 50
-        e.W[0] = 290; e.W[1] = 140; e.W[2] = 310; e.W[3] = 160
-        val mount = carrier(w, 1, 300, 150)
-        p.ga = mount
-        w.pad.edge = 16388
-        w.npcFsm.tickTrigger(e, p)
-        assertEquals(243, p.S, "aS.i(243) launch")
-        assertEquals(3328, p.ag); assertEquals(-6656, p.ah)
-        assertNull(p.ga)
-        assertTrue(p.cFlag, "g.C = true after dismount")
-        assertTrue(e in w.pendingRemove, "k.c(this)")
+        // clip21 anim13 X=(17,-36,16,36) right-extended; anim11
+        // X=(-11,-36,16,36) left-extended. Pair parked just left of e's
+        // right box ��� the L92 swap fires.
+        val pair = ax60At(w, 115, 200, 4, 11, 0, -1, 0, 0) // S11 member
+        val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
+        e.ag = 1024
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(1024, pair.ag, "pair gets Z[1]<<8 push")
+        assertEquals(-1024, e.ag, "self reverses")
     }
 
-    @Test fun `S50 overlap without tap just flags cFlag false`() {
+    @Test fun `zone scan — ax10 S39 overlap latches k for Z4=3`() {
         val w = world()
-        w.npcs.clear()
-        val p = w.player
-        p.S = 295
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        val e = Entity(10, null)
-        e.S = 50
-        e.W[0] = 290; e.W[1] = 140; e.W[2] = 310; e.W[3] = 160
-        val mount = carrier(w, 1, 300, 150)
-        p.ga = mount
-        p.cFlag = true
-        w.npcFsm.tickTrigger(e, p)
-        assertFalse(p.cFlag, "overlap -> g.C = false")
-        assertTrue(p.ga === mount, "still bound")
-        assertTrue(e !in w.pendingRemove)
+        val zone = Entity(10, w.clips[10]); zone.S = 39
+        w.npcs.add(zone)
+        val e = ax60At(w, 100, 200, 5, 10, 0, -1, 0, 0)
+        e.Z[4] = 3
+        e.refreshBoxes()
+        // zone inside the lift's real W corridor
+        zone.W[0] = e.W[0] + 1; zone.W[1] = e.W[1] + 1
+        zone.W[2] = e.W[2] - 1; zone.W[3] = e.W[3] - 1
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertTrue(e.k, "S10 + Z[4]==3 + zone → latch k")
     }
 }
+

@@ -981,6 +981,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
         X[0] += ak; X[1] += al; X[2] += X[0]; X[3] += X[1]
         Y[0] += ak; Y[1] += al; Y[2] += ak; Y[3] += al
         W[0] += ak; W[1] += al; W[2] += W[0]; W[3] += W[1]
+        // ax60 tail (i.java:543-581, proven): the lift's travel-bound edge
+        // is stretched to Z[5] — the init-probed solid. S9/10 → top,
+        // S16/17 → bottom, S13/15 → left, S11/14 → right. Most clip-71
+        // anims have an empty base rect, so W becomes a zero-width/-height
+        // strip covering the whole travel corridor.
+        if (ax == 60) when (S) {
+            9, 10 -> W[1] = Z[5]
+            16, 17 -> W[3] = Z[5]
+            13, 15 -> W[0] = Z[5]
+            11, 14 -> W[2] = Z[5]
+        }
     }
 
     /**

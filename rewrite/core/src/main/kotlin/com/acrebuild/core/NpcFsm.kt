@@ -5561,6 +5561,303 @@ fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
     }
 }
 
+// ===================================================================
+/**
+ * `i.bj()` (proven transcription). S9/16 = vertical lifts, S10/17 =
+ * vertical travel, S11/14 = horizontal pair member (parked), S13/15 =
+ * horizontal mover (`c(true)`), anything else = zone-scan only.
+ * `Z[4]` drive mode: 0/2 = timed/auto-bounce, 1 = ax60 pair, 3 = ax58 lever.
+ */
+fun NpcFsm.tickAx60(e: Entity, w: Level0World, p: Entity) {
+    e.refreshBoxes()                                       // t() (L2)
+    e.b = false                                            // ridden latch off
+    when (e.S) {
+        9, 16 -> {                                         // L4 idle/arm
+            e.aC = 0; e.ah = 0; e.ag = 0
+            if (e.Z[0] != -1) {
+                val r0 = w.findByAw(e.Z[0])                // k.q(Z[0])
+                if (r0 != null && r0.ax == 58) {
+                    e.s = r0; e.Z[4] = 3                   // lever-linked
+                }
+                if (r0 == null) {
+                    e.setAnim(if (e.S == 9) 10 else 17)    // L16/L17
+                    e.Z[0] = -1; e.aC = e.Z[2]
+                }
+            }
+            if (e.Z[4] == 2) {                             // L19 auto-bounce
+                e.setAnim(if (e.S == 9) 10 else 17)
+                e.ah = e.Z[1] shl 8
+            }
+            ax60Ride(e, w, p); ax60Zones(e, w)             // →L26 →L177
+        }
+        10, 17 -> { ax60Ride(e, w, p); ax60Zones(e, w) }   // L26
+        11, 14 -> { ax60Mount(e, w, p, false); ax60Zones(e, w) }  // L176
+        13, 15 -> {                                        // L168
+            if (ax60Mount(e, w, p, true)) {                // c(true) → L171
+                if (e.Z[4] == 1) {                         // pair handoff
+                    val ac = e.ac!!
+                    if (ac.ak <= ac.Z[3]) {
+                        e.ak = ac.Z[3] - 50
+                        e.ag = (-e.Z[1]) shl 8
+                    }
+                    ac.ak = e.ak + 50
+                }
+                ax60Zones(e, w)
+            }                                              // else return
+        }
+        else -> ax60Zones(e, w)                            // L177 default
+    }
+}
+
+/**
+ * `bj()` L26 arm (i.java:14845-14980, proven) — vertical mover body:
+ * rider anims + side push-out, then the Z[4]-mode drive tail.
+ * `r72` = vertical pair (S9/10) — S16/17 take the same arm with r72=false.
+ */
+private fun NpcFsm.ax60Ride(e: Entity, w: Level0World, p: Entity) {
+    val r72 = e.S == 9 || e.S == 10                        // L28-L31
+    if (Entity.overlapStrict(p.W, e.W)) {
+        if (p.ak >= e.W[0] && p.ak <= e.W[2] &&
+            p.W[1] <= e.W[3] && p.W[3] >= e.W[3] && r72 && p.aZ) {
+            // L48-L56: standing on the lift — ride anims while it moves
+            if (p.S != 79 && p.S != 78 && p.S != 50) p.setAnim(78)
+            if (e.ah != 0) p.setAnim(50)
+            else if (e.ag != 0) ax60PushOut(e, w, p)       // L55→L58
+        } else ax60PushOut(e, w, p)                        // L58
+    }
+    // L69+: drive tail
+    if (e.Z[4] == 2) {
+        // L69-L78: auto-bounce — probe one cell past the travel edge;
+        // solid (≥12) or type-5 → reverse to -|Z[1]|; otherwise keep
+        // pressing toward Z[5] with +|Z[1]| once below it.
+        val r03 = e.e(w, e.ak / 20, ((if (r72) e.W[3] else e.W[1]) + 1) / 20)
+        if (r03 >= 12 || r03 == 5) {
+            e.ah = -Math.abs(e.Z[1] shl 8)
+        } else if (e.al <= e.Z[5]) {
+            e.ah = Math.abs(e.Z[1] shl 8)
+        }
+        return
+    }
+    if (e.Z[4] == 3 && e.s != null) {
+        // L86: lever-driven — ax58 bf() starts/stops the motion
+        if (e.s!!.isBf()) {                                // L94 lever on
+            if (e.k) { e.ah = 0; return }                  // latched → hold
+            e.setAnim(if (r72) 10 else 17)
+            e.ah = (if (r72) 1 else -1) * (e.Z[1] shl 8)
+            e.runnerBz = true                              // i.bz moving
+        } else {                                           // L103 lever idle
+            if (e.k) {
+                e.ah = (if (r72) -1 else 1) * (e.Z[1] shl 8)
+                e.setAnim(if (r72) 10 else 17)
+                e.k = false
+            } else if (!e.runnerBz) return                 // L114 hold
+        }
+        // L116-L146: bounds + support latch
+        val r8 = if (e.Z[1] < 0) !r72 else r72
+        if (r8 && e.al < e.Z[3] && e.ah < 0) {             // L135 clamp top
+            e.ah = 0; e.al = e.Z[3]
+            e.setAnim(if (r72) 9 else 16)
+            e.runnerBz = false
+        }
+        if (!r8 && e.al > e.Z[3] && e.ah > 0) {            // L100 reverse
+            e.ah = -(e.Z[1] shl 8); e.runnerBz = true
+        } else {
+            // L141/L146: probe the support side — solid → latch `k`
+            val probe = if (r8) e.e(w, e.ak / 20, ((e.al + 28) / 20) + 1)
+                        else e.e(w, e.ak / 20, (e.al / 20) - 1)
+            if (probe >= 12) e.k = true
+        }
+        return
+    }
+    // L149: free run — aC countdown then sink until the probe lands
+    val r15 = e.aC; e.aC = r15 - 1
+    if (r15 >= 0) return
+    e.ah = e.Z[1] shl 8
+    val r04 = e.e(w, e.ak / 20, ((if (r72) e.W[3] else e.W[1]) + 1) / 20)
+    if ((r04 >= 12 || r04 == 5) && e.ah >= 0) {            // L160
+        e.ah = 0
+        e.setAnim(if (r72) 9 else 16)
+    }
+}
+
+/** `bj()` L58 arm (proven): horizontal push-out for a clipped player. */
+private fun ax60PushOut(e: Entity, w: Level0World, p: Entity) {
+    if (p.S != 277) return
+    if (p.W[2] < e.W[2]) {
+        p.ak = e.W[0] - (p.W[2] - p.ak) - 5
+    } else if (p.W[0] > e.W[0]) {
+        p.ak = e.W[2] + (p.ak - p.W[0]) + 5
+    }
+    p.ag = 0
+    if (!p.aZ) p.flingAirborne(0, w)                       // aS.a(0)
+}
+
+/**
+ * `i.c(boolean)` (i.java:15060-15260, proven) — ax60 mount + pair-motion
+ * helper for S11/13/14/15. Returns false = "motion still pending/stopped"
+ * (the caller returns early); true = ran through the end-probe.
+ */
+private fun NpcFsm.ax60Mount(e: Entity, w: Level0World, p: Entity,
+                             r7: Boolean): Boolean {
+    // L0-L20: lazy link — Z[0] → ac via a(i); pair/lever flags
+    if (e.ac == null && e.Z[0] != -1) {
+        val r0 = w.findByAw(e.Z[0])                        // k.q(Z[0])
+        if (r0 != null) e.ac = r0                          // a(r0): P|256
+    }
+    e.ac?.let { ac ->
+        if (e.S == 13 && ac.ax == 60 && ac.S == 11) {
+            e.Z[4] = 1; ac.Z[4] = 1                        // pair latch
+        }
+        if (ac.ax == 58) e.Z[4] = 3                        // lever-driven
+    }
+    // L20-L73: player mount / push / dismount arms
+    if (Entity.overlapStrict(p.W, e.W)) {
+        if (p.ga != e &&
+            (p.gB() || p.S == 209 || p.S == 34)) {
+            if (p.al <= e.W[3]) {                          // L30 top mount
+                p.setAnim(0); p.al = e.W[1] + 1
+                p.ag = 0; p.ah = 0; p.ga = e               // g.a = this
+            } else if ((p.ak <= e.W[0] && !p.av) ||
+                       (p.ak >= e.W[2] && p.av)) {         // L33 walk-into
+                p.setAnim(209)
+                if (p.ak <= e.W[0]) p.ak = e.W[0]
+                else if (p.ak >= e.W[2]) p.ak = e.W[2]
+                p.ag = 0; p.ah = 0; p.ga = e
+            }
+        }
+        if (p.ga != e && p.gC()) {                         // L48 side clip
+            if (p.W[2] < e.W[2]) {
+                p.ak = e.W[0] - (p.W[2] - p.ak) - 5; p.ag = 0
+                if (!p.aZ && p.ga == null) p.flingAirborne(0, w)
+            } else if (p.W[0] > e.W[0]) {                  // L59
+                p.ak = e.W[2] + (p.ak - p.W[0]) + 5; p.ag = 0
+                if (!p.aZ && p.ga == null) p.flingAirborne(0, w)
+            }
+        } else if (p.ga == e) {                            // L66 drift-off
+            if (p.al > e.W[3] && p.S != 209 && p.S != 50)
+                p.flingAirborne(0, w)
+        }
+        if (p.ga == e) {                                   // L78 ride carry
+            p.ak += e.ag shr 8
+            if (w.playerAttacking()) p.ak -= (e.ag shl 1) shr 8
+        }
+        // L83-L90: moving contact anim through the X attack box
+        if ((e.ag != 0 || e.ah != 0) &&
+            Entity.overlapStrict(p.W, e.X)) p.setAnim(50)
+    } else if (p.ga == e && p.S != 209) {                  // L73 walked off
+        p.ga = null
+    }
+    // L92-L109: S13 X-overlap → hand velocity to the S11 pair member
+    if (e.ag != 0 && e.S == 13) {
+        for (n in w.npcs) {
+            if (n.ax == 60 && n.S == 11 &&
+                Entity.overlapStrict(n.X, e.X)) {
+                e.ag = (-e.Z[1]) shl 8
+                n.ag = e.Z[1] shl 8
+            }
+        }
+    }
+    // L109-L136: lever-driven horizontal motion
+    if (e.Z[4] == 3) {
+        val ac = e.ac
+        if (ac != null && ac.isBf()) {
+            e.P = e.P or 16
+            if (e.k) { e.ag = 0; return false }
+            if (e.aC <= 0) e.ag = (if (r7) 1 else -1) * (e.Z[1] shl 8)
+            e.runnerBz = true
+        } else {
+            if (e.k) {                                   // L125 unlatch
+                e.ag = (if (r7) -1 else 1) * (e.Z[1] shl 8)
+                e.k = false
+            } else if (!e.runnerBz) return false         // L132 hold
+        }
+    }
+    if (e.ag == 0) {                                     // L136 cooldown
+        val r13 = e.aC; e.aC = r13 - 1
+        if (r13 > 0) return false
+    }
+    // L141-L190: bounds + end-probe latch
+    val r82 = if (e.Z[4] == 3 && e.Z[1] < 0) !r7 else r7
+    val pastBound = (e.ag < 0 && e.ak < e.Z[3] && r82) ||
+                    (e.ag > 0 && e.ak > e.Z[3] && !r82)
+    if (pastBound) {                                     // L164 clamp
+        e.ak = e.Z[3]
+        if (e.ag != 0 && e.Z[4] == 3 && e.runnerBz) {
+            e.ag = 0; e.runnerBz = false; e.aC = e.Z[2]
+            return false
+        }
+        e.ag = (if (r7) 1 else -1) * (e.Z[1] shl 8)      // L173/L175
+    }
+    if (e.ag != 0) {
+        // L178/L186: probe one cell past the travel edge
+        val r04 = if (r82)
+            e.e(w, ((e.ak + 22) / 20) + 1, (e.al / 20) - 1)
+        else
+            e.e(w, (e.ak / 20) - 1, (e.al / 20) - 1)
+        if (r04 < 12) return true
+        if (e.Z[4] == 3) { e.k = true; return true }       // L182/L188
+        e.ag = if (r82) (-e.Z[1]) shl 8                  // L184 bounce
+              else e.Z[1] shl 8                          // L190
+        return true
+    }
+    return true
+}
+
+/** `bj()` L177 tail (proven): ax10 S=39 zone overlap → bounce/latch/idle. */
+private fun ax60Zones(e: Entity, w: Level0World) {
+    for (n in w.npcs) {
+        if (n.ax != 10 || n.S != 39) continue
+        if (!Entity.overlapStrict(n.W, e.W)) continue
+        when (e.S) {
+            10, 17 -> when (e.Z[4]) {
+                3 -> e.k = true                            // L200
+                2 -> e.ah = -e.ah                          // L191 bounce
+                else -> e.setAnim(if (e.S == 10) 9 else 16)
+            }
+            14, 15 -> e.k = true                           // L200
+        }
+    }
+}
+
+/** ax60 init arm (i.java:3394, L259 block, proven). */
+fun NpcFsm.initAx60(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 1
+    e.Z.fill(0)
+    e.Z[0] = rf(7)                                         // link uid
+    e.Z[1] = rf(4)                                         // speed
+    e.Z[2] = rf(8)                                         // delay
+    e.Z[4] = 0
+    if (rf(5) == 9 || rf(5) == 16 || rf(5) == 10 || rf(5) == 17)
+        e.P = e.P or 4096                                  // L262-L267
+    e.Z[3] = if (rf(5) == 9 || rf(5) == 16) e.al else e.ak // L269-L272
+    if (rf(9) == 1) e.Z[4] = 2                             // auto-bounce
+    e.Z[5] = e.Z[3]
+    if (rf(5) == 14 || rf(5) == 15 || rf(5) == 16) {
+        // L281: horizontal bound probe — scan from ak toward solid while
+        // Z[1] < 0; S15 scans left, 14/16 scan right; S15 adds one cell.
+        if (e.Z[1] < 0) {
+            var r92 = e.ak / 20
+            val r05 = (e.al / 20) - 1
+            while (w.collisionCell(r92, r05) < 12)
+                r92 += if (rf(5) == 15) -1 else 1
+            e.Z[5] = r92 * 20
+            if (rf(5) == 15) e.Z[5] += 20
+        }
+    } else if (rf(5) == 9) {
+        // L297: vertical bound probe — scan UP to the first solid row.
+        var r03 = e.ak / 20
+        var r10 = e.al / 20
+        while (w.collisionCell(r03, r10) < 12) r10 -= 1
+        e.Z[5] = r10 * 20 + 20
+    }
+    if (rf(5) == 6 || rf(5) == 11 || rf(5) == 13) {        // L308/L310→L315
+        e.az = 0; e.P = e.P or 16
+    }
+    if (rf(5) in 11..15) e.aC = e.Z[2]                     // L317
+    e.setAnim(rf(5))                                       // L392 tail
+    e.refreshBoxes()                                       // t()
+}
 // =========================================================================
 // ax43 = bw() — ride/swing carrier (dispatch i.java:5081; bw():17086-17187,
 // all proven). Bound by the grapple-offer `o(i)` (:17038-17085) — the ax15
@@ -5582,6 +5879,7 @@ fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
  * `a(8,ak,al-85)` prompt + `v(65568)` tap path. `r7 && g.i` → bind:
  * `g.a=r6, i(1), k.ae=r6, A(19), r6.ag=Z[1]<<8, G(), g.C=true`.
  */
+
 fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
     if (r6.ax != 43) return                             // L7: non-43 → dead call
     r6.refreshBoxes()                                   // t()
