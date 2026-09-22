@@ -3785,10 +3785,10 @@ interface LevelCellSource {
     fun spawnWisp(src: Entity)
 
     // -- globals read by prop FSMs --------------------------------------
-    /** `k.Y` — global fall impulse (k.java:2336 `Y = X<<8`; source writes
-     *  at phase transitions are unmined; level-0 arms reading it are
-     *  unreachable). */
-    val kY: Int get() = 0
+    /** `k.Y` — global fall impulse (k.java:2336/2742 `Y = X << 8`,
+     *  proven): derived from `kX` so the wind write `k.X = …` re-prices
+     *  every ballistic bias like the original's `Y = X << 8` reload. */
+    val kY: Int get() = kX shl 8
     /** `k.O` — camera left edge in world px (subtract operand at
      *  i.java:9837; ax14 pickups pin to `k.O+{20,380}` = the view edges;
      *  writable — `aa()`'s op11/12 camera lerp advances it). */
@@ -4125,6 +4125,24 @@ interface LevelCellSource {
     fun padRelease(mask: Int): Boolean = false
     /** `k.v()` (k.java:7260, proven): full input-latch reset. */
     fun clearLatches() {}
+
+    // -- slice 65: ax64 `bl()` hooks ------------------------------------
+    /** `g.s` — in-cutscene flag (g.java static; no producer ported —
+     *  always false during gameplay; gates the ax64 S1 grab check at
+     *  i.java:15773). */
+    val gS: Boolean get() = false
+    /** `i.bi` — ax64 grab-hitlag flag (set by the S2 hold arm,
+     *  i.java:15686). */
+    var iBi: Boolean get() = false; set(_) {}
+    /** `av()` + `k.aX[50]` (i.java:7813, k.java:8423, proven): the pooled
+     *  shot-slot allocator — `P&128` marks free slots. Returns null when
+     *  all slots are live. Slot ax/clip are `inferred` (the original pool
+     *  is ax-generic; clip5 stands in as the shared projectile clip). */
+    fun allocShot(): Entity? = null
+    /** `k.aX` pool step (`inferred` — the pooled-shot tick path is
+     *  unmined): ballistic `am+=ag; an+=ah; ah+=kY`, `aC--` lifetime →
+     *  `P|=128` frees the slot. */
+    fun tickShotPool() {}
     /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at
      *  k.java:4073 as `120*(Z[1]-Z[2])/Z[1]`). ax27 claims/releases it. */
     var kAD: Entity? get() = null; set(_) {}
