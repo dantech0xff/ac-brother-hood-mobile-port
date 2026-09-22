@@ -189,6 +189,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var bY = 0                     // i.bY — waypoint prev-x px (bZ reused)
     var bs = 0                     // i.bs — respawn slot index (Z[bs+1])
     var iE = false                 // i.E — director engaged flag
+    // -- ax54/ax30 waypoint-runner fields (ax() i.java:8170) ----------------
+    var runnerBz = false           // i.bz — trigger-line latch (al>P+Z[7])
+    var runnerB = false            // i.B — homing leg active
+    var runnerC = 0                // i.C — resolved waypoint chain length
+    var runnerD = 0                // i.D — waypoint dwell countdown (bt.d)
+    var wpBt: Waypoint? = null     // i.bt — current chain waypoint (c.a)
+    var wpF: Waypoint? = null      // i.F — bound companion waypoint (c.a(Z[5]))
+    var runnerG = false            // i.G — ax56 pattern-done flag (ay())
+    var projB = false              // i.b — explode-on-contact flag (ba())
+    var projK = false              // i.k — lobbed-arc phase flag (ba())
+    var cHWaypoints: Array<IntArray>? = null  // i.cH — homing waypoint
+                                              // table on the owner (af)
+    var iP = 0                     // i.p — ax32 sub-type (bc() anim pick)
     var cIDone = false             // i.cI — attack-script done (bool)
     var cJDone = false             // i.cJ — transition ack (bool)
     var cHGrid: Array<IntArray>? = null   // i.cH — int[7][2] knife targets
@@ -3821,6 +3834,7 @@ interface LevelCellSource {
     var kR: Int
     /** `k.aE`/`k.aH` — director timers (aE>0 → `aH=80` at arming). */
     var kAE: Int
+    var kAF: Int get() = 0; set(_) {}
     var kAH: Int
     /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
     var kAR: Int
@@ -3953,6 +3967,12 @@ interface LevelCellSource {
      *  arg-ops write (i.java:153-204). */
     var iCe: Boolean get() = false; set(_) {}
     var iBD: Boolean get() = false; set(_) {}
+    var iBB: Boolean get() = false; set(_) {}
+    var iBC: Boolean get() = false; set(_) {}
+    var iBE: Int get() = 0; set(_) {}
+    var iBF: Int get() = 0; set(_) {}
+    var iBG: Int get() = -1; set(_) {}
+    var iCF: Boolean get() = false; set(_) {}   // i.cF — hit-confirm latch
     var iBQ: Int get() = 0; set(_) {}
     var iCO: Entity? get() = null; set(_) {}
     var iCg: Entity? get() = null; set(_) {}
@@ -4064,4 +4084,67 @@ class ScriptPrompt {
     var a = 0
     var b = 0
     fun setState(s: Int, f: Int) { e = s; flag = f }
+}
+
+/**
+ * Class `c` (c.java, proven) — the waypoint/marker pool. Level records
+ * with `ax == 55` load into it (k.java:6049 `c.a(r0)` gated on
+ * `r0[0] == 55`), never spawning entities; runners look them up by `k`.
+ * `a,b` = position, `c,d,e,f,g` = record params (`f` = fly speed, `g` =
+ * chain link used by ax21's director). `h,i` = runtime offsets written
+ * by ax()'s companion bind (shorts in the original — kept Int here).
+ */
+class Waypoint {
+    var k = 0          // record uid (spawned copies get j >= 10000)
+    var a = 0; var b = 0
+    var c = 0; var d = 0; var e = 0; var f = 0; var g = 0
+    var h = 0; var i = 0
+
+    /** `c.m[]` + `c.l` + `c.j` (c.java:14-17, proven) — fixed pool of 400;
+     *  copies mint uids from `j` (base 10000, `a()` resets). */
+    class Pool {
+        val slots = arrayOfNulls<Waypoint>(400)
+        var count = 0
+        var nextUid = 10000
+
+        /** `c.a(short[])` (c.java:26): load a record's 9 fields. */
+        fun load(r: List<Int>) {
+            if (count >= slots.size) return
+            val w = Waypoint()
+            w.k = r[1]; w.a = r[2]; w.b = r[3]
+            w.c = if (r.size > 4) r[4] else 0
+            w.d = if (r.size > 5) r[5] else 0
+            w.e = if (r.size > 6) r[6] else 0
+            w.f = if (r.size > 7) r[7] else 0
+            w.g = if (r.size > 8) r[8] else 0
+            slots[count++] = w
+        }
+
+        /** `c.a(int)` (c.java:63): first waypoint with `k == uid`;
+         *  negative uid → null (verbatim early-out). */
+        fun find(uid: Int): Waypoint? {
+            if (uid < 0) return null
+            for (i in 0 until count) {
+                val w = slots[i] ?: continue
+                if (w.k == uid) return w
+            }
+            return null
+        }
+
+        /** `c.a(c, i)` (c.java:45): copy `src` shifted by `+e.ak` on `a`
+         *  (waypoints are entity-x-relative), mint `k = nextUid++`. */
+        fun copyShifted(src: Waypoint, e: Entity): Waypoint {
+            val w = Waypoint()
+            w.k = nextUid++
+            w.a = src.a + e.ak; w.b = src.b
+            w.c = src.c; w.d = src.d; w.e = src.e; w.f = src.f; w.g = src.g
+            if (count < slots.size) slots[count++] = w
+            return w
+        }
+
+        /** `c.a()` (c.java:54): clear pool, `j = 10000`. */
+        fun clear() {
+            slots.fill(null); count = 0; nextUid = 10000
+        }
+    }
 }

@@ -88,8 +88,16 @@ CLIPS = {
     "clip29": ("pack-3", "entry-029-marker-003"),  # ax46 spring/trap (bi[46]=29)
     "clip25": ("pack-3", "entry-025-marker-003"),  # ax15 grapple volume (bi[15]=25)  # ax9 ad-child spawn (bM :21198)
     "clip60": ("pack-3", "entry-060-marker-003"),  # ax7 ejection slot (bi[7]=60)
+    "clip51": ("pack-3", "entry-051-marker-003"),  # ax72 counterweight platform (bi[72]=51)
+    "clip63": ("pack-3", "entry-063-marker-003"),  # ax78 counterweight (bi[78]=63)
+    "clip25": ("pack-3", "entry-025-marker-003"),  # ax15 grapple volume (bi[15]=25)  # ax9 ad-child spawn (bM :21198)
+    "clip25": ("pack-3", "entry-025-marker-003"),  # ax15 grapple volume (bi[15]=25)  # ax9 ad-child spawn (bM :21198)
     "clip4": ("pack-3", "entry-004-marker-003"),   # ax6 trigger marker (bi[6]=4)
     "clip11": ("pack-3", "entry-011-marker-003"),  # ax19 pickup (bi[19]=11)
+    "clip19": ("pack-3", "entry-019-marker-003"),  # ax54 waypoint runner (bi[54]=19)
+    "clip36": ("pack-3", "entry-036-marker-003"),  # ax30 runner (bi[30]=36)
+    "clip40": ("pack-3", "entry-040-marker-003"),  # ax24 projectile (bi[24]=40)
+    "clip20": ("pack-3", "entry-020-marker-003"),  # ax58 lever/counterweight (bi[58]=20)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index

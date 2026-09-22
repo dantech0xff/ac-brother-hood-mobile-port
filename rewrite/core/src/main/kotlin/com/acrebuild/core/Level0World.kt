@@ -50,9 +50,19 @@ class Level0World(
             15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
             46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
             7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
+            72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
+            78 to 63,     // ax78 counterweight (bi[78]=63, proven)
+            79 to 0,      // ax79 palette prop (bi[79]=0, proven)
             6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
             19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
             74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
+            80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
+                          // entry-057: J(57)=null → invisible/vestigial, proven)
+            54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
+            30 to 36,     // ax30 runner variant (bi[30]=36, proven)
+            24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
+            56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
+            58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
         )
     }
 
@@ -92,6 +102,29 @@ class Level0World(
     override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
+
+    // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
+    // {uid,x,y,param-d,c,f,g} in f[1..7]; ax54/ax30 runners resolve their
+    // Z[1..4] uid chain into entity-shifted copies (aw(), uid base 10000).
+    // Declared before init{} — spawnEntities() calls waypointPool.clear().
+    val waypointPool = Waypoint.Pool()
+
+    // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
+    // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
+    var projectilePool: Array<Entity?>? = null
+
+    /** `k.ap[]` progress counters (k.java:4314/L() proven): `k.e(r5,uid)`
+     *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
+     *  verbatim — always slot 0). */
+    val kAp = IntArray(6)
+    fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
+    /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
+     *  arming clears bit128 (`P &= -129`) marking the slot live again. */
+    fun projectileAlloc(): Int {
+        val pool = projectilePool ?: return -1
+        for (i in pool.indices) if (((pool[i]?.P ?: 0) and 128) != 0) return i
+        return -1
+    }
     // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
     // `bb[]` at the drain after the npc pass — never iterate-mutated.
     val pendingInsert = ArrayList<Entity>()     // k.b() drain buffer
@@ -361,7 +394,11 @@ class Level0World(
         lockTarget = null
         clearClaim()
         marker = null; markerTag = -1
+        waypointPool.clear()
+        projectilePool = null
         for (f in level.entities) {
+            if (f.isEmpty()) continue
+            if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
             if (f.size < 7) continue
             val type = f[0]
             // ax67: per-record clip from bk[kind] (i.java:2633); others use
@@ -396,6 +433,15 @@ class Level0World(
             else if (type == 42) npcFsm.initAx42(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 13) npcFsm.initAx13(e, f.toList())
+
+            else if (type == 72) npcFsm.initAx72(e, f.toList(), this)
+            else if (type == 78) npcFsm.initAx78(e, f.toList(), this)
+            else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
+            else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
+            else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
+            else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
+            else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
+            else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -408,6 +454,10 @@ class Level0World(
             if (checkpointDead.contains(e.aw)) e.setAnim(139)
             npcs += e
         }
+        // R() (i.java:8131 proven): after all entities+waypoints load,
+        // ax54/ax30 runners resolve their Z[1..4] uid chain via aw().
+        for (e in npcs) if (e.ax == 54 || e.ax == 30)
+            npcFsm.resolveRunnerWaypoints(e, this)
     }
 
     /**
@@ -445,6 +495,7 @@ class Level0World(
      *  aP arena clamp — aliased to `boundMinX` (proven same field). */
     override var kR: Int get() = boundMinX; set(v) { boundMinX = v }
     override var kAE = 0                       // k.aE
+    override var kAF = 0                         // k.aF — meter fill
     override var kAH = 0                       // k.aH
     override var kAR = 0                       // k.aR — chase row
     override val kBu: Int get() = level.worldH // k.bu — level height px
@@ -452,6 +503,7 @@ class Level0World(
     override fun kBk(i: Int): Int = 0
     override fun jNextInt(): Int = rng.nextInt()
     override fun queueInsert(e: Entity) { pendingInsert += e }
+
 
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
@@ -501,6 +553,12 @@ class Level0World(
     override var kF: Entity? = null              // k.F
     override var iCe = false                     // i.ce static
     override var iBD = false                     // i.bD static
+    override var iBB = false                     // i.bB static (revive arm)
+    override var iBC = false                     // i.bC static
+    override var iBE = 0                         // i.bE static
+    override var iBF = 0                         // i.bF static
+    override var iBG = -1                        // i.bG static
+    override var iCF = false                     // i.cF static
     override var iBQ = 0                         // i.bQ static
     override var iCO: Entity? = null             // i.cO mount-align link
     override var iCg: Entity? = null             // i.cg
@@ -845,8 +903,19 @@ class Level0World(
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
+
+
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
+
+            else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
+            else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
+            else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
+            else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
+            else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
+            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
         }

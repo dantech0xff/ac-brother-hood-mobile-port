@@ -2194,7 +2194,7 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 if (e.S == 22 &&
                     e.e(world, e.W[2] / 20, e.W[3] / 20) == 20 &&
-                    e.W[3] <= player.W[1]) {
+                    e.W[3] > player.W[1]) {
                     e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 }
                 if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)
@@ -4612,5 +4612,925 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.bP > 20480) { e.bP = 20480; e.bO = 0 }
     if ((e.bP and -128) == 0 && (e.bO and -128) == 0) {
         e.bO = 0; e.bP = 0                                          // L122
+    }
+}
+
+
+// =====================================================================
+// ax72 + ax78 + ax79 — the counterweight pair + palette prop
+// (i.java init L384/L153/L386; ax78 tick `bA()` :17525, proven).
+// =====================================================================
+
+/** ax72 init (L384 :3605, proven): `az=r8[7]` + `Z=int[5]` —
+ *  `Z[0]=r8[8]`, `Z[1]=r8[9]<<8` (fixed-point drop offset),
+ *  `Z[2]=r8[10]`, `Z[3]=r8[11]`, `Z[4]=r8[12]` (linked ax78's `aw`).
+ *  Tick dispatch `case 72 → L897` — static, never ticks. */
+fun NpcFsm.initAx72(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = rf(8); e.Z[1] = rf(9) shl 8; e.Z[2] = rf(10)
+    e.Z[3] = rf(11); e.Z[4] = rf(12)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax78 init (L153 :3114, proven): `az=r8[7]` + shared tail. */
+fun NpcFsm.initAx78(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax79 init (L386 :3630, proven): `Z=int[2]` — `Z[0]=r8[7]` (palette),
+ *  `Z[1]=r8[8]`; `aa.l(Z[0])` pins the palette when a clip is bound.
+ *  No tick arm — static. */
+fun NpcFsm.initAx79(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(7); e.Z[1] = rf(8)
+    e.palette = e.Z[0]
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax78 `bA()` (i.java:17525, proven): the suspended counterweight.
+ *  `r0` = support probe `h(ak/20,(al+10)/20)` — cell≥5 counts.
+ *  - S0: unsupported → `al+=2` settle; supported → `i(1)` armed.
+ *  - S1: supported → hold; unsupported → `aj=1536` gravity → `i(2)`.
+ *  - S2 falling: `bt()` crush-sweep; `T==4&&U==0` → `k.A(14)` whoosh;
+ *    supported → `a(true)` land + `i(3)` + zeroed vel; else sub-step
+ *    settle loop (halve `ah` until `h` clears → `i(3)`).
+ *  - S3: crushed/settled — `bt()` sweep + same land/drop logic. */
+fun NpcFsm.tickAx78(e: Entity, w: Level0World, p: Entity) {
+    fun sup(cx: Int, cy: Int): Boolean {                   // h(cx,cy) v>=5
+        val v = w.collisionCell(cx, cy)
+        return if (v < 12) v >= 5 else true
+    }
+    val r0 = sup(e.ak / 20, (e.al + 10) / 20)              // L5 head
+    when (e.S) {
+        0 -> { if (r0) e.setAnim(1) else e.al += 2 }         // L5/L8
+        1 -> {                                             // L11
+            if (r0) return
+            e.aj = 1536; e.setAnim(2)
+        }
+        2 -> {                                             // L14
+            e.sweepHostiles(w)
+            if (e.T == 4 && e.U == 0) w.sfx(14)
+            if (r0) {
+                e.collideSides(w, true); e.setAnim(3)
+                e.aj = 0; e.ah = 0; return
+            }
+            e.aj = 1536
+            var r7 = sup(e.ak / 20, (e.al + ((e.ah + e.aj) shr 8)) / 20)
+            while (r7) {                                   // L25 sub-settle
+                e.aj = 0; e.ah = e.ah / 2
+                r7 = sup(e.ak / 20, (e.al + (e.ah shr 8)) / 20)
+                e.setAnim(3)
+            }
+        }
+        3 -> {                                             // L28
+            e.sweepHostiles(w)
+            if (r0) {
+                e.collideSides(w, true); e.aj = 0; e.ah = 0; return
+            }
+            e.aj = 1536
+        }
+        else -> {}                                         // L35
+    }
+}
+
+
+/** ax80 init (L389 :2734→ :3636, proven): `az = r8[7]` + shared tail —
+ *  identical shape to ax7/ax78. Tick hits `default → L897` (:4986-4987),
+ *  i.e. static, never ticks. Records exist only in pack-12 (`S=4`,
+ *  `az=300`). */
+fun NpcFsm.initAx80(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+// ============================================================ ax54 / ax30
+// = ax() waypoint runner (i.java:8170) — the flying-level enemy (packs 7,10)
+// + ax24 = projectile type whose S==0 record seeds the shared k.aX[50] pool
+// (i.java:2842 arm under `case 24 → L75`). All proven.
+
+/** `i(short[])` L214 arm (i.java:3281, proven) — shared ax54/ax30 init. */
+fun NpcFsm.initAx54(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 100
+    e.aB = 300
+    e.Z.fill(0)
+    e.Z[15] = rf(2)                                   // spawn x
+    e.Z[16] = rf(3)                                   // spawn y
+    e.Z[0] = rf(4)                                    // mode (0/1/2/3)
+    for (i in 1..14) e.Z[i] = rf(i + 6)               // Z[1..14] = r8[7..20]
+    if (e.Z[9] == 0) e.Z[10] = 1                      // L218
+    else if (e.Z[9] == 1 && e.Z[8] == 0) e.Z[8] = 3   // L218→L222
+    else if (e.Z[8] == 1 && e.Z[9] == 1) e.Z[9] = 0   // L226
+    e.aC = e.Z[6]; e.aD = e.Z[11]; e.aF = e.Z[12]
+    e.nl = e.Z[14]
+    e.setAnim(rf(5))                                   // L392 tail: i(r8[5])
+    e.refreshBoxes()                                   // L427 tail: t()
+    if (e.Z[0] == 0) return                            // L392 — no child
+    e.az = if (e.ax == 30) 99 else -1                  // L233/L234
+    // r8[0] = 68; ad = new i(r8): ax68 child spawned from the same record
+    // fields, bound `af = this` (i.java:3296-3300, proven)
+    val cf = f.toMutableList(); cf[0] = 68
+    val child = Entity(68, w.clips[26])                // bi[68]=26
+    child.aw = e.aw
+    child.setPositionPx(cf[2], cf[3])
+    child.P = cf[6]; child.av = (cf[6] and 1) != 0
+    for (i in child.Z.indices) if (7 + i < cf.size) child.Z[i] = cf[7 + i]
+    child.refreshBoxes()
+    child.av = false
+    child.af = e
+    e.ad = child
+    w.queueInsert(child)
+}
+
+/** `i.aw()` (i.java:8127, proven) — resolve up to 4 waypoint uids in
+ *  Z[1..4] into entity-shifted pool copies; `C` = resolved count.
+ *  Called once post-load by `R()` (i.java:8131) for ax54/ax30. */
+fun NpcFsm.resolveRunnerWaypoints(e: Entity, w: Level0World) {
+    for (i in 0..3) {
+        val src = w.waypointPool.find(e.Z[1 + i]) ?: continue
+        val copy = w.waypointPool.copyShifted(src, e)
+        e.Z[1 + i] = copy.k
+        e.runnerC++
+    }
+}
+
+/** `i.Q()` (i.java:7771, proven): face the player — `av = ak > aS.ak`. */
+private fun NpcFsm.runnerFacePlayer(e: Entity, p: Entity) { e.av = e.ak > p.ak }
+
+/** `i.d(int)` (i.java:7782, proven): player within 400/400 && `v()`. */
+private fun NpcFsm.runnerNearPlayer(e: Entity, w: Level0World): Boolean {
+    if (kotlin.math.abs(w.player.ak - e.ak) > 400) return false
+    if (kotlin.math.abs(w.player.al - e.al) > 400) return false
+    return e.inPlayV(w)
+}
+
+/** `i.j(int,int)` (i.java:8067, proven): walk-anim picker toward (x,y). */
+private fun NpcFsm.runnerWalkAnim(e: Entity, x: Int, y: Int) {
+    if (y < e.al) {                                  // target above
+        e.setAnim(1)
+        if (kotlin.math.abs(x - e.ak) > 20) e.setAnim(0)
+    } else {
+        e.setAnim(3)
+        if (kotlin.math.abs(x - e.ak) > 20) e.setAnim(4)
+        if (kotlin.math.abs(y - e.al) > 20) e.setAnim(2)
+        if (e.ax == 30) e.setAnim(4)                 // L14 ax30 remap
+    }
+}
+
+/** `i.k(int,int)` (i.java:8088, proven): arrive-anim picker toward (x,y). */
+private fun NpcFsm.runnerArriveAnim(e: Entity, x: Int, y: Int) {
+    if (y < e.al) {
+        e.setAnim(6)
+        if (kotlin.math.abs(x - e.ak) > 20) e.setAnim(5)
+    } else {
+        e.setAnim(8)
+        if (kotlin.math.abs(x - e.ak) > 20) e.setAnim(9)
+        if (kotlin.math.abs(y - e.al) > 20) e.setAnim(7)
+        if (e.ax == 30) e.setAnim(9)
+    }
+}
+
+/** `i.i(int,int)` (i.java:7795, proven): anim-set selector —
+ *  0→i(r6), 1→i(r6+23), 2→i(22), 3→i(r6). */
+private fun NpcFsm.animVariant(e: Entity, set: Int, base: Int) {
+    when (set) { 1 -> e.setAnim(base + 23); 2 -> e.setAnim(22); else -> e.setAnim(base) }
+}
+
+/** `i.b(int,int,int,int)` (i.java:8026, proven): dominant-direction index
+ *  {1,2,3} from (x1,y1)→(x2,y2) — 5120px dominance threshold. */
+private fun NpcFsm.dirVariant(x1: Int, y1: Int, x2: Int, y2: Int): Int {
+    val dx = x2 - x1; val dy = y2 - y1
+    if (dx == 0) return 2
+    if (kotlin.math.abs(dx) <= 5120) return 2
+    val slope = (dy * 100) / dx
+    if (slope == 0) return 2
+    if (kotlin.math.abs(dy) <= 5120) return 2
+    return if (slope < 0) (if (dx > 0) 1 else 3)
+           else (if (dx > 0) 3 else 1)
+}
+
+/** `i.a(int, boolean)` (i.java:7826, proven): projectile volley — arms
+ *  `count` free `k.aX` slots (av() = first with P&128 clear). Launch point
+ *  `am/an` = X-center<<7 for ax54/30/56 else W-center<<7; `copyAim` keeps
+ *  e.ao/ap, else aim = wpF point or the player W-center<<7. Angular fan
+ *  spreads count>1 volleys ±r02 around atan2 aim; speed 2048 (ax54 Z[9]==2
+ *  → 1280; ax30 Z[9]==2&&count==3&&first → 2560). Velocity =
+ *  (dir*speed)/dist + gravity. Facing av/P|1, subpixel seed N/O, anim
+ *  i(Z[8],dirVar) on ax54 / i(Z[3],dirVar) on ax30, aG = Z[9] (both),
+ *  af = owner, aC = n. First shot of a volley: ax30 → sfx27 else sfx16. */
+private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
+                               w: Level0World) {
+    val pool = w.projectilePool ?: return             // unseeded → inert (inferred)
+    val r0 = if (count > 1) count - 1 else -1         // L6 arm (inferred —
+    // jadx dropped the assignment; -1 → r02=0 = no fan for single shots)
+    val r02 = r0 * Trig.M / 360
+    for (r10 in 0 until count) {
+        val slot = w.projectileAlloc()               // av()
+        if (slot == -1) return
+        val r04 = pool[slot]!!
+        // L32/L35: launch point — X-center for ax54/30/56 else W-center
+        if (e.ax == 54 || e.ax == 30 || e.ax == 56) {
+            r04.am = (e.X[0] + e.X[2]) shl 7
+            r04.an = (e.X[1] + e.X[3]) shl 7
+        } else {
+            r04.am = (e.W[0] + e.W[2]) shl 7
+            r04.an = (e.W[1] + e.W[3]) shl 7
+        }
+        if (copyAim) { r04.ao = e.ao; r04.ap = e.ap } // L38
+        else {                                       // L40
+            if (e.ax == 54 || e.ax == 30 || e.ax == 56 || e.ax == 64) {
+                val f = e.wpF
+                if (f != null) { r04.ao = f.a shl 8; r04.ap = f.b shl 8 }
+                else {
+                    r04.ao = (w.player.W[0] + w.player.W[2]) shl 7
+                    r04.ap = (w.player.W[1] + w.player.W[3]) shl 7
+                }
+            } else { r04.ao = r04.am + 25600; r04.ap = r04.an }
+            e.ao = r04.ao; e.ap = r04.ap
+        }
+        var r12 = r04.ao - r04.am
+        var r13 = r04.ap - r04.an
+        var r14 = e.h(r12, r13)
+        if (count > 1) {                             // fan math (L54-L80)
+            var r05 = Trig.atan2(r13, r12)  // j.b(r12,r13) = atan2(y=r13,x=r12)
+            if (r10 == 0 && (count % 2) != 0) {
+                // first shot of odd volley goes straight — L80 re-aim
+                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
+                r14 = e.h(r12, r13)
+            } else if ((r10 % 2) != 0) {             // odd slot → +side
+                val r15 = if ((count % 2) == 0)
+                    r05 + (r02 * ((r10 % 2) + (r10 / 2)))
+                else if (r10 == 1)
+                    r05 + (r02 * ((r10 % 2) + (r10 / 2))) / 2
+                else r05 + (r02 * ((r10 % 2) + (r10 / 2)))
+                r04.ao = r04.am + ((r14 * Trig.sin(r15)) shr 8)
+                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r15)) shr 8)
+                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
+                r14 = e.h(r12, r13)
+            } else if (r10 != 0) {                   // even slot → -side
+                val r152 = if ((count % 2) == 0)
+                    r05 - (r02 * (r10 / 2))
+                else if (r10 == 0)
+                    r05 - ((r02 * ((r10 / 2) + 1)) / 2)
+                else r05 - (r02 * ((r10 / 2) + 1))
+                r04.ao = r04.am + ((r14 * Trig.sin(r152)) shr 8)
+                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r152)) shr 8)
+                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
+                r14 = e.h(r12, r13)
+            }
+        }
+        if (r14 != 0) {                              // L82 velocity
+            var speed = 2048
+            if (e.ax == 54 && e.Z[9] == 2) speed = 1280
+            else if (e.ax == 30 && e.Z[9] == 2 && count == 3 && r10 == 0)
+                speed = 2560
+            r04.ag = (r12 * speed) / r14
+            r04.ah = ((r13 * speed) / r14) + w.kY
+        }
+        // L104: facing + flags
+        r04.av = r04.ao < r04.am
+        if (!r04.av) r04.P = r04.P or 1 else r04.P = r04.P and -2
+        r04.N = r04.am; r04.O = r04.an
+        r04.ak = r04.am shr 8; r04.al = r04.an shr 8
+        r04.P = r04.P and -129; r04.P = r04.P and -33; r04.P = r04.P or 16
+        val r06 = dirVariant(r04.am, r04.an, r04.ao, r04.ap)
+        when (e.ax) {
+            54 -> animVariant(r04, e.Z[8], r06)      // i(Z[8], r06)
+            30, 56 -> animVariant(r04, e.Z[3], r06)  // i(Z[3], r06)
+            else -> animVariant(r04, 0, r06)         // i(0, r06)
+        }
+        r04.refreshBoxes()                           // t()
+        r04.aG = if (e.ax == 54 || e.ax == 30) e.Z[9]
+                 else if (e.ax == 56) e.Z[4] else -1
+        r04.af = e                                   // owner link
+        r04.aC = e.nl
+        if (e.ax == 54 && e.Z[0] == 0) return        // L129 early-exit
+        if (r10 == 0) w.sfx(if (e.ax == 30) 27 else 16)  // L139/L140
+    }
+}
+
+/** `i.ax()` (i.java:8170, proven transcription) — the flying-level
+ *  waypoint runner FSM. `bY/bZ` are never written on this path (stay 0):
+ *  the homing delta is the waypoint's position in the scroll frame, so
+ *  `bt.a/b` act as a direction vector × `bt.f` speed — verbatim. */
+fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()                                            // e() s() preamble
+    if (!e.runnerBz) e.runnerBz = e.al > w.kP + e.Z[7]          // L7 latch
+    val chainDone = e.bs >= e.runnerC
+    if (e.runnerBz && e.Z[0] != 3 && chainDone && !e.inPlayV(w)) {
+        w.removeEntity(e); return                              // L10 k.c(this)
+    }
+    if (e.runnerBz)                                            // L26
+        e.wpBt = if (!chainDone) w.waypointPool.find(e.Z[e.bs + 1]) else null
+    e.Z[13] = e.Z[13] - 1                                      // L29 lifetime
+    if (e.wpF == null) {                                       // companion bind
+        e.wpF = w.waypointPool.find(e.Z[5])
+        e.wpF?.let { it.h = it.a - e.ak; it.i = it.b - e.al }
+    }
+    if (!e.runnerB && !e.iE && e.wpBt != null) {               // L35 arm leg
+        e.runnerB = true
+        val bt = e.wpBt!!
+        val dx = (bt.a - e.bY) shl 8; val dy = (bt.b - e.bZ) shl 8
+        val dist = e.h(dx, dy)
+        if (dist > 0) {
+            e.ag = (dx * (bt.f shl 8)) / dist
+            e.ah = (dy * (bt.f shl 8)) / dist
+        }
+        e.ah += w.kY
+        e.av = bt.a < e.bY                                     // L46/L47
+        e.ad?.setAnim(1)
+    }
+    when (e.S) {                                               // L51
+        10 -> {                                                // L113 exit
+            e.ah = 0; e.ag = 0; e.az = -1
+            e.iE = false; e.runnerB = false; e.bs = 4
+            if (e.animFinished()) e.P = e.P or 64
+            if (e.al > w.kP + 240 && e.Z[0] != 3) { w.removeEntity(e); return }
+        }
+        in 0..4 -> {                                           // L53 walk
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S != 4) {
+                if (e.S == 0 && f != null) e.av = f.a < e.ak   // L56/L58
+            } else e.av = false                                // L64
+            if (e.Z[0] != 2) {
+                val r14 = e.aC; e.aC = r14 - 1
+                if (r14 < 0 && e.Z[13] < 0) {                  // L66 timers out
+                    if (f != null) {
+                        if (e.inPlayV(w)) runnerArriveAnim(e, f.a, f.b)
+                    } else if (runnerNearPlayer(e, w)) {
+                        runnerArriveAnim(e, p.ak, p.al)        // L77
+                    }
+                }
+            }
+        }
+        in 5..9 -> {                                           // L80 attack
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S == 9 && f != null) e.av = f.a < e.ak       // L83
+            else if (e.S == 5) e.av = false                    // L91
+            if (e.animFinished() && e.U == 0) {                // L93
+                e.P = e.P or 64
+                val r16 = e.aF - 1; e.aF = r16
+                if (r16 <= 0) {
+                    e.aF = e.Z[12]
+                    runnerBurst(e, e.Z[10], e.aD < e.Z[11], w) // a(Z[10],flag)
+                    e.aD--
+                    if (e.aD <= 0) e.P = e.P and -65
+                }
+            }
+            if ((e.P and 64) == 0 && e.animFinished()) {       // L106
+                e.aC = e.Z[6]; e.aF = e.Z[12]; e.aD = e.Z[11]
+                if (f != null) runnerWalkAnim(e, f.a, f.b)
+                else runnerWalkAnim(e, p.ak, p.al)
+            }
+        }
+        else -> {}
+    }
+    // L123: homing caps — clamp velocity toward the waypoint vector
+    if (e.runnerB && e.wpBt != null) {
+        val bt = e.wpBt!!
+        if ((kotlin.math.abs(bt.a - e.bY) shl 8) <= kotlin.math.abs(e.ag))
+            e.ag = (bt.a - e.bY) shl 8
+        if ((kotlin.math.abs(bt.b - e.bZ) shl 8) <= kotlin.math.abs(e.ah))
+            e.ah = w.kY + ((bt.b - e.bZ) shl 8)
+        if (bt.a == e.bY && bt.b == e.bZ) {                    // L131 arrive
+            e.ah = 0; e.ag = 0; e.runnerB = false
+            e.runnerD = bt.d; e.iE = true
+            e.ad?.setAnim(0)
+        }
+    }
+    e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }      // L138 pin F
+    if (e.iE) {                                                // L141 dwell
+        val r19 = e.runnerD - 1; e.runnerD = r19
+        if (r19 < 0) { e.bs++; e.iE = false }
+        else {
+            e.ah = w.kY
+            e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }
+        }
+    }
+    e.integrate()                                              // L148 b(true)
+    // b(true) runs bF() every tick on flying levels — bh[k.aj]==3
+    // (i.java:4906, proven): waypoint coords = ak / al-kP.
+    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+}
+
+/** ax24 init (L75/L84 arms of `i(short[])`, i.java:2837, proven) —
+ *  `aB = r8[7]`; the S(r8[5])==0 record additionally seeds the shared
+ *  projectile pool: `k.aX = new i[aW(50)]` filled with `a(24, bi[24]=40,
+ *  S0, az200)` children — `P = this.P`, `aG = -1`, inserted via `k.b`.
+ *  The ax24 tick FSM (`ba()`, i.java:13742) is a separate slice. */
+fun NpcFsm.initAx24(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    if (rf(5) == 0) {
+        e.P = e.P or 640
+        if (w.projectilePool == null)
+            w.projectilePool = arrayOfNulls(50)               // k.aW = 50
+        val pool = w.projectilePool ?: return
+        for (i in 0 until 50) {
+            val child = e.spawnChildFx(w, 24, 40, 0, 200)     // a(24,40,0,200)
+            pool[i] = child
+            child.P = e.P
+            w.queueInsert(child)                            // k.b(aK)
+            child.aG = -1
+        }
+    }
+    e.aB = rf(7)
+}
+
+// ============================================================ ax56 = ay()
+// Flyer variant (i.java:8385, proven): same clip/burst family as ax54 but
+// waypoint-free — lerps to (aq,ar) at Z[12] speed, S13-15 travel anims,
+// universal Z[8] attack cooldown, Z[10] move modes {0 hold,1 x,2 y},
+// Z[11] target offset applied at init. All proven.
+
+/** `i.i(short[])` L235 arm (i.java:3336, proven) — ax56 init. */
+fun NpcFsm.initAx56(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 100
+    e.aB = 300
+    e.Z.fill(0)
+    e.Z[0] = rf(4)
+    for (i in 1..12) e.Z[i] = rf(i + 7)               // Z[1..12] = r8[8..19]
+    if (e.Z[4] == 0) {                                // L245 path
+        e.Z[5] = 1
+    } else if (e.Z[4] == 1) {                         // L239
+        if (e.Z[3] == 0) e.Z[3] = 3                   // L243
+        e.Z[5] = 1; e.Z[6] = 1; e.Z[7] = 0
+        if (e.Z[3] == 1 && e.Z[4] == 1) e.Z[4] = 0    // L247 (dead — Z3!=0 now)
+    }
+    e.aC = e.Z[2]; e.aD = e.Z[6]; e.aF = e.Z[7]
+    e.nl = e.Z[9]
+    e.aq = e.ak; e.ar = e.al
+    if (e.Z[10] == 1) e.aq += e.Z[11]                 // L253 x-shift
+    else if (e.Z[10] == 2) e.ar += e.Z[11]            // y-shift
+    val bj = intArrayOf(19, 68)                        // k.bj (k.java:8443)
+    val sel = rf(7)
+    e.clip = w.clips[if (sel in bj.indices) bj[sel] else 19]  // L21 aa=k.r(bj[r8[7]])
+    e.setAnim(rf(5))                                   // L392 tail: i(r8[5])
+    e.refreshBoxes()                                   // L427 tail: t()
+}
+
+/** `i.az()` (i.java:8600+, proven): still traveling — pos != (aq,ar)
+ *  && Z[10]!=0 && !G. */
+private fun NpcFsm.runnerTraveling(e: Entity): Boolean {
+    if (e.aq == e.ak && e.ar == e.al) return false    // at target → false
+    if (e.Z[10] == 0) return false                    // mode 0 → false
+    if (e.runnerG) return false                       // pattern done → false
+    return true
+}
+
+/** `i.l(int,int)` (i.java:8109, proven): travel anim — 15/14 when the
+ *  target is above/below, then 13 while x-mismatch. */
+private fun NpcFsm.runnerTravelAnim(e: Entity, x: Int, y: Int) {
+    if (y < e.al) e.setAnim(15) else e.setAnim(14)
+    if (x != e.ak) e.setAnim(13)
+}
+
+/** `i.ay()` (i.java:8385, proven transcription). Differences vs ax():
+ *  latch is `al > k.P` (no offset); L18 decrements Z[8] every armed tick
+ *  (attack cooldown, not lifetime); removal only when offscreen AND below
+ *  k.P+240; no waypoint chain — (aq,ar) destination + az() travel check;
+ *  burst fires on frame `T==3 && U==0` with timers Z[7]/Z[6]. */
+fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()                                            // e() s() preamble
+    if (!e.runnerBz) e.runnerBz = e.al > w.kP                 // L7 latch
+    if (!e.runnerBz) return                                 // L10 unarmed
+    if (!e.inPlayV(w) && e.al > w.kP + 240) {               // L14 offscreen
+        w.removeEntity(e); return
+    }
+    e.Z[8] = e.Z[8] - 1                                     // L18 cooldown
+    if (e.wpF == null) {                                    // companion bind
+        e.wpF = w.waypointPool.find(e.Z[5])
+        e.wpF?.let { it.h = it.a - e.ak; it.i = it.b - e.al }
+    }
+    when (e.S) {
+        10 -> {                                             // L152 exit
+            e.ah = 0; e.ag = 0; e.az = -1
+            if (e.animFinished()) e.P = e.P or 64
+            if (e.al > w.kP + 240) { w.removeEntity(e); return }
+        }
+        in 0..4 -> {                                        // L26 walk
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S == 4) e.av = false                      // L37
+            else if (e.S == 0 && f != null)                 // L36→L29
+                e.av = f.a < e.ak
+            if (e.Z[0] == 2) return                         // L160 mode-2 hold
+            val r12 = e.aC; e.aC = r12 - 1
+            if (r12 >= 0 || e.Z[8] >= 0) {                  // L55/L59 windup
+                if (runnerTraveling(e)) runnerTravelAnim(e, e.aq, e.ar)
+            } else {                                        // Z[8]<0 → attack
+                if (f != null) {
+                    if (e.inPlayV(w)) runnerArriveAnim(e, f.a, f.b)
+                } else if (runnerNearPlayer(e, w)) {
+                    runnerArriveAnim(e, p.ak, p.al)         // L51
+                }
+            }
+        }
+        in 5..9 -> {                                        // L117 attack
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S == 5) e.av = false                      // L128
+            else if (e.S == 9 && f != null)                 // L127→L120
+                e.av = f.a < e.ak
+            if (e.T == 3 && e.U == 0) {                     // L130 frame-3
+                e.P = e.P or 64
+                val r17 = e.aF - 1; e.aF = r17
+                if (r17 <= 0) {
+                    e.aF = e.Z[7]
+                    runnerBurst(e, e.Z[5], e.aD < e.Z[6], w)
+                    e.aD--
+                    if (e.aD <= 0) e.P = e.P and -65
+                }
+            }
+            if ((e.P and 64) == 0 && e.animFinished()) {    // L143-L145
+                e.aC = e.Z[2]; e.aF = e.Z[7]; e.aD = e.Z[6]
+                if (f != null) runnerWalkAnim(e, f.a, f.b)
+                else runnerWalkAnim(e, p.ak, p.al)
+            }
+        }
+        in 13..15 -> {                                      // L63 travel
+            e.av = e.aq < e.ak                              // L65
+            if (!runnerTraveling(e) || e.runnerG) {         // L70 arrived
+                e.ah = 0; e.ag = 0
+                if (e.wpF != null) runnerWalkAnim(e, e.wpF!!.a, e.wpF!!.b)
+                else runnerWalkAnim(e, p.ak, p.al)          // L74
+            } else {
+                if (e.Z[10] == 1) {                         // L79 x-move
+                    e.ag = if (e.aq > e.ak) e.Z[12] shl 8
+                           else -(e.Z[12] shl 8)
+                    if (kotlin.math.abs(e.aq - e.ak) < e.Z[12])
+                        e.ag = (e.aq - e.ak) shl 8
+                } else {                                    // L88 y-move
+                    e.ah = if (e.ar > e.al) e.Z[12] shl 8
+                           else -(e.Z[12] shl 8)
+                    if (kotlin.math.abs(e.ar - e.al) < e.Z[12])
+                        e.ah = (e.ar - e.al) shl 8
+                }
+                // L94: cooldown → attack-transition
+                val r15 = e.aC; e.aC = r15 - 1
+                if (r15 < 0 && e.Z[8] < 0) {
+                    val f = e.wpF
+                    if (f != null) {
+                        e.av = f.a < e.ak                     // L102
+                        if (e.inPlayV(w)) runnerArriveAnim(e, f.a, f.b)
+                    } else {
+                        runnerFacePlayer(e, p)                // L99 Q()
+                        if (runnerNearPlayer(e, w)) runnerArriveAnim(e, p.ak, p.al)
+                    }
+                    e.ah = 0; e.ag = 0                        // L114
+                }
+            }
+        }
+        else -> {}                                          // L159 default
+    }
+    e.integrate()
+    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)   // bF() tail
+}
+
+// ============================================================ ax24 = ba()
+// Projectile FSM (i.java:13742, proven) — flight arm for S∈0..4|22..28
+// (retire to pool on offscreen; aG 1=trail / 3=chain / else hit), then a
+// 45-state per-S table: impact anims, homing legs, lobbed arcs, the S20
+// heal-shrine arm, pinned S31/40 children, explode S35/36.
+// `bc()`/`bd()` = projectile-vs-entity sweeps (i.java:14396/14538).
+
+/** `i.p(int,int)` (i.java:18031, proven): lay a child ax24 at an offset —
+ *  S19 parents spawn S40, others S31. */
+private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
+    val s = if (e.ax == 24 && e.S == 19) 40 else 31
+    val child = e.spawnChildFx(w, 24, 40, s, e.az + 10)
+    child.av = false
+    child.ak = e.ak + dx; child.al = e.al + dy
+    child.ao = dx; child.ap = dy
+    child.ag = 0; child.ah = 0
+    child.refreshBoxes()
+    child.P = child.P or 16
+    child.af = e
+    w.queueInsert(child)
+}
+
+/** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
+ *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
+ *  semantics; `d(8,…)` floatie spawns remain unported (noted). */
+private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
+    var hit = false
+    for (r0 in w.npcs) {
+        if (e.X == null) break
+        when (r0.ax) {
+            54 -> {                                        // L26-fallback arm
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30) continue
+                r0.ad?.let { if (Entity.overlapStrict(it.W, e.X)) {
+                    it.setAnim(2); w.countKill(r0.aw); r0.setAnim(10)
+                    hit = true } }
+                if (Entity.overlapStrict(r0.W, e.X)) { r0.setAnim(10)
+                    w.countKill(r0.aw); hit = true }
+                if (hit) { e.setAnim(9); return true }
+            }
+            30 -> {
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30 ||
+                    e.af!!.ax == 56) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                r0.aB -= 20; r0.cGCount = 6
+                if (r0.aB <= 0) {
+                    r0.cGCount = 0; r0.setAnim(10); w.countKill(r0.aw)
+                    r0.ad?.setAnim(2)
+                }
+                e.setAnim(9); hit = true; return true
+            }
+            56 -> {
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 56 ||
+                    e.af!!.ax == 30) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                r0.setAnim(10); w.countKill(r0.aw)
+                e.setAnim(9); hit = true; return true
+            }
+            67 -> {
+                if (r0.S != 19 && r0.S != 21 && r0.S != 23 && r0.S != 32 &&
+                    r0.S != 35 && r0.S != 38 && r0.S != 41 && r0.S != 43) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                if (e.S != 9) r0.aB--
+                if (r0.aB <= 0) r0.setAnim(r0.S + 1)
+                e.setAnim(9); hit = true
+            }
+            24 -> {
+                if (r0.S != 19 || !Entity.overlapStrict(r0.W, e.X)) continue
+                r0.setAnim(20); e.setAnim(9); hit = true
+            }
+            32 -> {
+                if ((r0.l and 1) == 0) continue
+                if (r0.S in 21..27 && !w.iCF) break          // cF gate → abort sweep
+                if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
+                if (r0.aB > 0) {
+                    r0.aB -= Entity.WEAPON_K[w.weaponSlot]
+                    when (r0.iP) {
+                        0 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(15); r0.cGCount = 0 }
+                        2 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(19); r0.cGCount = 0 }
+                        3 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(25); r0.cGCount = 0 }
+                        4 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(36); r0.cGCount = 0 }
+                    }
+                }
+                hit = true
+            }
+        }
+    }
+    return hit
+}
+
+/** `i.bd()` (i.java:14538, proven): non-flying sweep — ax19 S2→i(3),
+ *  ax17/ax23 damage `H[k.au]` via `aB` with death anims. */
+private fun NpcFsm.projSweepBd(e: Entity, w: Level0World): Boolean {
+    var hit = false
+    for (r0 in w.npcs) {
+        if (e.X == null) break
+        if (!Entity.overlapStrict(r0.W, e.X)) continue
+        if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); hit = true }
+        if (e.S != 17) continue
+        when (r0.ax) {
+            17 -> { if (r0.S != 69) {
+                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
+                if (r0.aB <= 0) r0.setAnim(129) else r0.setAnim(68)
+                hit = true } }
+            23 -> { if (r0.S == 79) {
+                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
+                if (r0.aB <= 0) r0.setAnim(79) else r0.setAnim(73)
+                hit = true } }
+        }
+    }
+    return hit
+}
+
+/** `i.ba()` (i.java:13742, proven transcription). */
+fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
+    val inFlight = (e.S in 0..4) || (e.S in 22..28)      // L7/L15 gate
+    if (inFlight && (e.P and 128) == 0) {                // live projectiles
+        if (!e.inPlayV(w)) {                             // L17 offscreen retire
+            e.P = e.P or 128; e.P = e.P and -17
+            e.aG = -1; e.af = null; e.c = null
+        } else when (e.aG) {
+            1 -> {                                       // L23 trail type
+                val r1 = e.aC; e.aC = r1 - 1
+                if (r1 < 0) {
+                    runnerBurst(e, 9, false, w)          // a(9,false)
+                    // if (e.S == 22) → d(9,ak,al) floatie — unported
+                    e.P = e.P or 128; e.P = e.P and -17; e.af = null
+                }
+            }
+            3 -> {                                       // L31 chain type
+                val c = e.c
+                if (c != null && Entity.overlapStrict(e.W, c.W)) {
+                    e.aG = -1; e.setAnim(9)
+                    when (c.ax) { 56 -> c.setAnim(10); 64 -> c.setAnim(5) }
+                    w.countKill(e.aw); e.c = null
+                }
+            }
+            else -> {                                    // L44 player hit
+                if (Entity.overlapStrict(e.W, p.W)) {
+                    p.applyHit(38, 0, e, w)              // k.aS.a(38,0,0,this)
+                    e.aG = -1; e.af = null
+                    if (e.S in 0..4) { w.removeEntity(e); return }
+                }
+            }
+        }
+    }
+    when (e.S) {
+        6 -> {                                           // L171 drop line
+            if (e.al > e.ap) e.setAnim(9)
+            e.ap += w.kX
+            if (projSweepBc(e, w)) e.setAnim(9)
+        }
+        7 -> { val r = e.aC - 1; e.aC = r; if (r < 0) e.setAnim(9) }  // L166
+        8 -> if (e.animFinished()) { w.removeEntity(e); return }    // L87
+        9, 10 -> {                                       // L65 impact anim
+            if (e.T == 1 && e.U == 0) w.sfx(12)          // L67 sfx
+            e.refreshBoxes()                             // L69 t()
+            if (Entity.MISSION_BH[w.kAj] == 3) {
+                e.ah = 0; e.ag = 0
+                if (e.af == p) projSweepBc(e, w)
+                else if (e.X != null && Entity.overlapStrict(e.X, p.W))
+                    p.applyHit(38, 0, e, w)              // L75
+            } else {
+                projSweepBd(e, w)                        // L79 bd()
+                if (e.X != null && Entity.overlapStrict(e.X, p.W))
+                    p.applyHit(4, 0, e, w)
+            }
+            if (e.animFinished()) { e.af = null; w.removeEntity(e); return }
+        }
+        11 -> {                                          // L94 homing leg
+            val af = e.af ?: return
+            val cH = af.cHWaypoints ?: return
+            e.aC--
+            if (e.aC <= 0) {
+                e.ag = 0; e.ah = w.kY
+                e.bY = cH[e.ap][0]; e.bZ = cH[e.ap][1]
+                e.posFromWaypoint(w); e.setAnim(9)
+            } else {
+                val r0 = cH[e.ap][0] - e.bY; val r02 = cH[e.ap][1] - e.bZ
+                e.ag = (r0 shl 8) / e.aC; e.ah = ((r02 shl 8) / e.aC) + w.kY
+            }
+        }
+        12 -> { e.aC--; if (e.aC < 0) { w.removeEntity(e); return } } // L90
+        13 -> { if (e.animFinished()) e.setAnim(14); e.j--            // L101
+            if (e.bZ <= e.ap - 30) e.setAnim(45)
+            else if (e.projK) e.setAnim(45)
+            else if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        14 -> { e.j--                                    // L103 lobbed
+            if (e.bZ <= e.ap - 30) e.setAnim(45)
+            else if (e.projK) e.setAnim(45)
+            else if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        15 -> {                                          // L134
+            if (e.T == 1 && e.U == 0) w.sfx(12)
+            if (e.animFinished()) w.removeEntity(e)
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        in 16..18, in 41..43 -> {                        // L148
+            if (!e.inPlayV(w)) { w.removeEntity(e); return }
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                if (e.S in 16..18) { w.removeEntity(e); return }
+                p.applyHit(38, 0, e, w)
+            }
+        }
+        19 -> {                                          // L178 lay-child
+            if (!e.projB) { projLay(e, 0, 0, w); e.projB = true }
+        }
+        20 -> {                                          // L181 heal shrine
+            e.az = 100; e.P = e.P and -129
+            if (Entity.overlapStrict(p.W, e.W)) {
+                w.iBB = true; w.iBC = true; w.iBD = true
+                w.iBF = 100; w.iBE = 999; w.iBG = -1
+                p.setAnim(21)
+                val r03 = 100 - w.kAE
+                w.kAF = if (e.aB >= r03) r03 else e.aB
+                w.iBh = 0                                  // bh = 0 (i.bh)
+                // e = 30 — i.e static unmapped (script var)
+                if (w.kAJ != 0) { w.kX = w.kAJ; w.kAJ = 0 }
+                w.sfx(25)
+            }
+        }
+        31, 40 -> {                                      // L53 pinned child
+            val af = e.af
+            if (af == null) {
+                e.ag = 0; e.ah = 0
+                if (e.animFinished()) { w.removeEntity(e); return }
+            } else {
+                e.ak = af.ak + e.ao; e.al = af.al + e.ap
+                if (af.ax == 24 && af.S == 19) { e.ag = 0; e.ah = 0 }
+            }
+        }
+        35 -> {                                          // L193 explode-arm
+            e.projB = true
+            if (Entity.overlapStrict(e.W, p.W) ||
+                e.e(w, e.ak / 20, e.al / 20) >= 20) {
+                e.setAnim(36); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+            }
+        }
+        36 -> {                                          // L199 explode
+            e.projB = true
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) p.applyHit(4, 0, e, w)
+            if (e.animFinished()) { w.removeEntity(e); return }
+        }
+        44 -> if (e.animFinished()) { w.removeEntity(e); return }   // L163
+        45 -> {                                          // L117 lobbed sib
+            e.j--
+            if (e.bZ <= e.ap) {
+                if (e.projK && e.j <= 0) { e.projK = false; e.setAnim(15) }
+                else if (!e.projK) e.setAnim(15)
+            }
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        else -> {}                                       // L206 inert
+    }
+    e.integrate()
+}
+
+// =========================================================================
+// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
+// =========================================================================
+
+/**
+ * `i.be()` (i.java:14585, proven): "someone standing on the lever zone" —
+ * `W ∩ aS.W` short-circuits true; otherwise scans `k.bd[]` for ax∈{11,15}
+ * entities overlapping `W`, marks each `P|=16` (pressure flash) and stays
+ * true while any overlap holds. Loop marks ALL overlapping (no break).
+ */
+private fun leverOccupied(e: Entity, w: Level0World, p: Entity): Boolean {
+    if (Entity.overlapStrict(e.W, p.W)) return true
+    var hit = false
+    for (n in w.npcs) {                                   // k.bd[] scan
+        if (n.ax != 15 && n.ax != 11) continue
+        if (Entity.overlapStrict(e.W, n.W)) { n.P = n.P or 16; hit = true }
+    }
+    return hit
+}
+
+/**
+ * `i.bg()` (i.java:14633, proven): ax58 lever/counterweight FSM.
+ * `ab()` (claimActive) hands the tick to `aa()` (the claim-script VM).
+ * Odd states {0,5,7,9,11} wait for `be()` (lever zone occupied) →
+ * `i(S+1)` + one-shot bind: `k.C=this`, `h(k.s(Z0)); k(k.s(Z0))` arms the
+ * bound claim script, `Z0=-1`, `k.A(21)`. Even states {1,6,8,10,12} latch
+ * `P|64` once the anim ends and fall back `i(S-1)` when the zone clears.
+ * S2 runs the shared `a()` interact sweep, a crush arm (`W∩aS.X` while the
+ * player isn't in S22 → `i(3)` + sfx21), releases the `k.L` claim when it's
+ * ours (`k.m()`), then `G()` drops `ae`. S3 (played once) → `i(4)` + the
+ * same bind tail. S4 parks (`P|32`).
+ */
+fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()
+    if (e.claimActive()) { e.runClaimScript(w); return }  // ab() → aa()
+    when (e.S) {
+        0, 5, 7, 9, 11 -> {                               // L9 — armed wait
+            if (!leverOccupied(e, w, p)) return           // be()
+            e.setAnim(e.S + 1)
+            if (e.Z[0] > 0) {
+                w.kC = e                                // k.C = this
+                e.bindScript(w.kSIndex(e.Z[0]), w)        // h(k.s(Z0))
+                e.scriptKeyStep(w.kSIndex(e.Z[0]), w)     // k(k.s(Z0))
+                e.Z[0] = -1
+            }
+            w.sfx(21)                                   // k.A(21)
+        }
+        1, 6, 8, 10, 12 -> {                            // L16 — open latch
+            if (e.animFinished() && (e.P and 64) == 0) e.P = e.P or 64
+            if (!leverOccupied(e, w, p)) e.setAnim(e.S - 1)
+        }
+        2 -> {                                          // L24 — active lever
+            e.pushContact(w)                            // a()
+            if (Entity.overlapStrict(e.W, p.X) && p.S != 22) {
+                e.setAnim(3); w.sfx(21)
+            }
+            if (w.claimed != null && w.claimed!!.aw == e.aw) w.clearClaim()  // k.m()
+            e.releaseAe()                               // G()
+        }
+        3 -> {                                          // L39 — fired
+            if (!e.animFinished()) return
+            e.setAnim(4)                                // L41 (S==3 always)
+            if (e.Z[0] > 0) {                           // L44 bind tail
+                e.bindScript(w.kSIndex(e.Z[0]), w)
+                e.scriptKeyStep(w.kSIndex(e.Z[0]), w)
+                e.Z[0] = -1
+            }
+        }
+        4 -> e.P = e.P or 32                            // L36 — parked
+        else -> {}                                      // L47 inert
     }
 }
