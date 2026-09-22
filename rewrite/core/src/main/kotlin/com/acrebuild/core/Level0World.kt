@@ -63,6 +63,7 @@ class Level0World(
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
             56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
             58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
+            60 to 71,     // ax60 lift/piston platform (bi[60]=71, proven)
         )
     }
 
@@ -440,6 +441,7 @@ class Level0World(
             else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
             else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
+            else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
@@ -915,6 +917,7 @@ class Level0World(
             else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
             else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
             else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
+            else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
