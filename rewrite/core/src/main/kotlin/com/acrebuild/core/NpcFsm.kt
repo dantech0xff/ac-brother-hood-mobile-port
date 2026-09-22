@@ -2194,7 +2194,7 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 if (e.S == 22 &&
                     e.e(world, e.W[2] / 20, e.W[3] / 20) == 20 &&
-                    e.W[3] <= player.W[1]) {
+                    e.W[3] > player.W[1]) {
                     e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 }
                 if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)
@@ -5451,4 +5451,77 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
         else -> {}                                       // L206 inert
     }
     e.integrate()
+}
+
+// =========================================================================
+// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
+// =========================================================================
+
+/**
+ * `i.be()` (i.java:14585, proven): "someone standing on the lever zone" —
+ * `W ∩ aS.W` short-circuits true; otherwise scans `k.bd[]` for ax∈{11,15}
+ * entities overlapping `W`, marks each `P|=16` (pressure flash) and stays
+ * true while any overlap holds. Loop marks ALL overlapping (no break).
+ */
+private fun leverOccupied(e: Entity, w: Level0World, p: Entity): Boolean {
+    if (Entity.overlapStrict(e.W, p.W)) return true
+    var hit = false
+    for (n in w.npcs) {                                   // k.bd[] scan
+        if (n.ax != 15 && n.ax != 11) continue
+        if (Entity.overlapStrict(e.W, n.W)) { n.P = n.P or 16; hit = true }
+    }
+    return hit
+}
+
+/**
+ * `i.bg()` (i.java:14633, proven): ax58 lever/counterweight FSM.
+ * `ab()` (claimActive) hands the tick to `aa()` (the claim-script VM).
+ * Odd states {0,5,7,9,11} wait for `be()` (lever zone occupied) →
+ * `i(S+1)` + one-shot bind: `k.C=this`, `h(k.s(Z0)); k(k.s(Z0))` arms the
+ * bound claim script, `Z0=-1`, `k.A(21)`. Even states {1,6,8,10,12} latch
+ * `P|64` once the anim ends and fall back `i(S-1)` when the zone clears.
+ * S2 runs the shared `a()` interact sweep, a crush arm (`W∩aS.X` while the
+ * player isn't in S22 → `i(3)` + sfx21), releases the `k.L` claim when it's
+ * ours (`k.m()`), then `G()` drops `ae`. S3 (played once) → `i(4)` + the
+ * same bind tail. S4 parks (`P|32`).
+ */
+fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()
+    if (e.claimActive()) { e.runClaimScript(w); return }  // ab() → aa()
+    when (e.S) {
+        0, 5, 7, 9, 11 -> {                               // L9 — armed wait
+            if (!leverOccupied(e, w, p)) return           // be()
+            e.setAnim(e.S + 1)
+            if (e.Z[0] > 0) {
+                w.kC = e                                // k.C = this
+                e.bindScript(w.kSIndex(e.Z[0]), w)        // h(k.s(Z0))
+                e.scriptKeyStep(w.kSIndex(e.Z[0]), w)     // k(k.s(Z0))
+                e.Z[0] = -1
+            }
+            w.sfx(21)                                   // k.A(21)
+        }
+        1, 6, 8, 10, 12 -> {                            // L16 — open latch
+            if (e.animFinished() && (e.P and 64) == 0) e.P = e.P or 64
+            if (!leverOccupied(e, w, p)) e.setAnim(e.S - 1)
+        }
+        2 -> {                                          // L24 — active lever
+            e.pushContact(w)                            // a()
+            if (Entity.overlapStrict(e.W, p.X) && p.S != 22) {
+                e.setAnim(3); w.sfx(21)
+            }
+            if (w.claimed != null && w.claimed!!.aw == e.aw) w.clearClaim()  // k.m()
+            e.releaseAe()                               // G()
+        }
+        3 -> {                                          // L39 — fired
+            if (!e.animFinished()) return
+            e.setAnim(4)                                // L41 (S==3 always)
+            if (e.Z[0] > 0) {                           // L44 bind tail
+                e.bindScript(w.kSIndex(e.Z[0]), w)
+                e.scriptKeyStep(w.kSIndex(e.Z[0]), w)
+                e.Z[0] = -1
+            }
+        }
+        4 -> e.P = e.P or 32                            // L36 — parked
+        else -> {}                                      // L47 inert
+    }
 }
