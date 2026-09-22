@@ -3902,6 +3902,107 @@ fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
     if (e.animFinished()) e.P = e.P or 128 or 32                   // L46
 }
 
+
+// ====================================================================
+// slice 48 — ax9 `bM()` (i.java:21069-21196) + init arm L50 (:2781-2793)
+// ===========================================================================
+
+/** `k.bn` (k.java:8447, proven): ax9 record field r8[8] → clip-index table —
+ *  {47,72}; the record stores `bn[r8[8]]` in Z[2] verbatim (entity clip
+ *  binding itself stays `bi[9]=47`). */
+private val K_BN = intArrayOf(47, 72)
+
+/** `i.<init>` ax9 arm (i.java:2663 `case 9` → L50 :2781, proven) + shared
+ *  L392/L427 tail (`i(r8[5])` + `t()`):
+ *  `aB=10; az=99; r8[5]==0 → k.aV=this; r8[5]==34 → P|=512 (Z skipped,
+ *  hidden variant); else Z={0,r8[7],bn[r8[8]]}, aG=0`. */
+fun NpcFsm.initAx9(e: Entity, f: List<Int>, w: LevelCellSource) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aB = 10                                                  // L50
+    e.az = 99
+    if (rf(5) == 0) w.kAV = e                                  // L54
+    if (rf(5) == 34) {                                         // L53→L56
+        e.P = e.P or 512
+        e.az = 99
+    } else {                                                   // L55
+        e.Z[0] = 0
+        e.Z[1] = rf(7)                                         // link uid
+        e.Z[2] = K_BN.getOrElse(rf(8)) { 0 }
+        e.aG = 0
+    }
+    e.setAnim(rf(5))                                           // L392
+    e.refreshBoxes()                                           // L427 t()
+}
+
+/** `i.bM()` (i.java:21069-21196, proven) — ax9 contact block:
+ *  ride-linked blocks (ax51 crate / ax43 overlay) + the S-arm switch. */
+fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
+    // ---- preamble: link + ride (skipped for S>=35) -------------------------
+    if (e.S < 35) {
+        if (e.Z[1] > 0 && e.s == null) {
+            val r0 = w.findByAw(e.Z[1])
+            if (r0 != null) {
+                e.refreshBoxes()                               // t()
+                if ((r0.ax == 51 || r0.ax == 43) &&
+                    Entity.overlapStrict(e.Y, r0.W)) {          // L17
+                    e.s = r0
+                    e.al = r0.W[1] - (e.Y[3] - e.Y[1]) + 5
+                    e.ak += r0.ag shr 8
+                }
+            }
+        }
+        e.s?.takeIf { it.ax == 51 }?.let { s ->                 // L21
+            e.az = s.az + 1
+            e.al = s.W[1] - (e.Y[3] - e.Y[1]) + 5
+        }
+    }
+    when (e.S) {
+        // -- L28/L30/L32: contact arm — overlap → i(2) press then a() push --
+        0, 1, 6, 7, 10, 11, 14, 15 -> {
+            if (!Entity.overlapStrict(e.W, p.X) || p.S == 32) {
+                e.pushContact(w)
+            } else {
+                e.setAnim(2)                                   // L30
+                e.pushContact(w)                               // L32
+            }
+        }
+        // -- L34: wind-down — anim end → i(3) -------------------------------
+        2, 8, 12, 16 -> {
+            e.aB = 0
+            if (e.animFinished()) e.setAnim(3)
+        }
+        // -- L38: settle — anim end → solid|passive -------------------------
+        3, 9, 13, 17, 38 -> {
+            e.aB = 0
+            if (e.animFinished()) { e.P = e.P or 32; e.P = e.P and -17 }
+        }
+        18 -> e.adChildOverlay(w, 7)                           // L42 l(7)
+        // -- L45-L51: driven slide — k.ae vel + aG kick, /aI when slow-mo --
+        19 -> {
+            if (e.aG == 0) e.aG = 10                           // L48
+            val ae = w.kAe ?: return
+            e.ak += if (w.iAH) ((ae.ag shr 8) + e.aG) / w.iAI
+                    else (ae.ag shr 8) + e.aG
+            e.adChildOverlay(w, 1)                             // L51 l(1)
+        }
+        // -- L54-L57: same slide + l(4) overlay, anim end → i(19) ----------
+        20 -> {
+            val ae = w.kAe ?: return
+            e.ak += if (w.iAH) ((ae.ag shr 8) + e.aG) / w.iAI
+                    else (ae.ag shr 8) + e.aG
+            e.adChildOverlay(w, 4)
+            if (e.animFinished()) e.setAnim(19)
+        }
+        21 -> {                                                // L61
+            e.ad = null
+            if (e.animFinished()) e.setAnim(22)
+        }
+        22 -> e.ad = null                                      // L65
+        else -> {}                                             // L67 (S23-37,
+        //    35-37 passive; S>=35 also skips the preamble above)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ax6 `an()` (i.java:7220-7248) — overlap-trigger marker (one-shot flags).
 // ax19 `aO()` (i.java:10261-10299) — meter-restore pickup + fx burst.

@@ -142,6 +142,8 @@ private fun world(): Level0World {
             10 to Clip.load(asset("clips/clip10/clip.acpk")),
             48 to Clip.load(asset("clips/clip48/clip.acpk")),
             45 to Clip.load(asset("clips/clip45/clip.acpk")),
+            47 to Clip.load(asset("clips/clip47/clip.acpk")),
+            31 to Clip.load(asset("clips/clip31/clip.acpk")),
             4 to Clip.load(asset("clips/clip4/clip.acpk")),
             11 to Clip.load(asset("clips/clip11/clip.acpk")),
             62 to Clip.load(asset("clips/clip62/clip.acpk")),
@@ -188,11 +190,16 @@ class Level0WorldTest {
     @Test fun `NPC family entities spawn at record positions`() {
         val w = world()
         assertTrue(w.npcs.isNotEmpty(), "expected clip-7 family entities")
-        // record positions are spawned verbatim — some types legally sit
-        // outside the tile grid (off-level pickups, scripted spawns)
-        for (n in w.npcs.filter { it.ax in intArrayOf(11, 17, 23, 47, 50, 73) }) {
-            assertTrue(n.ak in 0..w.level.worldW)
-            assertTrue(n.al in 0..w.level.worldH)
+        // record positions are authoritative — several records sit outside
+        // the tile grid (ax9 at y=1106 > worldH=1100; ax74s at x>12540)
+        // and the original spawns them unclamped.
+        val byAw = w.level.entities.associate { it[1] to (it[2] to it[3]) }
+        for (n in w.npcs) {
+            val exp = byAw[n.aw]
+            if (exp != null) {
+                assertEquals(exp, n.ak to n.al,
+                    "ax${n.ax} aw=${n.aw} should sit at its record position")
+            }
         }
     }
 
@@ -4791,5 +4798,171 @@ class PointerLifecycleTest {
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.UP, 50, 60)))
         assertEquals(-1, w.lastMoveX)             // release: cleared at end
         assertEquals(-1, w.lastMoveY)
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// slice 48 — ax9 `bM()` contact block + `a()` push + `l()` overlay
+// (i.java:21069-21196 / :914-993 / :21198 / init L50 :2781)
+// ---------------------------------------------------------------------------
+class Slice48Test {
+
+    private fun ax9At(w: Level0World, x: Int, y: Int, s: Int,
+                      link: Int = -1, kind8: Int = 0): Entity {
+        val e = Entity(9, w.clips[47])
+        e.setPositionPx(x, y)
+        val f = mutableListOf(9, 0, x, y, 0, s, 0, link, kind8)
+        for (i in 9..15) f += 0
+        w.npcFsm.initAx9(e, f, w)
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `init S0 binds kAV and loads Z`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 100, 100, 0, link = 555, kind8 = 1)
+        assertSame(e, w.kAV, "r8[5]==0 → k.aV = this (i.java:2786)")
+        assertEquals(10, e.aB)
+        assertEquals(99, e.az)
+        assertEquals(0, e.Z[0])
+        assertEquals(555, e.Z[1], "Z[1] = r8[7] link uid")
+        assertEquals(72, e.Z[2], "Z[2] = k.bn[1] = 72 (k.java:8447)")
+        assertEquals(0, e.S, "L392 i(r8[5])")
+    }
+
+    @Test fun `init S34 hidden variant skips Z`() {
+        val w = world(); w.npcs.clear()
+        w.kAV = null                              // level-0 S0 record bound it
+        val e = ax9At(w, 100, 100, 34, link = 555)
+        assertEquals(0, e.Z[1], "S34 → P|=512, Z untouched")
+        assertTrue(e.P and 512 != 0)
+        assertNull(w.kAV, "S34 does not claim k.aV")
+    }
+
+    @Test fun `preamble binds Z-1 link to ax51 and rides it`() {
+        val w = world(); w.npcs.clear()
+        val crate = Entity(51, w.clips[7])
+        crate.aw = 777; crate.setPositionPx(200, 200)
+        crate.ag = 2560; crate.refreshBoxes()
+        w.npcs.add(crate)
+        val e = ax9At(w, 200, 200, 0, link = 777)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertSame(crate, e.s, "k.q(Z[1]) ax51 overlap → s link")
+        // ride arms: az = s.az + 1, al on top of the crate's W
+        assertEquals(crate.az + 1, e.az)
+        assertEquals(crate.W[1] - (e.Y[3] - e.Y[1]) + 5, e.al)
+    }
+
+    @Test fun `contact arm presses i-2 on player-X overlap`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, w.player.ak, w.player.al, 0)
+        w.player.refreshBoxes()
+        val p = w.player                          // give aS.X a real attackbox
+        p.X[0] = e.W[0] - 5; p.X[1] = e.W[1] - 5
+        p.X[2] = e.W[2] + 5; p.X[3] = e.W[3] + 5
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(2, e.S, "W∩aS.X → i(2) then a() (L30)")
+    }
+
+    @Test fun `contact arm pushes player off the left side`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // entity to the player's right, overlapping, p moving right or still
+        val e = ax9At(w, p.ak + 4, p.al, 0)
+        p.ag = 0; p.refreshBoxes(); e.refreshBoxes()
+        // make W overlap certain: give e a W around the player
+        e.W[0] = p.ak - 40; e.W[1] = p.al - 40
+        e.W[2] = p.ak + 40; e.W[3] = p.al + 40
+        val before = p.ak
+        e.pushContact(w)
+        assertTrue(p.ak < before, "L50 left-block snaps player left")
+        assertEquals(0, p.ag, "L63 zeroes ag")
+    }
+
+    @Test fun `L57 right-block snaps player right and sets ag 1`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax9At(w, p.ak - 4, p.al, 0)
+        p.ag = -1; p.refreshBoxes()
+        e.W[0] = p.ak - 40; e.W[1] = p.al - 40
+        e.W[2] = p.ak + 40; e.W[3] = p.al + 40
+        e.pushContact(w)
+        assertEquals(1, p.ag, "L57 sets ag=1 then falls to L25")
+    }
+
+    @Test fun `S139 corpse skips push entirely`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax9At(w, p.ak, p.al, 0)
+        e.S = 139; p.refreshBoxes()
+        val px = p.ak
+        e.pushContact(w)
+        assertEquals(px, p.ak)
+    }
+
+    @Test fun `ax15 grapple arm snaps player onto edge and claims g-a`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = Entity(15, w.clips[7])
+        e.setPositionPx(p.ak + 4, p.al); e.refreshBoxes()
+        e.S = 6                                             // grapple anim
+        e.W[0] = p.ak - 40; e.W[1] = p.al - 40
+        e.W[2] = p.ak + 40; e.W[3] = p.al + 40
+        p.refreshBoxes(); p.ac = e                          // held claim released
+        p.S = 18                                            // g.b() free set
+        e.pushContact(w)
+        assertSame(e, p.ga, "g.a = this")
+        assertEquals(209, p.S, "aS.i(209) grab anim")
+        assertNull(p.ac, "aS.a(null) claim released")
+        assertEquals(e.W[1] + 1, p.al)
+    }
+
+    @Test fun `l overlay spawns clip31 ax43 child and mirrors`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 300, 300, 18)
+        e.T = 4
+        w.npcFsm.tickAx9(e, w, w.player)
+        val ad = e.ad
+        assertNotNull(ad, "l(7) spawns the overlay child")
+        assertEquals(43, ad!!.ax); assertEquals(7, ad.S)
+        assertEquals(e.ak, ad.ak); assertEquals(e.al, ad.al)
+        assertEquals(4, ad.T, "ad.T mirrors parent T")
+        assertEquals(e.az + 1, ad.az)
+        val first = ad
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertSame(first, e.ad, "ad reused — no respawn")
+    }
+
+    @Test fun `S21 drops overlay and anim-end goes S22`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 300, 300, 21)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertNull(e.ad, "L61 ad=null")
+        // force anim end → i(22)
+        e.T = w.clips[47]!!.frameCount(e.S) - 1
+        e.U = w.clips[47]!!.frameDuration(e.S, e.T) - 1
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(22, e.S)
+    }
+
+    @Test fun `S2 wind-down goes i-3 on anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 300, 300, 2)
+        e.T = w.clips[47]!!.frameCount(e.S) - 1
+        e.U = w.clips[47]!!.frameDuration(e.S, e.T) - 1
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(0, e.aB, "L34 zeroes aB")
+        assertEquals(3, e.S, "L34 r() → i(3)")
+    }
+
+    @Test fun `S3 settle arm marks solid passive on anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 300, 300, 3)
+        e.T = w.clips[47]!!.frameCount(e.S) - 1
+        e.U = w.clips[47]!!.frameDuration(e.S, e.T) - 1
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertTrue(e.P and 32 != 0, "L38 → P|=32")
+        assertTrue(e.P and 16 == 0, "L38 → P&=-17")
     }
 }

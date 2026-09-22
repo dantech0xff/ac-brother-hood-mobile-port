@@ -82,6 +82,8 @@ CLIPS = {
     "clip10": ("pack-3", "entry-010-marker-003"),  # ax16 request markers (bi[16]=10)
     "clip27": ("pack-3", "entry-027-marker-003"),  # ax67 springboard (bk{1,2,3}=27)
     "clip35": ("pack-3", "entry-035-marker-003"),  # ax67 kind-5 interactives (bk[5]=35)
+    "clip47": ("pack-3", "entry-047-marker-003"),  # ax9 bM() push/contact (bi[9]=47)
+    "clip31": ("pack-3", "entry-031-marker-003"),  # ax9 ad-child spawn (bM :21198)
     "clip4": ("pack-3", "entry-004-marker-003"),   # ax6 trigger marker (bi[6]=4)
     "clip11": ("pack-3", "entry-011-marker-003"),  # ax19 pickup (bi[19]=11)
 }
@@ -109,7 +111,14 @@ def pack_clip(pack, entry_dir, out_dir):
     for m in mods:
         pngs = sorted((SPR / pack / entry_dir).glob(
             f"module-{m['index']:04d}-palette-*-*.png"))
-        assert pngs, f"missing pngs for module {m['index']} in {entry_dir}"
+        if not pngs:
+            # aU==2 = non-pixel module (vector/marker group): the decoder
+            # emits no PNG by design. Keep an empty-name slot so module
+            # indexing stays aligned; renderers skip empty names.
+            assert m.get("runtime_type_aU") == 2, (
+                f"missing pngs for module {m['index']} in {entry_dir}")
+            module_pngs.append(("", m["ae_width"], m["af_height"]))
+            continue
         p0 = [p for p in pngs if "-palette-00-" in p.name]
         assert p0, f"missing palette-00 png for module {m['index']}"
         module_pngs.append((p0[0].name, m["ae_width"], m["af_height"]))
