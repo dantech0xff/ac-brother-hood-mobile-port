@@ -236,6 +236,7 @@ class Level0World(
     override var playerLinkB: Entity? = null    // g.b marker-engage link
     override val missionIndex = 0               // k.aj — level 0 = mission 0
     var statTally0 = 0                          // k.ap[0] kill/stat tally
+    override var iBh = 0                        // i.bh static hit-lock
     /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
     override fun statTally(aw: Int) {
         if (aw > 0 && missionIndex != 7) statTally0++

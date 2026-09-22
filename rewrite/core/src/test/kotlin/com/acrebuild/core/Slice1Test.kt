@@ -294,10 +294,11 @@ class Level0WorldTest {
         repeat(200) {
             w.tick(emptyList())
             w.player.setPositionPx(s.ak + 30, s.al)   // keep in reach
-            if (w.player.hitsTaken > 0 || w.player.S == 43) struck = true
+            if (w.player.x1 < 90 || w.player.hitsTaken > 0 || w.player.S == 43)
+                struck = true
         }
         assertTrue(struck,
-            "soldier should land hits (S=${s.S}, hits=${w.player.hitsTaken})")
+            "soldier should land hits (S=${s.S}, x1=${w.player.x1})")
     }
 
     @Test fun `player vault attack damages and kills a soldier`() {
@@ -370,12 +371,24 @@ class Level0WorldTest {
 
     @Test fun `npc strike on a metered player counters the attacker`() {
         val w = world()
-        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
-        // soldier mid-strike (S12 X-arc on frames 1-5), player grounded in it
+        // pick a soldier whose strike-adjacent position passes i.c()'s
+        // wall guard (open-air spots legitimately block the drain)
+        var s: Entity? = null
+        var sdx = 0
+        for (cand in w.npcs.filter { it.ax == 11 }) {
+            for (dx in listOf(-20, 20)) {
+                w.player.setPositionPx(cand.ak + dx, cand.al)
+                w.player.refreshBoxes()
+                if (!w.player.nearLeftWall(w)) { s = cand; sdx = dx; break }
+            }
+            if (s != null) break
+        }
+        s ?: return
         s.setAnim(12)
         var staggered = false
-        for (i in 0 until 120) {
-            w.player.setPositionPx(s.ak + (if (s.av) -20 else 20), s.al)
+        for (i in 0 until 300) {
+            w.player.setPositionPx(s.ak + sdx, s.al)
+            w.player.refreshBoxes()
             w.player.ag = 0; w.player.ah = 0
             w.tick(emptyList())
             if (s.S == 9) { staggered = true; break }
@@ -388,10 +401,14 @@ class Level0WorldTest {
         val w = world()
         val spawn = w.player.ak to w.player.al
         repeat(5) { w.tick(emptyList()) }
-        w.player.setPositionPx(2000, 900)
-        // knockdowns drain the meter via g.a() (u[0]=5): 90/5 = 18 ops;
+        val (dx, dy) = damageSpot(w)
+        w.player.setPositionPx(dx, dy)
+        // knockdowns drain the meter via g.d() (u[0]=5): 90/5 = 18 ops;
         // reset g.t iframes between hits (each drain sets t=10)
-        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        repeat(20) {
+            w.player.applyHit(18, 0, null, w)
+            w.player.gt = 0; w.iBh = 0
+        }
         assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
         // KO → k.l(12): fail screen freezes the world until the context tap
         w.tick(emptyList())
@@ -412,7 +429,10 @@ class Level0WorldTest {
         val w = world()
         val soldier = w.npcs.first { it.ax == 11 }
         soldier.setAnim(139) // corpse
-        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        repeat(20) {
+            w.player.applyHit(18, 0, null, w)
+            w.player.gt = 0; w.iBh = 0
+        }
         w.tick(emptyList())
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
@@ -431,7 +451,12 @@ class Level0WorldTest {
         assertNotNull(w.checkpointSnap)
         assertEquals(cp.ak, w.checkpointSnap!!.ak)
         // die → fail → retry: player respawns at the checkpoint, not spawn
-        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        val (dx, dy) = damageSpot(w)
+        w.player.setPositionPx(dx, dy)
+        repeat(20) {
+            w.player.applyHit(18, 0, null, w)
+            w.player.gt = 0; w.iBh = 0
+        }
         w.tick(emptyList())
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
@@ -453,7 +478,12 @@ class Level0WorldTest {
         assertEquals(live.homeX, live.ak, "live npc re-homed on checkpoint save")
         assertEquals(139, dead.S, "pre-checkpoint corpse stays dead")
         // reload: the pre-checkpoint kill stays dead (as==-98 / br[])
-        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        val (dx, dy) = damageSpot(w)
+        w.player.setPositionPx(dx, dy)
+        repeat(20) {
+            w.player.applyHit(18, 0, null, w)
+            w.player.gt = 0; w.iBh = 0
+        }
         w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
@@ -463,11 +493,14 @@ class Level0WorldTest {
     @Test fun `iframes block a second drain for 10 ticks`() {
         val w = world()
         repeat(3) { w.tick(emptyList()) }
+        val (dx, dy) = damageSpot(w)
+        w.player.setPositionPx(dx, dy)
         w.player.applyHit(18, 0, null, w)
         assertEquals(85, w.player.x1)
         assertEquals(10, w.player.gt, "survived drain sets t=10")
-        assertTrue(w.player.bh > 0, "hit flash set")
+        assertEquals(8, w.iBh, "d() sets the i.bh hit-lock")
         // during iframes the op4->18 upgrade and drains are suppressed
+        w.iBh = 0
         w.player.applyHit(18, 0, null, w)
         assertEquals(85, w.player.x1, "iframe blocks drain")
         repeat(9) { w.tick(emptyList()) }
@@ -476,6 +509,7 @@ class Level0WorldTest {
         w.tick(emptyList())
         assertEquals(0, w.player.gt)
         w.player.setAnim(0)
+        w.iBh = 0
         w.player.applyHit(18, 0, null, w)
         assertEquals(80, w.player.x1, "drains again after iframes expire")
     }
@@ -1841,6 +1875,21 @@ class Level0WorldTest {
         assertTrue(p.S in intArrayOf(304, 305, 306), "aq() picked a reach anim, S=${p.S}")
     }
 
+
+    // ---- slice 32 helpers --------------------------------------------
+
+    /** Position the player where `i.c()` (g.d()'s left-wall guard) lets
+     *  damage through — the probe needs the left cells >=10. Scans level
+     *  geometry once per test. */
+    private fun damageSpot(w: Level0World): Pair<Int, Int> {
+        val p = w.player
+        for (y in 60..1000 step 10) for (x in 40..12000 step 40) {
+            p.setPositionPx(x, y); p.refreshBoxes()
+            if (!p.nearLeftWall(w)) return x to y
+        }
+        error("no damage spot found in level0")
+    }
+
     // ---- slice 31 — bb() L21 marker arms --------------------------------
 
     @Test fun `S31 stealth prompt teleports player into S216 on context tap`() {
@@ -1895,9 +1944,10 @@ class Level0WorldTest {
         val w = world()
         w.npcs.clear()
         val p = w.player
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        val e = requestMarkerAt(w, 16, 302, 150)
-        e.X[0] = 295; e.X[1] = 145; e.X[2] = 310; e.X[3] = 160  // overlap p
+        val (px, py) = damageSpot(w)
+        p.setPositionPx(px, py); p.refreshBoxes()
+        val e = requestMarkerAt(w, 16, px + 2, py)
+        e.X[0] = px - 5; e.X[1] = py - 5; e.X[2] = px + 10; e.X[3] = py + 10
         e.af = p                                              // bh[0]=4 path
         w.npcFsm.tickRequestMarker(e, p, Pad())
         assertNull(e.af, "L27 clears af")
@@ -1908,10 +1958,11 @@ class Level0WorldTest {
         val w = world()
         w.npcs.clear()
         val p = w.player
-        p.setPositionPx(300, 150); p.refreshBoxes()
-        val k = requestMarkerAt(w, 17, 305, 150)
+        val (px, py) = damageSpot(w)
+        p.setPositionPx(px, py); p.refreshBoxes()
+        val k = requestMarkerAt(w, 17, px + 5, py)
         k.ag = 256; k.ah = 0
-        k.X[0] = 295; k.X[1] = 145; k.X[2] = 310; k.X[3] = 160
+        k.X[0] = px - 5; k.X[1] = py - 5; k.X[2] = px + 10; k.X[3] = py + 10
         w.npcFsm.tickRequestMarker(k, p, Pad())
         assertTrue(p.x1 < 90, "idle overlap -> a(4) pays meter")
 

@@ -132,6 +132,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var g: Entity? = null          // g.g interact target (az() scan)
     var gJ = 0                      // g.J action-request bits (g.g(mask));
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
+    var bl = 0                     // i.bl — foot-contact flag (cleared on
+                                   // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
     // -- g.c(i) grab-lunge state (g.java:4115) -----------------------------
@@ -1519,6 +1521,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `k.bh[]` (k.java:8437, proven) — per-mission behavior flag;
          *  `bh[k.aj] == 3` picks the S16 settle arm (missions 1/4). */
         val MISSION_BH = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
+        /** `g.u[]` (g.java:6400, proven) — player meter cost per weapon
+         *  tier, indexed by `k.au`: {5,10,15}. */
+        val PLAYER_DMG = intArrayOf(5, 10, 15)
+        /** `d.b[]` (d.java:10, proven) — per-weapon {light,heavy} damage
+         *  pairs read by `i.W()` (ax61 boss damage). */
+        val DMG_B = intArrayOf(10, 20, 20, 40, 35, 70)
 
         /** `k.h(int,int)` (k.java:6839, proven): Manhattan-ish magnitude —
          *  `(a+b) - min/2 - min/4 + min/8`. */
@@ -1567,19 +1575,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
             r10 = 18; ag = 0
         }
         when (r10) {
-            // i.a(op4) L116-L131: struck while meter payable → c(attacker)
-            // (auto-counter; u[au] meter cost), else hurt-mark k.A(18)
+            // i.a(op4) (i.java:4540-4590, proven): `aS.S∈{284,285,50}`
+            // early-return; `r13.ax==61 && g.a(r13) → c(r13)` boss counter;
+            // `S!=9 → g.a() && r13.ax∉{17,50,61} → c(r13)`; `L139 → A(18)`
+            // hurt sfx fires unconditionally at the tail.
             4 -> {
-                val canCounter = attacker != null && x1 > 0 && S != 9 &&
-                    gt == 0 &&
-                    attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61
-                if (canCounter) { drainMeter(5); attacker.counteredBy(this) }
-                else hitsTaken++
+                if (S == 284 || S == 285 || S == 50) return
+                if (attacker != null && attacker.ax == 61 &&
+                    playerDamageable(attacker, world)) {
+                    attacker.counteredBy(this)
+                }
+                if (S != 9 && playerDamageable(g, world) && attacker != null &&
+                    attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61) {
+                    attacker.counteredBy(this)
+                }
+                world.sfx(18)
             }
-            // op18 body calls g.a() first → pays u[au]=5 meter then i(43);
-            // d() gates apply (e.g. S67 clash drains nothing but still
-            // knocks down — proven via the S∈{67,…} guard inside d())
-            18 -> { drainMeter(5); setAnim(43) }
+            // op18 (clash knockdown): `g.a()` pays u[au] inside d() — the
+            // gates apply (S67 clash drains nothing) — then `i(43)`
+            // unconditionally.
+            18 -> { playerDamageable(g, world); setAnim(43) }
             20 -> setAnim(43)
             // op21 fall damage (i.java:4535 L55, proven): raw drain —
             // bypasses d() gates; caller (land) already checked h()+the
@@ -1602,7 +1617,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
             // damage-gate chain (h()/g()/d()) is unported — gated open.
             38 -> {
                 if (S == 3 || S == 6 || S == 7) return
-                world.playerLinkB = attacker
+                if (!playerDamageable(g, world)) return   // g.a() gate now
+                world.playerLinkB = attacker               // ported
                 aB = 3
                 if (oState()) setAnim(3)
                 av = attacker != null && attacker.ak < ak
@@ -1613,6 +1629,84 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `i.o()` (i.java:6597, proven): `S∈{2,20..29} → false`, else true. */
     fun oState(): Boolean = !(S == 2 || S in 20..29)
+
+    /**
+     * `i.c()` (i.java:1445, proven): left-edge wall guard — scans cells
+     *  `W[0]-r10·20 .. W[2]+r10·20` on the `(W[1]%260+260)/20` row;
+     *  `aT<10` (a wall cell within 4 left tiles) → true; `aU<10` → false
+     *  early. `g.d()` skips damage while this holds. */
+    fun nearLeftWall(w: LevelCellSource): Boolean {
+        val r0 = (W[1] % 260) + 260
+        var r10 = 1
+        while (r10 < 5) {
+            aT = e(w, (W[0] - r10 * 20) / 20, r0 / 20)
+            aU = e(w, (W[2] + r10 * 20) / 20, r0 / 20)
+            if (aT < 10) return true
+            if (aU < 10) return false
+            r10++
+        }
+        return false
+    }
+
+    /** `i.W()` (i.java:10300, proven): the entity's damage value —
+     *  `d.b[k.au<<1]` on idle/even states {2,4,10,17}, `d.b[(k.au<<1)+1]`
+     *  on `S==13` (windup), else 0. `d.b={10,20,20,40,35,70}` per-weapon
+     *  {light,heavy} pairs (d.java:10). */
+    fun bossDamage(w: LevelCellSource): Int = when {
+        S == 2 || S == 4 || S == 10 || S == 17 -> DMG_B[w.weaponSlot shl 1]
+        S == 13 -> DMG_B[(w.weaponSlot shl 1) + 1]
+        else -> 0
+    }
+
+    /**
+     * `g.d(int)` (g.java:3885, proven): the player meter drain — guards
+     *  `s` godmode, `t` iframes, `aS.c()` wall-guard, `S∈{67,183,184}`
+     *  attack/finisher immunity, `S==205` (assassination victim — the
+     *  decompiler's `goto L35` reads as a skip, inferred); then
+     *  `i.bh = 8` (global hit-lock), `x[1] -= amt`; `x[1]<=0` → death
+     *  release (`bh[k.aj]==3` missions survive at 0; else `aZ` skips the
+     *  `E()` settle, `bl=0; G(); H(); a=null`); `x[1]>0 → t=10`.
+     *  `w.failed` mirrors the existing k.l(12) KO path (inferred). */
+    fun gDrain(amt: Int, w: LevelCellSource) {
+        if (w.godMode) return
+        if (gt != 0) return
+        if (nearLeftWall(w)) return
+        if (S == 67 || S == 183 || S == 184) return
+        if (S == 205) return
+        w.iBh = 8
+        x1 -= amt
+        if (x1 <= 0) {
+            x1 = 0
+            if (w.missionBh() == 3) return
+            if (!aZ && standingOn == null) settleToGround(w)
+            bl = 0
+            releaseAe(); consumeH()                 // G() + H()
+            standingOn = null
+            return                              // x1==0 → tick missionFail
+        }
+        gt = 10
+    }
+
+    /**
+     * `g.a(i r3)` (g.java:139, proven): the "should this hit land" gate —
+     *  `i.bh != 0` (hit-lock) → false; `h()` invulnerable → false;
+     *  `g()` dead → `return true` (no further drain); alive →
+     *  `d(r3?.ax==61 ? r3.W()(/3 when aS.S==6) : u[k.au])` then true.
+     *  The `g.a()` no-arg caller passes `r3 = g` (the grab link). */
+    fun playerDamageable(attacker: Entity?, w: LevelCellSource): Boolean {
+        if (w.iBh != 0) return false
+        if (w.playerInvulnerable()) return false
+        if (!w.playerDead()) {
+            val amt = if (attacker != null && attacker.ax == 61) {
+                var v = attacker.bossDamage(w)
+                if (S == 6) v /= 3
+                v
+            } else PLAYER_DMG[w.weaponSlot]
+            gDrain(amt, w)
+        }
+        return true
+    }
+
 
     /** `i.u()`+`i.v()` (i.java:700/730, ax16 subset, proven): view-proximity
      *  score `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120` — the marker
@@ -1848,4 +1942,16 @@ interface LevelCellSource {
         (player.gI == 1 || player.gI == 2) &&
             player.S in intArrayOf(67, 68, 69, 81, 112, 113, 114, 115,
                                    183, 184, 216, 217, 286, 287)
+
+    // -- g.d() player damage intake (g.java:3885) -----------------------------
+    /** `i.bh` STATIC (i.java:104) — global 8-tick hit-lock set by `d()`;
+     *  decremented per tick in the `g.e()` tail (g.java:572). */
+    var iBh: Int
+    /** `g.s` — godmode flag (g.java:24); default false. */
+    val godMode: Boolean get() = false
+    /** `g.h()` (g.java:3946, proven): invulnerable — `s` godmode or `t`
+     *  iframe timer nonzero. */
+    fun playerInvulnerable(): Boolean = godMode || player.gt != 0
+    /** `g.g()` (g.java:3939, proven): player dead — `x[1] <= 0`. */
+    fun playerDead(): Boolean = player.x1 <= 0
 }
