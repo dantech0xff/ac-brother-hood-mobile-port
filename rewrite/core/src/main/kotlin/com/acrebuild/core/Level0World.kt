@@ -49,6 +49,7 @@ class Level0World(
             9 to 47,      // ax9 push/contact entity (bi[9]=47, proven)
             15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
             46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
+            7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
             6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
             19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
             74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
@@ -390,6 +391,7 @@ class Level0World(
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
+            else if (type == 7) npcFsm.initAx7(e, f.toList(), this)
 
             else if (type == 42) npcFsm.initAx42(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
@@ -842,9 +844,10 @@ class Level0World(
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
-
+            else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
             else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
+
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
