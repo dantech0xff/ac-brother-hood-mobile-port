@@ -480,4 +480,13 @@ class Level0WorldTest {
         w2.player.applyHit(21, 0, w2.player, w2)
         assertEquals(90 - 52, w2.player.x1)
     }
+
+    @Test fun `ax11 palette slot follows proven Z0 arm i4180`() {
+        val w = world()
+        val slot1 = w.npcs.count { it.ax == 11 && it.palette == 1 }
+        val slot0 = w.npcs.count { it.ax == 11 && it.palette == 0 }
+        assertEquals(9, slot1, "level-0 records: 9 soldiers carry Z[0]==1")
+        assertEquals(44, slot0)
+        assertEquals(0, w.player.palette)
+    }
 }

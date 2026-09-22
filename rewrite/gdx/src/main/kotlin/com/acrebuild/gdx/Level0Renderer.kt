@@ -36,8 +36,11 @@ class Level0Renderer {
     private lateinit var batch: SpriteBatch
     private lateinit var white: Texture
 
-    // module index -> TextureRegion, per pack id
+    // (module index, palette slot) -> TextureRegion, per pack id.
+    // palette-00 is canonical (clip.moduleNames); palette-NN siblings are
+    // resolved lazily by filename substitution (b.aH slot, b.java:2436).
     private val clipModules = HashMap<Int, Array<TextureRegion?>>()
+    private val clipPalettes = HashMap<Int, HashMap<Int, TextureRegion>>()
     private val clipDims = HashMap<Int, Array<Pair<Int, Int>>>()
     private var clips: Map<Int, Clip> = emptyMap()
 
@@ -76,8 +79,29 @@ class Level0Renderer {
      * 4 MIRROR_ROT270, 5 ROT90, 6 ROT270, 7 MIRROR_ROT90.
      * FBO space is y-up vs J2ME y-down: screen-CW rotations are CCW here.
      */
-    private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int) {
-        val src = clipModules[pack]?.getOrNull(m) ?: return
+    private fun moduleRegion(pack: Int, m: Int, palette: Int): TextureRegion? {
+        val base = clipModules[pack]?.getOrNull(m) ?: return null
+        if (palette <= 0) return base
+        val pal = clipPalettes.getOrPut(pack) { HashMap() }
+        return pal.getOrPut(m or (palette shl 16)) {
+            val clip = clips[pack] ?: return base
+            val dir = when (pack) {
+                0 -> "clips/clip0/modules"
+                7 -> "clips/clip7/modules"
+                else -> "level0/tileset-$pack/modules"
+            }
+            val variant = clip.moduleNames[m]
+                .replace("-palette-00-", "-palette-%02d-".format(palette))
+            val fh = Gdx.files.internal("$dir/$variant")
+            if (!fh.exists()) return@getOrPut base
+            val t = Texture(fh)
+            t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
+            TextureRegion(t)
+        }
+    }
+
+    private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
+        val src = moduleRegion(pack, m, palette) ?: return
         val (w, h) = clipDims[pack]!![m]
         val t = transform and 7
         val region = TextureRegion(src)
@@ -110,12 +134,12 @@ class Level0Renderer {
      * placements (module or nested object when `aq & 16`). `flags` is the
      * caller's flip word (2-bit on tiles, `P & 7` on entities).
      */
-    private fun drawObject(pack: Int, obj: Int, x: Int, y: Int, flags: Int, depth: Int = 0) {
+    private fun drawObject(pack: Int, obj: Int, x: Int, y: Int, flags: Int, depth: Int = 0, palette: Int = 0) {
         val clip = clips[pack] ?: return
         if (obj < 0 || obj >= clip.objPlaceStart.size || depth > 4) return
         val count = clip.objPlaceCount[obj]
         if (count == 0) {
-            drawModule(pack, obj, x, y, flags)
+            drawModule(pack, obj, x, y, flags, palette)
             return
         }
         for ((m0, pf, off) in clip.placements(obj)) {
@@ -128,10 +152,10 @@ class Level0Renderer {
             val dx = if (flags and 1 != 0) -(off.first + mw) else off.first
             val dy = if (flags and 2 != 0) -(off.second + mh) else off.second
             if (pf and 16 == 0) {
-                drawModule(pack, m, x + dx, y + dy, tf and 15)
+                drawModule(pack, m, x + dx, y + dy, tf and 15, palette)
             } else {
                 // aq bit 0x10: target is another composite object, not a module
-                drawObject(pack, m, x + dx, y + dy, tf and 15, depth + 1)
+                drawObject(pack, m, x + dx, y + dy, tf and 15, depth + 1, palette)
             }
         }
     }
@@ -226,7 +250,8 @@ class Level0Renderer {
         val fd = clip.frameDraw(e.S, e.T, e.drawFlags())
         // screenX = ak - camX - dx ; screenY = al - camY - dy (b.java:907
         // i3-i10 / i4-i11); the object resolves through the composite path.
-        drawObject(pack, fd.module, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform)
+        drawObject(pack, fd.module, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
+                   palette = e.palette)
     }
 
     private fun clipPackOf(clip: Clip): Int? =
