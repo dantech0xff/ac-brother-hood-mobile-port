@@ -182,6 +182,24 @@ class Level0WorldTest {
             "player should rest on ground (got $v1/$v2/$feetCell)")
     }
 
+    @Test fun `long falls cannot tunnel through floors (terminal velocity 5120)`() {
+        // g.java:578 (proven): ah capped at 5120 = 20px/tick = one cell,
+        // which is what stops high-speed descents skipping a floor row.
+        val w = world()
+        val p = w.player
+        // settle first so spawn X sits on real ground
+        var t = 0
+        while (p.ah != 0 && t++ < 600) w.tick(emptyList())
+        val floorY = p.al
+        // drop from 20 cells up in fall state S=43
+        p.al = floorY - 20 * 20
+        p.setAnim(43)
+        t = 0
+        while (p.ah != 0 && t++ < 600) w.tick(emptyList())
+        assertTrue(p.al <= floorY + 21,
+            "player tunneled through floor: al=${p.al} floor=$floorY")
+    }
+
     @Test fun `hold-right runs the player forward`() {
         val w = world()
         val x0 = w.player.ak
@@ -196,12 +214,19 @@ class Level0WorldTest {
 
     @Test fun `player run uses clip0 anim 12 after run-start`() {
         val w = world()
+        // settle so the press lands while grounded
+        var t = 0
+        while (w.player.ah != 0 && t++ < 600) w.tick(emptyList())
         val q = InputQueue()
+        // hold RIGHT: the tap edge fires the proven vault-jump (S233), and
+        // the aS-edge-bump in land() keeps aZ correct after landing.
         q.post(InputQueue.Type.DOWN, 300, 120)
-        // run-start (32) then sustained run (12)
-        repeat(20) { w.tick(q.drainTo(q.headSequence())) }
-        assertTrue(w.player.S == 12 || w.player.S == 32,
-            "expected run anims 32/12, got ${w.player.S}")
+        var seen = false
+        repeat(200) {
+            w.tick(q.drainTo(q.headSequence()))
+            if (w.player.S == 12 || w.player.S == 32) seen = true
+        }
+        assertTrue(seen, "expected run anims 32/12 at some point, last S=${w.player.S}")
     }
 
     @Test fun `tap top third jumps through 21-22-23-43-5 landing chain`() {

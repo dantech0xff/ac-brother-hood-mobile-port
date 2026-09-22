@@ -60,6 +60,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.bh > 0) p.bh--
         dispatch(p, pad)
         postTail(p, pad)
+        // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =
+        // one cell) — without it long descents tunnel through floors.
+        if (p.ah > 5120) p.ah = 5120
     }
 
     private fun dispatch(p: Entity, pad: Pad) {
