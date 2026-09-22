@@ -54,6 +54,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ba = false                   // unused third flag, kept for parity
     val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
     val X = IntArray(4)              // attackbox (t())
+    val Y = IntArray(4)              // context-bounds rect (t() — the
+                                     // stored per-obj bounds row via
+                                     // aa.d(av,i&192); path unmined →
+                                     // stays zeros; aX() slice fills it)
     var tc = 0; var uc = 0           // hitbox center px (a() writes t/u)
     var co = 0                       // consecutive-run-tick counter (S12 arm)
     var aC = 0                       // generic countdown (patrol leg timer etc.)
@@ -102,7 +106,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var nl = 0                     // i.n (r8[8]; `n` clashes with 8.8 `N`
                                    // on the JVM, like o/O)
     var m = 0                      // r8[9] — burst count for the S6/8 arm
-    var i = 0                      // i.i — L166 sets 2 on non-S7 records
+    var i = 1                      // i.i — ctor default 1 (i.java:820);
+                                   // L166 sets 2 on non-S7 destructibles
     // -- ax74 wisp fields (bN S1, i.java:21341+; spawned via a(74,54,1,az)) --
     var j = 0                      // flight-radius counter (j += 15/tick)
     var aq = 0                     // launch anchor x px (i.aq)
@@ -110,6 +115,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
     var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
                                    // i.java:922/937; producer arms unported)
+    // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
+    var bZ = 0                     // i.bZ lifecycle counter (aX L23 linked
+                                   // arm — used by the ax14/pickup path)
+    var ad: Entity? = null         // i.ad child link (bd[] scan, p() cascade)
+    var au = 10                    // i.au screen-distance score (u() rewrites
+                                   // it per v() call; ctor 10, i.java:819)
+    var ae: Entity? = null         // i.ae player's spawned ax14 pickup ref
+    var gb: Entity? = null         // g.b grabbed-prop ref (op40 arm)
+    var ge: Entity? = null         // g.e hide-spot owner (bB S12 arm)
+    var gg: Entity? = null         // g.g hide-spot busy guard
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -202,22 +217,63 @@ open class Entity(val ax: Int, var clip: Clip?) {
     // W = clip rect(which=0) shifted by frame dx/dy, then + ak/al.
     // X = same for which=1. Facing flips the dx sign.
     // ==================================================================
+    /**
+     * `i.t()` (i.java:369, proven). ax∈{14,37,10,5,42} early-return —
+     * their W/X/Y come from record fields at init (L419/L427 arms).
+     * Order: W rect → X rect (skipped only for ax66 S∈[6,10]∪[24,28]) →
+     * Y bounds quad → absolute translate (X,Y then W — ax60's per-edge
+     * Z[5] remaps sit between Y-abs and W-abs; ax60 unspawned).
+     * The Y quad is folded twice through the frame dx/dy — once as the
+     * ±r13/r14 mirror fixup inside quad space, again as the ±av anchor —
+     * transcribed verbatim even though it reads like a double shift.
+     */
     fun refreshBoxes() {
+        if (ax == 14 || ax == 37 || ax == 10 || ax == 5 || ax == 42) return
         val c = clip
-        if (c == null || S < 0 || T < 0) { W.fill(0); X.fill(0); return }
-        c.rect(S, T, 0, drawFlags(), W)
+        if (c == null || S < 0 || T < 0) { W.fill(0); X.fill(0); Y.fill(0); return }
+        val flags = drawFlags()
         val fi = c.frameIndex(S, T)
-        val dx = c.frameDx[fi]
-        val dy = c.frameDy[fi]
+        val dx = c.frameDx[fi]; val dy = c.frameDy[fi]
+        // W = rect row 0 (L29-L41)
+        c.rect(S, T, 0, flags, W)
         if (av) W[0] -= dx else W[0] += dx
         W[1] += dy
-        c.rect(S, T, 1, drawFlags(), X)
-        if (av) X[0] -= dx else X[0] += dx
-        X[1] += dy
-        W[0] += ak; W[2] += W[0]
-        W[1] += al; W[3] += W[1]
-        X[0] += ak; X[2] += X[0]
-        X[1] += al; X[3] += X[1]
+        // X = rect row 1 (L51) — non-ax66 unconditional
+        if (!(ax == 66 && (S in 6..10 || S in 24..28))) {
+            c.rect(S, T, 1, flags, X)
+            if (av) X[0] -= dx else X[0] += dx
+            X[1] += dy
+        }
+        // Y = bounds quad (L59 ax13 radial / L62 generic)
+        if (ax == 13) {
+            Y[0] = -Z[1] * 12; Y[1] = 0
+            Y[2] = Z[1] * 12; Y[3] = Z[1] * 12
+        } else if (U >= 0) {
+            val obj = c.frameModuleIndex(S, T)
+            val bx = IntArray(4)
+            c.objectBounds(obj, bx)
+            val r13 = if (flags and 1 != 0) dx else -dx
+            val r14 = if (flags and 2 != 0) dy else -dy
+            Y[0] = bx[0] - r13; Y[1] = bx[1] - r14
+            Y[2] = bx[2] + Y[0]; Y[3] = bx[3] + Y[1]
+            if (flags and 1 != 0) { val t = Y[0]; Y[0] = -Y[2]; Y[2] = -t }
+            if (flags and 2 != 0) { val t = Y[1]; Y[1] = -Y[3]; Y[3] = -t }
+            if (av) { Y[0] -= dx; Y[2] -= dx } else { Y[0] += dx; Y[2] += dx }
+            Y[1] += dy; Y[3] += dy
+        } else {
+            // L82 (U<0): raw quad + flags mirror, no anchor fold
+            val obj = c.frameModuleIndex(S, T)
+            val bx = IntArray(4)
+            c.objectBounds(obj, bx)
+            Y[0] = bx[0]; Y[1] = bx[1]
+            Y[2] = bx[2] + bx[0]; Y[3] = bx[3] + bx[1]
+            if (flags and 1 != 0) { val t = Y[0]; Y[0] = -Y[2]; Y[2] = -t }
+            if (flags and 2 != 0) { val t = Y[1]; Y[1] = -Y[3]; Y[3] = -t }
+        }
+        // absolute translate (L102 X, L103 Y, L91 W)
+        X[0] += ak; X[1] += al; X[2] += X[0]; X[3] += X[1]
+        Y[0] += ak; Y[1] += al; Y[2] += ak; Y[3] += al
+        W[0] += ak; W[1] += al; W[2] += W[0]; W[3] += W[1]
     }
 
     /**
@@ -501,6 +557,83 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (x1 > 0) gt = 10
     }
 
+    /**
+     * `i.p()` (i.java:214, proven): deactivate — release collision boxes,
+     * cascade to the `ad` child, drop ae/af links. The original's `aS()`
+     * tail only flushes the `cr` scratch-grid cache — unmodeled. The entity
+     * stays listed but inert (zero W → no overlap arms fire).
+     */
+    fun deactivate() {
+        W.fill(0); X.fill(0); Y.fill(0)
+        ad?.deactivate()
+        ad = null; ae = null; af = null
+    }
+
+    /**
+     * `i.G()` (i.java:4792, proven): deactivate the player's live `ae`
+     * pickup indicator and drop the reference.
+     */
+    fun releaseAe() {
+        ae?.deactivate()
+        ae = null
+    }
+
+    /**
+     * `i.u()` (i.java:700, proven): recompute `au` = normalized distance
+     * from the view center (k.O+200, k.P+120). Arms: aG==4 → /400,/240;
+     * ax67&&bk[Z0]==49 → /400,/240; ax67&&bk[Z0]==27 → /800,/240;
+     * generic → /400,/120. (ax21's L14 arm duplicates the aG==4 body.)
+     */
+    fun updateAu(world: LevelCellSource) {
+        var dx = ak - (world.kO + 200); if (dx < 0) dx = -dx
+        var dy = al - (world.kP + 120); if (dy < 0) dy = -dy
+        au = when {
+            aG == 4 -> dx / 400 + dy / 240
+            ax == 67 && NpcFsm.decorClip(Z[0]) == 49 -> dx / 400 + dy / 240
+            ax == 67 && NpcFsm.decorClip(Z[0]) == 27 -> dx / 800 + dy / 240
+            else -> dx / 400 + dy / 120
+        }
+    }
+
+    /**
+     * `i.v()` (i.java:730, proven) — "on-screen / recently-active" check:
+     * typed early-true arms, then `u(); au>i → false`; else for ax67 and
+     * other non-listed types `a(k.ac, this.Y)` — the Y bounds quad against
+     * the camera view rect. ax14's arm (S76/W-null/`a(player.W,W)`) is
+     * transcribed too for the pickup path.
+     */
+    fun wasHitRecently(world: LevelCellSource): Boolean {
+        if (ax == 49) return true
+        if (ax == 29 && S == 24 && T >= 54) return true
+        if (ax == 10 || ax == 40 || ax == 60) {
+            if (P and 16 != 0) return true     // L21
+        }
+        if (ax == 27 && S == 6 && Z[1] > 0) return true
+        if (ax == 21 && S >= 2) return true    // L35
+        updateAu(world)
+        if (au > i) return false               // offscreen score
+        if (ax == 60) return true
+        if (ax == 11 && Z[8] == 888) return true
+        if (ax == 14) {                        // L51 ax14 arm
+            if (S == 76) return true
+            if (W.contentEquals(ZERO_RECT)) return true
+            val view = world.camRect
+            if (world.inPlay || S == 69 || S == 70 || S == 71)
+                return overlapI(view, Y)
+            return overlapI(world.playerRect(), W)
+        }
+        // L73: ax∈{37,10,60} → a(k.ac, W); ax==78&&S!=3 → a(k.ac,Y)
+        if (ax == 37 || ax == 10 || ax == 60) return overlapI(world.camRect, W)
+        return overlapI(world.camRect, Y)      // L85 — ax67 lands here
+    }
+
+    companion object {
+        val ZERO_RECT = IntArray(4)
+        /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
+        fun overlapI(a: IntArray, b: IntArray): Boolean =
+            a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+    }
+
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
         var r10 = op
         // i.java:4446 head (proven): op4 upgraded to op18 when the struck
@@ -580,4 +713,25 @@ interface LevelCellSource {
 
     /** `m(-1)` wisp burst (i.java:21259) spawned through `a(74,54,1,…)`. */
     fun spawnWisp(src: Entity)
+
+    // -- globals read by prop FSMs --------------------------------------
+    /** `k.Y` — global fall impulse (k.java:2336 `Y = X<<8`; source writes
+     *  at phase transitions are unmined; level-0 arms reading it are
+     *  unreachable). */
+    val kY: Int get() = 0
+    /** `k.O` — camera left edge in world px (subtract operand at
+     *  i.java:9837; ax14 pickups pin to `k.O+{20,380}` = the view edges). */
+    val kO: Int get() = 0
+    /** `k.P` — camera top edge in world px (u() center operand). */
+    val kP: Int get() = 0
+    /** `k.ac` — camera view rect [x1,y1,x2,y2] world px (v()'s L83/L85). */
+    val camRect: IntArray get() = IntArray(4)
+    /** `k.bh[k.aj] == 3` — in-play phase (v()'s ax14 arm L61). */
+    val inPlay: Boolean get() = true
+    /** `k.aS.W` — the player's hitbox (v()'s ax14 tail). */
+    fun playerRect(): IntArray = IntArray(4)
+
+    /** `i.a(int,int,int)` (i.java:9810): spawn an ax14 clip9 pickup
+     *  indicator (anim `n`, az=302) and return it for `ae` binding. */
+    fun spawnPickup(anim: Int, x: Int, y: Int): Entity
 }

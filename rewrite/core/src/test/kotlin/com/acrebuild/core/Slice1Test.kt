@@ -135,6 +135,10 @@ class Level0WorldTest {
             9 to Clip.load(asset("clips/clip9/clip.acpk")),
             32 to Clip.load(asset("clips/clip32/clip.acpk")),
             54 to Clip.load(asset("clips/clip54/clip.acpk")),
+            64 to Clip.load(asset("clips/clip64/clip.acpk")),
+            26 to Clip.load(asset("clips/clip26/clip.acpk")),
+            27 to Clip.load(asset("clips/clip27/clip.acpk")),
+            35 to Clip.load(asset("clips/clip35/clip.acpk")),
             10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -696,5 +700,157 @@ class Level0WorldTest {
         // anim finish → removed (drive a few more ticks through full sim)
         repeat(30) { w.tick(emptyList()) }
         assertFalse(w.npcs.contains(wisp))
+    }
+
+    // ------------------------------------------------------------- ax67
+
+    @Test fun `ax67 decor spawns with L347 fields on clip64`() {
+        val w = world()
+        val ds = w.npcs.filter { it.ax == 67 }
+        assertEquals(253, ds.size)
+        // every level-0 record is kind 9 → bk=64; Z[0]=kind, az=f8, S=f5
+        assertTrue(ds.all { it.Z[0] == 9 })
+        assertTrue(ds.all { it.clip != null && it.clip === w.clips[64] })
+        // f5==39 never occurs on level 0 → generic aB stays 0
+        assertTrue(ds.all { it.aB == 0 })
+        // az copies f8: level-0's set is {0×249, -1×2, 300×2}
+        assertEquals(2, ds.count { it.az == 300 })
+        assertEquals(2, ds.count { it.az == -1 })
+        // record f5 max is 32 < clip64's 35 anims — S is in range
+        assertTrue(ds.all { it.S in 0 until it.clip!!.animCount() })
+    }
+
+    @Test fun `kind-9 decor is inert under ticks`() {
+        val w = world()
+        val ds = w.npcs.filter { it.ax == 67 }
+        val p = w.player
+        p.setPositionPx(ds.first().ak, ds.first().al)
+        repeat(30) { w.npcFsm.tickDecor(ds.first(), p) }
+        // bk[9]=64 routes to no arm: no player side-effects, no ae spawn,
+        // prop stays put and alive
+        assertEquals(0, p.aC); assertEquals(0, p.ag)
+        assertNull(p.ae)
+        assertTrue(w.npcs.contains(ds.first()))
+    }
+
+    @Test fun `springboard arm bounces the player off W overlap`() {
+        // bk[1]=27 → clip27 (has real rects); record: [67,aw,x,y,f4,f5,P,kind,az]
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        w.npcFsm.initDecor(e, listOf(67, 900, 200, 400, 0, 19, 0, 1, 0))
+        assertEquals(19, e.S); assertEquals(1, e.Z[0])
+        // put the player's body over the prop's rect
+        w.player.setPositionPx((e.W[0] + e.W[2]) / 2, (e.W[1] + e.W[3]) / 2)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDecor(e, w.player)
+        // ah = 768 + k.Y(0); op40 grab applies the L96 arm on the player
+        assertEquals(768, w.player.ah)
+        assertEquals(20, e.S)      // i(S+1) — sprung anim
+    }
+
+    @Test fun `springboard spawned-linked-child arm ticks via ad scan`() {
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        w.npcFsm.initDecor(e, listOf(67, 901, 200, 400, 0, 21, 0, 1, 0))
+        // fabricate an ax68-linked child overlapping W (the k.bd[] scan)
+        val child = Entity(68, w.clips[27])
+        child.setPositionPx(e.ak, e.al)
+        val owner = Entity(11, w.clips[7])
+        owner.ad = child
+        w.npcs += owner; w.npcs += child
+        child.refreshBoxes(); e.refreshBoxes()
+        w.npcFsm.tickDecor(e, w.player)
+        // faithful double i(S+1): the bounce arm bumps 21→22, then the
+        // bd[]-scan arm reads the CURRENT S and bumps 22→23 (i.java:17620
+        // ordering — both arms fire on the same tick).
+        assertEquals(23, e.S)
+        assertEquals(2, child.S)   // ad.i(2)
+        assertEquals(10, owner.S)  // r0.i(10)
+    }
+
+    // Synthetic-clip convention for kind-5 arms: the FSM dispatches on
+    // Z[0], not the bound clip, so a prop bound to clip27 (populated rect
+    // pool + bounds quads) while kind=5 exercises the arms with real W/X
+    // geometry. The real kind5→clip35 pairing carries an EMPTY rect pool
+    // — its W/X degenerate to anchor-point rects, and `i.a()` being
+    // inclusive-edge means they fire only when the anchor lands inside
+    // the player's box (proven; tests below use clip27 for readability).
+
+    @Test fun `kind-5 S12 hide spot binds player when unused`() {
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        // record [67,aw,x,y,f4,f5,P,kind,az]: f4=1 → Z[1]=1 (L3530 arm)
+        w.npcFsm.initDecor(e, listOf(67, 902, 300, 500, 1, 12, 0, 5, 7))
+        assertEquals(12, e.S); assertEquals(1, e.Z[1]); assertEquals(5, e.Z[0])
+        e.setPositionPx(300, 500); e.refreshBoxes()
+        // W degenerates to the anchor point — the inclusive i.a() overlap
+        // still binds whenever the player box contains (300,500).
+        w.player.setPositionPx(300, 500); w.player.refreshBoxes()
+        w.player.gg = null
+        w.npcFsm.tickDecor(e, w.player)
+        // aA|=8 + g.e link + draw-under az-1
+        assertTrue(w.player.aA and 8 != 0)
+        assertSame(e, w.player.ge)
+        assertEquals(6, w.player.az)
+    }
+
+    @Test fun `kind-5 S28 spawner arms a 71 pickup pinned to view edge`() {
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        w.npcFsm.initDecor(e, listOf(67, 903, 500, 500, 0, 28, 0, 5, 0))
+        assertEquals(28, e.S)
+        e.setPositionPx(500, 500); e.refreshBoxes()
+        // X degenerates to the anchor point (clip27 obj0 has no rects) —
+        // place the player so its W contains that point; offscreen cam
+        // keeps v()=false so the spawn arm fires.
+        w.player.setPositionPx(e.X[0] + 1, (e.X[1] + e.X[3]) / 2)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDecor(e, w.player)
+        // aS.G() then i.a(71,ak,al): ax14 S71 az=302 pinned to k.O+edge
+        val ae = w.player.ae
+        assertNotNull(ae, "spawned pickup bound to player.ae")
+        assertEquals(14, ae!!.ax); assertEquals(71, ae.S); assertEquals(302, ae.az)
+        assertTrue(ae.P and 512 != 0); assertEquals(-1, ae.aw)
+        // r02 = player.ak - Wcenter; player left of center → pin k.O+380
+        val edge = if (w.player.ak - ((e.W[0] + e.W[2]) shr 1) >= 0) 20 else 380
+        assertEquals(w.camX + edge, ae.ak)
+        assertEquals(e.al, ae.al)
+        // next tick drains the insert buffer
+        w.tick(emptyList())
+        assertTrue(w.npcs.contains(ae))
+    }
+
+    @Test fun `kind-5 S28 shove arm pushes player out of W`() {
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        w.npcFsm.initDecor(e, listOf(67, 904, 500, 500, 0, 28, 0, 5, 0))
+        e.setPositionPx(500, 500); e.refreshBoxes()
+        // Shove needs v()==true (else the spawn arm eats the tick): put
+        // the prop beside the player in view — the camera follows the
+        // player on real ticks so one tick centers the view on them.
+        e.setPositionPx(300, 150)
+        w.player.setPositionPx(300, 150)
+        w.tick(emptyList())
+        w.player.refreshBoxes()
+        w.npcFsm.tickDecor(e, w.player)
+        // i(309), aC=5, ag=±2560 by side, av, g.a=null
+        assertEquals(309, w.player.S)
+        assertEquals(5, w.player.aC)
+        assertEquals(2560, w.player.ag)
+        assertTrue(w.player.av)
+        assertNull(w.player.ga)
+    }
+
+    @Test fun `kind-5 S28 releases ae when no overlap`() {
+        val w = world()
+        val e = Entity(67, w.clips[27])
+        w.npcFsm.initDecor(e, listOf(67, 905, 500, 500, 0, 28, 0, 5, 0))
+        e.setPositionPx(500, 500); e.refreshBoxes()
+        // bind a stale ae, stand far away → aS.G() path
+        val old = w.spawnPickup(71, 0, 0); w.player.ae = old
+        w.player.setPositionPx(2000, 500); w.player.refreshBoxes()
+        w.npcFsm.tickDecor(e, w.player)
+        assertNull(w.player.ae)
+        assertEquals(0, old.W[0])          // p() zeroed the boxes
     }
 }

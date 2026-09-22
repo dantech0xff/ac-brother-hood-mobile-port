@@ -28,11 +28,14 @@ class Level0World(
         const val VIEW_H = 240
 
         // Entity type -> clip index (k.bi[]; only decoded clips carried).
+        // ax67 is special: the record binds `aa = k.r(bk[kind])` per-kind
+        // (i.java:2633) — resolved in spawnEntities via NpcFsm.decorClip.
         val ENTITY_CLIP = mapOf(
             11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             10 to 6,      // clip6 not converted yet — triggers spawn clipless
+            71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
         )
     }
 
@@ -130,6 +133,37 @@ class Level0World(
     override fun sfx(id: Int) { sfxLog += id }
     override fun shake() { shake++ } // k.s()
 
+    /** `k.O` — camera left edge (the pickup pin anchor, i.java:9837). */
+    override val kO: Int get() = camX
+    /** `k.P` — camera top edge (u()'s view-center operand). */
+    override val kP: Int get() = camY
+    /** `k.ac` — camera view rect [x1,y1,x2,y2] (v() on-screen check). */
+    override val camRect: IntArray get() =
+        intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
+    /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
+    override val inPlay: Boolean get() = !failed
+    /** `k.aS.W` — player hitbox. */
+    override fun playerRect(): IntArray = player.W
+
+    /**
+     * `i.a(int,int,int)` (i.java:9810, proven): spawn an ax14 clip9 entity
+     * (the pickup/marker family) — `a(14, 9, anim, az=302)` via the 4-arg
+     * generic spawner (i.java:6898: P|=512, aw=-1, au=0), position (x,y).
+     */
+    override fun spawnPickup(anim: Int, x: Int, y: Int): Entity {
+        val e = Entity(14, clips[9]).apply {
+            aw = -1
+            setAnim(anim); az = 302
+            setPositionPx(x, y); av = false
+            P = P or 512
+            refreshBoxes()          // ax14 t() early-returns — W stays the
+                                    // record-empty zero rect until aX()
+                                    // is ported; harmless (v() reads Y).
+        }
+        pendingInsert += e                        // k.b(aK)
+        return e
+    }
+
     /** `m(int)` particle burst (i.java:21259, proven): `a(74,54,1,
      *  player.az+1)` via the generic spawner (i.java:4799) — random angle
      *  aD = j.a(0,360), launch radius cap aE = j.a(70,90), aC=2 drift legs,
@@ -220,7 +254,11 @@ class Level0World(
         for (f in level.entities) {
             if (f.size < 7) continue
             val type = f[0]
-            val clipIdx = ENTITY_CLIP[type] ?: continue
+            // ax67: per-record clip from bk[kind] (i.java:2633); others use
+            // the bi[] table. decorClip(-1)/missing clip → record skipped.
+            val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
+                          else ENTITY_CLIP[type]
+            if (clipIdx == null || clipIdx < 0) continue
             val e = Entity(type, clips[clipIdx]).apply {
                 aw = f[1]
                 setPositionPx(f[2], f[3])
@@ -232,6 +270,7 @@ class Level0World(
             else if (type == 44) npcFsm.initDoor(e, f.toList())
             else if (type == 10) npcFsm.initTrigger(e, f.toList())
             else if (type == 4) npcFsm.initDestructible(e, f.toList())
+            else if (type == 67) npcFsm.initDecor(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -383,6 +422,7 @@ class Level0World(
             else if (n.ax == 10) npcFsm.tickTrigger(n, player)
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
             else if (n.ax == 74) npcFsm.tickWisp(n, player)
+            else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) n.advanceAnim()   // k.N marker: S54 loop
             else npcFsm.tick(n, player)
         }
