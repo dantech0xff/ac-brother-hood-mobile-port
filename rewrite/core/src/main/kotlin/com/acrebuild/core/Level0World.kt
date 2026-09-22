@@ -53,6 +53,7 @@ class Level0World(
             72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
             78 to 63,     // ax78 counterweight (bi[78]=63, proven)
             79 to 0,      // ax79 palette prop (bi[79]=0, proven)
+            80 to 57,     // ax80 static prop (bi[80]=57, proven)
         )
     }
 
@@ -393,6 +394,7 @@ class Level0World(
             else if (type == 72) npcFsm.initAx72(e, f.toList(), this)
             else if (type == 78) npcFsm.initAx78(e, f.toList(), this)
             else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
+            else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
