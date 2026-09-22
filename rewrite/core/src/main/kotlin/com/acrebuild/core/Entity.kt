@@ -510,4 +510,6 @@ interface LevelCellSource {
     /** `i.aN` — the single weakened-target lock (static field in the
      *  original; scoped to the world here). */
     var lockTarget: Entity?
+    /** `k.q(uid)` lookup source (proven: entity list search by `aw`). */
+    val npcs: List<Entity>
 }
