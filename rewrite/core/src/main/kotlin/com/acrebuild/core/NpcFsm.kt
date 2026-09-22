@@ -678,6 +678,80 @@ class NpcFsm(val world: LevelCellSource) {
     private fun overlap(a: IntArray, b: IntArray): Boolean =
         a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 
+    // ============================================================ ax41 = n()
+    // Knockable prop (i.java:6414, proven): vases/crates the player knocks
+    // into enemies. S3 → shared a() interact (pushOut); S4 settle — vel0,
+    // sweep touching entities {0→i(9), 11→s-chain, 51→i(2)}, k.ae = aS at
+    // T==frames-2, r() → k.c; S6 tumble — aj=1536, ah<=2560, wall-bounce,
+    // entity impact → i(4); S5/default → L92 dropped label → no-op.
+
+    /** `i(i)` — i.java:6655 (proven): W-overlap always; when the other is a
+     *  "carrier" (player `g.a.ax==51`, or ax11 `s.ax==51`) also requires
+     *  |al diff| <= 20. */
+    private fun knockOverlap(e: Entity, o: Entity): Boolean {
+        val carrier = when {
+            o.ax == 0 -> o.ga?.ax == 51
+            o.ax == 11 -> o.s?.ax == 51
+            else -> false
+        }
+        if (carrier && kotlin.math.abs(o.al - e.al) > 20) return false
+        return Entity.overlapI(o.W, e.W)
+    }
+
+    fun tickKnockable(e: Entity, w: Level0World, p: Entity) {
+        when (e.S) {
+            3 -> pushOut(e, p)                                        // L44 a()
+            4 -> {                                                    // L4 settle
+                e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                // k.bd includes the player — w.npcs does not, append it.
+                for (o in w.npcs + p) {
+                    if (o === e) continue
+                    val r0 = o.ax
+                    if (r0 != 0 && r0 != 11 && r0 != 51 && r0 != 41 && r0 != 4)
+                        continue                                    // L36
+                    // `bd.W==null || this.W==null` — port W is never null;
+                    // an all-zero box fails the overlap identically.
+                    if (!Entity.overlapI(o.W, e.W)) continue
+                    when (r0) {
+                        0 -> o.setAnim(9)                             // L25
+                        11 -> {                                       // L27
+                            val s = o.s
+                            if (s == null) o.setAnim(0)               // L30
+                            else if (s.ax != 51 && e.S == 6) o.setAnim(7) // L34
+                        }
+                        51 -> o.setAnim(2)                            // L31
+                        // 41 → L36 box-check only; 4 → inner default → L36.
+                        // Inner case 15 is unreachable: the outer filter
+                        // admits r0==4, not 15 — likely a decompiler
+                        // constant swap; ported verbatim (inferred).
+                    }
+                }
+                val clip = e.clip
+                if (clip != null && e.T == clip.frameCount(e.S) - 2)
+                    w.aeRef = p                                       // k.ae = k.aS
+                if (e.animFinished()) w.removeEntity(e)
+            }
+            6 -> {                                                    // L46 tumble
+                e.aj = 1536
+                if (e.ah >= 2560) { e.ah = 2560; e.aj = 0 }
+                e.bd = true
+                e.collideSides(w, true)                               // a(true)
+                if (e.bb) e.ag = -e.ag
+                e.av = e.ag < 0                                       // L55-58
+                val moving = e.ag != 0 || e.ah != 0
+                if (knockOverlap(e, p) && moving) { e.setAnim(4); return }
+                for (o in w.npcs) {
+                    if (o === e) continue
+                    if (o.ax != 51 && o.ax != 11 && o.ax != 41 && o.ax != 15)
+                        continue                                      // L91
+                    if (!knockOverlap(e, o) || !moving) continue
+                    e.setAnim(4); return                              // L88 i(4)
+                }
+            }
+            // case 5 + default → L92 dropped label → no-op (flagged).
+        }
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

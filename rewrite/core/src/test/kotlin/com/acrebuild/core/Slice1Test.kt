@@ -2562,4 +2562,129 @@ class Level0WorldTest {
         w.npcFsm.tickAx61(e, w, w.player)
         assertEquals(19, e.S, "reverts i(19)")
     }
+
+    // -- slice 36: ax41 n() knockable prop --------------------------------
+
+    private fun knockableAt(w: Level0World, x: Int, y: Int, s: Int): Entity {
+        val e = Entity(41, w.clips[7])
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.S = s
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax41 S4 settle zeroes velocity and removes at anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = knockableAt(w, 300, 150, 4)
+        e.ag = 999; e.ah = 999; e.ai = 9; e.aj = 9
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(0, e.ag); assertEquals(0, e.ah)
+        assertEquals(0, e.ai); assertEquals(0, e.aj)
+        // clip7 S4 = 10f — drive to anim end
+        e.S = 4; repeat(12) { w.npcFsm.tickKnockable(e, w, w.player); e.advanceAnim() }
+        assertTrue(e in w.pendingRemove, "r() -> k.c(this)")
+    }
+
+    @Test fun `ax41 S4 sweep hits overlapping player with i9`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = knockableAt(w, 300, 150, 4)
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(9, p.S, "r0==0 overlap -> bd.i(9)")
+    }
+
+    @Test fun `ax41 S4 sweep routes overlapping soldier by s link`() {
+        val w = world(); w.npcs.clear()
+        val soldier = Entity(11, w.clips[7]).apply {
+            setPositionPx(300, 150); refreshBoxes(); S = 5
+        }
+        w.npcs.add(soldier)
+        val e = knockableAt(w, 300, 150, 4)
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(0, soldier.S, "s==null -> bd.i(0)")
+        soldier.S = 5; soldier.s = Entity(51, null)
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(5, soldier.S, "s.ax==51 -> skip")
+        soldier.s = Entity(4, null)
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(5, soldier.S, "s.ax!=51 but this.S==4 != 6 -> no i(7)")
+    }
+
+    @Test fun `ax41 S4 attributes k ae to the player near anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = knockableAt(w, 900, 900, 4)       // isolated — no sweep hits
+        e.T = e.clip!!.frameCount(e.S) - 2
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertSame(w.player, w.aeRef, "T==frames-2 -> k.ae = aS")
+    }
+
+    @Test fun `ax41 S6 tumble applies gravity cap and wall bounce`() {
+        val w = world(); w.npcs.clear()
+        val e = knockableAt(w, 300, 50, 6)
+        e.ah = 3000; e.ag = 500
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(2560, e.ah, "ah capped at 2560")
+        assertEquals(0, e.aj, "aj zeroed at cap")
+        assertTrue(e.bd, "bd = true")
+        assertFalse(e.av, "ag>=0 -> av=false")
+        e.ah = 100; e.ag = -300
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertTrue(e.av, "ag<0 -> av=true")
+    }
+
+    @Test fun `ax41 S6 player impact enters S4`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = knockableAt(w, 300, 150, 6)
+        e.ag = 400                                  // moving -> impact
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(4, e.S, "moving + i(aS) -> i(4)")
+    }
+
+    @Test fun `ax41 S6 soldier impact enters S4`() {
+        val w = world(); w.npcs.clear()
+        val soldier = Entity(11, w.clips[7]).apply {
+            setPositionPx(300, 150); refreshBoxes()
+        }
+        w.npcs.add(soldier)
+        val e = knockableAt(w, 300, 150, 6)
+        e.ah = 400                                  // moving via ah
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(4, e.S, "moving + i(bd) -> i(4)")
+    }
+
+    @Test fun `ax41 S6 still entity does not impact`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = knockableAt(w, 300, 150, 6)
+        // ag/ah zero -> impact gate needs motion
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(6, e.S, "ag==0 && ah==0 -> no i(4)")
+    }
+
+    @Test fun `ax41 S3 runs the shared pushOut interact`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.S = 0
+        p.setPositionPx(300, 150); p.refreshBoxes()  // overlaps prop
+        val e = knockableAt(w, 300, 150, 3)
+        p.ak = e.ak - 2                              // left side, moving right
+        p.ag = 10
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertTrue(p.ak < e.ak, "clamped to prop's left edge")
+    }
+
+    @Test fun `ax41 S5 and default are no-ops`() {
+        val w = world(); w.npcs.clear()
+        val e = knockableAt(w, 300, 150, 5)
+        e.ag = 777
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(777, e.ag, "S5 -> L92 dropped -> no-op")
+        e.S = 99
+        w.npcFsm.tickKnockable(e, w, w.player)
+        assertEquals(99, e.S, "default -> L92 -> no-op")
+    }
 }
