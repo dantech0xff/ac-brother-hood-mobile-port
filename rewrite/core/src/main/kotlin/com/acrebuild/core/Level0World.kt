@@ -50,6 +50,9 @@ class Level0World(
             15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
             46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
             7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
+            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
+            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
+            74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
         )
     }
 
@@ -58,6 +61,9 @@ class Level0World(
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
+    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
+     *  default is the x1 init value (inferred — dB restore path unmined). */
+    override var kAx = 90
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -380,6 +386,8 @@ class Level0World(
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
+            else if (type == 6) npcFsm.initAx6(e, f.toList())
+            else if (type == 19) npcFsm.initAx19(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
@@ -826,6 +834,8 @@ class Level0World(
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
