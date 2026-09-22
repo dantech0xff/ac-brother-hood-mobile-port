@@ -998,6 +998,129 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.S in 6..10 || e.S in 24..28) e.b = false         // L288/L295
     }
 
+    // ============================================================ ax51 = bs()
+    // Pushable crate (i.java:16440, proven): land-mount arm, edge-input
+    // grab (k.v — EDGE unlike bm()'s held k.u), carry clamps, S2 death.
+
+    /** `i.bo()` (i.java:16274, proven): `g.j` latch && overlap &&
+     *  `g.a == null` — player pressed against the crate while j-set. */
+    private fun crateContact(e: Entity, w: LevelCellSource,
+                             p: Entity): Boolean =
+        w.gj && Entity.overlapI(p.W, e.W) && p.ga == null
+
+    /** `i.bp()` (i.java:16288, proven): `g.j` && `aS.S∈{43,35}` &&
+     *  `ah>0` && `W[0] < aS.ak < W[2]` && `aS.al <= W[3]` — falling onto
+     *  the crate's top while j-set. */
+    private fun crateLandSpot(e: Entity, w: LevelCellSource,
+                              p: Entity): Boolean =
+        w.gj && (p.S == 43 || p.S == 35) && p.ah > 0 &&
+        p.ak > e.W[0] && p.ak < e.W[2] && p.al <= e.W[3]
+
+    fun tickPushable(e: Entity, w: LevelCellSource, p: Entity) {
+        if (p.S == 284) return                                     // L6
+        if (e.claimActive()) e.runClaimScript(w)                   // ab()→aa()
+        // L9/L22 — walked off while carried → release
+        if (p.ga === e && !Entity.overlapI(p.W, e.W) &&
+            p.S != 235 && p.S != 238 && p.S != 50 && p.S != 9) {
+            p.ga = null; e.releaseAe()
+        }
+        // L22/L30 — land-mount arm (g.j clears it entirely)
+        if (!w.gj &&
+            (p.al < e.W[3] || (p.ah > 0 && w.gc === e))) {         // L22
+            if (p.ga == null &&
+                p.S != 146 && p.S != 236 && p.S != 239 &&
+                p.S != 235 && p.S != 238 && p.S != 237 &&
+                p.S != 240 && p.S != 0 && p.S != 277 &&
+                Entity.overlapI(p.W, e.W) && e.S != 8) {           // L30
+                if (p.S == 16 || p.Q == 16 ||
+                    ((e.al - p.gy) / 20) < 20 || w.gH()) {         // L62
+                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                    p.setAnim(0); w.iBq = 0; p.ga = e
+                } else {                                          // mount
+                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                    p.al = e.W[1] + 4
+                    p.applyHit(21, 0, e, w)
+                    p.ga = e
+                }
+            }
+        }
+        // L64/L72/L80/L82 — br() gate: runs when aS not mid-grab-set, or
+        // when riding+claiming this crate; br()==false -> G() release
+        val grabSet = p.S == 236 || p.S == 239 || p.S == 235 || p.S == 238
+        if (!grabSet || (p.ga === e && p.ac === e)) {
+            if (platformGrabCheck(e, w, p))
+                e.spawnAeMarker(w, 1, e.ak, e.al - 85)             // L80
+            else e.releaseAe()                                   // L82
+        }
+        // L84/L94 — board arm: ac null or claimed-on-this + S236/239
+        if (p.ga !== e && e.S != 8 && (p.ac == null || p.ac === e) &&
+            Entity.overlapI(p.W, e.W) &&
+            (p.S == 236 || p.S == 239)) {
+            p.setAnim(if (p.S == 236) 237 else 240)                // L103
+            p.ah = 0; p.ag = 0; p.ga = e
+            if (p.av) {                                           // L113
+                if (p.W[0] < e.W[0]) p.ak += 20
+            } else if (p.W[2] > e.W[2]) p.ak -= 20
+        }
+        // L116/L126 — EDGE-input grab (k.v, unlike bm()'s k.u)
+        val grabEdge = w.padHeld(16388) ||
+            (p.av && w.padHeld(2)) || (!p.av && w.padHeld(8))
+        if (grabEdge && (p.ga === e || grabZone(e, p))) {          // L126
+            if (p.S != 238 && p.S != 235 && p.S != 239 &&
+                p.S != 236 && p.ac != null &&
+                p.av == (p.ac!!.ak < p.ak) &&                     // L142
+                !p.isHolding() &&
+                (p.S == 0 || p.S == 1 || p.S == 12)) {             // L153
+                p.setAnim(if (p.S == 237) 238 else 235)            // dead-237 kept
+            }
+        }
+        // L157 — carry: shift player with the crate + side pin
+        if (p.ga === e) {
+            e.refreshBoxes()                                       // t()
+            p.ak += e.ag shr 8
+            if (p.S == 7 || p.S == 32 || p.S == 12 || p.S == 0) {
+                if (p.av) {                                       // L167
+                    if (p.W[0] < e.W[0]) {
+                        p.ag = 0; p.ak = (p.ak - p.W[0]) + e.W[0]
+                    }
+                } else if (p.W[2] > e.W[2]) {                     // L172
+                    p.ag = 0; p.ak = (p.ak - p.W[2]) + e.W[2]
+                }
+            }
+        }
+        // L175 — S-switch
+        when (e.S) {
+            0, 1 -> {                                             // L177
+                // bp/bo bookkeeping on g.c
+                if (!crateLandSpot(e, w, p) && !crateContact(e, w, p)) {
+                    if (w.gc === e) w.gc = null                   // L184
+                } else if (w.gc == null || w.gc !== e) {          // L188
+                    if (p.P and 1024 == 0) w.gc = e               // L192
+                }
+                if (p.ga === e) {                                 // L195/L197
+                    if (!Entity.overlapI(p.W, e.W) &&
+                        p.S != 50 && p.S != 9) {
+                        e.P = e.P and -17; p.ga = null; e.releaseAe()
+                        return
+                    }
+                    if (p.S != 236 && p.S != 239 && p.S != 235 &&
+                        p.S != 238) {                             // L204-210
+                        e.refreshBoxes()
+                        p.ak += e.ag shr 8
+                        p.al = e.W[1] + 4
+                    }
+                }
+            }
+            2 -> {                                                // L213
+                e.releaseAe()
+                if (!Entity.overlapI(p.W, e.W)) {
+                    e.P = e.P and -17; p.ga = null; e.releaseAe()
+                }
+                if (e.animFinished()) { e.P = e.P or 64 or 32 }   // L217
+            }
+        }
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`
