@@ -144,6 +144,8 @@ private fun world(): Level0World {
             45 to Clip.load(asset("clips/clip45/clip.acpk")),
             47 to Clip.load(asset("clips/clip47/clip.acpk")),
             31 to Clip.load(asset("clips/clip31/clip.acpk")),
+            4 to Clip.load(asset("clips/clip4/clip.acpk")),
+            11 to Clip.load(asset("clips/clip11/clip.acpk")),
             62 to Clip.load(asset("clips/clip62/clip.acpk")),
             25 to Clip.load(asset("clips/clip25/clip.acpk")),
             29 to Clip.load(asset("clips/clip29/clip.acpk")),
@@ -3919,6 +3921,216 @@ class Slice43bTest {
     }
 }
 
+// ---------------------------------------------------------------------------
+// slice 46 — ax6 `an()` trigger marker + ax19 `aO()` meter pickup
+// ---------------------------------------------------------------------------
+class Slice46Test {
+
+    private fun axAt(w: Level0World, ax: Int, x: Int, y: Int, s: Int): Entity {
+        val e = Entity(ax, w.clips[if (ax == 6) 4 else 11])
+        e.setPositionPx(x, y)
+        val f = mutableListOf(ax, 0, x, y, 0, s, 0)
+        for (i in 7..15) f += 0
+        if (ax == 6) w.npcFsm.initAx6(e, f) else w.npcFsm.initAx19(e, f)
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax6 armed marker fires on player overlap then removes`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 6, p.ak, p.al, 5)                       // S5 armed
+        p.refreshBoxes(); e.refreshBoxes()
+        w.npcFsm.tickAx6(e, w, p)
+        assertEquals(6, e.S, "S5 + overlap → i(6)")
+        // wind down: anim end → k.c(this) removal
+        e.T = w.clips[4]!!.frameCount(e.S) - 1
+        e.U = w.clips[4]!!.frameDuration(e.S, e.T) - 1
+        w.npcFsm.tickAx6(e, w, p)
+        assertTrue(e in w.pendingRemove, "S6 r() → k.c(this)")
+    }
+
+    @Test fun `ax6 armed S3 stays armed without overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 6, p.ak + 4000, p.al + 4000, 3)         // far away
+        w.npcFsm.tickAx6(e, w, p)
+        assertEquals(3, e.S, "no overlap → still armed")
+        // clip4 anim3's object carries ZERO rects → degenerate W → the
+        // i.a() point-box reject keeps S3 dormant even under the player
+        // (faithful: the same arm is dead in the original too).
+        e.setPositionPx(p.ak, p.al); e.refreshBoxes(); p.refreshBoxes()
+        w.npcFsm.tickAx6(e, w, p)
+        assertEquals(3, e.S, "S3 + degenerate W → i.a() reject")
+    }
+
+    @Test fun `ax19 pickup overlap fires i(18) + sfx17 + 5 sparks`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 19, p.ak, p.al, 17)                     // S17 idle
+        p.setAnim(0)                                           // g.c(0) ok
+        p.refreshBoxes(); e.refreshBoxes()
+        w.npcFsm.tickAx19(e, w, p)
+        assertEquals(18, e.S, "overlap → i(18)")
+        assertTrue(17 in w.sfxLog, "k.A(17) sfx")
+        assertEquals(5, w.pendingInsert.size, "5x a(74,54,5,300) sparks")
+        assertTrue(e.b, "b=true latched")
+        assertTrue(w.pendingInsert.all { it.ax == 74 && it.P == 528 })
+    }
+
+    @Test fun `ax19 consume restores x1 from kAx then removes`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 19, p.ak, p.al, 18)                     // consuming
+        p.x1 = 40; w.kAx = 75
+        e.T = w.clips[11]!!.frameCount(e.S) - 1
+        e.U = w.clips[11]!!.frameDuration(e.S, e.T) - 1
+        w.npcFsm.tickAx19(e, w, p)
+        assertEquals(75, p.x1, "g.e(k.ax) → x1=kAx")
+        assertTrue(e in w.pendingRemove)
+        // dead player: no restore
+        val e2 = axAt(w, 19, p.ak, p.al, 18)
+        p.x1 = 0
+        e2.T = w.clips[11]!!.frameCount(e2.S) - 1
+        e2.U = w.clips[11]!!.frameDuration(e2.S, e2.T) - 1
+        w.npcFsm.tickAx19(e2, w, p)
+        assertEquals(0, p.x1, "g.g() dead → no restore")
+    }
+
+    @Test fun `ax19 spark burst table + velocity`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 19, p.ak, p.al, 17)
+        p.setAnim(0); p.refreshBoxes(); e.refreshBoxes()
+        w.npcFsm.tickAx19(e, w, p)
+        val s = w.pendingInsert[0]
+        assertTrue(s.clip === w.clips[54], "bi[74]=54 clip map")
+        assertEquals(5, s.S); assertEquals(300, s.az)
+        assertTrue(s.ag in (-1536..1536) && s.ag and 255 == 0,
+                   "ag = j.a(-6,6)<<8")
+        assertEquals(0, s.Z[6]); assertTrue(s.Z[7] in 10..15,
+                   "Z[7]=j.a(10,16) lifetime")
+    }
+
+    @Test fun `ax19 gated on interact-eligible player states`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = axAt(w, 19, p.ak, p.al, 17)
+        p.setAnim(67)                                          // mid-attack —
+        p.refreshBoxes(); e.refreshBoxes()                     // NOT g.c()
+        w.npcFsm.tickAx19(e, w, p)
+        assertEquals(17, e.S, "non-g.c state → no pickup")
+    }
+}
+
+// ===========================================================================
+// Slice 47 — ax42 `bz()` fuse/timer zone + k.F claim slot
+// ===========================================================================
+class Slice47Test {
+
+    private fun ax42At(w: Level0World, x: Int, y: Int, kind: Int, uid: Int, secs: Int): Entity {
+        val e = Entity(42, null)
+        e.setPositionPx(x, y)
+        val f = mutableListOf(42, 0, x, y, kind, 0, 0, 0, 0, 20, 20, uid, secs)
+        w.npcFsm.initAx42(e, f)
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax42 dormant records still claim kF + P bits every tick`() {
+        val w = world(); w.npcs.clear()
+        val e = ax42At(w, 0, 0, 0, 0, 30)
+        assertEquals(-1, e.S, "no i() reaches ax42 in the ctor — S stays -1")
+        w.kAJ = 0; w.kAM = 0
+        w.npcFsm.tickAx42(e, w, w.player)
+        assertSame(e, w.kF, "k.F = this")
+        assertTrue(e.P and 16 != 0 && e.P and 512 != 0, "P|=16|512")
+        assertEquals(0, w.kAJ, "S!=0 → aJ machine skipped")
+        assertEquals(0, w.kAM)
+    }
+
+    @Test fun `ax42 kind0 fires when the bound entity expires`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax42At(w, p.ak, p.al, 0, 77, 30)
+        e.setAnim(0)                                          // arm: S==0
+        // bound entity uid 77, dead (aB<=0 → P()==true)
+        val dead = Entity(6, null); dead.aw = 77; dead.aB = 0
+        w.npcs.add(dead)
+        w.sfxLog.clear()
+        w.npcFsm.tickAx42(e, w, p)
+        assertEquals(1, w.kAJ); assertEquals(-40, w.kAK); assertEquals(30, w.kAL)
+        assertNull(e.s, "s=null after L27 fire")
+        assertTrue(9 in w.sfxLog, "k.A(9) on fire")
+    }
+
+    @Test fun `ax42 kind0 waits while the bound entity lives`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax42At(w, p.ak, p.al, 0, 77, 30)
+        e.setAnim(0)
+        val alive = Entity(6, null); alive.aw = 77; alive.aB = 10; alive.P = 32
+        w.npcs.add(alive)
+        w.npcFsm.tickAx42(e, w, p)
+        assertEquals(0, w.kAJ, "s.P&32 set → no fire")
+        assertSame(alive, e.s, "s stays bound")
+    }
+
+    @Test fun `ax42 kind1 fires on bind even while s lives`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax42At(w, p.ak, p.al, 1, 77, 45)
+        e.setAnim(0)
+        val alive = Entity(6, null); alive.aw = 77; alive.aB = 10; alive.P = 0
+        w.npcs.add(alive)
+        w.npcFsm.tickAx42(e, w, p)
+        assertEquals(1, w.kAJ, "Z0==1 && s.P&32==0 → L27 fire")
+        assertEquals(45, w.kAL)
+    }
+
+    @Test fun `ax42 aJ2 expiry fails the mission`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax42At(w, p.ak + 9000, p.al + 9000, 0, 77, 0)   // aL=0 → expires immediately
+        e.setAnim(0)
+        w.kAJ = 2; w.kAL = 0; w.kAM = 0; w.kBw = 0; w.kBx = 0
+        w.npcFsm.tickAx42(e, w, p)
+        assertEquals(-1, w.kBw, "bw=-1")
+        assertEquals(58, w.kBx, "aj!=7 → bx=58")
+        assertEquals(-1, w.kAL); assertEquals(0, w.kAM)
+        assertEquals(2, w.kAJ, "this arm doesn't write aJ")
+    }
+
+    @Test fun `ax42 aJ2 overlap while ticking collects`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax42At(w, p.ak, p.al, 0, 77, 10)                // aL=10s
+        e.setAnim(0)
+        w.kAJ = 2; w.kAL = 10; w.kAM = 0
+        p.refreshBoxes(); e.refreshBoxes()
+        w.npcFsm.tickAx42(e, w, p)
+        assertTrue(e in w.pendingRemove, "player∩W → k.c(this)")
+        assertEquals(3, w.kAJ)
+        assertEquals(0, w.kBw, "no fail write")
+    }
+
+    @Test fun `ax42 kind2 expiry binds script then aa-steps it`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // uid absent from k.eH → kSIndex = -1 → bindScript(-1) leaves
+        // ca=-1 → claimActive false (the aJ==3 remove+reset tail).
+        w.kEh = intArrayOf(999)
+        val e = ax42At(w, p.ak + 9000, p.al, 2, 1234, 0)
+        e.setAnim(0)
+        w.kAJ = 2; w.kAL = 0; w.kAM = 0; w.kBw = 0
+        w.npcFsm.tickAx42(e, w, p)
+        assertEquals(3, w.kAJ)
+        assertEquals(-1, e.ca, "h(k.s(Z[1])) → bindScript(-1)")
+        w.npcFsm.tickAx42(e, w, p)
+        assertTrue(e in w.pendingRemove, "!claimActive → k.c(this)")
+        assertEquals(-1, w.kAL); assertEquals(0, w.kAM); assertEquals(2, w.kBw)
+    }
+}
 // ---------------------------------------------------------------------------
 // slice 44 — ax35 `bQ()` scripted multi-tool (i.java:21594-22296)
 // ---------------------------------------------------------------------------
