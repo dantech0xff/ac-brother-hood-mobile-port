@@ -578,6 +578,7 @@ class Level0World(
             else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
             else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
             else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
+            else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
