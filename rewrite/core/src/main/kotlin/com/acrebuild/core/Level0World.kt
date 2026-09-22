@@ -53,6 +53,9 @@ class Level0World(
             72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
             78 to 63,     // ax78 counterweight (bi[78]=63, proven)
             79 to 0,      // ax79 palette prop (bi[79]=0, proven)
+            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
+            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
+            74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
         )
     }
 
@@ -61,6 +64,9 @@ class Level0World(
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
+    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
+     *  default is the x1 init value (inferred — dB restore path unmined). */
+    override var kAx = 90
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -383,11 +389,14 @@ class Level0World(
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
+            else if (type == 6) npcFsm.initAx6(e, f.toList())
+            else if (type == 19) npcFsm.initAx19(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
             else if (type == 7) npcFsm.initAx7(e, f.toList(), this)
 
+            else if (type == 42) npcFsm.initAx42(e, f.toList())            else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 13) npcFsm.initAx13(e, f.toList())
 
             else if (type == 72) npcFsm.initAx72(e, f.toList(), this)
@@ -492,6 +501,9 @@ class Level0World(
     override var kBK = false                     // k.bK — never set true in JAR
     override var kBx = 0                         // k.bx — l(12) sentinel
     override var kBw = 0                         // k.bw — l(13) sentinel
+    override var kAJ = 0                         // k.aJ — ax42 fuse phase
+    override var kAK = 0                         // k.aK — countdown init
+    override var kAM = 0                         // k.aM — fuse accumulator
     override var kF: Entity? = null              // k.F
     override var iCe = false                     // i.ce static
     override var iBD = false                     // i.bD static
@@ -833,11 +845,14 @@ class Level0World(
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
 
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
             else if (n.ax == 78) npcFsm.tickAx78(n, this, player)

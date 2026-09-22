@@ -89,6 +89,8 @@ CLIPS = {
     "clip60": ("pack-3", "entry-060-marker-003"),  # ax7 ejection slot (bi[7]=60)
     "clip51": ("pack-3", "entry-051-marker-003"),  # ax72 counterweight platform (bi[72]=51)
     "clip63": ("pack-3", "entry-063-marker-003"),  # ax78 counterweight (bi[78]=63)
+    "clip4": ("pack-3", "entry-004-marker-003"),   # ax6 trigger marker (bi[6]=4)
+    "clip11": ("pack-3", "entry-011-marker-003"),  # ax19 pickup (bi[19]=11)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
