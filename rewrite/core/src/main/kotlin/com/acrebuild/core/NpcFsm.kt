@@ -525,6 +525,32 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> if (rectsOverlap(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
+            50 -> {                                             // L852 rope-dismount
+                val ga = player.ga
+                if (ga != null && ga.ax == 43 &&
+                    (ga.S == 1 || ga.S == 4)) {                  // L854/L860
+                    if (rectsOverlap(player.W, e.W)) {
+                        e.spawnMarker(world, 7, player.ak, player.al - 50)
+                        e.ae?.let { it.ak = player.ak; it.al = player.al - 50 }
+                        player.cFlag = false                     // g.C = false
+                        if (world.padHeld(16388)) {              // k.v(16388) edge
+                            e.releaseAe()
+                            player.ag = if (player.av) -3328 else 3328
+                            player.ah = -6656
+                            player.setAnim(243)
+                            player.ga = null
+                            player.cFlag = true                  // g.C = true
+                            world.removeEntity(e)
+                        }
+                    }
+                }
+            }
+            51 -> {                                             // L874/L880 cv register
+                if (world.cv !== e && Entity.overlapStrict(world.kAc, e.W))
+                    world.cv = e
+                else if (world.cv === e && !Entity.overlapStrict(world.kAc, e.W))
+                    world.cv = null
+            }
             53 -> if (player.gD && rectsOverlap(player.W, e.W) &&
                       (player.S == 0 || player.S == 1 || player.S == 5)) {
                 player.setAnim(360)
@@ -5532,5 +5558,126 @@ fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
         }
         4 -> e.P = e.P or 32                            // L36 — parked
         else -> {}                                      // L47 inert
+    }
+}
+
+// =========================================================================
+// ax43 = bw() — ride/swing carrier (dispatch i.java:5081; bw():17086-17187,
+// all proven). Bound by the grapple-offer `o(i)` (:17038-17085) — the ax15
+// arm's r6 == 43 check: `g.a=r6, i(1), k.ae=r6, A(19), ag=Z[1]<<8, G(),
+// g.C=true`. While bound (`g.a==this`, S∈{1,4}): pins the player at its
+// own X center, forces the hang-anim family (295/304-307), moves at
+// `Z[1]<<8` modulated ×150% same-dir / ×50% reverse by held pads
+// u(4112)/u(8256). `v(16388)&&g.C → i(4)`; `g.g()` attack → `i(7)` cut.
+// `cv` (i.cv): the ax10-S51 rail zone under k.ac — full containment of
+// own Y inside cv.W → detach + aS.a(0) + k.c(this). S7 = cut → vel0 +
+// unlink ae/ga + o(this) re-offer. L75 (unbound): k.ae=aS + o(this).
+// =========================================================================
+
+/**
+ * `i.o(i)` (i.java:17038-17085, proven): the ax43 grapple-attach offer —
+ * non-43 callsites no-op (ax40's `o(this)` at :17185 is dead). `t()` then:
+ * `g.a != null` or `g.g()` → `G()` + return. Else `aS.Y ∩ r6.Y` required;
+ * `aS.S ∈ {243,24,22}` bails to `G()`; `r6.Z[2]>0` auto-binds, else the
+ * `a(8,ak,al-85)` prompt + `v(65568)` tap path. `r7 && g.i` → bind:
+ * `g.a=r6, i(1), k.ae=r6, A(19), r6.ag=Z[1]<<8, G(), g.C=true`.
+ */
+fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
+    if (r6.ax != 43) return                             // L7: non-43 → dead call
+    r6.refreshBoxes()                                   // t()
+    val p = w.player
+    if (p.ga != null) { r6.releaseAe(); return }        // L34
+    if (w.playerAttacking()) { r6.releaseAe(); return } // L12→L34
+    if (!Entity.overlapStrict(p.Y, r6.Y)) {             // →L27
+        r6.releaseAe(); return
+    }
+    if (p.S == 243 || p.S == 24 || p.S == 22) {         // L16 rejects
+        r6.releaseAe(); return
+    }
+    var r7 = false
+    if (r6.Z[2] > 0) r7 = true                          // auto-proximity
+    else {                                              // L24 prompt + tap
+        r6.spawnMarker(w, 8, r6.ak, r6.al - 85)
+        if (w.padHeld(65568)) r7 = true
+    }
+    if (!r7 || !w.iFlag) return                         // L29/L38
+    p.ga = r6                                           // L31 bind
+    r6.setAnim(1)
+    w.kAe = r6
+    w.sfx(19)
+    r6.ag = r6.Z[1] shl 8
+    r6.releaseAe()
+    p.cFlag = true                                      // g.C = true
+}
+
+fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()
+    if (e.claimActive()) { e.runClaimScript(w); return }        // ab()→aa()
+    when (e.S) {
+        7 -> {                                                  // L7 cut/re-offer
+            e.ag = 0; e.ah = 0
+            if (w.kAe === e) w.kAe = p
+            if (p.ga === e) p.ga = null
+            grappleOffer(e, w)
+            return
+        }
+        1, 4 -> {
+            // L16 cv arm — Y fully inside the S51 rail zone → detach+remove
+            val cv = w.cv
+            if (cv != null) {
+                cv.refreshBoxes()
+                if (cv.W != null && Entity.containRect(e.Y, cv.W)) {
+                    if (p.ga === e) {
+                        p.ga = null
+                        p.flingAirborne(0, w)             // k.aS.a(0)
+                        if (w.kAe === e) w.kAe = p
+                    }
+                    w.removeEntity(e)
+                    return
+                }
+            }
+            // L29 — player attack cuts the bind → i(7)
+            if (w.playerAttacking() && p.ga === e) {
+                p.ga = null
+                e.setAnim(7)
+                return
+            }
+            if (p.ga !== e) {                             // L75 unbound path
+                if (p.ga == null) {
+                    w.kAe = p                             // k.ae = aS
+                    e.ag = e.Z[1] shl 8
+                    grappleOffer(e, w)
+                }
+                if (!e.animFinished()) return             // L78
+                e.setAnim(1)
+                return
+            }
+            // L35 bound ride
+            e.refreshBoxes()                              // t()
+            e.az = p.az - 1
+            e.ag = e.Z[1] shl 8
+            if (w.padHeld(16388) && p.cFlag) e.setAnim(4) // L42 release variant
+            if (e.S == 1) {                               // L48-L60 input mod
+                val base = e.Z[1] shl 8
+                e.ag = when {
+                    (e.av && w.padDown(4112)) ||
+                    (!e.av && w.padDown(8256)) -> base * 150 / 100
+                    (e.av && w.padDown(8256)) ||
+                    (!e.av && w.padDown(4112)) -> base * 50 / 100
+                    else -> base
+                }
+            }
+            if (w.kAe !== e) w.kAe = e                    // L62/L65
+            if (p.S < 304) p.setAnim(295)                 // L72
+            if (p.S < 308) {                              // L73 pin (≥308 → L75→L78)
+                p.av = e.av
+                p.ag = 0; p.ah = 0
+                p.ak = (e.X[0] + e.X[2]) shr 1
+                p.al = (e.X[1] + e.X[3]) shr 1
+            }
+            if (e.animFinished()) e.setAnim(1)            // L78
+            return
+        }
+        else -> return                                    // L81
     }
 }
