@@ -2513,7 +2513,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val GRABBABLE_STATES = intArrayOf(
             18, 19, 20, 22, 23, 24, 25, 35, 36, 43,
             150, 157, 165, 233, 242, 243, 263, 264, 265, 266)
->>>>>>> origin/main
     }
 
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
