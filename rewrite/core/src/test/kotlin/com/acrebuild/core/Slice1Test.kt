@@ -129,6 +129,7 @@ class Level0WorldTest {
         val clips = mapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
             7 to Clip.load(asset("clips/clip7/clip.acpk")),
+            32 to Clip.load(asset("clips/clip32/clip.acpk")),
             10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -501,5 +502,37 @@ class Level0WorldTest {
         w.player.setPositionPx(5000, 900)   // target camY 740 > ceiling
         w.tick(emptyList())
         assertTrue(w.camY <= 613, "camY ceiling = U-240 = 613, got ${w.camY}")
+    }
+
+    @Test fun `ax44 doors spawn banked and timed cycle runs i16927`() {
+        val w = world()
+        val doors = w.npcs.filter { it.ax == 44 }
+        assertEquals(61, doors.size)
+        assertEquals(17, doors.count { it.S in 8..13 })
+        // cycling door: S0 → S1 on first tick (all timers zero → Z3<0
+        // advances immediately), then anim-gated S1→S2→S3→S0 loop.
+        val d = doors.first { it.Z[4] == 0 }
+        repeat(2) { w.tick(emptyList()) }
+        val seen = mutableSetOf(d.S)
+        repeat(60) { w.tick(emptyList()); seen += d.S }
+        assertTrue(1 in seen && 2 in seen && 3 in seen,
+            "door should cycle closed→opening→open→closing, saw $seen")
+        // static bank never ticks
+        val s8 = doors.first { it.S == 8 }
+        repeat(30) { w.tick(emptyList()) }
+        assertEquals(8, s8.S)
+    }
+
+    @Test fun `ax44 closed door crushes player into S50 i16927`() {
+        val w = world()
+        val door = w.npcs.first { it.ax == 44 && it.S in 8..13 }
+        door.refreshBoxes()
+        // stand the player inside the crusher's hitbox (W is anchor-offset)
+        w.player.setPositionPx((door.W[0] + door.W[2]) / 2, door.W[3] - 1)
+        w.player.refreshBoxes()
+        w.tick(emptyList())
+        assertEquals(50, w.player.S)
+        w.tick(emptyList())
+        assertTrue(w.failed, "x1=0 after S50 → k.l(12) mission fail")
     }
 }

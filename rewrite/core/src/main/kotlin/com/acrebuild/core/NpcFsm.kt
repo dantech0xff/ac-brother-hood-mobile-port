@@ -97,6 +97,94 @@ class NpcFsm(private val world: LevelCellSource) {
         e.setAnim(0)
     }
 
+    /**
+     * ax44 door/gate record init (i.java:3574 L377, proven):
+     * `az=r8[7]` (display depth), `Z[0]=r8[8]` mode when >0 else 0,
+     * `Z[1]=r8[9]` open timer, `Z[2]=r8[10]` closed timer, `Z[3]=0`
+     * countdown, `Z[4]=r8[5]` base state, `Z[5]=r8[11]` linked ax58 uid.
+     * Initial anim is the generic `i(r8[5])` (i.java:3733) — records with
+     * f5==8 spawn in the static-crusher bank S8-13.
+     */
+    fun initDoor(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = rf(7)
+        e.Z[0] = if (rf(8) > 0) rf(8) else 0
+        e.Z[1] = rf(9)
+        e.Z[2] = rf(10)
+        e.Z[3] = 0
+        e.Z[4] = rf(5)
+        e.Z[5] = rf(11)
+        e.setAnim(rf(5))
+    }
+
+    /**
+     * `bv()` door/gate FSM (i.java:16927, proven). Z[0] mode:
+     * 0 = timed cycle (link absent or `ac.bf()` running), 1 = slaved to
+     * the linked ax58's anim, 2 = proximity auto (player inside keeps the
+     * countdown reloaded). States S0-7 = two cycling banks anchored at
+     * Z[4] (closed/opening/open/closing); S8-13 = static crusher bank.
+     * Crush arm (L64 + L75): player W ∩ door W while closed/closing/
+     * static → `k.aS.aj=0; ah=0; i(50)` — S50 zeroes x[1] → k.l(12).
+     */
+    fun tickDoor(e: Entity, player: Entity) {
+        // the original's t() recomputes W on every query; our cached copy
+        // needs a per-tick refresh since doors never take the probe paths.
+        e.refreshBoxes()
+        when (e.S) {
+            0, 2, 4, 6 -> {
+                e.P = e.P or 16
+                // link arm (L4): resolve Z[5] → ac once; ax58 with
+                // S∈{0,5,7} promotes Z[0] to slaved mode.
+                if (e.ac == null && e.Z[5] != -1)
+                    e.ac = world.npcs.firstOrNull { it.aw == e.Z[5] }
+                val ac = e.ac
+                if (ac != null && ac.ax == 58 && (ac.S == 0 || ac.S == 5 || ac.S == 7))
+                    e.Z[0] = 1
+                when (e.Z[0]) {
+                    0 -> if (ac == null || bf(ac)) {
+                        if (e.Z[2] < 999 && e.Z[3] != -1) {
+                            e.Z[3]--
+                            if (e.Z[3] < 0) e.setAnim(e.S + 1)
+                        }
+                    }
+                    1 -> if (ac != null) {
+                        if (e.Z[4] == e.S) { if (!bf(ac)) e.setAnim(e.S + 1) }
+                        else if (bf(ac)) e.setAnim(e.Z[4])
+                    }
+                    2 -> if (e.Z[4] == e.S) {
+                        if (e.Z[3] == 0 && rectsOverlap(player.W, e.W))
+                            e.Z[3] = if (e.S == 0 || e.S == 4) e.Z[2] else e.Z[1]
+                        if (e.Z[3] > 0) { e.Z[3]--; if (e.Z[3] <= 0) e.setAnim(e.S + 1) }
+                    }
+                }
+                if (e.S == 0 || e.S == 4) crush(e, player)
+            }
+            1, 5 -> if (e.animFinished()) { e.setAnim(e.S + 1); e.Z[3] = e.Z[1] }
+            3, 7 -> {
+                if (e.animFinished()) { e.setAnim(e.S - 3); e.Z[3] = e.Z[2] }
+                crush(e, player)
+            }
+            in 8..13 -> crush(e, player)
+        }
+        // P&16 keeps the door unintegrated (static prop); anims still tick.
+        e.advanceAnim()
+    }
+
+    /** `bf()` (i.java:14608, proven): ax58 anim-running — true iff its S is
+     * one of {1,3,4,6,8,10,12}. */
+    private fun bf(e: Entity): Boolean =
+        e.ax == 58 && (e.S == 1 || e.S == 3 || e.S == 4 ||
+                       e.S == 6 || e.S == 8 || e.S == 10 || e.S == 12)
+
+    private fun rectsOverlap(a: IntArray, b: IntArray): Boolean =
+        a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+
+    private fun crush(e: Entity, player: Entity) {
+        if (!rectsOverlap(player.W, e.W)) return
+        player.aj = 0; player.ah = 0
+        player.setAnim(50)
+    }
+
     // -- helpers ------------------------------------------------------------
 
     /** `Q()` — face the player. */
