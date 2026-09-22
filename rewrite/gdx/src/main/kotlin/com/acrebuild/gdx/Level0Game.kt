@@ -35,6 +35,9 @@ class Level0Game : ApplicationAdapter() {
         clips[0] = Clip.load(Gdx.files.internal("clips/clip0/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
         clips[32] = Clip.load(Gdx.files.internal("clips/clip32/clip.acpk").readBytes())
+        clips[3] = Clip.load(Gdx.files.internal("clips/clip3/clip.acpk").readBytes())
+        clips[9] = Clip.load(Gdx.files.internal("clips/clip9/clip.acpk").readBytes())
+        clips[54] = Clip.load(Gdx.files.internal("clips/clip54/clip.acpk").readBytes())
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space.
         for (ts in intArrayOf(10, 11, 12)) {

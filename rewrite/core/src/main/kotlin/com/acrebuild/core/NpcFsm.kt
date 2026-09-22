@@ -529,6 +529,146 @@ class NpcFsm(private val world: LevelCellSource) {
         }
     }
 
+    // ============================================================ ax4 = aj()
+    // Destructible volume / attack hitbox (dispatch i.java:6682, proven).
+    // Init arm L161 (i.java:3132): az=r8[11]; aD=r8[4]; aE=r8[5]; aF=r8[7];
+    // n=r8[8]; m=r8[9]; p=r8[10]. r8[5]==5 → k.aq+=m (L165) + i=2 (L166);
+    // r8[5]==7 → az=1, Z[4], P|=512 (L169); r8[5]==33 → aA=0, p<<=8.
+    // Level 0: S ∈ {5×2, 6×1, 7×3, 9×14, 21×1} — 9/21 hit the default
+    // no-op; only the aw-paired {5,7} claims and one 6 do anything.
+
+    fun initDestructible(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = rf(11); e.aD = rf(4); e.aE = rf(5); e.aF = rf(7)
+        e.nl = rf(8); e.m = rf(9); e.pv = rf(10)
+        // arm reads raw r8[5] — S isn't assigned until the L392 tail.
+        if (rf(5) == 5) world.aq += e.m        // L165 (k.aq stat counter)
+        if (rf(5) != 7) {                      // L164 → L166
+            e.i = 2
+            if (rf(5) == 33) { e.aA = 0; e.pv = e.pv shl 8 }
+        } else {                               // L169: Z=int[4] alloc —
+            e.az = 1                           // port's Z pre-exists; the
+            e.P = e.P or 512                   // r8[5]!=0 fill is skipped.
+        }
+        e.setAnim(rf(5))                       // L392 tail: i(r8[5])
+    }
+
+    private val ctxZone = IntArray(4)
+
+    /** `k.l()` (k.java:802): the 60px context bubble leading the player's
+     *  facing — M = [ak±60 by av, al-60, +60, al]. */
+    private fun ctxZone(p: Entity) {
+        val x = if (p.av) p.ak - 60 else p.ak
+        ctxZone[0] = x; ctxZone[1] = p.al - 60
+        ctxZone[2] = x + 60; ctxZone[3] = p.al
+    }
+
+    fun tickDestructible(e: Entity, player: Entity) {
+        e.advanceAnim()   // universal s() in the outer tick (i.java:6407)
+        // W comes from clip3 rects via t() — refresh like ax44 (slice-19
+        // pitfall: volumes never take the probe paths that recompute it).
+        e.refreshBoxes()
+        when (e.S) {
+            5, 7 -> {
+                // L5 (i.java:6733): player mid-attack + body overlap arms it.
+                if (PlayerFsm.isAttackState(player.S)) {
+                    if (rectsOverlap(player.W, e.W)) {
+                        e.setAnim(e.S + 1); world.sfx(14); return
+                    }
+                } else {
+                    ctxZone(player)
+                    if (player.S == 37 || player.S == 38 ||
+                        !rectsOverlap(e.W, ctxZone)) {
+                        // L14: zone exit releases our claim (k.m()) and
+                        // clears the marker popup (k.k(aw)).
+                        if (world.claimed === e) {
+                            world.clearClaim(); world.clearMarker(e.aw)
+                        }
+                    } else {
+                        // in k.M: bid prio 5 (k.a) + marker popup (k.c).
+                        world.claim(e, 5, e.W)
+                        world.setMarker(e.ak, e.al - 85, e.aw)
+                    }
+                    pushOut(e, player)       // L18: a() solid-side helper
+                }
+                // L24: the player's attack hitbox reaching W also arms it.
+                if (rectsOverlap(player.X, e.W)) {
+                    e.setAnim(e.S + 1); world.sfx(14)
+                }
+            }
+            6, 8 -> {
+                // L28 (i.java:6760): on anim end, up to two `m(-1)` wisp
+                // bursts per tick while m>0 (+k.o(5) stat, +k.s() shake),
+                // then release the claim if we hold it and k.c(self).
+                if (!e.animFinished()) return
+                if (e.m > 0) {
+                    world.spawnWisp(e); e.m--
+                    world.apStats[5]++; world.shake()
+                    if (e.m > 0) {
+                        world.spawnWisp(e)
+                        world.apStats[5]++; world.shake()
+                        e.m--
+                    }
+                }
+                if (world.claimed === e) world.clearClaim()
+                world.removeEntity(e)
+            }
+            // S29/30/33 and every other aj() state: unported — level-0's
+            // S9/S21 records fall to the same default no-op as upstream.
+        }
+    }
+
+    // ============================================================ ax74 = bN()
+    // Wisp/particle (i.java:21280). Only the arms a `m(-1)` burst reaches:
+    // S1 (L20→L28): polar flight — radius j += 15/tick toward aE px along
+    // angle aD (aF = aD*256/360 table index), anchored at (aq,ar); once the
+    // radius saturates, aC drains then i(2) (sfx 15 when af.aG!=0).
+    // S2 (L43): anchor on the player's head; die on anim end.
+    /** `a()` side-push (i.java:914+, L48-63 ax4 path, proven): while the
+     *  player is grounded (S<=43) and overlapping the volume, clamp their
+     *  `ak` to its edge (dead ±1 `ag` nudge kept verbatim, L63 zeroes it).
+     *  Guards that can't fire here omitted; `aS.y()` unported → treated
+     *  false (inferred). */
+    private fun pushOut(e: Entity, p: Entity) {
+        if (e.S == 139) return
+        if (e.S == 18 && p.S == 12) return
+        if (e.S == 131 || e.S == 146) return
+        if (!rectsOverlap(p.W, e.W)) return
+        if (p.ga != null) return
+        if (p.S > 43) return
+        val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
+        if (p.ak <= e.ak) {
+            if (p.ag >= 0) { p.ak = e.ak - pw / 2 - ew / 2; p.ai = 0; p.ag = -1 }
+        } else if (p.ag <= 0) {
+            p.ak = e.ak + pw / 2 + ew / 2; p.ai = 0; p.ag = 1
+        }
+        p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
+    }
+
+    fun tickWisp(e: Entity, player: Entity) {
+        e.advanceAnim()   // universal s()
+        when (e.S) {
+            1 -> {
+                if (e.aA != 0) return            // L28 gate (aA==0 arm only)
+                if (e.j >= e.aE) e.aC-- else e.j += 15
+                e.aF = (e.aD * Trig.M) / 360
+                e.setPositionPx(
+                    e.aq + ((Trig.sin(e.aF) * e.j) shr 8),
+                    e.ar + ((Trig.sin(Trig.N - e.aF) * e.j) shr 8))
+                if (e.j >= e.aE && e.aC <= 0) {
+                    e.setAnim(2)
+                    e.af?.let { if (it.aG != 0) world.sfx(15); e.af = null }
+                    e.aC = 0; e.aE = e.j; e.j = 0
+                }
+            }
+            2 -> {
+                e.P = e.P and -17
+                e.setPositionPx(player.ak, player.al - 30)
+                if (e.animFinished()) world.removeEntity(e)
+            }
+        }
+    }
+
     private fun overlap(a: IntArray, b: IntArray): Boolean =
         a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 }

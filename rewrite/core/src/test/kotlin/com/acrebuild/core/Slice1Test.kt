@@ -130,8 +130,11 @@ class Level0WorldTest {
         val level = LevelPack.load(asset("level0/level0.aclv"))
         val clips = mapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
+            3 to Clip.load(asset("clips/clip3/clip.acpk")),
             7 to Clip.load(asset("clips/clip7/clip.acpk")),
+            9 to Clip.load(asset("clips/clip9/clip.acpk")),
             32 to Clip.load(asset("clips/clip32/clip.acpk")),
+            54 to Clip.load(asset("clips/clip54/clip.acpk")),
             10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -608,5 +611,90 @@ class Level0WorldTest {
         assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
         w.tick(emptyList())               // npc loop drains pendingRemove
         assertFalse(w.npcs.contains(t), "k.c(this) removes the trigger")
+    }
+
+    @Test fun `ax4 destructibles spawn with L161 fields and clip3`() {
+        val w = world()
+        val ds = w.npcs.filter { it.ax == 4 }
+        assertEquals(21, ds.size)
+        // level-0 bank: S∈{5×2, 6×1, 7×3, 9×14, 21×1}
+        assertEquals(mapOf(5 to 2, 6 to 1, 7 to 3, 9 to 14, 21 to 1),
+            ds.groupingBy { it.S }.eachCount())
+        // S7 → az=1 + P bit512 (L169); all others → i=2 (L166)
+        assertTrue(ds.filter { it.S == 7 }
+            .all { it.az == 1 && it.P and 512 != 0 })
+        assertTrue(ds.filter { it.S != 7 }.all { it.i == 2 })
+        // W comes from clip3 rects via t() — non-degenerate on the pair
+        val d5 = ds.first { it.S == 5 }
+        w.npcFsm.tickDestructible(d5, w.player)
+        assertTrue(d5.W[2] > d5.W[0] && d5.W[3] > d5.W[1])
+    }
+
+    @Test fun `ax4 S5 claims prio-5 in ctx zone then releases on exit`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 && it.S == 5 }
+        d.refreshBoxes()
+        // facing-right ctx bubble k.M = [ak, al-60, ak+60, al] — stand so
+        // the bubble overlaps the volume W (player left of it, same row).
+        w.player.setPositionPx(d.W[0] - 10, d.W[3])
+        w.player.av = false
+        w.player.setAnim(0)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDestructible(d, w.player)
+        assertSame(d, w.claimed)
+        assertEquals(5, w.claimPrio)
+        // k.c popup: ax14 singleton S54, az=302, tagged by aw
+        assertNotNull(w.marker)
+        assertEquals(14, w.marker!!.ax); assertEquals(54, w.marker!!.S)
+        assertEquals(302, w.marker!!.az)
+        // step out of the bubble → claim (k.m) and marker (k.k) release
+        w.player.setPositionPx(d.W[2] + 200, d.W[3])
+        w.player.refreshBoxes()
+        w.npcFsm.tickDestructible(d, w.player)
+        assertNull(w.claimed); assertEquals(6, w.claimPrio)
+        assertNull(w.marker)
+    }
+
+    @Test fun `ax4 armed by attack then S6 bursts wisps and self-removes`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 && it.S == 5 }
+        d.refreshBoxes()
+        // mid-attack body overlap → i(S+1) + k.A(14)
+        w.player.setPositionPx(d.W[0] + 1, d.W[3] - 1)
+        w.player.setAnim(67)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDestructible(d, w.player)
+        assertEquals(6, d.S)
+        assertTrue(14 in w.sfxLog)
+        // drive just this FSM: S6 anim ends → m bursts (m=2 → two m(-1)
+        // wisps via k.b(aK)), apStats[5]+=2, shake+=2, then k.c(self)
+        repeat(40) { w.npcFsm.tickDestructible(d, w.player) }
+        assertEquals(2, w.apStats[5])
+        assertEquals(2, w.shake)
+        // pending removal — drain via a tick to drop it from npcs
+        w.tick(emptyList())
+        assertFalse(w.npcs.contains(d))
+    }
+
+    @Test fun `ax74 wisp polar flight re-anchors on player then dies`() {
+        val w = world()
+        val src = w.npcs.first { it.ax == 4 }
+        w.spawnWisp(src)
+        w.tick(emptyList())            // k.b(aK) drain — joins npcs next tick
+        val wisp = w.npcs.last { it.ax == 74 }
+        assertEquals(1, wisp.S)
+        assertEquals(528, wisp.P)
+        assertEquals(2, wisp.aC)
+        assertEquals(src.ak, wisp.aq); assertEquals(src.al, wisp.ar)
+        assertTrue(wisp.aD in 0 until 360); assertTrue(wisp.aE in 70 until 90)
+        // radius grows 15/tick to aE, aC drains 2, then i(2) anchors
+        val ticks = (wisp.aE / 15) + 4
+        repeat(ticks) { w.npcFsm.tickWisp(wisp, w.player) }
+        assertEquals(2, wisp.S)
+        assertEquals(w.player.ak, wisp.ak)
+        assertEquals(w.player.al - 30, wisp.al)
+        // anim finish → removed (drive a few more ticks through full sim)
+        repeat(30) { w.tick(emptyList()) }
+        assertFalse(w.npcs.contains(wisp))
     }
 }

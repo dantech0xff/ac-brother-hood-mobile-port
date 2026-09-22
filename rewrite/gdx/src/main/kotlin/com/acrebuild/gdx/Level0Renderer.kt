@@ -58,8 +58,11 @@ class Level0Renderer {
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
             val base = when (packId) {
                 0 -> "clips/clip0/modules"
+                3 -> "clips/clip3/modules"
                 7 -> "clips/clip7/modules"
+                9 -> "clips/clip9/modules"
                 32 -> "clips/clip32/modules"
+                54 -> "clips/clip54/modules"
                 else -> "level0/tileset-$packId/modules"
             }
             for (i in clip.moduleNames.indices) {
@@ -88,8 +91,11 @@ class Level0Renderer {
             val clip = clips[pack] ?: return base
             val dir = when (pack) {
                 0 -> "clips/clip0/modules"
+                3 -> "clips/clip3/modules"
                 7 -> "clips/clip7/modules"
+                9 -> "clips/clip9/modules"
                 32 -> "clips/clip32/modules"
+                54 -> "clips/clip54/modules"
                 else -> "level0/tileset-$pack/modules"
             }
             val variant = clip.moduleNames[m]
