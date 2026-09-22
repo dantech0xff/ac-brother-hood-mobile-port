@@ -3061,4 +3061,126 @@ class Level0WorldTest {
         w.npcFsm.tickPushable(e, w, p)
         assertEquals(e.W[1] + 4, p.al, "al = W[1]+4 top carry")
     }
+
+    // -- slice 39: ax22 aN() capture zone --------------------------------
+
+    private fun zoneAt(w: Level0World, x: Int, y: Int, s: Int,
+                       z1: Int = 0, z2: Int = 0, z3: Int = -1): Entity {
+        val e = Entity(22, w.clips[7])
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.S = s; e.Z[1] = z1; e.Z[2] = z2; e.Z[3] = z3
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax22 S0 captures overlapping free-anim player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, 400, 200, 0)
+        ridePlayer(w, e, 18)                 // 18 ∈ g.b() set
+        p.ah = 500; p.ag = 300
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(e.ak, p.ak, "snapped to anchor")
+        assertEquals(e.al, p.al)
+        assertEquals(0, p.ah); assertEquals(0, p.ag)
+        assertEquals(65, p.S, "player -> S65")
+        assertEquals(1, e.S, "zone -> S1")
+    }
+
+    @Test fun `ax22 S0 ignores non-capture anims`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, 400, 200, 0)
+        ridePlayer(w, e, 0)                  // 0 ∉ g.b() set
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(0, p.S); assertEquals(0, e.S)
+    }
+
+    @Test fun `ax22 head resets when player leaves`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak + 800, p.al, 1)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(0, e.S, "left -> i(0)")
+    }
+
+    @Test fun `ax22 S1 vault-exit left on edge`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak, p.al, 1, z2 = 0)
+        ridePlayer(w, e, 65)
+        p.ah = 100; p.ag = 100
+        w.pad.commit(16390)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(-3328, p.ag); assertEquals(-3840, p.ah)
+        assertTrue(p.av, "Z2==0 -> av=true")
+        assertEquals(19, p.S); assertEquals(0, e.S)
+        assertEquals(0, w.pad.edge, "k.v() cleared latches")
+    }
+
+    @Test fun `ax22 S1 vault-exit right on edge`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak, p.al, 1, z2 = 1)
+        ridePlayer(w, e, 65)
+        w.pad.commit(16396)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(3328, p.ag); assertEquals(-3840, p.ah)
+        assertFalse(p.av, "Z2!=0 -> av=false")
+        assertEquals(19, p.S); assertEquals(0, e.S)
+    }
+
+    @Test fun `ax22 S1 down-exit drops to zone floor`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak, p.al, 1, z1 = 1)
+        ridePlayer(w, e, 65)
+        w.pad.commit(33024)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(43, p.S, "aS.a(0) fling -> S43")
+        assertEquals(0, e.S)
+        assertTrue(p.al > e.W[3], "snapped below zone bottom")
+    }
+
+    @Test fun `ax22 S1 down-exit needs Z1`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak, p.al, 1, z1 = 0)
+        ridePlayer(w, e, 65)
+        w.pad.commit(33024)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(65, p.S, "Z1==0 -> no down arm")
+        assertEquals(1, e.S)
+    }
+
+    @Test fun `ax22 S1 pins velocity each tick`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = zoneAt(w, p.ak, p.al, 1)
+        ridePlayer(w, e, 65)
+        p.ah = 777; p.ag = 888
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertEquals(0, p.ah); assertEquals(0, p.ag)
+        assertEquals(65, p.S); assertEquals(1, e.S)
+    }
+
+    @Test fun `ax22 Z3 facing -1 keeps, 0 forces left, 1 forces right`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // Z3=-1: keep facing
+        var e = zoneAt(w, p.ak, p.al, 0, z3 = -1)
+        p.av = true; ridePlayer(w, e, 18)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertTrue(p.av, "Z3=-1 keeps av")
+        // Z3=0: av=true
+        e = zoneAt(w, p.ak + 300, p.al, 0, z3 = 0)
+        p.S = 18; p.av = false; ridePlayer(w, e, 18)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertTrue(p.av, "Z3=0 -> av=true")
+        // Z3=1: av=false
+        e = zoneAt(w, p.ak + 600, p.al, 0, z3 = 1)
+        p.S = 18; p.av = true; ridePlayer(w, e, 18)
+        w.npcFsm.tickZoneInteract(e, w, p)
+        assertFalse(p.av, "Z3=1 -> av=false")
+    }
 }

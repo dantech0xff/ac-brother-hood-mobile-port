@@ -1121,6 +1121,53 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
+    // ============================================================ ax22 = aN()
+    // Capture zone (i.java:10167, proven): overlap + g.b(S) anim gate
+    // snaps the player to the anchor + enters anim 65; S1 pins vel and
+    // exits on edge input — vault out ±3328/-3840 by Z[2], or (Z[1])
+    // drop-through on down-edge to the zone floor. Z[3] facing:
+    // -1 keep, 0 → av=true, else av=false.
+
+    fun tickZoneInteract(e: Entity, w: LevelCellSource, p: Entity) {
+        if (!Entity.overlapI(p.W, e.W) && e.S != 0) e.setAnim(0)
+        when (e.S) {
+            0 -> {                                        // L10
+                if (!p.gB()) return                       // g.b(S) gate
+                if (!Entity.overlapI(p.W, e.W)) return    // L49 (dropped)
+                p.ak = e.ak; p.al = e.al                  // L12 snap
+                p.ah = 0; p.ag = 0
+                if (e.Z[3] != -1) p.av = e.Z[3] == 0      // L14/L18/L19
+                p.setAnim(65)                             // L20
+                e.setAnim(1)
+                return
+            }
+            1 -> {                                        // L22
+                p.ah = 0; p.ag = 0
+                val r7 = if (e.Z[2] != 0) 16396 else 16390  // L25
+                if (w.padHeld(r7)) {                      // L27 edge vault
+                    p.ak += if (e.Z[2] != 0) 20 else -20  // L31/L32
+                    p.al -= 20
+                    p.ag = if (e.Z[2] != 0) 3328 else -3328  // L35/L36
+                    p.ah = -3840
+                    p.av = e.Z[2] == 0                    // L39/L40
+                    p.setAnim(19)
+                    e.setAnim(0)
+                    w.clearLatches()                      // k.v()
+                }
+                // L42 — down-exit arm (Z[1] gated)
+                if (e.Z[1] == 0) return
+                if (w.padHeld(33024)) {                   // L44
+                    p.flingAirborne(0, w)                 // aS.a(0)
+                    p.refreshBoxes()                      // t()
+                    p.al = (e.W[3] + (p.al - p.W[1])) + 2 // floor snap
+                    e.setAnim(0)
+                    return
+                }
+                return                                    // L51
+            }
+        }
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

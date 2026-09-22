@@ -1525,6 +1525,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return false
     }
 
+    /** `g.b(int)` (g.java:374, proven): free/interact-eligible anim set —
+     *  states a volume may capture: airborne + locomotion + misc. */
+    fun gB(): Boolean = when (S) {
+        18, 19, 20, 22, 23, 24, 25, 35, 36, 43, 150, 157, 165, 233,
+        242, 243, 263, 264, 265, 266 -> true
+        else -> false
+    }
+
     /** `g.k(int)` (g.java:5434, proven): mount-eligible state whitelist. */
     fun mountableState(): Boolean = when (S) {
         0, 1, 18, 19, 20, 23, 24, 25, 35, 36, 43, 150, 157, 165,
@@ -2681,6 +2689,8 @@ interface LevelCellSource {
     /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
      *  — distinct from `padHeld`/`k.v` which reads the edge set `bB`. */
     fun padDown(mask: Int): Boolean = false
+    /** `k.v()` (k.java:7260, proven): full input-latch reset. */
+    fun clearLatches() {}
     /** `g.j` (g.java:15) — context latch, set on S145/S147 exits,
      *  cleared at g.java:6393 / k.java:6638. */
     var gj: Boolean get() = false; set(_) {}
