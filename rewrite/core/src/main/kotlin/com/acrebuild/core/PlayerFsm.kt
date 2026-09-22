@@ -55,6 +55,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     fun tick(p: Entity, pad: Pad) {
         p.cp = true; p.cq = true; p.ct = true; p.cw = true; p.zz = true
+        // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
+        if (p.gt > 0) p.gt--
+        if (p.bh > 0) p.bh--
         dispatch(p, pad)
         postTail(p, pad)
     }
