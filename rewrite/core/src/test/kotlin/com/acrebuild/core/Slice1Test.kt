@@ -142,11 +142,17 @@ class Level0WorldTest {
             27 to Clip.load(asset("clips/clip27/clip.acpk")),
             35 to Clip.load(asset("clips/clip35/clip.acpk")),
             10 to Clip.load(asset("clips/clip10/clip.acpk")),
+            48 to Clip.load(asset("clips/clip48/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
         )
-        return Level0World(level, clips, DeterministicRandom(1L))
+        // pack-14 entry-001 level-string table (line-delimited emit)
+        val levelStrings = java.io.File("../generated/level0/strings-1.txt")
+            .readText().split("\n").filter { it.isNotEmpty() }
+            .map { it.replace("\\n", "\n") }
+        return Level0World(level, clips, DeterministicRandom(1L),
+            levelStrings = levelStrings)
     }
 
     @Test fun `level decodes pack-6 shape`() {
@@ -3297,5 +3303,100 @@ class Level0WorldTest {
         val e = ax5At(w, p.ak, p.al, 8, z1 = 1, z2 = 55, aG = 7)
         w.npcFsm.tickMissionLogic(e, w, p)
         assertTrue(w.kC === e, "P16 on target -> resolve bind")
+    }
+
+    // ---- slice 41 — ax27 bL() fuse/message prop (i.java:20843) --------
+
+    /** ax27 record fixture; `initAx27` fills W via t() (clip48 rects). */
+    private fun ax27At(w: Level0World, x: Int, y: Int, s: Int,
+                       z0: Int = -1, z1: Int = 0, z3: Int = -1,
+                       aA: Int = 0): Entity {
+        val e = Entity(27, w.clips[48])
+        e.setPositionPx(x, y)
+        //              0    1   2  3  4   5   6  7   8   9   10
+        val f = listOf(27,  9,  x, y, 0,  s,  0, aA, z0, z1, z3)
+        w.npcFsm.initAx27(e, f, w)
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax27 init arm loads L197 record fields`() {
+        val w = world(); w.npcs.clear()
+        val e = ax27At(w, 100, 200, 16, z0 = 5, z1 = 3, z3 = 11, aA = 2)
+        assertEquals(1, e.az)
+        assertEquals(2, e.aA, "aA = r8[7]")
+        assertEquals(30, e.aB, "aB = 30")
+        assertEquals(5, e.Z[0]); assertEquals(3000, e.Z[1], "Z1 = r8[9]*1000")
+        assertEquals(0, e.Z[2]); assertEquals(11, e.Z[3])
+        assertEquals(16, e.S, "i(r8[5])")
+        assertEquals(0, e.P and 4096, "S!=4 -> no hazard bit")
+    }
+
+    @Test fun `ax27 S16 loads the level string into kAP`() {
+        val w = world(); w.npcs.clear()
+        val e = ax27At(w, w.player.ak, w.player.al, 16, z3 = 11)
+        w.kAO = 1000
+        w.npcFsm.tickAx27(e, w, w.player)
+        assertEquals(w.levelString(1, 11), w.kAP)
+        w.kAP = null; w.kAO = -1
+        w.npcFsm.tickAx27(e, w, w.player)
+        assertNull(w.kAP, "kAO<0 -> kAP cleared")
+    }
+
+    @Test fun `ax27 S6 fuse ticks Z2 and fires S8 plus sfx23`() {
+        val w = world(); w.npcs.clear()
+        val e = ax27At(w, w.player.ak, w.player.al, 6, z0 = 5, z1 = 1)
+        // Z1 = 1*1000 = 1000ms; run S6's anim to its last frame first
+        while (!e.animFinished()) e.advanceAnim()
+        w.npcFsm.tickAx27(e, w, w.player)
+        assertEquals(62, e.Z[2], "Z2 += j.f")
+        assertEquals(0, e.P and 4096, "fuse tick clears the hazard bit")
+        assertTrue(e.P and 64 != 0, "P|64")
+        e.Z[2] = 999
+        w.npcFsm.tickAx27(e, w, w.player)
+        assertEquals(8, e.S, "Z2 >= Z1 -> i(8)")
+        assertEquals(0, e.Z[2])
+        assertTrue(23 in w.sfxLog, "k.A(23) fuse-beep")
+    }
+
+    @Test fun `ax27 S15 drains aB on player attack box overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // init at S5 (a r8[5]==15 record would take the L203 shared arm
+        // and start at aB=800, not 30) then land in S15 like i(5)->i(15)
+        val e = ax27At(w, p.ak, p.al, 5)
+        e.setAnim(15)
+        // p.X = attack box; ax27's W comes from t()/clip48 rects
+        p.refreshBoxes()
+        p.X[0] = e.W[0]; p.X[1] = e.W[1]
+        p.X[2] = e.W[0] + 10; p.X[3] = e.W[1] + 10
+        w.npcFsm.tickAx27(e, w, p)
+        assertEquals(20, e.aB, "aB -= 10")
+        assertEquals(5, e.S, "aB>0 -> i(5)")
+        e.S = 15; e.aB = 10
+        w.npcFsm.tickAx27(e, w, p)
+        assertEquals(12, e.S, "aB<=0 -> i(12) burn-out")
+    }
+
+    @Test fun `ax27 S0 context tap binds player to the prop`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax27At(w, p.ak, p.al, 0)
+        w.pad.commit(16388)                        // tap 16388 edge
+        w.npcFsm.tickAx27(e, w, p)
+        assertTrue(p.af === e, "k.aS.af = this")
+        assertEquals(267, p.S, "player -> i(267) interact anim")
+        assertEquals(0, w.pad.edge and 16388, "k.v() cleared latches")
+    }
+
+    @Test fun `ax27 S0 stays armed without the tap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax27At(w, p.ak, p.al, 0)
+        w.npcFsm.tickAx27(e, w, p)
+        assertEquals(0, e.S)
+        assertNull(p.af)
     }
 }

@@ -69,6 +69,7 @@ VISUAL_LAYERS = ["ep", "eu", "er"]
 CLIPS = {
     "clip0": ("pack-3", "entry-000-marker-130"),   # player (z[0])
     "clip1": ("pack-3", "entry-001-marker-003"),   # ax5 mission logic (bi[5]=1)
+    "clip48": ("pack-3", "entry-048-marker-003"),  # ax27 fuse/message (bi[27]=48)
     "clip3": ("pack-3", "entry-003-marker-003"),   # ax4 destructibles (bi[4]=3)
     "clip7": ("pack-3", "entry-007-marker-130"),   # shared NPC family
     "clip9": ("pack-3", "entry-009-marker-003"),   # k.c marker popup (ax14 S54)
@@ -222,12 +223,22 @@ def pack_level():
     out = OUT / "level0"
     out.mkdir(parents=True, exist_ok=True)
     (out / "level0.aclv").write_bytes(bytes(blob))
+    # per-level string table — `k.d(1+k.aj, idx)` (k.java:486) resolves
+    # through j.g to pack-14 entry-<level>; level 0 → entry-001.
+    strings_src = (RES / "decoded" / "pack-14" / "entry-001-strings.json")
+    (out / "strings-1.json").write_text(strings_src.read_text())
+    # line-delimited variant for the gdx loader (no JSON dep): inner
+    # newlines escaped as \n so one string = one line.
+    _strings = json.loads(strings_src.read_text())
+    (out / "strings-1.txt").write_text(
+        "\n".join(s.replace("\n", "\\n") for s in _strings) + "\n")
     (out / "meta.json").write_text(json.dumps({
         "source": f"pack-{LEVEL_PACK}", "cols": cols, "rows": rows,
         "worldPx": [cols * 20, rows * 20], "entities": len(entities),
         "layers": {k: {"entry": LAYER_ENTRIES[k], "tileset": TILESETS.get(k),
                        "dims": [dims[k]["width"], dims[k]["height"]]}
-                   for k in LAYER_ENTRIES}}, indent=1))
+                   for k in LAYER_ENTRIES},
+        "strings": "pack-14/entry-001-strings.json"}, indent=1))
 
     for name, clip in TILESETS.items():
         src_dir = next((SPR / "pack-15").glob(f"entry-{clip:03d}-*"))
