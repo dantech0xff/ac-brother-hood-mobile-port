@@ -4247,6 +4247,96 @@ fun NpcFsm.tickAx19(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ax42 `bz()` (i.java:17428-17523) — fuse/timer zone + `k.F` claim slot.
+// ---------------------------------------------------------------------------
+
+/** Init arm L382 (i.java:3589) + L419 W-fill (i.java:3698): `P|=16|512`,
+ *  `Z[3] = {kind r8[4], uid r8[11], secs r8[12]}` and the zone rect
+ *  `W = [ak+r8[7], al+r8[8], +r8[9], +r8[10]]`. `bi[42]=-1` (no clip) and
+ *  no `i()` call reaches this arm in the ctor — `S` stays -1, so `bz()`'s
+ *  `S==0` gate keeps the fuse dormant until a claim-script `i(0)` arms it
+ *  (faithful; same shape as ax6's degenerate-W dormancy). */
+fun NpcFsm.initAx42(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.P = e.P or 16 or 512
+    e.S = -1                               // ctor S=-1; no i() reaches ax42
+    e.Z.fill(0)                            // Z = new int[3] (val array)
+    e.Z[0] = rf(4); e.Z[1] = rf(11); e.Z[2] = rf(12)
+    e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
+    e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
+}
+
+/** `bz()`: every tick `P|=16|512` and `k.F = this` (the fuse registers
+ *  itself as the claim-locked entity), then the `k.aJ` phase machine —
+ *  all of it gated on `S == 0` (`ifne 422`, i.javap ~:58379).
+ *
+ *  aJ==0 (L5): `Z[0]` kind 0/1 lazily binds `s = k.q(Z[1])` and fires
+ *  `aJ=1, aK=-40, aL=Z[2], s=null, A(9)` when `s.P()` expired (Z0==0) or
+ *  `s.P&32==0` (Z0==1); kind 2 fires the same countdown when `Z[1]>0`
+ *  (no `s` clear / sfx on that arm).
+ *  aJ==2 (L36): `aM += 50` per tick. Kind 0/1 — `aL*1000 <= aM` expires
+ *  to `bw=-1, bx = aj==7?56:58, l(13)` + `aL=-1,aM=0`; still ticking and
+ *  player∩W collects → `k.c(this)`, aJ=3. Kind 2 — expiry binds +
+ *  step-resets `h(s(Z[1]))`/`k(s(Z[1]))`, aJ=3.
+ *  aJ==3 (L60): kind 2 only — `ab()` → `aa()` while the bound script is
+ *  active, else `k.c(this)`, `aL=-1, aM=0, bw=2`. */
+fun NpcFsm.tickAx42(e: Entity, w: LevelCellSource, p: Entity) {
+    e.P = e.P or 16 or 512
+    w.kF = e
+    if (e.S != 0) return
+    when (w.kAJ) {
+        0 -> when (e.Z[0]) {
+            2 -> if (e.Z[1] > 0) {                              // L32
+                w.kAJ = 1; w.kAK = -40; w.kAL = e.Z[2]
+            }
+            0, 1 -> {                                           // L11
+                if (e.s == null && e.Z[1] != -1) {
+                    val r0 = w.findByAw(e.Z[1])
+                    if (r0 != null) e.s = r0
+                }
+                val s = e.s ?: return
+                // L20/L24/L26 — fire via expired (Z0==0) or !(s.P&32) (Z0==1)
+                val fire = (s.deadRelease() && e.Z[0] == 0) ||
+                        ((s.P and 32) == 0 && e.Z[0] == 1)
+                if (fire) {                                     // L27
+                    w.kAJ = 1; w.kAK = -40; w.kAL = e.Z[2]
+                    e.s = null
+                    w.sfx(9)                                    // k.A(9)
+                }
+            }
+            else -> {}
+        }
+        2 -> {
+            w.kAM += 50                                         // L36
+            when (e.Z[0]) {
+                2 -> if (w.kAL * 1000 <= w.kAM) {               // L56 expired
+                    e.bindScript(w.kSIndex(e.Z[1]), w)               // i.h(int)
+                    e.scriptKeyStep(w.kSIndex(e.Z[1]), w)            // i.k(int)
+                    w.kAJ = 3
+                }
+                0, 1 -> if (w.kAL * 1000 <= w.kAM) {            // L42 expired
+                    w.kBw = -1
+                    w.kBx = if (w.kAj == 7) 56 else 58
+                    w.screenL(13)                               // k.l(13)
+                    w.kAL = -1; w.kAM = 0
+                } else if (Entity.overlapStrict(p.W, e.W)) {    // L44 collect
+                    w.removeEntity(e)                           // k.c(this)
+                    w.kAJ = 3
+                }
+                else -> {}
+            }
+        }
+        3 -> if (e.Z[0] == 2) {                                 // L62
+            if (e.claimActive()) e.runClaimScript(w)            // ab()→aa()
+            else {
+                w.removeEntity(e)                               // k.c(this)
+                w.kAL = -1; w.kAM = 0
+                w.kBw = 2
+            }
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // ax13 `aW()` (i.java:13182-13367) — swinging rope/vine entity.
