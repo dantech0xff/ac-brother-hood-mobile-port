@@ -53,7 +53,8 @@ class Level0World(
             72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
             78 to 63,     // ax78 counterweight (bi[78]=63, proven)
             79 to 0,      // ax79 palette prop (bi[79]=0, proven)
-            80 to 57,     // ax80 static prop (bi[80]=57, proven)
+            80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
+                          // entry-057: J(57)=null → invisible/vestigial, proven)
         )
     }
 
