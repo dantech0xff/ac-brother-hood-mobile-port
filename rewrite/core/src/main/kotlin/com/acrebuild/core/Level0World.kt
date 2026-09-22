@@ -448,6 +448,7 @@ class Level0World(
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
             else if (type == 69) npcFsm.initAx69(e, f.toList(), this)
+            else if (type == 73) npcFsm.initAx73(e, f.toList())
             else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
@@ -700,6 +701,18 @@ class Level0World(
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
+    override var iBf = false                       // i.bf engage latch
+    override var iBx: Entity? = null               // i.bx grab-QTE holder
+    override var kAA = 0                           // k.aA
+    override var gZ = false                        // g.z
+    override var iL = -1                           // i.L
+    override var iM = -1                           // i.M
+    /** `aS.l()` (g.java:4968) — grab-release; bM=null first per the
+     *  original head, then the shared `PlayerFsm.l` resolver. */
+    override fun grabResolve(p: Entity): Boolean {
+        p.bM = null
+        return playerFsm.l(p, pad)
+    }
     override var gc: Entity? = null                // g.c crate-top link
     override var iBq = 0                           // i.bq floor-Y latch
     var gs = false                                 // g.s transition bool
@@ -933,6 +946,7 @@ class Level0World(
             else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
             else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
+            else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 

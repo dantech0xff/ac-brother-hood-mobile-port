@@ -6306,3 +6306,671 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
     e.setAnim(rf(5))                                      // L395 i(r8[5])
     e.refreshBoxes()                                      // L427 t()
 }
+
+// ============================================================ ax73 = aJ()
+// The heavy guard — the third combat NPC of the clip-7 family (bi[73]=7,
+// 10 records across packs 8/9/11/12). Transcribed verbatim from:
+//   aJ()           i.java:9331-9905   (the FSM body)
+//   init dispatch  i.java:2727 (case 73 → L120), :3038-3088 (L120 full /
+//                  L123 → L134 minimal), :3042-3066 (Z-field seeds)
+//   d()  i.java:1466-1538  — awareness tier (shared, ax73 path)
+//   e()  i.java:1539-1545  — sight-rect recompute
+//   b(i) i.java:1546-1560+ — engage gate
+//   l()  i.java:2255-2330  — sight check, ax73 arm L62-L68
+//   h()  i.java:1735-1765  — counter window, ax73 arm L29-L32
+//   i()  i.java:1767-1800  — counter trigger, ax73 arm L17
+//   j()  i.java:1803-1950  — player→NPC damage intake (L24 path for ax73)
+//   C()  i.java:1951-2060  — react/enrage/die, ax73 arms L13/L29/L61
+//   g()  i.java:1678-1734  — hit knockback/wall-snap
+//   aB() i.java:8845-8893  — strike executor, ax73 arm L17-L40
+//   aC() i.java:8893-9144  — attack scheduler (j-tier dispatch + aq arm)
+//   aE() i.java:9144-9192  — ceiling ambush
+//   aF() i.java:9192-9220  — trailing-edge probe (crate + tile)
+//   aG() i.java:9220-9253  — forward-edge probe (crate + tile)
+//   am() i.java:7167-7182  — upward ceiling probe (3 cells, facing side)
+//   v()  i.java:730-785    — "active" check; ax73 falls through to L85
+//   h(int,int) i.java:7219 — tile-blocking predicate (e>=12 || e<5)
+//   k.h  k.java:6839       — approx distance ((dx+dy)-min/2-min/4+min/8)
+//   k.a  k.java:627        — h()-distance <= r7
+//   k.l() k.java:804       — k.M 60x60 reach box in front of player
+//   k.a(i,int,int[]) k.java:816 — interact claim (registerClaim)
+//   k.m() k.java:863       — claim reset (claimReset)
+//   c/d/T/U/V/o i.java:9840-9910 — clip-74 "ae" marker ops
+//   n()  i.java:9792-9810  — door-corridor scan (bd[] ax44 S0 X)
+//   i.g(int,int) i.java:6881 — press-gauge (65568 taps → bl≥80)
+//   statics: aN=lockTarget, bf=iBf, bx=iBx, x=iX, aK wisp-pool (unused here)
+//   damage tables: bu={300,400,500}, bw={80,80,80}, I={20,20,20},
+//   J={100,100,100} (i.java:22315, proven)
+//
+// Confidence: PROVEN for every arm transcribed; the level-0 fixture has no
+// ax73 records (packs 8/9/11/12 only) so tests construct synthetic ones.
+
+private val BU73 = intArrayOf(300, 400, 500)
+private val BW73 = intArrayOf(80, 80, 80)
+private val IH73 = intArrayOf(20, 20, 20)
+
+/** `case 73 → L120 → (Z[0]!=1 && ax==73) → L134` (i.java:2727/3038-3088,
+ *  proven): every shipped ax73 record carries r8[10]=0 → `Z=int[1]`
+ *  minimal — here `Z` is fixed IntArray(22), so "minimal" = Z[0]=r8[4]
+ *  with the rest 0. That reproduces the J2ME OOB→0 reads the S152 ambush
+ *  arm relies on (inferred reconciliation — the original would AIOOBE on
+ *  Z[14] for a true 1-element Z, so shipped records must never arm the
+ *  Z[14] paths; zeroed fields give exactly that). */
+fun NpcFsm.initAx73(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(17)                                       // az = r8[17]
+    e.aB = BU73.getOrElse(e.au) { BU73[0] }             // aB = bu[au]
+    e.Z.fill(0)
+    e.Z[0] = rf(4)                                      // L134: Z[0]=r8[4]
+    e.setAnim(rf(5))                                    // L395: i(r8[5])
+    e.refreshBoxes()                                    // L427: t()
+}
+
+/** `i.d()` (i.java:1466, proven) — awareness tier for ax73. 0 = unaware,
+ *  6/7 = contact-alerted, 4/3/1 = sight tiers by |dx|. The g.a grapple
+ *  sub-arm and aA&256 upgrade are shared (not ax73-specific). */
+private fun awareness73(e: Entity, w: LevelCellSource, p: Entity): Int {
+    if (e.aB <= 0) return 0                               // P()
+    if (w.gG()) return 0                                  // g.g() dead player
+    if (p.S == 268 || p.S == 267 || p.S == 291) return 0
+    if ((p.aA and 8) != 0) return 0                       // player scripted
+    var r5 = p.ak - e.ak
+    var r6 = p.al - e.al
+    if (Entity.overlapStrict(p.W, e.W) || Entity.overlapStrict(p.X, e.W)) {
+        // L25: grapple-latched far-below player doesn't alert.
+        val ga = p.ga
+        if (ga != null && ga.ax == 15 && Math.abs(r6) > 15) return 0
+        if ((p.aA and 256) != 0) { p.aA = p.aA and -257; p.aA = p.aA or 16 }
+        return 6
+    }
+    if (e.Z[12] <= p.W[1]) return 0                       // sight bottom above player top
+    if (e.Z[11] >= p.W[3]) return 0                       // player below sight rect
+    val facing = r5 <= 0                                  // r1: player left = true
+    if (e.av != facing) return 0                          // must face the player
+    if (r5 < 0) r5 = -r5
+    if (r6 < 0) r6 = -r6
+    if (r6 <= 15) {
+        if (r5 <= 55) return 4
+        if (e.aA == 6) return 7
+    }
+    if (r5 <= 100) return 3
+    if (r5 <= 180) return 1
+    return 0
+}
+
+/** `i.e()` (i.java:1539, proven): recompute the absolute sight rect
+ *  Z[9..12] from stored offsets Z[15..18]. Minimal records → degenerate. */
+private fun sightRect73(e: Entity) {
+    e.Z[9] = e.ak + e.Z[15]
+    e.Z[11] = e.al + e.Z[16]
+    e.Z[10] = e.ak + e.Z[15] + e.Z[17]
+    e.Z[12] = e.al + e.Z[16] + e.Z[18]
+}
+
+/** `i.l()` ax73 arm (i.java:2255-2330 L62-L68 + shared tail L83-L101,
+ *  proven): contact → true; else point-in-sight-rect + LOS + player not
+ *  in S284/285; `aS.aA&8` blinds; `ai()` (camera-lock marker ax10 S52)
+ *  fast-path true. */
+private fun sightCheck73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true    // ai()
+    if ((p.aA and 8) != 0) return false                   // scripted → blind
+    val r0: Boolean
+    if (Entity.overlapStrict(p.W, e.W)) {
+        r0 = true
+    } else {
+        // sight rect rel extents: Z[10]-ak (right) or ak-Z[9] (left)
+        val r11 = e.Z[11] - e.al                          // top extent
+        val r12 = if (e.av) e.ak - e.Z[9] else e.Z[10] - e.ak
+        val r13 = e.Z[12] - e.al                          // bottom extent
+        val r = intArrayOf(
+            e.ak + if (e.av) -r12 else 0,
+            e.al + r11,
+            e.ak + if (e.av) 0 else r12,
+            e.al + r13)
+        r0 = Entity.pointInBox(p.ak, (p.W[1] + p.W[3]) shr 1, r)
+    }
+    if (!r0) return false
+    if (e.losBlocked(p, w)) return false                  // e(aS)==true → blocked
+    if (p.S == 284 || p.S == 285) return false
+    return true
+}
+
+/** `i.b(i)` (i.java:1546, proven): engage gate — player not in a
+ *  cutscene anim, not mounted (`g.j`), clear Bresenham LOS. */
+private fun canEngage73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (p.S == 268 || p.S == 267 || p.S == 291) return false
+    if (w.gj) return false                                // g.j mounted
+    return !e.losBlocked(p, w)
+}
+
+/** `i.h()` ax73 arm (i.java:1735 L29-L32, proven): counter window opens
+ *  only against player anim 69. */
+private fun counterWindow73(e: Entity, p: Entity): Boolean {
+    if (p.S == 216 || p.S == 217) return false
+    return p.S == 69                                      // L29-L32
+}
+
+/** `i.i()` ax73 arm (i.java:1767 L17, proven): player attackbox non-
+ *  degenerate + overlapping my W + mid-attack → player i(8) + E.P|=128 +
+ *  my counter stance i(167) with aC=16. Returns false always (L27). */
+private fun counterStrike73(e: Entity, w: LevelCellSource, p: Entity) {
+    if (p.X[0] == p.X[2]) return                          // degenerate X
+    if (!Entity.overlapStrict(e.W, p.X)) return
+    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return    // g.b()
+    if (p.S != 8) { p.setAnim(8); w.kE?.let { it.P = it.P or 128 } }
+    if (e.S != 17) { e.aC = 16; e.setAnim(167) }          // L17-L27
+}
+
+/** `i.j()` ax73 path (i.java:1803 L24-L135, proven): dist-gated engage
+ *  lock (bf/aN), then finisher/heavy/sword damage and C() react. */
+private fun damageIntake73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return false   // L24 g.b()
+    val r02 = Math.abs(e.ak - p.ak) <= 160 && Math.abs(e.al - p.al) <= 20
+    if (!r02) return false
+    // L38-L48: bf/aN engage lock — armed once when player winds up S67.
+    if (!w.iBf) {
+        val aN = w.lockTarget
+        if (aN == null || aN === e) {
+            if (p.S == 67) { if (aN == null) w.lockTarget = e; w.iBf = true }
+        }
+    }
+    if (p.X[0] == p.X[2]) return false                    // L50-L52
+    if (!Entity.overlapStrict(e.W, p.X)) return false     // L52-L144
+    e.av = p.ak < e.ak                                    // Q()
+    when {
+        p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217 ->
+            e.aB -= JD.getOrElse(e.au) { JD[0] }          // L61 finisher
+        p.S == 286 || p.S == 287 ->
+            e.aB -= IH73.getOrElse(e.au) { IH73[0] }      // L99 heavy anims
+        else -> e.aB -= BW73.getOrElse(e.au) { BW73[0] }  // L98 sword
+    }
+    // L122 → ax!=11 → L135 → C()
+    return reactOrEnrage73(e, w, p)
+}
+
+/** `i.C()` ax73 arms (i.java:1951 L13/L29/L61, proven): dead → i(164);
+ *  wounded-normal (Z0==0 && aB<=bu) → ENRAGE Z0=3 + i(155) + aq=±60 +
+ *  player i(8) + E.P|=128; else hit-react i(156) + sfx 13 (sword/heavy
+ *  anims also knockback via g()). */
+private fun reactOrEnrage73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (e.aB <= 0) {                                      // L64 death
+        e.setAnim(164); e.ah = 0; e.ag = 0; e.aj = 0; e.ai = 0
+        return true
+    }
+    if (e.Z[0] == 0 && e.aB <= BU73.getOrElse(e.au) { BU73[0] }) {
+        e.Z[0] = 3                                        // L13-L22 enrage
+        e.av = p.ak < e.ak                                // Q()
+        e.setAnim(155)
+        e.aq = e.ak + if (e.av) -60 else 60               // retreat marker
+        p.setAnim(8); w.kE?.let { it.P = it.P or 128 }
+        return true
+    }
+    // L29-L42: hit-react — g() knockback on sword/heavy anims only.
+    if (p.S == 67 || p.S == 68 || p.S == 69 || p.S == 286 || p.S == 287)
+        hitKnockback73(e, w, p)
+    e.setAnim(156); w.sfx(13)
+    return true
+}
+
+/** `i.g()` no-arg (i.java:1678, proven): hit knockback — zero velocity;
+ *  no-op on crate edge; snap to the player's attackbox edge unless a
+ *  wall sits behind (e()>=12 in the facing-back cell) — then fling off. */
+private fun hitKnockback73(e: Entity, w: LevelCellSource, p: Entity) {
+    e.ag = 0; e.ai = 0
+    if (crateEdge73(e, w)) return                         // aF()
+    val behind = if (e.av) 1 else -1                      // trailing side
+    if (e.e(w, e.ak / 20 + behind, e.al / 20 - 1) >= 12) return
+    if (!p.av) {
+        if (e.ak >= p.ak) {                               // L16-L20
+            val keep = e.ak
+            e.ak = p.X[2] + (e.ak - e.W[0])
+            if (e.e(w, e.ak / 20, e.al / 20) == 20 ||
+                e.e(w, e.ak / 20, e.al / 20) == 0) {
+                e.ak = keep; e.ag = 2560; e.ai = -1280
+            }
+        }
+    } else {
+        if (e.ak <= p.ak) {                               // L27-L31
+            val keep = e.ak
+            e.ak = p.X[0] - (e.W[2] - e.ak)
+            if (e.e(w, e.ak / 20, e.al / 20) == 20 ||
+                e.e(w, e.ak / 20, e.al / 20) == 0) {
+                e.ak = keep; e.ag = -2560; e.ai = 1280
+            }
+        }
+    }
+}
+
+/** `i.aB()` ax73 arm (i.java:8852 L17-L40, proven): strike when the
+ *  attackbox overlaps the player's W — S165 grab arm consumes Z[8],
+ *  S146 strikes unconditionally, else skipped while the player rolls S6. */
+private fun strikePlayer73(e: Entity, w: LevelCellSource, p: Entity) {
+    if (e.X[0] == e.X[2]) return                          // degenerate X
+    if (!Entity.overlapStrict(p.W, e.X)) return
+    when {
+        e.S == 165 -> {                                   // grab-drain arm
+            e.releaseAe()                                 // G()
+            p.applyHit(4, e.l, e, w)
+            if (e.Z[8] == 0) e.Z[8] = 1
+        }
+        e.S == 146 -> p.applyHit(4, e.l, e, w)
+        p.S == 6 -> Unit
+        else -> p.applyHit(4, e.l, e, w)
+    }
+}
+
+/** `i.v()` ax73 fallthrough (i.java:730-785 L85, proven): "active" iff
+ *  the support box overlaps the camera rect. */
+private fun onscreen73(e: Entity, w: LevelCellSource): Boolean =
+    w.kAc?.let { Entity.overlapStrict(it, e.Y) } ?: false
+
+/** `i.aF()` (i.java:9192, proven): TRAILING-side ledge probe — a crate
+ *  edge (s.ax==51) within 20px of ak on either side, or the cell behind
+ *  the facing direction is neither 20 (void) nor 5. */
+private fun crateEdge73(e: Entity, w: LevelCellSource): Boolean {
+    val s = e.s
+    if (s != null && s.ax == 51) {
+        if (s.W[2] > e.ak && s.W[2] - 20 < e.ak) return true
+        if (s.W[0] < e.ak && s.W[0] + 20 > e.ak) return true
+        return false                                       // s!=null → skip tile arms
+    }
+    if (s != null) return false
+    if (e.av) {
+        val c = e.e(w, e.W[2] / 20 + 1, (e.W[3] + 10) / 20)
+        return c != 20 && c != 5
+    }
+    val c = e.e(w, e.W[0] / 20 - 1, (e.W[3] + 10) / 20)
+    if (c == 20) return false
+    return c != 5
+}
+
+/** `i.aG()` (i.java:9220, proven): FORWARD ledge probe — facing-aware
+ *  crate edge, or the cell ahead of the feet is neither 20 nor 5. */
+private fun edgeAhead73(e: Entity, w: LevelCellSource): Boolean {
+    val s = e.s
+    if (s != null) {
+        if (s.ax != 51) return false
+        if (e.av) {
+            if (s.W[0] < e.ak && s.W[0] + 20 > e.ak) return true
+        } else {
+            if (s.W[2] > e.ak && s.W[2] - 20 < e.ak) return true
+        }
+        return false
+    }
+    if (!e.av) {
+        val c = e.e(w, e.W[2] / 20 + 1, (e.W[3] + 10) / 20)
+        return c != 20 && c != 5
+    }
+    val c = e.e(w, e.W[0] / 20 - 1, (e.W[3] + 10) / 20)
+    if (c == 20) return false
+    return c != 5
+}
+
+/** `i.am()` (i.java:7167, proven): ceiling probe — the 3 cells above the
+ *  facing-adjacent column contain a solid tile (e>=12). Requires s==null. */
+private fun ceilingProbe73(e: Entity, w: LevelCellSource): Boolean {
+    if (e.s != null) return false
+    val x0 = e.ak / 20 + if (e.av) -1 else 1
+    for (r7 in 1..3) if (e.e(w, x0, e.al / 20 - r7) >= 12) return true
+    return false
+}
+
+/** `i.aE()` (i.java:9144, proven): ceiling ambush — contact tier + player
+ *  in {24,22,43,150,35,157} + player bottom above my mid-Y. ≥20 cells
+ *  from `g.y` → drop-kill arm (x1=0, gI=1, snap to my al, i(20));
+ *  else pin: player i(89) snapped to my top-center + me i(24) aC=30. */
+private fun ceilingAmbush73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (e.j != 6) return false
+    if (p.S != 24 && p.S != 22 && p.S != 43 && p.S != 150 &&
+        p.S != 35 && p.S != 157) return false
+    if (p.W[3] >= (e.W[1] + e.W[3]) shr 1) return false
+    return if ((e.al - p.gy) / 20 < 20) {
+        p.setAnim(89)
+        p.ah = 0; p.ag = 0
+        p.al = e.W[1]
+        p.ak = (e.W[0] + e.W[2]) shr 1
+        p.O = p.al shl 8; p.N = p.ak shl 8
+        e.setAnim(24); e.aC = 30
+        true
+    } else {
+        p.x1 = 0                                          // g.x[1] = 0
+        p.bindScript(1, w)                                // aS.h(1)
+        p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+        p.al = e.al
+        e.setAnim(20)
+        false
+    }
+}
+
+/** `i.aC()` (i.java:8893-9144, proven): the attack scheduler — `P|=16`,
+ *  `k.aA=60`, face the player; `aq!=0` → leap-landing arm (ax69 bound
+ *  i(138) + Z0==3 ceiling leap to i(165)); else the j-tier dispatch —
+ *  0 stalk, 6/4 windup→S131, 3/1 approach→S154 via aG() edge check. */
+private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
+    e.P = e.P or 16
+    w.kAA = 60
+    e.av = p.ak < e.ak                                    // Q()
+    if (e.aq != 0) {
+        // L5: leap-landing arm — bound ax69 kill or Z0==3 ceiling probe.
+        val af = e.af
+        if (af != null && af.ax == 69 && af.aA == 1 &&
+            Entity.overlapStrict(e.W, af.W)) { e.setAnim(138); return }
+        val r7 = Math.abs(e.aq - e.ak); val r8 = Math.abs(e.ar - e.al)
+        e.av = e.aq < e.ak                                // face the marker
+        if (e.Z[0] == 3) {                                // L20-L42 leaper
+            var r03 = false
+            if (r7 >= 10 && Math.abs(p.ak - e.ak) < 140) {
+                val x0 = e.ak / 20 + if (e.av) -1 else 1
+                for (r9 in 1..3)
+                    if (e.e(w, x0, e.al / 20 - r9) >= 12) { r03 = true; break }
+            }
+            if (r03 || crateEdge73(e, w)) return          // wall/edge → stay
+        }
+        // L42-L46: arrived → i(165) leap (Z0==3) or i(152) reset.
+        if (r7 < 10) {
+            if (e.S == 155) {
+                e.ar = 0; e.aq = 0; w.kAA = 0
+                e.setAnim(165); e.am = e.ak; w.gZ = false
+            }
+            if (e.Z[0] != 3) { e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0; e.setAnim(152) }
+        }
+        return
+    }
+    val r7 = Math.abs(p.ak - e.ak); val r8 = Math.abs(p.al - e.al)
+    when (e.j) {
+        // L50: unaware → stalk the player until close, else countdown back
+        // to S152 idle.
+        0 -> if (r7 > 180 || r8 > 70) {
+            if (e.aC == 0) { e.aC = 60; e.setAnim(155) }
+            else {
+                e.aC--
+                if (e.aC <= 0 || !onscreen73(e, w)) {
+                    e.P = e.P and -17; w.kAA = 0; e.aA = 0
+                    e.setAnim(152)                        // L72 ax73 arm
+                }
+            }
+        }
+        6 -> {                                            // L76 contact tier
+            e.setAnim(155)
+            val was = e.aC; e.aC = was - 1
+            if (was <= 0) e.setAnim(131)                  // c(11,131) block
+        }
+        4 -> {                                            // L82 close tier
+            if (++e.l <= 0) e.l = 1
+            val was = e.aC; e.aC = was - 1
+            if (was >= 0) e.setAnim(155) else e.setAnim(131)
+        }
+        3 -> {                                            // L93 mid tier
+            val was = e.aC; e.aC = was - 1
+            if (was <= 0 && !edgeAhead73(e, w)) e.setAnim(154)
+        }
+        1 -> if (!edgeAhead73(e, w)) e.setAnim(154)       // L101 far tier
+    }
+}
+
+/** `i.c(int,int)` (i.java:9840, proven): spawn/position the clip-74 `ae`
+ *  marker (ax14, S0, az302) and latch `i.L`/`i.M`. */
+private fun markerSpawn74(e: Entity, w: LevelCellSource, x: Int, y: Int) {
+    val m = e.ae ?: Entity(14, w.clipFor(74)).also { m ->
+        m.setAnim(0); m.az = 302; m.au = 0
+        e.ae = m
+    }
+    m.ak = x; m.al = y
+    m.refreshBoxes()                                      // t()
+    w.iL = x; w.iM = y                                    // o(r5,r6)
+}
+
+/** `i.d(int,int)` (i.java:9861, proven): reposition the marker; when
+ *  idle (T) re-latch `L`/`M`; flip anim 1 while the touch point is within
+ *  70px of its screen position. */
+private fun markerMove74(e: Entity, w: LevelCellSource, x: Int, y: Int) {
+    val m = e.ae ?: return
+    m.ak = x; m.al = y
+    if (markerIdle74(e, w)) { w.iL = x; w.iM = y }
+    m.setAnim(if (m.markerTouched(w)) 1 else 0)
+}
+
+/** `i.T()` (i.java:9878, proven): marker is the clip-74 indicator in a
+ *  rest anim (S0/S1). */
+private fun markerIdle74(e: Entity, w: LevelCellSource): Boolean {
+    val m = e.ae ?: return false
+    return m.ax == 14 && (m.S == 0 || m.S == 1)
+}
+
+/** `i.V()` (i.java:9902, proven): touch point within 70px of the
+ *  marker's screen position. */
+private fun markerTapped74(e: Entity, w: LevelCellSource): Boolean {
+    val m = e.ae ?: return false
+    return w.touchNearView(m, 70)                          // k.a(H,I,ak-O,al-P,70)
+}
+
+/** `i.n(44,0)` (i.java:9792, proven): any open-door corridor (ax44 S==0
+ *  with an X box) overlapping my W. */
+private fun doorScan73(e: Entity, w: LevelCellSource): Boolean {
+    for (n in w.npcs) {
+        if (n.ax == 44 && n.S == 0 && n.X.let { it[0] != it[2] } &&
+            Entity.overlapStrict(e.W, n.X)) return true
+    }
+    return false
+}
+
+/** `i.g(int,int)` (i.java:6881, proven): press-gauge — `k.v(mask)` press
+ *  edges +8, decay −1 per tick, clamped [0,80]; true at 80. */
+private fun pressGauge73(e: Entity, w: LevelCellSource, mask: Int): Boolean {
+    if (w.padHeld(mask)) e.bl += 8 else e.bl--
+    if (e.bl < 0) e.bl = 0
+    if (e.bl >= 80) { e.bl = 80; return true }
+    return false
+}
+
+/** `k.h` (k.java:6839, proven): Manhattan-ish distance
+ *  `(|dx|+|dy|) - m/2 - m/4 + m/8`, m = min(|dx|,|dy|). */
+private fun kDist73(dx: Int, dy: Int): Int {
+    if (dx == 0 && dy == 0) return 0
+    val a = Math.abs(dx); val b = Math.abs(dy)
+    val m = if (a <= b) a else b
+    return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
+}
+
+/** `k.l()` (k.java:804, proven): the 60×60 reach box in front of the
+ *  player — `k.M`. */
+private fun reachRect73(p: Entity): IntArray {
+    val x = if (p.av) p.ak - 60 else p.ak
+    return intArrayOf(x, p.al - 60, x + 60, p.al)
+}
+
+/** `i.P()` (i.java:7699, proven): dead → release the marker. */
+private fun heavyDead73(e: Entity): Boolean =
+    if (e.aB <= 0) { e.releaseAe(); true } else false
+
+/** `i.aJ()` (i.java:9331-9905, proven): the heavy-guard tick. */
+fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
+    // -- head: P() or out-of-reach → L8 release claim; in reach → claim --
+    if (heavyDead73(e) || !Entity.overlapStrict(e.W, reachRect73(p))) {
+        if (w.kL?.aw == e.aw) w.claimReset()               // k.m()
+    } else {
+        w.registerClaim(e, 0, e.W)                         // k.a(this,0,W)
+    }
+    var r10 = true; var r11 = false
+    if (e.aB <= 0 && e.S != 164) e.setAnim(164)            // L12-L21
+    if (!p.faces(e)) r11 = true                            // g(aS)==false
+    e.j = awareness73(e, w, p)                             // j = d()
+    sightRect73(e)                                         // e()
+    when (e.S) {
+        131 -> {                                           // L106 block/counter
+            e.ah = 0; e.ag = 0
+            if (Entity.overlapStrict(p.W, e.X) && p.faces(e) && p.S == 6) {
+                p.applyHit(34, 0, e, w); w.lockTarget = e
+            }
+            if (e.animFinished()) { e.setAnim(146); return }
+        }
+        146 -> { e.ah = 0; e.ag = 0                        // L117
+            if (e.animFinished()) e.setAnim(171)
+        }
+        147 -> {                                           // L201 grab-QTE hold
+            if (markerTapped74(e, w)) e.bl += 9            // V()→bl+=9
+            if (pressGauge73(e, w, 65568)) {               // g(65568,80)
+                e.bl = 0; e.releaseAe(); e.setAnim(164)
+                p.setAnim(287); e.aB = 0; w.iBx = null
+            } else if (e.bl == 0) {                        // timeout release
+                e.setAnim(149); w.grabResolve(p); e.releaseAe(); w.iBx = null
+            }
+        }
+        148 -> {                                           // L209 throw
+            r11 = false; r10 = false
+            if (e.animFinished()) e.setAnim(151)
+        }
+        149 -> {                                           // L212
+            r11 = false; r10 = false
+            if (e.animFinished()) {
+                e.aq = e.ak + if (e.av) -60 else 60
+                e.setAnim(155)
+            }
+        }
+        152 -> {                                           // L32 idle-reset
+            e.releaseAe(); e.ah = 0; e.ag = 0; e.Z[0] = 0
+            if (!e.cq) { if (canEngage73(e, w, p)) e.aA = 1 } else r11 = false
+            if (e.Z[14] == 1 || e.Z[14] == 6 || e.Z[14] == 7)
+                if (ceilingAmbush73(e, w, p)) r10 = false
+        }
+        153, 154 -> {                                      // L48 chase
+            if (edgeAhead73(e, w)) { e.aC = 10; e.setAnim(155) }
+            else {
+                e.wallProbe(w)                             // a(true)
+                r11 = true; r10 = false
+                e.ag = if (e.S == 153) (if (e.av) -2048 else 2048)
+                       else (if (e.av) -512 else 512)
+                if (Entity.overlapStrict(p.W, e.W) && e.af == null) {
+                    e.aC = 3; e.setAnim(155)
+                }
+                attackScheduler73(e, w, p)
+            }
+        }
+        155 -> {                                           // L68 attack commit
+            e.wallProbe(w)
+            e.ab?.deactivate(); e.ab = null                // H()
+            if (e.Z[0] == 3) {
+                e.ag = if (e.av) 1536 else -1536
+                r11 = false; r10 = false
+            } else {
+                e.ag = if (e.av) 512 else -512
+                r11 = true
+            }
+            attackScheduler73(e, w, p)
+            if (crateEdge73(e, w)) { e.ai = 0; e.ag = 0 }  // L81 aF()
+        }
+        156 -> {                                           // L83 leap
+            e.releaseAe(); e.wallProbe(w)
+            if (e.ag != 0) e.ai = if (e.av) -1280 else 1280
+            if (e.T == 1) {
+                e.spawnFx8(w, 50, 1, e.av, e.ak, e.al - 40, 300)
+                if (w.kBK) e.spawnFx8(w, 59, 0, e.av, e.ak, e.al - 40, 300)
+            }
+            e.aA = 1
+            if (e.animFinished()) e.setAnim(155)
+        }
+        157 -> {                                           // L97 stagger step
+            e.releaseAe(); e.wallProbe(w); e.ah = 0; e.ag = 0
+            if (e.animFinished()) e.setAnim(158)
+        }
+        158 -> if (e.animFinished()) {                     // L104
+            e.aC = 20; e.setAnim(155)
+        }
+        165 -> {                                           // L147 grab approach
+            if (e.animFinished()) e.P = e.P or 64
+            r11 = false
+            if (!p.faces(e)) {                             // L152-L156
+                if ((e.av xor p.av) && Math.abs(p.al - e.al) < 10)
+                    markerSpawn74(e, w, p.ak, p.al - 85)   // c()
+            }
+            markerMove74(e, w, p.ak, p.al - 85)            // d()
+            e.ag = if (e.av) -2560 else 2560
+            if (p.faces(e)) e.releaseAe()                  // L163 G()
+            val r02 = kDist73(p.ak - e.ak, p.al - e.al)
+            val grab = ((e.av xor p.av) &&
+                Entity.overlapStrict(p.W, e.X) && p.aZ &&
+                w.padDown(16388) &&                       // k.u held
+                Math.abs(p.al - e.al) < 10 &&
+                e.Z[8] == 0 && r02 >= 60) || markerTapped74(e, w)
+            if (grab) {                                    // L179
+                p.setAnim(294); e.P = e.P and -65; e.setAnim(147)
+                e.ah = 0; e.ag = 0; p.ah = 0; p.ag = 0
+                e.bl = 40; e.Z[8] = 0; w.iBx = e
+                e.ak = if (e.av) p.ak + 80 else p.ak - 80
+                return
+            }
+            // L178-L199 abort chain: overshot (facing-side ≥140 past the
+            // player) → L199; else L194: wandered ≥140 off the latch `am`
+            // or a ledge ahead → L199; `am()` clear → L234 (keep walking);
+            // `am()` blocked → L159/L160 re-arm `ag=2560` (verbatim — the
+            // decompiled L159 sets +2560 regardless of facing).
+            var abort = when {
+                e.av && e.ak - p.ak <= -140 -> true
+                !e.av && e.ak - p.ak >= 140 -> true
+                else -> false
+            }
+            if (!abort) {
+                if (Math.abs(e.am - e.ak) > 140) abort = true
+                else if (edgeAhead73(e, w)) abort = true
+                else if (ceilingProbe73(e, w)) e.ag = 2560
+            }
+            if (abort) {                                   // L199
+                e.P = e.P and -65; e.setAnim(171); e.Z[8] = 0
+                e.releaseAe()
+            }
+        }
+        167 -> { e.ah = 0; e.ag = 0                        // L120 counter stand
+            if (e.animFinished()) { e.aC = 20; e.setAnim(155) }
+        }
+        171 -> {                                           // L123 knockdown-rise
+            e.ah = 0; e.ag = 0; r11 = true
+            if (e.animFinished()) {
+                if (e.Z[0] != 3) { e.aC = 20; e.setAnim(155) }   // L126
+                else if (p.W[1] > e.Z[12] || p.W[3] < e.Z[11]) {
+                    e.setAnim(152); e.aA = 0; return       // L135 disengage
+                } else if (edgeAhead73(e, w) && p.faces(e)) {
+                    // L134→L209: ledge + player visible → the S148
+                    // codepath (r11=r10=false; anim → i(151)).
+                    r11 = false; r10 = false
+                    e.setAnim(151)
+                } else {
+                    e.av = p.ak < e.ak                     // L137 Q()
+                    if (ceilingProbe73(e, w)) e.av = !e.av // L140 flip
+                    e.setAnim(165); e.am = e.ak; w.gZ = false // L144
+                }
+            }
+        }
+        190 -> { e.ah = 0; e.ag = 0 }                      // L25 dormant idle
+        191 -> if (e.animFinished()) e.setAnim(192)        // L27
+        192 -> if (e.animFinished()) e.setAnim(190)        // L30
+        164 -> {                                           // L220 death
+            if (w.kBK && e.T == 3)
+                e.spawnFx8(w, 59, 0, e.av, e.ak, e.al - 40, 300)
+            if (e.animFinished()) {
+                if (w.kBK) e.spawnFx8(w, 59, 2, e.av, e.ak, e.al, e.az - 1)
+                e.P = e.P and -17; e.P = e.P or 32; e.P = e.P or 64
+                if ((p.gJ and 2) == 0) {
+                    p.gJ = p.gJ or 2                       // g.g(2)
+                    p.bindScript(2, w)                     // aS.h(2)
+                }
+            } else return
+        }
+    }
+    // -- L234 tail ------------------------------------------------------
+    if (e.Z[0] != 3 && counterWindow73(e, p)) counterStrike73(e, w, p)
+    if (r11 && e.Z[0] != 3 && damageIntake73(e, w, p)) return
+    if (r10) strikePlayer73(e, w, p)
+    if (e.aA == 0) {
+        e.P = e.P and -17
+        if (p.aA > 2 && sightCheck73(e, w, p)) p.applyHit(32, 0, e, w)
+    } else {
+        e.P = e.P or 16
+        if ((p.aA and 1) != 0 && p.faces(e) && e.j != 0)
+            p.applyHit(32, 0, e, w)
+    }
+    if ((p.aA and 8) != 0) return
+    if (e.S == 165) return
+    if (p.S == 6) return
+    if (e.Z[0] == 3 && e.S == 171) return
+    e.pushContact(w)
+}

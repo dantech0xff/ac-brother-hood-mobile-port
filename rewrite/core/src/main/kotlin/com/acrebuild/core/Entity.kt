@@ -4111,6 +4111,20 @@ interface LevelCellSource {
     /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
      *  same-entity refresh else `prio<co || prio==1` steals it. */
     fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
+    // -- ax73 aJ() statics (i.java:77/100/132/9825, k.aA, g.z) -----------
+    /** `i.bf` (i.java:100) — engage-claim latch for the aN-lock sweep. */
+    var iBf: Boolean get() = false; set(_) {}
+    /** `i.bx` (i.java:132) — entity holding the grab-QTE (S147). */
+    var iBx: Entity? get() = null; set(_) {}
+    /** `k.aA` — shared engage/alert countdown (`aC()` zeroes it). */
+    var kAA: Int get() = 0; set(_) {}
+    /** `g.z` — player-side latch cleared on grab-entry/leap re-arm. */
+    var gZ: Boolean get() = false; set(_) {}
+    /** `i.L`/`i.M` (i.java:9825) — clip74 marker position latch. */
+    var iL: Int get() = -1; set(_) {}
+    var iM: Int get() = -1; set(_) {}
+    /** `aS.l()` (g.java:4968) — grab-release resolver (`PlayerFsm.l`). */
+    fun grabResolve(p: Entity): Boolean = false
     /** `g.c` (g.java:7) — static crate link: the ax51 the player is
      *  claimed on top of (bs() L188/L192 claim, L184 release). */
     var gc: Entity? get() = null; set(_) {}
