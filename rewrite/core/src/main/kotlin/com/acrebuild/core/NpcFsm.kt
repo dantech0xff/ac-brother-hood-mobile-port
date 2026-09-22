@@ -752,6 +752,252 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
+    // ============================================================ ax66 = bm()
+    // Moving platform / crate-ride-grab FSM (i.java:15899, proven).
+    // S is the clip-anim index: pairs (6,24) board → (7,25) ride →
+    // (8,26) stop → (9,27) sink → (10,28) reset; (11,12,13) is the
+    // L113 crate-ride/grab arm; (14,15,16,18..23) the linked-kill and
+    // timed return arms. `g.a` → `p.ga` (player's platform link),
+    // `aS` → `p`, `b` = i.b ridden latch.
+
+    /** `i.m(i)` (i.java:16311, proven): grab-eligible — ax51
+     *  `S∈{0,1,6,8}` or ax66 `S∈{11,12,13}`. */
+    private fun grabEligible(o: Entity): Boolean =
+        (o.ax == 51 && (o.S == 0 || o.S == 1 || o.S == 6 || o.S == 8)) ||
+        (o.ax == 66 && (o.S == 11 || o.S == 12 || o.S == 13))
+
+    /** `i.n(i)` (i.java:16337, proven): player faces `o` and is within
+     *  `|dx| < 180` (140 for ax66), `|dy| < 80`. */
+    private fun grabInReach(o: Entity, p: Entity): Boolean {
+        if (if (p.av) p.ak <= o.ak else p.ak >= o.ak) return false
+        val dxLim = if (o.ax == 66) 140 else 180
+        return Math.abs(p.ak - o.ak) < dxLim &&
+               Math.abs(p.al - o.al) < 80
+    }
+
+    /** `i.bq()` (i.java:16363, proven): self is holding (ax51 S8 /
+     *  ax66 S13) AND the player overlaps W. */
+    private fun grabZone(e: Entity, p: Entity): Boolean {
+        if (!((e.ax == 51 && e.S == 8) || (e.ax == 66 && e.S == 13)))
+            return false
+        return Entity.overlapI(p.W, e.W)
+    }
+
+    /** `i.bn()` (i.java:~16272, proven): player carries a claim →
+     *  spawn the aid marker above this platform. */
+    private fun platformSpawnAid(e: Entity, w: LevelCellSource, p: Entity) {
+        if (p.ac == null) return
+        e.spawnAeMarker(w, 1, e.ak, e.al - 60)
+    }
+
+    /** `i.br()` (i.java:~16395, proven): grab-check — refresh/steal the
+     *  player's `ac` claim while overlapping or holding. `k.bd` scan →
+     *  `w.npcs + p`. */
+    private fun platformGrabCheck(e: Entity, w: LevelCellSource,
+                                  p: Entity): Boolean {
+        var r5 = false
+        if (!Entity.overlapI(p.W, e.W) && !grabZone(e, p)) return false
+        if (!grabEligible(e)) return false
+        if (p.ac != null) {
+            // L11/L13/L18 — ac==this or dead claim → release then scan;
+            // live claim on ANOTHER eligible entity → register it.
+            val ac = p.ac!!
+            if (ac !== e && grabEligible(ac) && grabInReach(ac, p)) {
+                w.registerClaim(ac, 1, ac.W)
+                return true
+            }
+            p.ac = null                                          // L18
+            if (w.kL != null && w.kL!!.aw == e.aw) w.claimReset()
+        }
+        // L23 — k.bd sweep
+        for (o in w.npcs + p) {
+            if (o === e || !grabEligible(o) || !grabInReach(o, p)) continue
+            if (p.ac != null &&
+                !((o.ax == 51 && o.S == 8) || (o.ax == 66 && o.S == 13)))
+                continue                                            // L41
+            // L45 — same-type-in-holding skip
+            if (o.ax == 51 && o.S == 8 && e.ax == 51 && e.S == 8) continue
+            if (o.ax == 66 && o.S == 13 && e.ax == 66 && e.S == 13) continue
+            if (p.S != 252) p.ac = o                              // L61
+            if (o.ax == 51) { if (o.S == 8) return r5 }             // L66
+            else r5 = true                                          // L67
+        }
+        return r5                                                   // L70
+    }
+
+    /**
+     * `i.bm()` (i.java:15899, proven) — the ax66 S-switch, transcribed
+     * per label. The S11/12/13 L113 arm is the crate-ride/grab state
+     * (~110 lines in the original).
+     */
+    fun tickPlatform(e: Entity, w: LevelCellSource, p: Entity) {
+        run {
+        when (e.S) {
+            // -- L5 board: overlap + alive + not mid-throw → ride -----
+            6, 24 -> {
+                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (p.x1 <= 0) return@run                          // g.g()
+                if (p.S == 50) return@run
+                e.setAnim(if (e.S == 6) 7 else 25)                  // L14
+                p.ga = e
+                p.ag = e.ag; p.ah = e.ah; p.ai = e.ai; p.aj = e.aj
+                if (p.S != 12 && p.S != 11) { p.al = e.al; p.setAnim(0) }
+                e.Z[1] = e.Z[0]                                     // L19
+            }
+            // -- L21 ride: bind, clamp upward vel, S43 snap, timer ---
+            7, 25 -> {
+                if (!Entity.overlapI(p.W, e.W)) {
+                    if (p.ga === e) p.ga = null                     // L34
+                } else {
+                    p.ga = e
+                    if (p.ah > 0) p.ah = 0                          // L26
+                    if (p.aj > 0) p.aj = 0                          // L29
+                    if (p.S == 43) { p.al = e.al; p.setAnim(0) }    // L32
+                    else if (p.S == 34 && p.ga === e) p.ga = null   // L34
+                }
+                e.Z[1]--                                            // L36
+                if (e.Z[1] < 0 && e.animFinished())
+                    e.setAnim(if (e.S == 7) 8 else 26)              // L44
+            }
+            // -- L46 stop: anim done → sink + release ---------------
+            8, 26 -> {
+                if (!e.animFinished()) return@run
+                e.setAnim(if (e.S == 8) 9 else 27)                  // L51
+                if (p.ga === e) { p.ga = null; p.flingAirborne(0, w) }
+            }
+            // -- L55 sink until the floor cell ----------------------
+            9, 27 -> {
+                if (e.e(w, ((e.Y[0] + e.Y[2]) shr 1) / 20,
+                        e.al / 20 + 1) >= 12) {                     // L57
+                    e.setAnim(if (e.S == 9) 10 else 28)
+                    e.ah = 0; e.aj = 0
+                } else {
+                    e.al += 10; e.ah = 2560; e.aj = 1536
+                    if (p.ga === e) p.flingAirborne(2560, w)
+                }
+            }
+            // -- L65 reset: teleport home → board state -------------
+            10, 28 -> {
+                if (!e.animFinished()) return@run
+                if (p.ga === e) p.ga = null                         // L69
+                e.ak = e.Z[2]; e.al = e.Z[3]
+                e.setAnim(if (e.S == 10) 6 else 24)                 // L73
+            }
+            // -- L113 crate-ride / grab arm (S11/12/13) -------------
+            11, 12, 13 -> {
+                if (p.S == 252 && p.ga === e) { p.ga = null; return } // L115
+                platformGrabCheck(e, w, p)                          // br()
+                // L121 — falling into the grab zone mid-236/239 → aid
+                if (Entity.overlapI(p.W, e.X) && p.ah > 0 &&
+                    (p.S == 236 || p.S == 239)) platformSpawnAid(e, w, p)
+                val r8 = if (e.Z[4] != -1) w.findByAw(e.Z[4]) else null
+                // L131/L143 — player boards/attacks onto the crate
+                if (p.ga !== e && e.S != 13 &&
+                    Entity.overlapI(p.W, e.W) &&
+                    (w.playerAttacking() || p.S == 236 || p.S == 239)) {
+                    if (r8 != null && r8.ax == 66 && r8.S == 16) {
+                        p.flingAirborne(p.ah, w); p.ga = null       // L143
+                    }
+                    if (p.al > e.W[3]) {                            // L150
+                        p.setAnim(209); p.ag = 0; p.ah = 0; p.ak = e.ak
+                    } else {                                        // L152
+                        if (p.S == 236 || p.S == 239) {
+                            p.setAnim(if (p.S == 236) 237 else 240)
+                            p.ah = 0; p.ak = e.ak                   // L159
+                        } else {
+                            p.ag = 0; p.ah = 0
+                            if (e.S == 12) {
+                                p.ak = e.ak; p.al = e.al
+                                p.setAnim(if (e.Z[0] > 0) 228 else 358)
+                            } else p.setAnim(0)                     // L166
+                        }
+                    }
+                    p.al = e.al                                     // L168
+                    if (e.S != 13) p.ga = e                         // (S13 gate)
+                    platformSpawnAid(e, w, p)                       // L171
+                } else if (e.S == 13 &&                             // L173
+                    Entity.pointInBox(p.ak, p.al, e.W) &&
+                    (p.ac == null || p.ac === e)) {
+                    if (p.S == 236 || p.S == 239)                   // L184
+                        p.flingAirborne(p.ah, w)
+                }
+                // L186 — grab/release input (16388 or dir-toward-av)
+                val grabKey = w.padDown(16388) ||
+                    (p.av && w.padDown(2)) || (!p.av && w.padDown(8))
+                if (grabKey &&
+                    (p.ga === e || grabZone(e, p))) {               // L196
+                    // L200/L204 — eligibility gates
+                    val acNullBlocked = p.ac == null && e.S == 13
+                    val blocked = acNullBlocked ||
+                        p.S == 238 || p.S == 235 || p.S == 239 ||
+                        p.S == 236 || p.S == 43 || p.S == 252 ||
+                        p.S == 147 || p.isHolding()
+                    if (!blocked) {
+                        // L224-L227 — face the claim when one exists
+                        val ok = p.ac == null ||
+                            p.av == (p.ac!!.ak < p.ak)
+                        if (ok) {
+                            p.setAnim(if (p.S == 237) 238 else 235) // L227
+                            e.releaseAe()                           // L230 G()
+                        }
+                    }
+                }
+                // L232 — drift release (ran in every path)
+                if (p.ga === e && !Entity.overlapI(p.W, e.X) &&
+                    p.S != 209) { p.ga = null; e.releaseAe() }
+            }
+            // -- L241 → S20 after aC countdown ----------------------
+            14 -> { e.aC--; if (e.aC <= 0) e.setAnim(20) }
+            // -- L75 link-check: target crate holds player → arm ---
+            15 -> {
+                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (e.Z[0] == -1) return@run
+                val r03 = w.findByAw(e.Z[0])
+                if (r03 == null || r03.ax != 66 || r03.S != 12) return@run
+                if (p.ga !== r03) return@run
+                e.setAnim(16)
+            }
+            // -- L88 kill-linked: flag + drain the linked crate -----
+            16 -> {
+                val r0 = if (e.Z[0] != -1) w.findByAw(e.Z[0]) else null
+                if (r0 != null && r0.ax == 66 && r0.S == 12 &&
+                    p.ga !== r0) w.removeEntity(r0)                 // L98 arm
+                if (!e.animFinished()) return@run
+                if (r0 != null && r0.ax == 66 && r0.S == 12) {      // L102
+                    if (p.ga === r0) p.ga = null
+                    w.removeEntity(r0)
+                }
+                e.P = e.P or 64; e.P = e.P or 32                    // L111
+            }
+            17, 23 -> { /* → L288 tail only */ }
+            // -- L239: arm the aC=Z[0] countdown --------------------
+            18 -> if (e.animFinished()) { e.setAnim(14); e.aC = e.Z[0] }
+            // -- L248: timed return / attack-grab (S19 timed, 20-22
+            //    anim-done → i(18) + release) ------------------------
+            19, 20, 21, 22 -> {
+                if (p.ga !== e) {                                   // L254
+                    if (w.playerAttacking() &&
+                        Entity.overlapI(p.W, e.W)) {
+                        p.setAnim(if (p.S == 264) 262 else 260)     // L260
+                        p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0      // L261
+                        p.ak = e.ak; p.al = e.al; p.ga = e
+                    }
+                }
+                if (p.ga === e && !Entity.overlapI(p.W, e.W) &&     // L263
+                    p.S != 261 && p.S != 259) p.ga = null
+                if (e.S == 19) {                                    // L274
+                    if (e.Z[1] >= 0) { e.aC--; if (e.aC <= 0) e.setAnim(21) }
+                } else if (e.animFinished() && e.S != 22) {         // L281
+                    e.setAnim(18)
+                    if (p.ga === e) { p.ga = null; p.flingAirborne(2560, w) }
+                }
+            }
+            else -> { /* default → L288 tail */ }
+        }
+        }
+        if (e.S in 6..10 || e.S in 24..28) e.b = false         // L288/L295
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

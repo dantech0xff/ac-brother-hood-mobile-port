@@ -78,8 +78,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var az = 0
     var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
-    var ac: Entity? = null           // `ac` — resolved link target (ax44 door
-                                     // slaves resolve Z[5] via `a(k.q(Z[5]))`)
+    /** `ac` — resolved link target; writes run `i.a(i)` (i.java:229,
+     *  proven): clear `P|256` on the old target, set it on the new. */
+    var ac: Entity? = null
+        set(o) {
+            field?.P = field!!.P and -257
+            field = o
+            o?.P = o.P or 256
+        }
     var l = 0                        // attack level fed to a(op,l,..)
     var hitsTaken = 0                // slice-3 instrumentation (inferred counter)
     var gt = 0                       // g.t iframe timer: 10 after drain, 5 after
@@ -139,6 +145,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
+    var b = false                  // i.b — ridden/carried latch (bm() tail)
     // -- mission-director + barrage fields (i.java:18003+, bD/bG/d/p/g) ------
     var ao = 0                     // i.ao — floatie aim target x
     var ap = 0                     // i.ap — floatie aim target y
@@ -2659,8 +2666,25 @@ interface LevelCellSource {
     var kK: Int get() = 0; set(_) {}
     /** `k.ac[4]` — camera/arena rect ints (aP S5 arena clamp). */
     val kAc: IntArray? get() = null
-    /** `k.v(mask)` (k.java:7210, proven): held-input `(bB & mask) != 0`. */
+    /** `k.v(mask)` (k.java:7210, proven): edge-input `(bB & mask) != 0`. */
     fun padHeld(mask: Int): Boolean = false
+    /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
+     *  — distinct from `padHeld`/`k.v` which reads the edge set `bB`. */
+    fun padDown(mask: Int): Boolean = false
+    /** `g.j` (g.java:15) — context latch, set on S145/S147 exits,
+     *  cleared at g.java:6393 / k.java:6638. */
+    var gj: Boolean get() = false; set(_) {}
+    /** `k.L` — the entity currently registered as the interact claim. */
+    var kL: Entity? get() = null; set(_) {}
+    /** `k.co` — claim priority countdown (reset 6 by `k.m()`). */
+    var claimCo: Int get() = 6; set(_) {}
+    /** `k.cp` — the claim marker rect (k.java:~820 `a(int[])`). */
+    var claimRect: IntArray? get() = null; set(_) {}
+    /** `k.m()` (k.java:863): reset the interact-claim channel. */
+    fun claimReset() {}
+    /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
+     *  same-entity refresh else `prio<co || prio==1` steals it. */
+    fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
     /** `k.s(i)` (k.java:7149, proven): `eH[]` display-row lookup (-1 miss). */
     fun kS(i: Int): Int = -1
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */

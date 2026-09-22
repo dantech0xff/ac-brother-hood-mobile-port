@@ -436,6 +436,32 @@ class Level0World(
     override var kK: Int get() = lastTouchY; set(v) { lastTouchY = v }
     override val kAc: IntArray? = null         // k.ac[] — unmined
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
+    override fun padDown(mask: Int): Boolean = pad.u(mask)
+    override var gj = false                        // g.j context latch
+    override var kL: Entity? = null                // k.L claim entity
+    override var claimCo = 6                       // k.co
+    override var claimRect: IntArray? = null       // k.cp
+
+    /** `k.m()` (k.java:863, proven): reset the interact-claim channel. */
+    override fun claimReset() {
+        claimCo = 6; kL = null; claimRect = IntArray(4)
+    }
+
+    /** `k.a(i,int,int[])` (k.java:816, proven): interact-claim registrar —
+     *  same-entity refresh, else `prio<co || prio==1` steals the claim
+     *  (`co=prio; L=e`); ax51 binds its Y rect not the passed rect. */
+    override fun registerClaim(e: Entity, prio: Int, rect: IntArray) {
+        if (kL != null && kL === e) {
+            claimRect = if (e.ax == 51) e.Y else rect
+            return
+        }
+        if (prio < 0 || prio >= 6) return
+        if (prio < claimCo || prio == 1) {
+            claimCo = prio; kL = e
+            claimRect = if (e.ax == 51) e.Y else rect
+        }
+    }
+
     /** `k.S` — camera right bound (`boundMaxX`), also the aP arena
      *  clamp right edge (same static in the original). */
     override var kSBound: Int get() = boundMaxX; set(v) { boundMaxX = v }
@@ -579,6 +605,7 @@ class Level0World(
             else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
             else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
             else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
+            else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

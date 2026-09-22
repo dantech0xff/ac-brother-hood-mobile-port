@@ -2687,4 +2687,225 @@ class Level0WorldTest {
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(99, e.S, "default -> L92 -> no-op")
     }
+
+    // -- slice 37: ax66 bm() moving platform -----------------------------
+
+    private fun platformAt(w: Level0World, x: Int, y: Int, s: Int): Entity {
+        val e = Entity(66, w.clips[7])
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.S = s
+        w.npcs.add(e)
+        return e
+    }
+
+    /** Player overlapping `e` with real hitboxes. */
+    private fun ridePlayer(w: Level0World, e: Entity, s: Int = 0) {
+        val p = w.player
+        p.setPositionPx(e.ak, e.al); p.S = s; p.T = 0; p.refreshBoxes()
+    }
+
+    @Test fun `ax66 S6 board binds player and inherits velocity`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 6)
+        e.ag = 500; e.ah = -200; e.ai = 60; e.aj = 90
+        ridePlayer(w, e); p.x1 = 90
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(7, e.S, "S6 -> i(7)")
+        assertSame(e, p.ga, "g.a = this")
+        assertEquals(500, p.ag); assertEquals(-200, p.ah)
+        assertEquals(60, p.ai); assertEquals(90, p.aj)
+        assertEquals(0, p.S, "aS.i(0)")
+        assertFalse(e.b, "tail clears b on S6")
+    }
+
+    @Test fun `ax66 S6 does not board while dead or mid-throw`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 6)
+        ridePlayer(w, e); p.x1 = 0                          // g.g() true
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(6, e.S, "x1<=0 blocks board")
+        ridePlayer(w, e, 50); p.x1 = 90
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(6, e.S, "aS.S==50 blocks board")
+    }
+
+    @Test fun `ax66 S7 ride clamps vel ticks down and S34 releases`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 7)
+        ridePlayer(w, e); e.Z[1] = 5
+        p.ga = e; p.ah = 300; p.aj = 100
+        w.npcFsm.tickPlatform(e, w, p)
+        assertSame(e, p.ga); assertEquals(0, p.ah); assertEquals(0, p.aj)
+        assertEquals(4, e.Z[1], "Z[1]-- per tick")
+        ridePlayer(w, e, 34); p.ga = e
+        w.npcFsm.tickPlatform(e, w, p)
+        assertNull(p.ga, "S34 -> L34 release")
+    }
+
+    @Test fun `ax66 S7 timer expiry advances to S8`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 7)
+        ridePlayer(w, e)
+        e.Z[1] = 0; e.T = e.clip!!.frameCount(7) - 1
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(8, e.S, "Z[1]<0 && r() -> i(8)")
+    }
+
+    @Test fun `ax66 S8 stop releases player into fling`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 8)
+        e.T = e.clip!!.frameCount(8) - 1
+        p.ga = e
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(9, e.S, "S8 -> i(9)")
+        assertNull(p.ga, "g.a released")
+        assertEquals(43, p.S, "aS.a(0) -> fling S43")
+    }
+
+    @Test fun `ax66 S9 sinks until floor cell then S10`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // low al => the probe cell below is air (<12): sink arm
+        val e = platformAt(w, 320, 120, 9)
+        p.ga = e; val al0 = e.al
+        w.npcFsm.tickPlatform(e, w, p)
+        assertTrue(e.al > al0, "sinks al+=10")
+        assertEquals(2560, e.ah); assertEquals(1536, e.aj)
+        assertEquals(43, p.S, "g.a==this -> aS.a(2560)")
+    }
+
+    @Test fun `ax66 S10 resets home and re-arms S6`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, 320, 120, 10)
+        e.T = e.clip!!.frameCount(10) - 1
+        e.Z[2] = 999; e.Z[3] = 88; p.ga = e
+        w.npcFsm.tickPlatform(e, w, p)
+        assertNull(p.ga)
+        assertEquals(999, e.ak); assertEquals(88, e.al)
+        assertEquals(6, e.S, "-> i(6) re-arm")
+    }
+
+    @Test fun `ax66 S11 board arm mounts the attacking player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al + 40, 11)
+        e.Z[4] = -1
+        ridePlayer(w, e, 236)
+        p.al = e.W[3] - 5; p.refreshBoxes()   // above W[3]? flip
+        // L152 path: al <= W[3] && S236 -> i(237)
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(237, p.S, "S236 -> i(237)")
+        assertEquals(e.ak, p.ak, "ak snap")
+        assertEquals(e.al, p.al, "L168 al snap")
+        // ga may be released by L232 when the X grab-zone doesn't overlap
+    }
+
+    @Test fun `ax66 S13 holding arm flings the falling player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 13)
+        e.Z[4] = -1
+        ridePlayer(w, e, 236); p.ac = null
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(43, p.S, "S236 inside W -> aS.a(ah) fling")
+    }
+
+    @Test fun `ax66 S15 link-check arms S16 when crate holds player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val crate = platformAt(w, p.ak, p.al, 12); crate.aw = 77
+        val e = platformAt(w, p.ak, p.al, 15); e.Z[0] = 77
+        ridePlayer(w, e); p.ga = crate
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(16, e.S, "i(16) when linked crate holds player")
+    }
+
+    @Test fun `ax66 S16 flags and drains the linked crate`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val crate = platformAt(w, p.ak + 200, p.al, 12); crate.aw = 77
+        val e = platformAt(w, p.ak, p.al, 16); e.Z[0] = 77
+        e.T = e.clip!!.frameCount(16) - 1
+        p.ga = crate
+        w.npcFsm.tickPlatform(e, w, p)
+        assertTrue(e.P and 64 != 0 && e.P and 32 != 0, "P|=64|32")
+        assertTrue(crate in w.pendingRemove, "k.c(crate)")
+        assertNull(p.ga, "g.a(r0) released")
+    }
+
+    @Test fun `ax66 S18 arms countdown S14 decrements to S20`() {
+        val w = world(); w.npcs.clear()
+        val e = platformAt(w, 320, 120, 18); e.Z[0] = 3
+        e.T = e.clip!!.frameCount(18) - 1
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertEquals(14, e.S); assertEquals(3, e.aC)
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertEquals(14, e.S, "aC>0 still counting")
+        w.npcFsm.tickPlatform(e, w, w.player)
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertEquals(20, e.S, "aC<=0 -> i(20)")
+    }
+
+    @Test fun `ax66 S19 timed wait then S21`() {
+        val w = world(); w.npcs.clear()
+        val e = platformAt(w, 320, 120, 19)
+        e.Z[1] = 1; e.aC = 2
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertEquals(19, e.S); assertEquals(1, e.aC, "aC--")
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertEquals(21, e.S, "aC<=0 -> i(21)")
+    }
+
+    @Test fun `ax66 S20 anim-end reverts to S18 and flings player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 20)
+        e.T = e.clip!!.frameCount(20) - 1
+        ridePlayer(w, e, 0); p.ga = e
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(18, e.S, "-> i(18)")
+        assertNull(p.ga); assertEquals(43, p.S, "aS.a(2560) fling")
+    }
+
+    @Test fun `ax66 L232 drift release drops ga and ae`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 11); e.Z[4] = -1
+        ridePlayer(w, e, 0); p.ga = e
+        // off the X grab-zone: move player far right so W still overlaps
+        // but X (narrow zone) does not
+        p.ak = e.X[2] + 400; p.refreshBoxes()
+        // keep W overlap so L131 doesn't matter; L232 needs ga && !X-overlap
+        w.npcFsm.tickPlatform(e, w, p)
+        assertNull(p.ga, "off-zone drift release")
+    }
+
+    @Test fun `ax66 br claim stolen by nearer eligible crate`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 11); e.Z[4] = -1
+        ridePlayer(w, e, 0); p.av = false               // facing right
+        val stale = platformAt(w, p.ak - 300, p.al, 13)  // behind, out of reach
+        p.ac = stale
+        val near = platformAt(w, p.ak + 100, p.al, 12)
+        w.npcFsm.tickPlatform(e, w, p)
+        assertSame(near, p.ac, "dead claim released; nearer crate claimed")
+        assertTrue(near.P and 256 != 0, "claim sets P|256")
+    }
+
+    @Test fun `ax66 tail clears b only on ride states`() {
+        val w = world(); w.npcs.clear()
+        val e = platformAt(w, 320, 120, 6); e.b = true
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertFalse(e.b, "S6 -> b=false")
+        e.S = 15; e.b = true
+        w.npcFsm.tickPlatform(e, w, w.player)
+        assertTrue(e.b, "S15 keeps b")
+    }
 }
