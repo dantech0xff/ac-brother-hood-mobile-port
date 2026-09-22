@@ -375,6 +375,7 @@ class Level0World(
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 6) npcFsm.initAx6(e, f.toList())
             else if (type == 19) npcFsm.initAx19(e, f.toList())
+            else if (type == 42) npcFsm.initAx42(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -474,6 +475,9 @@ class Level0World(
     override var kBK = false                     // k.bK — never set true in JAR
     override var kBx = 0                         // k.bx — l(12) sentinel
     override var kBw = 0                         // k.bw — l(13) sentinel
+    override var kAJ = 0                         // k.aJ — ax42 fuse phase
+    override var kAK = 0                         // k.aK — countdown init
+    override var kAM = 0                         // k.aM — fuse accumulator
     override var kF: Entity? = null              // k.F
     override var iCe = false                     // i.ce static
     override var iBD = false                     // i.bD static
@@ -711,6 +715,7 @@ class Level0World(
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
             else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
