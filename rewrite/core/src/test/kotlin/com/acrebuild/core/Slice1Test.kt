@@ -409,6 +409,45 @@ class Level0WorldTest {
         assertTrue(w.npcs.none { it.S == 139 }, "reload must respawn entities (f(false))")
     }
 
+    @Test fun `ax2 checkpoint fires on overlap and reload restores to it`() {
+        val w = world()
+        assertTrue(w.checkpoints.isNotEmpty(), "level 0 has ax2 records")
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed, "checkpoint should fire on overlap")
+        assertNotNull(w.checkpointSnap)
+        assertEquals(cp.ak, w.checkpointSnap!!.ak)
+        // die → fail → retry: player respawns at the checkpoint, not spawn
+        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        w.tick(emptyList())
+        assertTrue(w.failed)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertEquals(cp.ak, w.player.ak, "reload must restore checkpoint pos")
+        assertEquals(cp.al, w.player.al)
+    }
+
+    @Test fun `checkpoint re-homes live npcs and keeps pre-checkpoint dead dead`() {
+        val w = world()
+        val cp = w.checkpoints.first()
+        val live = w.npcs.first { it.ax == 11 }
+        val dead = w.npcs.last { it.ax == 11 }
+        live.setPositionPx(live.homeX + 400, live.homeY)
+        dead.setAnim(139) // killed before the checkpoint
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed)
+        assertEquals(live.homeX, live.ak, "live npc re-homed on checkpoint save")
+        assertEquals(139, dead.S, "pre-checkpoint corpse stays dead")
+        // reload: the pre-checkpoint kill stays dead (as==-98 / br[])
+        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        w.tick(emptyList())
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertEquals(139, w.npcs.first { it.aw == dead.aw }.S)
+    }
+
     @Test fun `iframes block a second drain for 10 ticks`() {
         val w = world()
         repeat(3) { w.tick(emptyList()) }
