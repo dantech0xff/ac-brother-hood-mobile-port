@@ -125,6 +125,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gb: Entity? = null         // g.b grabbed-prop ref (op40 arm)
     var ge: Entity? = null         // g.e hide-spot owner (bB S12 arm)
     var gg: Entity? = null         // g.g hide-spot busy guard
+    var ci: Entity? = null         // g.ci carried prop (f() holding check)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -261,10 +262,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
             if (av) { Y[0] -= dx; Y[2] -= dx } else { Y[0] += dx; Y[2] += dx }
             Y[1] += dy; Y[3] += dy
         } else {
-            // L82 (U<0): raw quad + flags mirror, no anchor fold
-            val obj = c.frameModuleIndex(S, T)
+            // L82 (U<0): bounds indexed by raw T + flags mirror, no anchor fold
             val bx = IntArray(4)
-            c.objectBounds(obj, bx)
+            c.objectBounds(T, bx)
             Y[0] = bx[0]; Y[1] = bx[1]
             Y[2] = bx[2] + bx[0]; Y[3] = bx[3] + bx[1]
             if (flags and 1 != 0) { val t = Y[0]; Y[0] = -Y[2]; Y[2] = -t }
@@ -579,6 +579,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.g(i)` (i.java:7758, proven): true when `r4` is on the side this
+     * entity faces — `(r4.ak < ak) == av`.
+     */
+    fun inFrontOf(r4: Entity): Boolean = (r4.ak < ak) == av
+
+    /**
+     * `g.f()` (g.java:3763, proven): player holding/carried check —
+     * `ci != null && g(ci) && |ci.ak-ak|<120 && |ci.al-al|<20`. Pickups
+     * suppress while the player's hands are occupied.
+     */
+    fun isHolding(): Boolean {
+        val c = ci ?: return false
+        if (!inFrontOf(c)) return false
+        return Math.abs(c.ak - ak) < 120 && Math.abs(c.al - al) < 20
+    }
+
+    /**
      * `i.u()` (i.java:700, proven): recompute `au` = normalized distance
      * from the view center (k.O+200, k.P+120). Arms: aG==4 → /400,/240;
      * ax67&&bk[Z0]==49 → /400,/240; ax67&&bk[Z0]==27 → /800,/240;
@@ -730,6 +747,8 @@ interface LevelCellSource {
     val inPlay: Boolean get() = true
     /** `k.aS.W` — the player's hitbox (v()'s ax14 tail). */
     fun playerRect(): IntArray = IntArray(4)
+    /** `k.q(o)` — resolve a linked entity by its `aw` id. */
+    fun findByAw(aw: Int): Entity? = null
 
     /** `i.a(int,int,int)` (i.java:9810): spawn an ax14 clip9 pickup
      *  indicator (anim `n`, az=302) and return it for `ae` binding. */
