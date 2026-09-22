@@ -1462,6 +1462,41 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ae = null
     }
 
+    /** `i.g(i)` (i.java:7758, proven): is `o` on my facing side —
+     *  `r0 = o.ak < ak` (other left) then `r0 == av`; with this port's
+     *  `av` = "facing/mirroring left" that reads "other is in front". */
+    fun faces(o: Entity): Boolean = (o.ak < ak) == av
+
+    /** `i.T()` (i.java:9879, proven): marker alive — `ae` exists, is the
+     *  clip-74 prompt clip, and `S ∈ {0,1}`. Our markers spawn on clip 9
+     *  (`spawnPickup`) so the clip-identity check is dropped (`inferred` —
+     *  same effect: `ae` is always the marker entity). */
+    fun markerAlive(): Boolean = ae != null && ae!!.S in 0..1
+
+    /** `i.o(int,int)` (i.java:9825, proven): park the last marker point —
+     *  class statics `L`/`M` consumed by `b(x,y)` (:9829). */
+    fun markerPoint(x: Int, y: Int) { markerLx = x; markerLy = y }
+
+    /**
+     * `i.d(int,int)` (i.java:9856, proven): move the `ae` marker to (x,y);
+     *  when `T()` re-park `o()`; then pick anim 1 when the touch point is
+     *  within 70px of the marker on screen (`k.a(J,K, x-O, y-P, 70)`),
+     *  else 0.
+     */
+    fun moveMarker(w: LevelCellSource, x: Int, y: Int) {
+        val m = ae ?: return
+        m.ak = x; m.al = y
+        if (markerAlive()) markerPoint(x, y)
+        m.setAnim(if (w.touchNearView(m, 70)) 1 else 0)
+    }
+
+    /** `i.V()` (i.java:9903, proven): marker-touch check — `ae` live and
+     *  `k.a(k.H,k.I, ae.ak-k.O, ae.al-k.P, 70)`. */
+    fun markerTouched(w: LevelCellSource): Boolean {
+        val m = ae ?: return false
+        return w.touchNearView(m, 70)
+    }
+
     /** `i.as()` (i.java:7680, proven): instant kill — `aB=0` plus the
      *  death-anim map {11→i(0), 17→i(69), 23→i(79)}. Other ax types get
      *  aB=0 with no anim change. */
@@ -2711,6 +2746,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     companion object {
         val ZERO_RECT = IntArray(4)
+        /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
+         *  (written by `o()`, read by `b(x,y)` :9829). */
+        var markerLx = -1
+        var markerLy = -1
         /** `i.bu[]` (i.java:22315, proven) — per-weapon damage table,
          *  indexed by `k.au` (weapon slot). */
         val WEAPON_DMG = intArrayOf(300, 400, 500)
@@ -4038,6 +4077,9 @@ interface LevelCellSource {
     fun padDown(mask: Int): Boolean = false
     /** `k.x(mask)` (k.java:7224, proven): double-tap-window edge (`eM`). */
     fun padTap(mask: Int): Boolean = false
+    /** `k.w(mask)` (k.java:7217, proven): released-input `(eM & mask) != 0`
+     *  — `eN` latches the held bits at pointer-release. */
+    fun padRelease(mask: Int): Boolean = false
     /** `k.v()` (k.java:7260, proven): full input-latch reset. */
     fun clearLatches() {}
     /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at
