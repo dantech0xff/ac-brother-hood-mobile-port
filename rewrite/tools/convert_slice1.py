@@ -87,11 +87,18 @@ def pack_clip(pack, entry_dir, out_dir):
 
     mods = secs["modules"]["records"]
     module_pngs = []
+    # b.java:2436 `l(int)` = per-entity palette slot `aH`; export every
+    # variant the decoder produced, keyed palette-00 in the blob so the
+    # renderer substitutes by filename suffix.
+    all_pngs = []
     for m in mods:
         pngs = sorted((SPR / pack / entry_dir).glob(
-            f"module-{m['index']:04d}-palette-00-*.png"))
-        assert pngs, f"missing palette-00 png for module {m['index']} in {entry_dir}"
-        module_pngs.append((pngs[0].name, m["ae_width"], m["af_height"]))
+            f"module-{m['index']:04d}-palette-*-*.png"))
+        assert pngs, f"missing pngs for module {m['index']} in {entry_dir}"
+        p0 = [p for p in pngs if "-palette-00-" in p.name]
+        assert p0, f"missing palette-00 png for module {m['index']}"
+        module_pngs.append((p0[0].name, m["ae_width"], m["af_height"]))
+        all_pngs.extend(p.name for p in pngs)
 
     frames = secs["av_aw_ax_ay_i_records"]["records"]
     anims = secs["au_h_records"]["records"]
@@ -135,7 +142,7 @@ def pack_clip(pack, entry_dir, out_dir):
                             p["aq"]["raw_u8"], ar, as_)
 
     (out_dir / "modules").mkdir(parents=True, exist_ok=True)
-    for name, _, _ in module_pngs:
+    for name in all_pngs:
         shutil.copy2(SPR / pack / entry_dir / name, out_dir / "modules" / name)
     (out_dir / "clip.acpk").write_bytes(bytes(blob))
     (out_dir / "meta.json").write_text(json.dumps({

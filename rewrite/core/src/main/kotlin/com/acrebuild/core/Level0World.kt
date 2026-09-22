@@ -109,6 +109,11 @@ class Level0World(
             }
             if (type == 11) npcFsm.initSoldier(e, f.toList())
             else for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
+            // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
+            // Z[0]∈{1,2} (red-uniform variant), aH=0 otherwise; the player
+            // uses bo[bL][0]=0 for level 0 (bo={{0,-1},{3,1},{5,2},{6,3}},
+            // k.java:8450) — every other spawned type keeps aH=0.
+            if (type == 11 && (e.Z[0] == 1 || e.Z[0] == 2)) e.palette = 1
             // br[] parity: entities already dead when the checkpoint fired
             // stay dead through the reload (as==-98 persisted).
             if (checkpointDead.contains(e.aw)) e.setAnim(139)
