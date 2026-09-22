@@ -4056,11 +4056,10 @@ class Slice43cTest {
         assertTrue(e.cd[0], "cd[0]=true halt")
         assertTrue(w.dialogModal, "k.b accept → k.l(21)")
         assertEquals(1, w.bO); assertEquals(3, w.bN0); assertEquals(42, w.dialogLine)
-        // screen-21 dismiss edge → k.C.Z() (cd[0]=false), modal clears
+        // screen-21 dismiss edge → k.C.Z() (cd[0]=false), modal clears.
+        // The arming tick's press is already consumed — the first fresh
+        // press edge dismisses (no cooldown, k.java:1578-1603 semantics).
         w.kC = e
-        // first tick drains the one-tick cooldown; second = the dismiss edge
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
-        assertTrue(w.dialogModal, "cooldown tick still holds the modal")
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
         assertFalse(w.dialogModal)
         assertFalse(e.cd[0], "Z() resumed the claim")
@@ -4240,3 +4239,34 @@ class Slice43cTest {
     }
 }
 
+
+/** Pointer-field lifecycle regression (Devin Review, PR #52): `k.H/k.I`
+ *  are the pointer-RELEASE point held for exactly one frame
+ *  (k.java:548-553 writes them on pointerReleased; k.java:1874-77 copies
+ *  and clears `ch/ci` every frame). A DOWN-only tap leaves no residue —
+ *  stale taps must not resolve later `k.c`/`k.j` polls. */
+class PointerLifecycleTest {
+    @Test fun `k H,I fill on release and clear at tick end`() {
+        val w = world()
+        // DOWN alone must not populate the release fields
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 100, 100)))
+        assertEquals(-1, w.lastTouchX)
+        assertEquals(-1, w.lastTouchY)
+        // even when set mid-tick (release path), fields clear at tick end
+        w.lastTouchX = 50; w.lastTouchY = 60
+        w.tick(emptyList())
+        assertEquals(-1, w.lastTouchX)
+        assertEquals(-1, w.lastTouchY)
+    }
+
+    @Test fun `k J,K persist while touching and clear after release`() {
+        val w = world()
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 30, 40)))
+        assertEquals(30, w.lastMoveX); assertEquals(40, w.lastMoveY)
+        w.tick(emptyList())                       // held: position kept
+        assertEquals(30, w.lastMoveX)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.UP, 50, 60)))
+        assertEquals(-1, w.lastMoveX)             // release: cleared at end
+        assertEquals(-1, w.lastMoveY)
+    }
+}
