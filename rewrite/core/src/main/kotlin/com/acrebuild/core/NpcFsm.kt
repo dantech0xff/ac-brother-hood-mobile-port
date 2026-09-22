@@ -896,12 +896,16 @@ class NpcFsm(private val world: LevelCellSource) {
      * - `S==38` → same with bit 8
      * - `S==39` → `g.g(4)` + `k.c(this)` (mount request — feeds the az()
      *   ax72 arm's `J&4` gate)
-     * The `L21` tail (S15-24 switch) is unported — flagged `unknown`.
+     * `i.bb()` (i.java:14088, proven): the ax16 request-marker FSM —
+     *  collect arms (S30/38/39 → `g.g(N)` + `h(N)` + `i(91)` + A(15) +
+     *  `E()` + `k.c(this)`), then the L21 switch: flight/rest projectile
+     *  arms (S15/16/17), ceiling props (S22/23/25), and the stealth-kill
+     *  prompt markers (S31/32/33 → `aS.i(216/214)` on a 65568 tap).
      */
-    fun tickRequestMarker(e: Entity, player: Entity) {
+    fun tickRequestMarker(e: Entity, player: Entity, pad: Pad) {
         e.advanceAnim()
         when (e.S) {
-            30, 38 -> {
+            30, 38 -> {                   // L9/L15 — equip pickups
                 if (!Entity.overlapI(player.W, e.W)) return
                 val bit = if (e.S == 30) 2 else 8
                 player.requestAction(bit, world)
@@ -911,12 +915,162 @@ class NpcFsm(private val world: LevelCellSource) {
                 player.settleToGround(world)
                 world.removeEntity(e)
             }
-            39 -> {
+            39 -> {                       // L21 — mount-request pickup
                 if (!Entity.overlapI(player.W, e.W)) return
                 player.requestAction(4, world)
                 world.removeEntity(e)
             }
-            else -> return                                   // L21 tail unported
+            else -> markerArm(e, player, pad)
+        }
+    }
+
+    // `bb()` L21 switch (i.java:14113+): the non-collect marker states.
+    private fun markerArm(e: Entity, player: Entity, pad: Pad) {
+        when (e.S) {
+            // L23 — flight end: `t() + bd() + i(9)`
+            15 -> {
+                if (!e.animFinished()) return
+                e.refreshBoxes()
+                e.sweepNeighbors(world)
+                e.setAnim(9)
+            }
+            // L27 — rest/decay: `T==1&&U==0 → A(12)`; `t()`; then the
+            // `k.bh[k.aj]==3` settle arm else the `bd()+op4` damage arm;
+            // `af=null; r() → k.c(this)`
+            16 -> {
+                if (e.T == 1 && e.U == 0) world.sfx(12)
+                e.refreshBoxes()
+                if (world.missionBh() == 3) {
+                    e.ah = 0; e.ag = 0
+                    if (e.af === player) e.sweepNeighborsB(world)
+                    else if (Entity.overlapI(e.X, player.W))
+                        player.applyHit(38, 0, e, world)
+                } else {
+                    e.sweepNeighbors(world)
+                    if (Entity.overlapI(e.X, player.W))
+                        player.applyHit(4, 0, e, world)
+                }
+                e.af = null
+                if (e.animFinished()) world.removeEntity(e)
+            }
+            // L48 — the thrown-knife flight: `aj=512`; `ah==0&&ag!=0` →
+            // `a(4,ak,al-60)` trail marker; X-overlap on the player →
+            // `g.b()` attack → the L58 bounce (snap outside the X box,
+            // flip av, `ag=k.e(afΔy, ah>>8, 2, afΔx)` arc-solve to the
+            // thrower, `bR` set); else `aS.a(4)`. `bR&&af.ax==23&&overlap
+            // → af.aB=0,i(79)`. r9 → `i(16)+G()`. Then wall-bounce scan
+            // (av-side column, `e>=12` → snap+flip+`ag=-ag/2`), floor hit
+            // (`e<12` keeps flying): `G()` + `ah>2048` → bounce `-ah/2`,
+            // else `k.h(ag,ah)>=1024 → ah=0`, else `i(16)` rest.
+            17 -> {
+                e.aj = 512
+                if (e.ah == 0 && e.ag != 0) e.spawnMarker(world, 4, e.ak, e.al - 60)
+                var r9 = false
+                if (Entity.overlapI(player.W, e.X)) {
+                    if (!world.playerAttacking()) {
+                        player.applyHit(4, 0, e, world); r9 = true
+                    } else if (!e.bR) {
+                        if (e.ag > 0) {
+                            e.ak = player.X[0] - (e.X[2] - e.X[0])
+                            e.al = player.X[1] - (e.X[3] - e.X[1])
+                        } else if (e.ag < 0) {
+                            e.ak = player.X[2] + (e.X[2] - e.X[0])
+                            e.al = player.X[1] - (e.X[3] - e.X[1])
+                        }
+                        e.av = !e.av
+                        val r0 = -e.ah / 2
+                        val f = e.af                       // af.al read — null
+                        val r92 = if (f != null) {         // guard inferred
+                            var v = Entity.arcSolve(
+                                f.al - e.al, e.ah shr 8, f.ak - e.ak)
+                            if (v == -1) -e.ag else v
+                        } else -e.ag
+                        e.ag = r92; e.ah = r0; e.bR = true
+                    }
+                }
+                if (e.bR && e.af?.ax == 23 &&
+                    Entity.overlapI(e.W, e.af!!.W)) {
+                    e.af!!.aB = 0; e.af!!.setAnim(79); r9 = true
+                }
+                if (r9) {
+                    e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                    e.setAnim(16); e.releaseAe()
+                }
+                if (e.ag != 0 && !e.W.contentEquals(Entity.ZERO_RECT)) {
+                    val r04 = if (e.av) e.W[0] else e.W[2]
+                    val r06 = r04 / 20 + (if (e.av) -1 else 1)
+                    var r10 = e.W[1] / 20
+                    var hit = false
+                    while (r10 <= e.W[3] / 20) {
+                        if (e.e(world, r06, r10) >= 12) { hit = true; break }
+                        r10++
+                    }
+                    if (hit) {
+                        e.ak = if (e.av) (e.ak / 20) * 20 else ((e.ak / 20) + 1) * 20
+                        e.av = !e.av
+                        e.ag = -e.ag / 2
+                    }
+                }
+                if (e.ah < 0) return
+                if (e.e(world, e.ak / 20, e.al / 20) < 12) return
+                e.releaseAe()                              // G()
+                if (e.ah > 2048) { e.ah = -e.ah / 2; e.ag /= 2; return }
+                if (Entity.magApprox(e.ag, e.ah) < 1024) {
+                    e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                    e.setAnim(16); return
+                }
+                e.ah = 0
+            }
+            // L131 — ceiling props: `W==null → k.c`; `W∩aS.W → a(4)+k.c`;
+            // S22 under-player ceiling cell==20 → `i(25)` rest; S23 →
+            // `v()` view check.
+            22, 23 -> {
+                if (e.W.contentEquals(Entity.ZERO_RECT)) { world.removeEntity(e); return }
+                if (Entity.overlapI(player.W, e.W)) {
+                    player.applyHit(4, 0, e, world)
+                    world.removeEntity(e); return
+                }
+                if (e.S == 22 &&
+                    e.e(world, e.W[2] / 20, e.W[3] / 20) == 20 &&
+                    e.W[3] <= player.W[1]) {
+                    e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                }
+                if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)
+            }
+            // L152 — anim end → k.c
+            25 -> if (e.animFinished()) world.removeEntity(e)
+            // L156 — stealth-kill prompt: leaves area → `G()`; while the
+            // player overlaps, not mid-kill (S216/50), not attacking
+            // (`g.b()`), and `J&2` armed → spawn the `a(8,ak,al-85)`
+            // indicator; a 65568 tap teleports the player into `i(216)`
+            // + A(29).
+            31 -> {
+                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (player.S == 216 || player.S == 50 || world.playerAttacking() ||
+                    (player.gJ and 2) == 0) { e.releaseAe(); return }
+                e.spawnMarker(world, 8, e.ak, e.al - 85)
+                if (pad.v(Pad.M_CONTEXT)) {
+                    player.ak = e.ak; player.al = e.al
+                    player.ah = 0; player.ag = 0; player.aj = 0; player.ai = 0
+                    player.setAnim(216); world.sfx(29)
+                }
+            }
+            // L172 — left/right kill prompts: same shape → `i(214)`;
+            // S32 pins `aS.ak = ak-45, av=false`; S33 `ak+45, av=true`.
+            32, 33 -> {
+                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (player.S == 214 || player.S == 215 || player.S == 50 ||
+                    (player.gJ and 2) == 0) { e.releaseAe(); return }
+                e.spawnMarker(world, 8, e.ak, e.al - 85)
+                if (pad.v(Pad.M_CONTEXT)) {
+                    player.al = e.al
+                    if (e.S == 32) { player.ak = e.ak - 45; player.av = false }
+                    else { player.ak = e.ak + 45; player.av = true }
+                    player.ah = 0; player.ag = 0; player.aj = 0; player.ai = 0
+                    player.setAnim(214); world.sfx(29)
+                }
+            }
+            else -> {}                   // L195 — inert
         }
     }
 }

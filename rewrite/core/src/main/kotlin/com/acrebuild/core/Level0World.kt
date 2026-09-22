@@ -231,6 +231,16 @@ class Level0World(
     override fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean =
         lastTouchX in x until x + w && lastTouchY in y until y + h
 
+    // -- marker/sweep globals -------------------------------------------------
+    override var cFFlag = false                 // i.cF gauge-full static
+    override var playerLinkB: Entity? = null    // g.b marker-engage link
+    override val missionIndex = 0               // k.aj — level 0 = mission 0
+    var statTally0 = 0                          // k.ap[0] kill/stat tally
+    /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
+    override fun statTally(aw: Int) {
+        if (aw > 0 && missionIndex != 7) statTally0++
+    }
+
     /** `m(int)` particle burst (i.java:21259, proven): `a(74,54,1,
      *  player.az+1)` via the generic spawner (i.java:4799) — random angle
      *  aD = j.a(0,360), launch radius cap aE = j.a(70,90), aC=2 drift legs,
@@ -497,7 +507,7 @@ class Level0World(
             else if (n.ax == 74) npcFsm.tickWisp(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
-            else if (n.ax == 16) npcFsm.tickRequestMarker(n, player)
+            else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
