@@ -63,6 +63,7 @@ class Level0World(
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
             56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
             58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
+            43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
         )
     }
 
@@ -270,6 +271,7 @@ class Level0World(
     override var actionLock = 0                 // k.at
     override var cEntity: Entity? = null        // k.C
     override var vehicle: Entity? = null        // g.a
+    override var cv: Entity? = null             // i.cv — ax10-S51 rail zone
     override var iFlag = true                   // g.i
     override var eFlag = false                  // g.E
 
@@ -911,6 +913,7 @@ class Level0World(
             else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
             else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
             else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
+            else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

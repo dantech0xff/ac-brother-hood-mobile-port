@@ -6279,3 +6279,202 @@ class Slice58Test {
         assertEquals(4, e.S)
     }
 }
+
+// =========================================================================
+// slice 59 — ax43 bw() ride carrier + o(i) grapple offer + aV() S50/S51
+// =========================================================================
+
+class Slice59Test {
+    private fun carrier(w: Level0World, s: Int, x: Int, y: Int): Entity {
+        val e = Entity(43, w.clips[31])
+        e.S = s
+        e.setPositionPx(x, y)
+        e.Z[1] = 8                                          // ride speed 8<<8
+        e.X[0] = x - 10; e.X[1] = y - 10; e.X[2] = x + 10; e.X[3] = y + 10
+        e.Y[0] = x - 15; e.Y[1] = y - 15; e.Y[2] = x + 15; e.Y[3] = y + 15
+        w.npcs.add(0, e)
+        return e
+    }
+
+    // -- o(i) grapple offer -------------------------------------------------
+    @Test fun `offer binds when player-Y overlaps and Z2 auto-proximity`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 0
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
+        val e = carrier(w, 0, 300, 150)
+        e.Z[2] = 1                                          // auto-bind
+        w.npcFsm.grappleOffer(e, w)
+        assertTrue(p.ga === e, "g.a = r6")
+        assertEquals(1, e.S, "r6.i(1)")
+        assertTrue(w.kAe === e, "k.ae = r6")
+        assertTrue(19 in w.sfxLog, "k.A(19)")
+        assertEquals(8 shl 8, e.ag, "r6.ag = Z[1]<<8")
+        assertTrue(p.cFlag, "g.C = true")
+    }
+
+    @Test fun `offer no-ops without overlap`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(9000, 9000); p.refreshBoxes()
+        p.Y[0] = 8990; p.Y[1] = 8990; p.Y[2] = 9010; p.Y[3] = 9010
+        val e = carrier(w, 0, 300, 150)
+        e.Z[2] = 1
+        w.npcFsm.grappleOffer(e, w)
+        assertNull(p.ga, "no overlap -> no bind")
+        assertEquals(0, e.S)
+        assertFalse(p.cFlag)
+    }
+
+    @Test fun `offer rejects player S22`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 22                                            // rest anim — L16 bail
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
+        val e = carrier(w, 0, 300, 150)
+        e.Z[2] = 1
+        w.npcFsm.grappleOffer(e, w)
+        assertNull(p.ga, "aS.S==22 -> G() + return")
+        assertEquals(0, e.S)
+    }
+
+    // -- bw() ride ----------------------------------------------------------
+    @Test fun `S1 bound pins player to X center and forces 295`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 0
+        p.setPositionPx(500, 400); p.refreshBoxes()         // away from X center
+        val e = carrier(w, 1, 300, 150)
+        p.ga = e                                            // mounted
+        w.npcFsm.tickAx43(e, w, p)
+        assertEquals(295, p.S, "aS.S<304 -> aS.i(295)")
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertEquals((e.X[0] + e.X[2]) shr 1, p.ak, "aS.ak = X-center")
+        assertEquals((e.X[1] + e.X[3]) shr 1, p.al, "aS.al = X-center")
+        assertTrue(w.kAe === e, "k.ae = this")
+        assertEquals(p.az - 1, e.az)
+    }
+
+    @Test fun `S1 speed modulates 150pct same-dir and 50pct reverse`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 295
+        val e = carrier(w, 1, 300, 150)
+        e.av = true
+        p.ga = e
+        w.pad.held = 4112                                     // same-dir as av
+        w.npcFsm.tickAx43(e, w, p)
+        assertEquals((8 shl 8) * 150 / 100, e.ag, "u(4112)+av -> x150")
+        w.pad.held = 8256                                     // reverse
+        w.npcFsm.tickAx43(e, w, p)
+        assertEquals((8 shl 8) * 50 / 100, e.ag, "u(8256)+av -> x50")
+        w.pad.held = 0
+    }
+
+    @Test fun `S1 attack cuts bind to S7`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.gI = 1; p.S = 67                                  // g.b() attack anim
+        val e = carrier(w, 1, 300, 150)
+        p.ga = e
+        w.npcFsm.tickAx43(e, w, p)
+        assertNull(p.ga, "g.a = null")
+        assertEquals(7, e.S, "i(7)")
+    }
+
+    @Test fun `cv containment detaches and removes`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 295
+        val e = carrier(w, 1, 300, 150)
+        p.ga = e
+        val rail = Entity(10, null)
+        rail.W[0] = 0; rail.W[1] = 0; rail.W[2] = 1000; rail.W[3] = 1000
+        w.cv = rail
+        w.npcFsm.tickAx43(e, w, p)
+        assertNull(p.ga, "g.a = null")
+        assertTrue(w.kAe === p || w.kAe == null, "k.ae restored")
+        assertTrue(e in w.pendingRemove, "k.c(this)")
+    }
+
+    @Test fun `S7 zeros vel unlinks and re-offers`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 0
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.Y[0] = 290; p.Y[1] = 140; p.Y[2] = 310; p.Y[3] = 160
+        val e = carrier(w, 7, 300, 150)
+        e.ag = 500; e.ah = 500
+        e.Z[2] = 1                                          // rebind on offer
+        w.kAe = e
+        p.ga = e
+        w.npcFsm.tickAx43(e, w, p)
+        assertEquals(8 shl 8, e.ag, "o() re-bind re-arms ag = Z[1]<<8")
+        assertEquals(0, e.ah)
+        assertTrue(p.ga === e, "o(this) re-bound -> S1 next tick")
+        assertEquals(1, e.S)
+    }
+
+    // -- aV() S50/S51 -------------------------------------------------------
+    @Test fun `S51 registers cv while kAc overlaps`() {
+        val w = world()
+        w.npcs.clear()
+        val rail = Entity(10, null)
+        rail.S = 51
+        rail.W[0] = 0; rail.W[1] = 0; rail.W[2] = 500; rail.W[3] = 500
+        w.kO = 0; w.kP = 0                                     // kAc covers rail
+        w.npcFsm.tickTrigger(rail, w.player)
+        assertTrue(w.cv === rail, "a(k.ac, W) -> cv = this")
+        w.kO = 9000; w.kP = 9000                              // camera gone
+        w.npcFsm.tickTrigger(rail, w.player)
+        assertNull(w.cv, "!overlap -> cv = null")
+    }
+
+    @Test fun `S50 context-tap launches the rider off`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 295; p.av = false
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = Entity(10, null)
+        e.S = 50
+        e.W[0] = 290; e.W[1] = 140; e.W[2] = 310; e.W[3] = 160
+        val mount = carrier(w, 1, 300, 150)
+        p.ga = mount
+        w.pad.edge = 16388
+        w.npcFsm.tickTrigger(e, p)
+        assertEquals(243, p.S, "aS.i(243) launch")
+        assertEquals(3328, p.ag); assertEquals(-6656, p.ah)
+        assertNull(p.ga)
+        assertTrue(p.cFlag, "g.C = true after dismount")
+        assertTrue(e in w.pendingRemove, "k.c(this)")
+    }
+
+    @Test fun `S50 overlap without tap just flags cFlag false`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.S = 295
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = Entity(10, null)
+        e.S = 50
+        e.W[0] = 290; e.W[1] = 140; e.W[2] = 310; e.W[3] = 160
+        val mount = carrier(w, 1, 300, 150)
+        p.ga = mount
+        p.cFlag = true
+        w.npcFsm.tickTrigger(e, p)
+        assertFalse(p.cFlag, "overlap -> g.C = false")
+        assertTrue(p.ga === mount, "still bound")
+        assertTrue(e !in w.pendingRemove)
+    }
+}
