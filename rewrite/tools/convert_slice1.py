@@ -73,6 +73,10 @@ CLIPS = {
     "clip9": ("pack-3", "entry-009-marker-003"),   # k.c marker popup (ax14 S54)
     "clip32": ("pack-3", "entry-032-marker-003"),  # ax44 door/gate (bi[44]=32)
     "clip54": ("pack-3", "entry-054-marker-003"),  # ax74 wisp (m(-1) bursts)
+    "clip64": ("pack-3", "entry-064-marker-003"),  # ax67 kind-9 decor props (bk[9]=64)
+    "clip26": ("pack-3", "entry-026-marker-003"),  # generic a(ax) small-item clip
+    "clip27": ("pack-3", "entry-027-marker-003"),  # ax67 springboard (bk{1,2,3}=27)
+    "clip35": ("pack-3", "entry-035-marker-003"),  # ax67 kind-5 interactives (bk[5]=35)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
@@ -112,6 +116,11 @@ def pack_clip(pack, entry_dir, out_dir):
     rects_meta = secs.get("ai_aj_ao_and_ak_or_al_records", {}).get("records", [])
     rect_pool = [r["runtime_values"] for r in
                  secs.get("am_or_an_records", {}).get("records", [])]
+    # ak_or_al = per-object bounds quads (i.java t() Y fill, b.java:868-895
+    # g/h/e/f readers). Decoded as runtime_values [x,y,w,h] i16-le.
+    bounds_quads = [r["runtime_values"] for r in
+                    secs.get("ai_aj_ao_and_ak_or_al_records", {}).get(
+                        "ak_or_al_records", [])]
 
     blob = bytearray()
     blob += struct.pack("<4sB", b"ACPK", 1)
@@ -135,6 +144,9 @@ def pack_clip(pack, entry_dir, out_dir):
     blob += struct.pack("<I", len(rect_pool))
     for x, y, w, h in rect_pool:
         blob += struct.pack("<hhhh", x, y, w, h)
+    blob += struct.pack("<I", len(bounds_quads))
+    for x, y, w, h in bounds_quads:
+        blob += struct.pack("<hhhh", x, y, w, h)
     placements = secs.get("ap_ar_as_aq_records", {}).get("records", [])
     blob += struct.pack("<I", len(placements))
     for p in placements:
@@ -152,9 +164,11 @@ def pack_clip(pack, entry_dir, out_dir):
     (out_dir / "meta.json").write_text(json.dumps({
         "source": f"{pack}/{entry_dir}",
         "modules": len(module_pngs), "anims": len(anims),
-        "frames": len(frames), "rects": len(rect_pool)}, indent=1))
+        "frames": len(frames), "rects": len(rect_pool),
+        "bounds": len(bounds_quads)}, indent=1))
     print(f"clip {entry_dir}: {len(anims)} anims {len(frames)} frames "
-          f"{len(module_pngs)} modules {len(rect_pool)} rects")
+          f"{len(module_pngs)} modules {len(rect_pool)} rects "
+          f"{len(bounds_quads)} bounds")
 
 
 def pack_level():

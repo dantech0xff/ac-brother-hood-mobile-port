@@ -28,7 +28,8 @@ class Clip private constructor(
     val objRectCount: IntArray,
     val objPlaceStart: IntArray,
     val objPlaceCount: IntArray,
-    val rects: IntArray,        // x,y,w,h quads
+    val rects: IntArray,        // x,y,w,h quads (am_or_an — W/X rects)
+    val bounds: IntArray,       // x,y,w,h quads (ak_or_al — Y bounds)
     val placements: IntArray,   // module,flags,x,y quads
 ) {
 
@@ -75,6 +76,17 @@ class Clip private constructor(
         if (fl and 1 != 0) x = -x - w
         if (fl and 2 != 0) y = -y - h
         out[0] = x; out[1] = y; out[2] = w; out[3] = h
+    }
+
+    /**
+     * `aa.g/h/e/f(obj)` — per-object bounds quad (b.java:868-895; the
+     * `ak`/`al` array read by t()'s Y fill). `out` = [x,y,w,h].
+     */
+    fun objectBounds(obj: Int, out: IntArray) {
+        val q = obj * 4
+        if (q + 3 >= bounds.size) { out.fill(0); return }
+        out[0] = bounds[q]; out[1] = bounds[q + 1]
+        out[2] = bounds[q + 2]; out[3] = bounds[q + 3]
     }
 
     /** Draw descriptor for one frame (`b.java:907`): module + anchor offset. */
@@ -139,6 +151,9 @@ class Clip private constructor(
             val rectCount = r.u32().toInt()
             val rects = IntArray(rectCount * 4)
             for (i in rects.indices) rects[i] = r.i16()
+            val boundsCount = r.u32().toInt()
+            val bounds = IntArray(boundsCount * 4)
+            for (i in bounds.indices) bounds[i] = r.i16()
             val placeCount = r.u32().toInt()
             val places = IntArray(placeCount * 4)
             for (i in 0 until placeCount) {
@@ -147,7 +162,7 @@ class Clip private constructor(
             }
             require(r.pos == data.size) { "trailing bytes in ACPK" }
             return Clip(names, mw, mh, aStart, aCount, fMod, fDur, fDx, fDy,
-                        fFl, oRs, oRc, oPs, oPc, rects, places)
+                        fFl, oRs, oRc, oPs, oPc, rects, bounds, places)
         }
     }
 }

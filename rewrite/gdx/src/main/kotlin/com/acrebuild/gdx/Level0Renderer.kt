@@ -63,6 +63,8 @@ class Level0Renderer {
                 9 -> "clips/clip9/modules"
                 32 -> "clips/clip32/modules"
                 54 -> "clips/clip54/modules"
+                64 -> "clips/clip64/modules"
+                26 -> "clips/clip26/modules"
                 else -> "level0/tileset-$packId/modules"
             }
             for (i in clip.moduleNames.indices) {
@@ -96,6 +98,8 @@ class Level0Renderer {
                 9 -> "clips/clip9/modules"
                 32 -> "clips/clip32/modules"
                 54 -> "clips/clip54/modules"
+                64 -> "clips/clip64/modules"
+                26 -> "clips/clip26/modules"
                 else -> "level0/tileset-$pack/modules"
             }
             val variant = clip.moduleNames[m]

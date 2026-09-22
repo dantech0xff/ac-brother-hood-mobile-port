@@ -3,5 +3,6 @@
  "modules": 51,
  "anims": 51,
  "frames": 51,
- "rects": 0
+ "rects": 0,
+ "bounds": 51
 }

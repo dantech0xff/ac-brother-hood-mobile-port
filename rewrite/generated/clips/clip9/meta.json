@@ -3,5 +3,6 @@
  "modules": 102,
  "anims": 109,
  "frames": 567,
- "rects": 43
+ "rects": 43,
+ "bounds": 320
 }

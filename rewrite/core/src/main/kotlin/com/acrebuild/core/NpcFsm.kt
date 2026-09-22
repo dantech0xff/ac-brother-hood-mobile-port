@@ -72,6 +72,12 @@ class NpcFsm(private val world: LevelCellSource) {
         private val ATTACK_ANIMS = intArrayOf(
             67, 68, 69, 81, 112, 113, 114, 115,
             183, 184, 216, 217, 286, 287)
+        /** `k.bk` — ax67 prop kind→clip table (k.java:8444, proven). */
+        private val BK = intArrayOf(
+            24, 27, 27, 27, 34, 35, 37, 41, 64, 64, 65, 67, 49, 69, 70)
+        /** ax67 clip resolved by kind (i.java:2633 `aa = k.r(bk[r8[7]])`). */
+        fun decorClip(kind: Int): Int =
+            if (kind >= 0 && kind < BK.size) BK[kind] else -1
     }
 
     /** ax11/73 record init (L120). `f` = the entity record fields. */
@@ -671,4 +677,142 @@ class NpcFsm(private val world: LevelCellSource) {
 
     private fun overlap(a: IntArray, b: IntArray): Boolean =
         a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
+
+    // ============================================================ ax67 = bB()
+    // Decor/interactive props (i.java:17584). Clip binds at record init to
+    // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`
+    // (i.java:2633, proven). bk = kind→clip table (k.java:8444, proven):
+    //   {24,27,27,27,34,35,37,41,64,64,65,67,49,69,70}
+    // Level-0's 253 ax67 records are all kind 9 → bk=64 (pure decor —
+    // clip64 has 35 anims/0 rects so every interaction arm is naturally
+    // dead). The bk==27 (springboard) and kind-5 (S28 spawner/shove,
+    // S12 hide spot) arms are transcribed verbatim for other levels;
+    // deps they need that aren't modeled yet are flagged inline.
+
+    /**
+     * ax67 record init — L347 arm (i.java:3530, proven) + the generic
+     * aB arm (i.java:2635): `az=f8`; `Z[0]=f7` (kind); `bk==37 → P|16`
+     * (physics flag); `bk==35 && f5==12 → Z[1]=f4`; `bk==35 && f5==28 →
+     * P|16`; `aB = f5==39 ? 2 : 0`; then `i(f5)`. `t()` box fill follows
+     * in the caller (clip64 carries no rects → W/X stay zero).
+     */
+    fun initDecor(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = rf(8)
+        val kind = rf(7)
+        if (decorClip(kind) == 37) {
+            e.P = e.P or 16
+        } else {
+            if (decorClip(kind) == 35 && rf(5) == 12) e.Z[1] = rf(4)
+            if (decorClip(kind) == 35 && rf(5) == 28) e.P = e.P or 16
+        }
+        e.Z[0] = kind
+        e.aB = if (rf(5) == 39) 2 else 0     // bh[aj]==3 arm (2634)
+        e.setAnim(rf(5))
+        e.refreshBoxes()
+    }
+
+    /**
+     * ax67 `bB()` (i.java:17584, proven transcription). Overlap checks use
+     * `i.a()` — INCLUSIVE edges (i.java:632, differs from `overlap`).
+     * - bk==27 springboard: S∈{19,21,23,32,35,38} armed; W∩playerW →
+     *   `ah=768+k.Y` + op40 grab + `i(S+1)`; then for S∈{19,21,23} the
+     *   `bd[]` scan arms ax68-linked children (`ad.i(2)`, `d(8,…)`
+     *   floatie — unported, `r0.i(10)`); even S∈{20,22,24,33,36,39}
+     *   despawn on `r()`; S∈{25..31,34,37} are dead.
+     * - Z[0]==5 (bk=35) interactive: S28 — `X∩playerW && !v()` →
+     *   spawn/re-pin the ae pickup (`i.a(71,ak,al)` at the view edge);
+     *   `W∩playerW` → shove `i(309)`/`aC=5`/`ag=±2560`/`g.a=null`;
+     *   else `aS.G()`. S12 — hide spot (`Z[1]==1 && g.g==null &&
+     *   W∩playerW` → `aA|=8`,`g.e`,`az-1`; release arm restores aA/az).
+     */
+    fun tickDecor(e: Entity, player: Entity) {
+        e.advanceAnim()   // universal s()
+        e.refreshBoxes()
+        if (decorClip(e.Z[0]) == 27) {
+            when (e.S) {
+                19, 21, 23, 32, 35, 38 -> {
+                    // L7: player body reaches the pad → bounce + grab
+                    if (Entity.overlapI(e.W, player.W)) {
+                        player.ah = 768 + world.kY
+                        player.applyHit(40, 0, e, world)   // a(40,0,0,this)
+                        if (e.S != 39) e.setAnim(e.S + 1)
+                    }
+                    // L12/L14/L94: S∈{32,35,38} skip the child scan
+                    if (e.S == 32 || e.S == 35 || e.S == 38) return
+                    // L19: `k.bd[]` scan for an ax68-linked child hitting W
+                    for (r0 in world.npcs) {
+                        val ad = r0.ad ?: continue
+                        if (ad.ax != 68) continue
+                        if (!Entity.overlapI(e.W, ad.W)) continue
+                        if (e.S != 39) e.setAnim(e.S + 1)
+                        ad.setAnim(2)
+                        // d(8, ad.ak, ad.al) floatie spawner — unported
+                        r0.setAnim(10)
+                        return
+                    }
+                    return
+                }
+                20, 22, 24, 33, 36, 39 -> {
+                    if (e.animFinished()) world.removeEntity(e)   // L39 k.c(this)
+                    return
+                }
+                else -> return     // L91 — dead bank (25..31,34,37, default)
+            }
+        }
+        if (e.Z[0] != 5) return          // L43 gate — kind-9 decor exits
+        when (e.S) {
+            28 -> {
+                // L46: r02 = player side vs prop centerline
+                val r02 = player.ak - ((e.W[0] + e.W[2]) shr 1)
+                if (Entity.overlapI(e.X, player.W) &&
+                    !e.wasHitRecently(world)) {
+                    val ae = player.ae
+                    if (ae == null) {
+                        player.releaseAe()               // aS.G() then a(71)
+                        player.ae = world.spawnPickup(71, e.ak, e.al)
+                        pinAe(player.ae!!, r02, e.al); return
+                    }
+                    if (ae.S == 71) {                    // L53→L56 re-pin
+                        pinAe(ae, r02, e.al); return
+                    }
+                    // ae exists but isn't a 71 → fall to the shove check
+                }
+                // L62: player inside the body → hard shove out
+                if (Entity.overlapI(e.W, player.W)) {
+                    player.setAnim(309)
+                    player.aC = 5
+                    if (r02 >= 0) { player.ag = 2560; player.av = true }
+                    else { player.ag = -2560; player.av = false }
+                    player.ga = null                     // g.a = null
+                    return
+                }
+                player.releaseAe()                       // L69 aS.G()
+                return
+            }
+            12 -> {
+                if (e.Z[1] != 1) return                  // L72
+                // L74: un-guarded + overlap → bind (aA|=8, g.e, az-1)
+                if (player.gg == null && Entity.overlapI(e.W, player.W)) {
+                    player.aA = player.aA or 8
+                    player.ge = e
+                    player.az = e.az - 1
+                    return
+                }
+                // L80: not ours → end; ours → release (aA&=-9, az=100)
+                if (player.ge !== e) return
+                player.aA = player.aA and -9
+                player.ge = null
+                player.az = 100
+                return
+            }
+            else -> return                               // L98
+        }
+    }
+
+    /** L56-L59 (i.java): pin `ae` to the view edge on the prop's side. */
+    private fun pinAe(ae: Entity, r02: Int, y: Int) {
+        ae.ak = if (r02 >= 0) world.kO + 20 else world.kO + 400 - 20
+        ae.al = y
+    }
 }
