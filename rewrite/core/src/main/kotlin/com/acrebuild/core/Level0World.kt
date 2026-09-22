@@ -144,6 +144,20 @@ class Level0World(
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
     /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
     override val inPlay: Boolean get() = !failed
+    /** `k.cm` — mounted flag (k.k() at k.java:638; `cm=true` writes 1 at
+     *  g.java:3564). */
+    var cm = 0
+    override val mounted: Boolean get() = cm == 1
+    override fun setMounted() { cm = 1 }
+    /** `k.H`/`k.I` — the last touch point in view px (-1 = none). */
+    var lastTouchX = -1
+    var lastTouchY = -1
+    override fun clipFor(idx: Int): Clip? = clips[idx]
+    /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): touch point vs
+     *  entity in view space — equivalent to world-space vs (k.H+k.O). */
+    override fun touchNearView(e: Entity, r: Int): Boolean =
+        lastTouchX >= 0 &&
+            e.h(Math.abs(lastTouchX + camX - e.ak), Math.abs(lastTouchY + camY - e.al)) <= r
     /** `k.aS.W` — player hitbox. */
     override fun playerRect(): IntArray = player.W
 
@@ -380,6 +394,7 @@ class Level0World(
             when (e.type) {
                 InputQueue.Type.DOWN -> {
                     pointerDown = true
+                    lastTouchX = e.x; lastTouchY = e.y   // k.H/k.I
                     zoneMask = zoneFor(e.x, e.y)
                     when (zoneMask) {
                         Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)

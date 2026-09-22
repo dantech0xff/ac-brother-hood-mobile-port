@@ -130,11 +130,143 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gJ = 0                      // g.J action-request bits (g.g(mask));
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
     var c: Entity? = null         // i.c carry link (released by p())
+    // -- g.c(i) grab-lunge state (g.java:4115) -----------------------------
+    var F: Entity? = null         // g.F — grab/lunge target (c() sets, as() binds)
+    var cE = 0                    // c() — lunge length = the anim's total frames
+    var cF = 0                    // c() — impulse (default 5120; Z[1]/298 override)
+    var cC = 0                    // c() — per-tick x step (cz/cE)
+    var cD = 0                    // c() — per-tick y step (signed cA/cE)
+    var cz = 0                    // c() — target.x - X[0] (clamped ≠0)
+    var cA = 0                    // c() — target W-center-y - X[1]
+    var cB = 0                    // c() — h(cz,cA) straight-line distance
+    var cx = 0                    // c() — yaw rate ((Z[2] or 8) · j.m/360)
+    var cy = 0                    // c() — launch angle (j.b two-arg)
+    var cG = false                // c() — facing snapshot at grab
+    var cJ = 0                    // c() — X[0] snapshot
+    var cK = 0                    // c() — X[1] snapshot
+    var cH = 0                    // c() — X[0] snapshot (target x anchor)
+    var cI = 0                    // c() — X[1] snapshot
+    var cM = 0                    // c() — ax72 Z[0]==1 clears it (L58)
+    var z = false                 // g.z — cleared on grab (c() callers)
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
         ab?.releaseCascade()
         ab = null
+    }
+
+    // -- clip-74 hand indicator (i.c/d/T/U/V + i.o statics) ---------------
+
+    /** `i.T()` (i.java:9879, proven): the ae indicator is a clip-74 hand
+     *  at anim S∈{0,1}. clip74 unconverted → false until converted. */
+    fun indicatorIsHand(w: LevelCellSource): Boolean {
+        val e = ae ?: return false
+        return e.clip === w.clipFor(74) && (e.S == 0 || e.S == 1)
+    }
+
+    /** `i.U()` (i.java:9895, proven): if T() — release the ae indicator
+     *  and clear the static indicator point L/M. */
+    fun dropIndicator(w: LevelCellSource) {
+        if (!indicatorIsHand(w)) return
+        releaseAe()
+        L = -1; M = -1
+    }
+
+    /** `i.V()` (i.java:9903, proven): ae exists and sits ≤70px (k.h) from
+     *  the touch point k.H/k.I (view-space) — `ae.ak-k.O`/`ae.al-k.P`. */
+    fun indicatorNearTouch(w: LevelCellSource): Boolean {
+        val e = ae ?: return false
+        return w.touchNearView(e, 70)
+    }
+
+    /** `i.c(x,y)` (i.java:9840, proven): spawn the clip-74 hand indicator
+     *  (ax14, anim 0, az=302, au=0) at (x,y) and pin the static point
+     *  L/M via `o(x,y)` (i.java:9825). */
+    fun spawnHand(w: LevelCellSource, x: Int, y: Int) {
+        if (ae == null) ae = Entity(14, w.clipFor(74)).also {
+            it.setAnim(0); it.az = 302; it.au = 0
+        }
+        ae?.let { it.ak = x; it.al = y; it.refreshBoxes() }
+        L = x; M = y
+    }
+
+    /** `i.d(x,y)` (i.java:9856, proven): move the hand indicator; T()
+     *  hands re-pin L/M; anim 1 while within 70px of (k.J,k.K) — the
+     *  held-point; the port reuses the single touch point (inferred —
+     *  J2ME tracks down vs current separately). */
+    fun moveHand(w: LevelCellSource, x: Int, y: Int) {
+        val e = ae ?: return
+        e.ak = x; e.al = y
+        if (indicatorIsHand(w)) { L = x; M = y }
+        e.setAnim(if (w.touchNearView(e, 70)) 1 else 0)
+    }
+
+    // -- g.c(i) the grab lunge --------------------------------------------
+
+    /**
+     * `g.c(i r8)` (g.java:4115, proven) — zero velocity, pick the lunge
+     *  anim (attack state → 292; S==298 keeps anim; else by the 8.8
+     *  rise:run ratio r04/r03 → 272/273/274/275 arcs), then compute the
+     *  per-tick step (cC,cD) that carries the player onto the target
+     *  over the anim's cE frames. `F = r8` links the target for the
+     *  mount/grab consumer arms (g.java:4303+, unported).
+     *  `cy = j.b(-cz, cA)` keeps the original's arg order verbatim
+     *  (inferred sign convention — resolved when the throw arm lands).
+     */
+    fun grabLunge(t: Entity, w: LevelCellSource) {
+        refreshBoxes()
+        bq = 0                       // i.bq static — cleared on grab
+        aj = 0; ai = 0; ah = 0; ag = 0
+        val r0 = (W[0] + W[2]) shr 1
+        val r02 = (W[1] + W[3]) shr 1
+        var r11 = t.ak; var r12 = t.al
+        if (t.ax == 11 || t.ax == 17) {      // L5→L6 victim anchor
+            r11 = (t.W[0] + t.W[2]) shr 1
+            r12 = t.W[3] - 45
+        }
+        val r03 = Math.abs(r11 - r0)
+        val r04 = Math.abs(r12 - r02) shl 8
+        if (PlayerFsm.isAttackState(S)) { setAnim(292); w.sfx(30) }
+        else if (S == 298) w.sfx(30)         // L11: keeps current anim
+        else if (r03 <= 0 || r04 <= 0) {     // L35/L38
+            setAnim(if (r03 == 0) 275 else 272)
+            w.sfx(30)
+        } else {
+            val r07 = r04 / r03
+            setAnim(when {                   // steepness pick
+                r07 <= 64 -> 272
+                r07 <= 256 -> 273
+                r07 <= 1024 -> 274
+                else -> 275
+            })
+            w.sfx(30)                        // L33
+        }
+        // L40
+        cF = 5120; cx = (8 * Trig.M) / 360; cG = av
+        if (t.ax == 72) {
+            if (t.Z[0] == 1) cM = 0          // L58
+            else {                           // L49-L52 param overrides
+                if (t.Z[1] > 0) cF = t.Z[1]
+                if (t.Z[2] > 0) cx = (t.Z[2] * Trig.M) / 360
+            }
+        } else if (t.ax == 11 || t.ax == 17) {          // L60-L66
+            if (S == 298) { cF = 7680; cx = 0 } else { cF = 5120; cx = 0 }
+        }
+        // L67: cE = the lunge anim's total frames
+        cE = 0
+        clip?.let { for (f in 0 until it.frameCount(S)) cE += it.frameDuration(S, f) }
+        refreshBoxes()                       // t()
+        val r05 = (t.W[1] + t.W[3]) shr 1
+        cz = t.ak - X[0]; cA = r05 - X[1]
+        cB = h(cz, cA)
+        if (cz == 0) cz = 1
+        cy = Trig.atan2(cA, -cz)             // j.b(-cz, cA) = atan2(r8,r7)
+        cC = cz / cE
+        val r06 = (Math.abs(cA) shl 8) / Math.abs(cz)
+        cD = if (cz == 1) cA / cE else (Math.abs(cC) * r06) shr 8
+        if (r05 < X[1]) cD = -cD
+        cJ = X[0]; cK = X[1]; cH = X[0]; cI = X[1]
+        F = t
     }
 
     /** `i.p()` (i.java:214, proven): full release — clears the W/X/Y
@@ -803,6 +935,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
         var at: Entity? = null
+        /** `i.L`/`i.M` (i.java:9825 `o(x,y)`) — the static indicator
+         *  point; -1 = unset (cleared by `U()`). */
+        var L = -1
+        var M = -1
+        /** `i.bq` — static cleared on grab (`c()` head, g.java:4118). */
+        var bq = 0
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
@@ -906,6 +1044,16 @@ interface LevelCellSource {
     fun playerRect(): IntArray = IntArray(4)
     /** `k.q(o)` — resolve a linked entity by its `aw` id. */
     fun findByAw(aw: Int): Entity? = null
+
+    /** `k.r(idx)` — clip-space access for i.T()'s identity check. */
+    fun clipFor(idx: Int): Clip? = null
+    /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): is the entity
+     *  within r px (k.h octagonal) of the view-space touch point? */
+    fun touchNearView(e: Entity, r: Int): Boolean = false
+    /** `k.k()` (k.java:638) — `cm == 1` mounted flag. */
+    val mounted: Boolean get() = false
+    /** `cm = true` at g.java:3564 (L2040) — sets `cm = 1`. */
+    fun setMounted() {}
 
     /** `i.a(int,int,int)` (i.java:9810): spawn an ax14 clip9 pickup
      *  indicator (anim `n`, az=302) and return it for `ae` binding. */

@@ -1223,4 +1223,118 @@ class Level0WorldTest {
         assertSame(m, Entity.at, "az() ax72 arm consumed the J&4 request")
         Entity.at = null
     }
+
+    // ---- slice 26 — g.java:3474-3562 L1947 mount/assassinate arm ------
+
+    private fun ax72MountAt(w: Level0World, x: Int, y: Int, z0: Int): Entity {
+        val m = Entity(72, null)
+        m.aB = 10; m.setPositionPx(x, y)
+        m.W[0] = x - 10; m.W[1] = y - 10; m.W[2] = x + 10; m.W[3] = y + 10
+        // v() L85 -> a(k.ac, Y): real context-bounds quad against camRect
+        m.Y[0] = m.W[0]; m.Y[1] = m.W[1]; m.Y[2] = m.W[2]; m.Y[3] = m.W[3]
+        m.Z[0] = z0; m.Z[3] = 300; m.Z[4] = 1
+        w.npcs.add(0, m)
+        return m
+    }
+
+    @Test fun `context press lunges onto an in-range ax72 mount`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0; p.z = true
+        val m = ax72MountAt(w, 340, 150, 1)          // Z[0]==1, dist < Z[3]
+        Entity.at = m
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertSame(m, p.F, "c(i.at) bound the lunge target")
+        assertFalse(p.z, "z cleared on grab")
+        assertEquals(0, p.ag); assertEquals(0, p.ah); assertEquals(0, p.aj)
+        assertTrue(p.S in 272..292, "lunge arc anim (272-275 or 292)")
+        assertTrue(w.cm == 1, "L2040 cm=1 — mounted")
+        assertTrue(30 in w.sfxLog)
+        Entity.at = null
+    }
+
+    @Test fun `mount arm out-of-range Z3 keeps r98 out and never mounts`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 3)          // Z[0]==3 -> r104=false
+        Entity.at = m
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertNull(p.F, "no lunge when r104 cleared")
+        assertTrue(w.cm == 0, "cm stays 0 without r98")
+        Entity.at = null
+    }
+
+    @Test fun `mount arm spawns the clip74 hand at view center when armed`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 1)
+        Entity.at = m
+        p.gJ = 4                                    // armed but NO press
+        w.playerFsm.mountEntry(p, Pad())
+        val ae = p.ae
+        assertNotNull(ae, "L2035 c() spawned the hand indicator")
+        assertEquals(14, ae!!.ax)
+        assertEquals(200 + w.camX, ae.ak, "hand pinned at view center x")
+        assertEquals(120 + w.camY, ae.al, "hand pinned at view center y")
+        assertTrue(w.cm == 1)
+        Entity.at = null
+    }
+
+    @Test fun `assassinate arm lunges onto the in-front ax11 window`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val s = soldierAt(w, 320, 150)
+        s.Z[19] = 1                                 // assassination window
+        s.aB = 100                                  // alive (P() false)
+        p.av = false                                // facing right -> s in front
+        p.g = s                                     // az() bound target
+        Entity.at = null                            // no mount -> L2006
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertSame(s, p.F, "c(g) lunged onto the victim")
+        assertTrue(w.cm == 1)
+    }
+
+    @Test fun `no J bit4 means the whole arm stays inert`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 1)
+        Entity.at = m
+        p.gJ = 1                                  // bit0 only — no mount request
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertNull(p.F); assertTrue(w.cm == 0)
+        Entity.at = null
+    }
+
+    @Test fun `grabLunge keeps anim on S298 and overrides cF to 7680`() {
+        val w = world()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.S = 298
+        val victim = soldierAt(w, 330, 150)
+        p.grabLunge(victim, w)
+        assertEquals(298, p.S, "S==298 keeps the current anim")
+        assertEquals(7680, p.cF, "ax11 L66 override cF=7680")
+        assertEquals(0, p.cx, "L66 clears cx")
+        assertSame(victim, p.F)
+    }
 }
