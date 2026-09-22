@@ -4181,3 +4181,115 @@ private fun ax15Capture(e: Entity, w: Level0World, p: Entity) {
         p.setAnim(0)
     }
 }
+
+// =====================================================================
+// ax46 — aZ() (i.java:13568-13726, proven): spring/trap prop. bi[46]=29
+// but the anim clip rebinds per-record: `aa = k.r(k.bl[r8[10]])` with
+// k.bl = {29, 0} — bl[1]=0 = the mega clip (clip0) whose 300-range
+// anims host the armed-trap states 327/328/329. Head pins palette Z[5].
+// =====================================================================
+
+/** init arm — `case 46` (i.java:2700) → L206 (:3245, proven):
+ *  `Z=int[8]`; `Z[4]=r8[5]` (armed marker); `Z[0]=r8[8]<<8`,
+ *  `Z[1]=r8[9]<<8` (throw velocities); `Z[5]=r8[11]` (palette pin);
+ *  `Z[6]=k.bl[r8[10]]`; `Z[7]=r8[12]`; `Z[3]=30`. The L15 head binds
+ *  the anim clip `aa = k.r(k.bl[r8[10]])`; shared `i(r8[5])+t()`. */
+fun NpcFsm.initAx46(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    val bl = intArrayOf(29, 0)                        // k.bl (k.java:8445)
+    val bi10 = rf(10)
+    e.clip = w.clips[if (bi10 in bl.indices) bl[bi10] else 0]
+    e.Z[4] = rf(5); e.Z[0] = rf(8) shl 8; e.Z[1] = rf(9) shl 8
+    e.Z[5] = rf(11); e.Z[6] = if (bi10 in bl.indices) bl[bi10] else 0
+    e.Z[7] = rf(12); e.Z[3] = 30
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `aZ()` verbatim (proven): head `aa.l(Z[5])` = palette pin; then the
+ *  S dispatch — spring pads (0/11/1/12), touch traps (3/4/327), the
+ *  fire cycle (5/6/328), settle (7/8), dead (2), pusher (10), and the
+ *  re-arm (329). */
+fun NpcFsm.tickAx46(e: Entity, w: Level0World, p: Entity) {
+    e.palette = e.Z[5]                                          // aa.l(Z[5])
+    when (e.S) {
+        0, 11 -> ax46Spring(e, w, p)                            // L79
+        1, 12 -> {                                              // L71
+            if (e.animFinished()) e.setAnim(if (e.S == 1) 0 else 11)
+            ax46Spring(e, w, p)
+        }
+        2 -> {}                                                 // L7 dead
+        3, 4, 327 -> ax46Touch(e, w, p)                         // L9
+        5, 6, 328 -> ax46Cycle(e, w, p)                         // L33
+        7, 8 -> { if (e.animFinished()) e.setAnim(2) }          // L63/L107
+        10 -> ax46Pusher(e, p)                                  // L92
+        329 -> { if (e.animFinished()) e.setAnim(327) }         // L67
+        else -> {}                                              // L103
+    }
+}
+
+/** L79 spring arm (proven): player-W overlap + falling (`ah>=0`) +
+ *  quarter-point above the pad top → `aS.a(11,0,0,this)` (op11 intake:
+ *  pin + Z-launch) then `i(1)`/`i(12)` sprung anim. */
+private fun ax46Spring(e: Entity, w: Level0World, p: Entity) {
+    if (!Entity.overlapStrict(p.W, e.W)) return                 // L80
+    if (p.ah < 0) return                                        // L82 still rising
+    if ((((p.W[1] + (p.W[1] + p.W[3])) shr 1) shr 1) >= e.W[1]) return
+    p.applyHit(11, 0, e, w)                                     // L83
+    e.setAnim(if (e.S == 11) 12 else 1)                         // L88/L102
+}
+
+/** L9 touch arm (proven): X-box (attack rect) overlap → armed records
+ *  (`Z[4]==S`) pin the player via `a(24,…)` and advance the fire cycle;
+ *  unarmed contacts throw the player off (`aS.i(165)` + `ag=∓2048`,
+ *  `ah=-5120`, `i(7)`). */
+private fun ax46Touch(e: Entity, w: Level0World, p: Entity) {
+    if (!Entity.overlapStrict(p.W, e.X)) return                 // L10
+    if (e.Z[4] == e.S) {                                        // L13 armed
+        if (e.S == 327) {
+            p.applyHit(24, 330, e, w); e.setAnim(328)
+        } else {
+            p.applyHit(24, 110, e, w)
+            e.setAnim(if (e.S == 3) 6 else 5)
+        }
+        return
+    }
+    // L11 touch throw
+    e.P = e.P and -65
+    e.releaseAe()                                               // G()
+    p.setAnim(165)
+    p.av = e.av                                                 // L25/L26 face = e.av
+    p.ag = if (p.av) -2048 else 2048
+    p.ah = -5120
+    e.setAnim(7)
+}
+
+/** L33 fire-cycle arm (proven): X overlap → S328 pins again; on anim
+ *  end S5 resets to i(3)+face-invert, S328 throws off to i(329),
+ *  S6 winds down to i(4). `Z[2]=Z[3]` rearms the 30-tick counter. */
+private fun ax46Cycle(e: Entity, w: Level0World, p: Entity) {
+    if (!Entity.overlapStrict(p.W, e.X)) return                 // L34
+    if (e.S == 328) p.applyHit(24, 330, e, w)                   // L37
+    if (!e.animFinished()) return                               // L40
+    when (e.S) {
+        5 -> { e.setAnim(3); p.av = !e.av }                     // L41/L59 flip
+        328 -> {                                                // L46 throw-off
+            e.setAnim(329); e.P = e.P and -65
+            p.setAnim(165)
+            p.av = e.av                                         // L50/L51
+            p.ag = if (p.av) -2048 else 2048
+            p.ah = -5120
+        }
+        else -> { e.setAnim(4); p.av = e.av }                   // L56/L59
+    }
+    e.Z[2] = e.Z[3]                                             // L60
+}
+
+/** L92 pusher arm (proven): W overlap → `ag=Z[0], ah=Z[1]` +
+ *  `av=!e.av` + `i(242)` — the directional air-jet push. */
+private fun ax46Pusher(e: Entity, p: Entity) {
+    if (!Entity.overlapStrict(e.W, p.W)) return                 // L93
+    p.ag = e.Z[0]; p.ah = e.Z[1]
+    p.av = !e.av                                                // L98/L99
+    p.setAnim(242)
+}
