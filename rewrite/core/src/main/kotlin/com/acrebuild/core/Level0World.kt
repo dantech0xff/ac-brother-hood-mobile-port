@@ -49,6 +49,20 @@ class Level0World(
     var failed = false                 // j.c==12 mission-fail screen active
         private set
 
+    /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id. */
+    data class Checkpoint(val aw: Int, val ak: Int, val al: Int, var consumed: Boolean = false)
+
+    /** Snapshot written into bA[16..] by aY() — subset we model. */
+    data class Snapshot(val ak: Int, val al: Int, val av: Boolean, val x1: Int)
+
+    val checkpoints: List<Checkpoint> = level.entities
+        .filter { it.size >= 4 && it[0] == 2 }
+        .map { Checkpoint(it[1], it[2], it[3]) }
+    var checkpointSnap: Snapshot? = null
+        private set
+    private var checkpointDead: Set<Int> = emptySet()  // br[]-equivalent
+                                                       // dead at save time
+
     val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
     var camX = 0
@@ -62,9 +76,18 @@ class Level0World(
     }
 
     private fun resetPlayerToSpawn() {
-        val spawn = level.playerSpawn() ?: (100 to 200)
-        player.setPositionPx(spawn.first, spawn.second)
-        player.x1 = 90
+        // aY() snapshot (bA[18..24]) when a checkpoint fired, else level spawn
+        val s = checkpointSnap
+        if (s != null) {
+            player.setPositionPx(s.ak, s.al)
+            player.av = s.av
+            player.x1 = s.x1
+        } else {
+            val spawn = level.playerSpawn() ?: (100 to 200)
+            player.setPositionPx(spawn.first, spawn.second)
+            player.av = false
+            player.x1 = 90
+        }
         player.setAnim(0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
         player.gt = 0; player.bh = 0
@@ -80,11 +103,15 @@ class Level0World(
             val e = Entity(type, clips[clipIdx]).apply {
                 aw = f[1]
                 setPositionPx(f[2], f[3])
+                homeX = f[2]; homeY = f[3]
                 P = f[6]
                 av = (f[6] and 1) != 0
             }
             if (type == 11) npcFsm.initSoldier(e, f.toList())
             else for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
+            // br[] parity: entities already dead when the checkpoint fired
+            // stay dead through the reload (as==-98 persisted).
+            if (checkpointDead.contains(e.aw)) e.setAnim(139)
             npcs += e
         }
     }
@@ -97,6 +124,32 @@ class Level0World(
      */
     private fun missionFail() {
         if (!failed) { failed = true; deaths++ }
+    }
+
+    /**
+     * ax2 `aY()` (i.java:13477): W-rect overlap (`a(this.W, k.aS.W)`) —
+     * modeled as the player crossing the record's cell — saves the
+     * checkpoint snapshot into bA, self-removes, and re-materializes
+     * every entity to its home slot (`k.a(bb[i], bb[i].as)`).
+     * `k.y()` (checkpoint sfx/flash) unported — no audio hook yet.
+     */
+    private fun fireCheckpoints() {
+        for (cp in checkpoints) {
+            if (cp.consumed) continue
+            if (Math.abs(cp.ak - player.ak) > cellPx) continue
+            if (player.al < cp.al - cellPx) continue
+            cp.consumed = true
+            checkpointSnap = Snapshot(cp.ak, cp.al, player.av, player.x1)
+            checkpointDead = npcs.filter { it.S == 139 }.map { it.aw }.toSet()
+            // k.a(bb[i], bb[i].as): re-materialize each entity at its home
+            // slot — original skips as==-98 (consumed/dead) and ax==70
+            // (proven i.java:13535+); our -98 equivalent = S139 corpse.
+            for (n in npcs) {
+                if (n.ax == 70 || n.S == 139) continue
+                n.setPositionPx(n.homeX, n.homeY)
+                n.setAnim(0)
+            }
+        }
     }
 
     private fun reload() {
@@ -161,6 +214,7 @@ class Level0World(
         player.advanceAnim()
 
         for (n in npcs) npcFsm.tick(n, player)
+        fireCheckpoints()
 
         camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
         camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))
