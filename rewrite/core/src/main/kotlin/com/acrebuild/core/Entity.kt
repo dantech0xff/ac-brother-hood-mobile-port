@@ -110,6 +110,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gd: Entity? = null         // g.d  — S36 owning trigger (i.java:12912)
     var gD = false                 // g.D  — S53 gate (g.java:2054; producer
                                    // arm unported — stays false this slice)
+    var cFlag = false              // g.C  — ax43 ride-flag (g.java:48;
+                                   // o() bind sets true, aV() S50 clears)
     // -- ax4 destructible fields (init arm L161, i.java:3132) --
     var aD = 0                     // r8[4]
     var nl = 0                     // i.n (r8[8]; `n` clashes with 8.8 `N`
@@ -3775,6 +3777,9 @@ interface LevelCellSource {
      *  weapon-cycle button); default false when no touch UI is ported. */
     fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean = false
 
+    /** `i.cv` — static rail-zone register (i.java:157): the ax10-S51
+     *  trigger currently overlapping `k.ac`; read by bw()'s cv arm. */
+    var cv: Entity?
     // -- marker/sweep globals (bb() L21 tail) ---------------------------------
     /** `i.cF` — i-STATIC gauge-full flag (i.java:184/18543; set by the
      *  charge-fill arm `aB+=5 → bU`, unported — stays false). ax32 armed
