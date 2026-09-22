@@ -126,6 +126,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ge: Entity? = null         // g.e hide-spot owner (bB S12 arm)
     var gg: Entity? = null         // g.g hide-spot busy guard
     var ci: Entity? = null         // g.ci carried prop (f() holding check)
+    var g: Entity? = null          // g.g interact target (az() scan)
+    var gJ = 0                      // g.J action-request bits (g.g(mask));
+                                   // bit4 = mount request, producers unported
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -596,6 +599,95 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.P()` (i.java:7699, proven): dead check — `aB<=0 → G()` releases
+     * the `ae`/`ab` slots and returns true. Alive (`aB>0`) → false.
+     */
+    fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
+
+    /**
+     * `k.h(dx,dy)` (k.java:6839, proven): octagonal distance in px —
+     * `(a+b) - (min>>1) - (min>>2) + (min>>3)`.
+     */
+    fun h(dx: Int, dy: Int): Int {
+        var x = if (dx >= 0) dx else -dx
+        var y = if (dy >= 0) dy else -dy
+        if (x == 0 && y == 0) return 0
+        val mn = if (x <= y) x else y
+        return ((x + y) - (mn shr 1) - (mn shr 2)) + (mn shr 3)
+    }
+
+    /**
+     * `i.e(i)` (i.java:2407, proven): Bresenham LOS walk in 20px cells
+     * between the two W-centers — `cell >= 12` → true (blocked); OOB
+     * reads as 20 (blocked) via i.e(x,y) (i.java:15294, ax0-override
+     * arms for S37/257 unported — raw cell read here, `inferred` on
+     * those arms). End conditions per major axis.
+     */
+    fun losBlocked(t: Entity, world: LevelCellSource): Boolean {
+        if (W.contentEquals(ZERO_RECT) || t.W.contentEquals(ZERO_RECT)) return false
+        var cx = ((W[0] + W[2]) shr 1) / 20
+        var cy = ((W[1] + W[3]) shr 1) / 20
+        val tx = ((t.W[0] + t.W[2]) shr 1) / 20
+        val ty = ((t.W[1] + t.W[3]) shr 1) / 20
+        var dx = tx - cx; if (dx < 0) dx = -dx
+        var dy = ty - cy; if (dy < 0) dy = -dy
+        val sx = if (tx < cx) -1 else 1
+        val sy = if (ty < cy) -1 else 1
+        if (dx > dy) {
+            var err = dx / 2
+            while (cx != tx) {
+                if (cellForLos(cx, cy, world) >= 12) return true
+                cx += sx
+                err += dy
+                if (err > dx) { cy += sy; err -= dx }
+            }
+        } else {
+            var err = dy / 2
+            while (cy != ty) {
+                if (cellForLos(cx, cy, world) >= 12) return true
+                cy += sy
+                err += dx
+                if (err > dy) { cx += sx; err -= dy }
+            }
+        }
+        return false
+    }
+
+    /** `i.e(x,y)` subset (i.java:15294): OOB → 20, else raw cell value. */
+    private fun cellForLos(cx: Int, cy: Int, world: LevelCellSource): Int {
+        if (cx < 0 || cy < 0) return 20
+        return world.collisionCell(cx, cy)
+    }
+
+    /**
+     * `g.i(i)` (g.java:5465, proven): interact-eligibility of `cand`
+     * under this player's current state — `J&4 && cand.ax==11 &&
+     * cand.Z[19]==1` → facing + |dx|<=200 window; `S∈{268,291}` or
+     * `aS.S==267` → true; `S==303 && r()` → true; `S∈{295,357,358}` →
+     * true; `S∈[299,307]` → true; else false.
+     */
+    fun interactEligible(cand: Entity): Boolean {
+        if (gJ and 4 != 0 && cand.ax == 11 && cand.Z[19] == 1) {
+            if (av && cand.ak - ak >= 0) return false
+            if (!av && cand.ak - ak > 0) return false
+            if (Math.abs(cand.ak - ak) > 200) return false
+            return true
+        }
+        if (S == 268 || S == 291) return true
+        if (S == 303) return animFinished()
+        if (S == 295 || S == 357 || S == 358) return true
+        if (S in 299..307) return true
+        return false
+    }
+
+    /** `g.k(int)` (g.java:5434, proven): mount-eligible state whitelist. */
+    fun mountableState(): Boolean = when (S) {
+        0, 1, 18, 19, 20, 23, 24, 25, 35, 36, 43, 150, 157, 165,
+        242, 243, 263, 264, 265, 266, 358 -> true
+        else -> false
+    }
+
+    /**
      * `i.u()` (i.java:700, proven): recompute `au` = normalized distance
      * from the view center (k.O+200, k.P+120). Arms: aG==4 → /400,/240;
      * ax67&&bk[Z0]==49 → /400,/240; ax67&&bk[Z0]==27 → /800,/240;
@@ -646,6 +738,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     companion object {
         val ZERO_RECT = IntArray(4)
+        /** `i.at` (i.java:42) — static mount/assassination link; set by
+         *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
+        var at: Entity? = null
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]

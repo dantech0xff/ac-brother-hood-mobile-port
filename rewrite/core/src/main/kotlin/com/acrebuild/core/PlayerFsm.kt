@@ -113,6 +113,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
         }
+        interactScan(p)     // az() — g/ci/at interact maintenance+scan
     }
 
     // -- grounded family tail (L682) ----------------------------------------
@@ -505,6 +506,112 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun Entity.tick100(): Boolean = (tickCount % 100) == 0L
 
     var tickCount = 0L
+
+    /**
+     * `az()` (g.java:5510-5757, proven) — per-tick interact maintenance +
+     * `k.bd[]` scan that produces the three links:
+     *   `g`   = interact target (NPC/prop in front, <440 octagonal px),
+     *   `ci`  = carry target (NPC-kind candidate at the same spot),
+     *   `i.at`= mount/assassination link (ax72 arm; also written at
+     *           i.java:6007 by the ax11 grab).
+     * Hidden (`aA&8`) → drop `g`/`at`, bail. Hostage-carry states
+     * (S270/271) hold the links; S268 drops `g` for a fresh rebind.
+     */
+    fun interactScan(p: Entity) {
+        // -- L5-L8: hidden → clear and bail --------------------------------
+        if (p.aA and 8 != 0) { p.g = null; Entity.at = null; return }
+        // -- L12-L19: carry anims preserve links; S268 rebinds g -----------
+        if (p.S == 270 || p.S == 271) return
+        if (p.S == 268) p.g = null
+        // -- L26-L35: drop stale/dead g (ax4 exempt from the aB check) -----
+        p.g?.let { g ->
+            if (g.ax != 4 && g.aB <= 0) p.g = null
+            else if (p.h(p.ak - g.ak, p.al - g.al) > 440 ||
+                     Math.abs(p.al - g.al) >= 60) p.g = null
+        }
+        // -- L37-L48: ci dies or moves behind → drop (facing flow is
+        //    decompiler-garbled in the original — !inFrontOf is the
+        //    consistent reading, `inferred`) ---------------------------
+        p.ci?.let { c -> if (c.aB <= 0 || !p.inFrontOf(c)) p.ci = null }
+        // -- L50-L63: ax11 Z[19]==1 targets must stay in front ------------
+        p.g?.let { g -> if (g.ax == 11 && g.Z[19] == 1 && !p.inFrontOf(g)) p.g = null }
+        // -- L65-L83: `i.at` — drop when dead, far, behind, or off-level --
+        Entity.at?.let { a ->
+            val drop = when {
+                a.ax != 11 || !a.deadRelease() -> {
+                    p.h(p.ak - a.ak, p.al - a.al) > 440 ||
+                    (p.ak - a.ak >= 0 && p.av) || (p.ak - a.ak <= 0 && !p.av) ||
+                    p.W[3] < a.W[1]
+                }
+                else -> true                       // dead ax11 → L83
+            }
+            if (drop && p.S != 277 && p.S != 293 && p.S != 298) Entity.at = null
+        }
+        // -- L90-L131: kind gates — dead NPCs, ax4 pose, ax58, anim-end ----
+        p.g?.let { g ->
+            when (g.ax) {
+                11, 17, 73, 9 -> if (g.deadRelease()) p.g = null
+            }
+            if (p.g != null && (p.S == 295 || p.S == 303) && p.animFinished()) {
+                val g2 = p.g!!
+                if (g2.ax != 4 || g2.S != 30 || !p.inFrontOf(g2)) p.g = null
+            }
+            p.g?.let { g2 -> if (g2.ax == 4 && g2.S != 30) p.g = null }
+            p.g?.let { g2 -> if (g2.ax == 58) p.g = null }
+        }
+        // -- L136-L142: all bound + no pending mount bit → done -----------
+        if (p.g != null && Entity.at != null && p.gJ and 4 == 0 && p.ci != null) return
+        // -- L144-L350: scan k.bd[] ----------------------------------------
+        var best = 440                            // r6 — narrowed by L228
+        for (e in world.npcs) {
+            if (e.P and 32 != 0) continue         // held
+            if ((e.ax == 11 || e.ax == 17 || e.ax == 73 || e.ax == 23 || e.ax == 9)
+                && e.deadRelease()) continue
+            if (e.ax == 4 && e.S != 30) continue
+            val npcKind = e.ax == 11 || e.ax == 17 || e.ax == 23 ||
+                          e.ax == 73 || e.ax == 29 || e.ax == 9
+            val pathA = npcKind || (e.ax == 4 && e.S == 30) || e.ax == 58
+            if (!pathA) {
+                // -- L279: ax72 mount arm only ------------------------------
+                if (e.ax != 72) continue
+                if (p.gJ and 4 == 0 || !p.mountableState() || !e.wasHitRecently(world) ||
+                    e.Z[0] == 3) continue
+                if (p.av && e.ak - p.ak >= 0) continue
+                if (!p.av && e.ak - p.ak <= 0) continue
+                if (p.h(p.ak - e.ak, p.al - e.al) >= 440) continue
+                if (e.Z[0] == 1 && p.h(p.ak - e.ak, p.al - e.al) >= e.Z[3]) continue
+                if (p.W[1] < e.W[3]) continue
+                if (p.W[3] < e.W[1]) continue
+                if (p.losBlocked(e, world)) continue
+                if (Entity.at != null) continue
+                Entity.at = e
+                return
+            }
+            // -- L200 path: dead-check, I==8 gate for ax4/58, facing, dist --
+            if (e.aB <= 0 && e.ax != 4 && e.ax != 58) continue
+            if (p.gI != 8 && (e.ax == 4 || e.ax == 58)) continue
+            // L212-L220: facing gate — av=false needs dx>0; av=true dx<0;
+            // S∈{268,291} bypass (L220).
+            val inFront = if (p.av) e.ak - p.ak < 0 else e.ak - p.ak > 0
+            if (!inFront && p.S != 268 && p.S != 291) continue
+            val d = p.h(p.ak - e.ak, p.al - e.al)
+            if (d >= best) continue                                 // L224
+            best = d                                                // r6 = r03
+            p.g = null                                              // L228 boundary
+            if (p.S == 268) { p.g = e; continue }                   // L231
+            if (npcKind) {
+                // L250: !i(e) && aA∈{0,2} → skip; otherwise binds via
+                // the facing/dist path already passed
+                if (!p.interactEligible(e) && (e.aA == 0 || e.aA == 2)) continue
+                if (p.g == null) p.g = e                            // L260
+                if (p.ci == null) p.ci = e                          // L275
+            } else {
+                // L256-L260: i(e) or |dy|<=20 → g-bind
+                if (!p.interactEligible(e) && Math.abs(p.al - e.al) > 20) continue
+                if (p.g == null) p.g = e                            // L260
+            }
+        }
+    }
 
     companion object {
         /** `g.b()` no-arg attack table (proven, L9→L10 in g.java). */

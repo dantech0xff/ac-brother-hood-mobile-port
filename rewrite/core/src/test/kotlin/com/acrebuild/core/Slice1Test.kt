@@ -973,4 +973,145 @@ class Level0WorldTest {
         w.npcFsm.tickPickup(e, w.player)
         assertEquals(1, e.aF)
     }
+
+    // ---- slice 24: az() interact scan + maintenance (g.java:5510) ----
+
+    private fun soldierAt(w: Level0World, x: Int, y: Int): Entity {
+        val e = Entity(11, w.clips[7])
+        e.aB = 50; e.aA = 1                     // alive + past the aA gate
+        e.setPositionPx(x, y); e.refreshBoxes()
+        w.npcs.add(0, e)
+        return e
+    }
+
+    @Test fun `interactScan binds g and ci to an eligible NPC in front`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        p.setAnim(295)                        // interactEligible state
+        val e = soldierAt(w, 350, 150)
+        w.playerFsm.interactScan(p)
+        assertSame(e, p.g)
+        assertSame(e, p.ci)                   // L275 — NPC-kind → ci too
+    }
+
+    @Test fun `interactScan skips candidates behind the player`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        p.setAnim(295)
+        soldierAt(w, 250, 150)                // left of a right-facing player
+        w.playerFsm.interactScan(p)
+        assertNull(p.g); assertNull(p.ci)
+    }
+
+    @Test fun `interactScan skips dead candidates (P() releases ae)`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        p.setAnim(295)
+        val e = soldierAt(w, 350, 150)
+        e.aB = 0                              // dead → P() true
+        val ae = w.spawnPickup(71, 0, 0); e.ae = ae
+        w.playerFsm.interactScan(p)
+        assertNull(p.g)
+        assertNull(e.ae)                      // G() ran inside P()
+    }
+
+    @Test fun `hidden player drops g and at and skips the scan`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        p.setAnim(295)
+        p.g = soldierAt(w, 350, 150)
+        Entity.at = p.g
+        p.aA = p.aA or 8                      // hidden in a spot
+        w.playerFsm.interactScan(p)
+        assertNull(p.g); assertNull(Entity.at)
+        Entity.at = null
+    }
+
+    @Test fun `stale g drops when the target leaves the 440 window`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = soldierAt(w, 350, 150)
+        p.g = e
+        e.setPositionPx(300 + 460, 150); e.refreshBoxes()
+        w.playerFsm.interactScan(p)
+        assertNull(p.g)
+    }
+
+    @Test fun `at maintenance drops a dead ax11 unless in struggle states`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = soldierAt(w, 350, 150).apply { aB = 0 }
+        Entity.at = e
+        w.playerFsm.interactScan(p)
+        assertNull(Entity.at)
+        val e2 = soldierAt(w, 350, 150).apply { aB = 0 }
+        Entity.at = e2
+        p.setAnim(298)                        // struggle QTE → preserved
+        w.playerFsm.interactScan(p)
+        assertSame(e2, Entity.at)
+        Entity.at = null
+    }
+
+    @Test fun `ax72 mount arm binds i_at when mountable and clear LOS`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        p.gJ = 4                              // mount request bit
+        w.tick(emptyList())                   // camera follows → on-screen
+        val e = Entity(72, null)
+        e.aB = 10
+        e.setPositionPx(350, 150)
+        // mount arm verbatim: e.W[3] <= p.W[1] && e.W[1] <= p.W[3] —
+        // the mount sits at/above the player's head; LOS walks the
+        // player's own open cell
+        e.W[0] = p.W[0] + 20; e.W[1] = p.W[1] - 10
+        e.W[2] = p.W[0] + 35; e.W[3] = p.W[1] - 5
+        e.Y[0] = e.W[0]; e.Y[1] = e.W[1]; e.Y[2] = e.W[2]; e.Y[3] = e.W[3]
+        w.npcs.add(0, e)
+        p.S = 0                               // mountable state (g.k whitelist)
+        w.playerFsm.interactScan(p)
+        assertSame(e, Entity.at)
+        Entity.at = null
+    }
+
+    @Test fun `losBlocked reports a solid cell between anchors`() {
+        val w = world()
+        w.npcs.clear()                  // isolate from spawned records
+        // find a row with a solid cell, then place entities either side
+        val lvl = w.level
+        var found = false
+        outer@ for (cy in 5..50) {
+            for (cx in 10..600) {
+                if (lvl.collisionCell(cx, cy) >= 12 &&
+                    lvl.collisionCell(cx - 3, cy) < 12 &&
+                    lvl.collisionCell(cx + 3, cy) < 12) {
+                    // endpoints in the two verified-clear cells, wall between
+                    val a = Entity(0, null); val b = Entity(11, null)
+                    a.W[0] = (cx - 3) * 20; a.W[2] = a.W[0] + 15
+                    a.W[1] = cy * 20; a.W[3] = a.W[1] + 15
+                    b.W[0] = (cx + 3) * 20; b.W[2] = b.W[0] + 15
+                    b.W[1] = cy * 20; b.W[3] = b.W[1] + 15
+                    assertTrue(a.losBlocked(b, w))
+                    // same row, no wall between → clear
+                    b.W[0] = (cx - 3) * 20 + 10; b.W[2] = b.W[0] + 10
+                    assertFalse(a.losBlocked(b, w))
+                    found = true; break@outer
+                }
+            }
+        }
+        assertTrue(found, "no suitable wall cell found in level0")
+    }
 }
