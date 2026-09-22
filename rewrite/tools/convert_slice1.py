@@ -82,6 +82,8 @@ CLIPS = {
     "clip10": ("pack-3", "entry-010-marker-003"),  # ax16 request markers (bi[16]=10)
     "clip27": ("pack-3", "entry-027-marker-003"),  # ax67 springboard (bk{1,2,3}=27)
     "clip35": ("pack-3", "entry-035-marker-003"),  # ax67 kind-5 interactives (bk[5]=35)
+    "clip4": ("pack-3", "entry-004-marker-003"),   # ax6 trigger marker (bi[6]=4)
+    "clip11": ("pack-3", "entry-011-marker-003"),  # ax19 pickup (bi[19]=11)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
