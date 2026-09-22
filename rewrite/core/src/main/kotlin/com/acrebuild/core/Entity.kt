@@ -72,6 +72,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var zz = true
     var aA = 0                       // alert level (NPC) / turn-block (player)
     var aB = 0                       // hp-ish stat (az = max)
+    var bR = false                   // i.bR — knife bounced-off-a-swing flag (bb L58)
+    var cGCount = 0                  // i.cG int — hit-flash counter on sweep
+                                   // targets (distinct from g.cG bool)
     var az = 0
     var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
@@ -1509,6 +1512,38 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.bu[]` (i.java:22315, proven) — per-weapon damage table,
          *  indexed by `k.au` (weapon slot). */
         val WEAPON_DMG = intArrayOf(300, 400, 500)
+        /** `i.H[]` (i.java:22318, proven) — carried-entity damage (bc()/bd()). */
+        val WEAPON_H = intArrayOf(50, 50, 50)
+        /** `i.K[]` (i.java:22322, proven) — ax32 wall-break damage (bc()). */
+        val WEAPON_K = intArrayOf(6, 4, 2)
+        /** `k.bh[]` (k.java:8437, proven) — per-mission behavior flag;
+         *  `bh[k.aj] == 3` picks the S16 settle arm (missions 1/4). */
+        val MISSION_BH = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
+
+        /** `k.h(int,int)` (k.java:6839, proven): Manhattan-ish magnitude —
+         *  `(a+b) - min/2 - min/4 + min/8`. */
+        fun magApprox(r4: Int, r5: Int): Int {
+            if (r4 == 0 && r5 == 0) return 0
+            val a = kotlin.math.abs(r4); val b = kotlin.math.abs(r5)
+            val m = minOf(a, b)
+            return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
+        }
+
+        /** `j.d(int)` — floor integer square root (inferred impl). */
+        fun isqrt(x: Int): Int =
+            if (x <= 0) 0 else kotlin.math.sqrt(x.toDouble()).toInt()
+
+        /** `k.e(int,int,int,int)` (k.java:6860, proven): the arc/lead
+         *  solver — roots of `x² + r5·x − r4 = 0` (the `1`-coefficient is
+         *  hardcoded; the `r6` arg is dead in the original): returns
+         *  `(r7 / max(r62,r42)) << 8`, or -1 when both roots are ≤ 0. */
+        fun arcSolve(r4: Int, r5: Int, r7: Int): Int {
+            val disc = r5 * r5 - 4 * (-r4)
+            val r62 = if (disc >= 0) (isqrt(disc) - r5) / 2 else -1
+            val r42 = if (disc >= 0) (-isqrt(disc) - r5) / 2 else -1
+            if (r62 <= 0 && r42 <= 0) return -1
+            return (r7 / maxOf(r62, r42)) shl 8
+        }
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
         var at: Entity? = null
@@ -1562,7 +1597,130 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 ag = if (av) 1536 else -1536
             }
             34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+            // L75 (proven structure): marker-engage — `g.b = r13`, `aB=3`,
+            // `o()?i(3)`, face + push ±512 toward the marker. The `g.a()`
+            // damage-gate chain (h()/g()/d()) is unported — gated open.
+            38 -> {
+                if (S == 3 || S == 6 || S == 7) return
+                world.playerLinkB = attacker
+                aB = 3
+                if (oState()) setAnim(3)
+                av = attacker != null && attacker.ak < ak
+                ag = if (av) 512 else -512
+            }
         }
+    }
+
+    /** `i.o()` (i.java:6597, proven): `S∈{2,20..29} → false`, else true. */
+    fun oState(): Boolean = !(S == 2 || S in 20..29)
+
+    /** `i.u()`+`i.v()` (i.java:700/730, ax16 subset, proven): view-proximity
+     *  score `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120` — the marker
+     *  survives while `au > i`. */
+    fun markerVisible(w: LevelCellSource): Boolean {
+        au = kotlin.math.abs(ak - (w.kO + 200)) / 400 +
+            kotlin.math.abs(al - (w.kP + 120)) / 120
+        return au > i
+    }
+
+    /**
+     * `i.bd()` (i.java:14538, proven): the marker's rest sweep — X-overlap
+     *  neighbors: ax19 `S==2 → i(3)`; while THIS flies (`S==17`), ax17
+     *  (`S!=69`) and — when the sweeper is ax23 — any `S!=79` take
+     *  `aB -= H[au]`; death → ax17 `i(129)`/ax23 `i(79)`, alive →
+     *  `i(68)`/`i(73)`. */
+    fun sweepNeighbors(w: LevelCellSource): Boolean {
+        var r6 = false
+        for (r0 in w.npcs) {
+            if (r0 === this) continue
+            if (!overlapI(r0.W, X)) continue
+            if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); r6 = true }
+            if (S != 17) continue
+            if (r0.ax == 17 && r0.S != 69) { sweepHit(w, r0); r6 = true; continue }
+            if (ax == 23 && r0.S != 79) { sweepHit(w, r0); r6 = true }
+        }
+        return r6
+    }
+
+    /** bd() L28-L42 — `aB -= H[k.au]` then the ax17/23 hit/death anims. */
+    private fun sweepHit(w: LevelCellSource, r0: Entity) {
+        r0.aB -= WEAPON_H[w.weaponSlot]
+        if (r0.aB <= 0) {
+            if (r0.ax == 17 && r0.S != 69) r0.setAnim(129)
+            if (r0.ax == 23) r0.setAnim(79)
+        } else {
+            if (r0.ax == 17) r0.setAnim(68)
+            else if (r0.ax == 23) r0.setAnim(73)
+        }
+    }
+
+    /**
+     * `i.bc()` (i.java:14396, proven): the flight-impact sweep — X-overlap
+     *  neighbors by type. Own `af` (thrower) is protected: `af.ax` in the
+     *  prop family skips matching `r0.ax` (e.g. af==54 → ax54s skipped).
+     *  `d(8,…)` floatie spawns flagged unported. `cF` is the i-STATIC
+     *  gauge-full flag (i.java:184) — ax32 `S∈[21,27]` (armed walls) only
+     *  break on full-gauge throws; when unset the scan ABORTS. */
+    fun sweepNeighborsB(w: LevelCellSource): Boolean {
+        var r6 = false
+        val afAx = af?.ax
+        scan@ for (r0 in w.npcs) {
+            if (r0 === this) continue
+            if (!overlapI(r0.W, X)) continue
+            when (r0.ax) {
+                54 -> {
+                    if (afAx == 54 || afAx == 30) continue
+                    r0.ad?.let { if (overlapI(it.W, X)) it.setAnim(2) /* d(8) */ }
+                    r0.setAnim(10); w.statTally(r0.aw); setAnim(9); r6 = true
+                    break@scan
+                }
+                30 -> {
+                    if (afAx == 54 || afAx == 30 || afAx == 56) continue
+                    r0.aB -= 20; r0.cGCount = 6
+                    if (r0.aB <= 0) {
+                        r0.cGCount = 0; r0.setAnim(10)
+                        w.statTally(r0.aw); setAnim(9)
+                        r0.ad?.setAnim(2)           // + d(8) floatie unported
+                    }
+                    r6 = true; break@scan
+                }
+                56 -> {
+                    if (afAx == 54 || afAx == 56 || afAx == 30) continue
+                    r0.setAnim(10); w.statTally(r0.aw); setAnim(9); r6 = true
+                    break@scan
+                }
+                67 -> {
+                    if (r0.S in intArrayOf(19, 21, 23, 32, 35, 38, 41, 43)) {
+                        if (S != 9) r0.aB--          // L71-L78: S9 → skip dec
+                        if (r0.aB <= 0) r0.setAnim(r0.S + 1)
+                        setAnim(9); r6 = true
+                    }
+                }
+                24 -> {
+                    if (r0.S == 19) { r0.setAnim(20); setAnim(9); r6 = true }
+                }
+                32 -> {
+                    if ((r0.l and 1) == 0) continue  // `l` parity gate
+                    if (r0.S in 21..27) { if (!w.cFFlag) break@scan }  // L87
+                    if (r0.S == 20) continue
+                    if (r0.aB > 0) r0.aB -= WEAPON_K[w.weaponSlot]
+                    when (r0.pv) {                 // L97 p-switch
+                        0 -> if (r0.aB <= 0) { r0.setAnim(15); r0.cGCount = 0 }
+                            else r0.cGCount = 6
+                        2 -> if (r0.aB <= 0) { r0.setAnim(19); r0.cGCount = 0 }
+                            else r0.cGCount = 6
+                        3 -> if (r0.aB <= 0) { r0.setAnim(25); r0.cGCount = 0 }
+                            else r0.cGCount = 6
+                        4 -> if (r0.aB <= 0) { r0.setAnim(36); r0.cGCount = 0 }
+                            else r0.cGCount = 6
+                        else -> {}
+                    }
+                    r6 = true
+                }
+                else -> {}
+            }
+        }
+        return r6
     }
 }
 
@@ -1669,4 +1827,25 @@ interface LevelCellSource {
     /** `k.c(x,y,w,h)` — view-space touch-rect hit test (`ao()`'s 355,197
      *  weapon-cycle button); default false when no touch UI is ported. */
     fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean = false
+
+    // -- marker/sweep globals (bb() L21 tail) ---------------------------------
+    /** `i.cF` — i-STATIC gauge-full flag (i.java:184/18543; set by the
+     *  charge-fill arm `aB+=5 → bU`, unported — stays false). ax32 armed
+     *  walls (`S∈[21,27]`) only break when this is true. */
+    var cFFlag: Boolean
+    /** `g.b` — the marker-engage link on the player (op38 writes it). */
+    var playerLinkB: Entity?
+    /** `k.aj` — current mission index; gates `k.e(0,aw)` and `bh[k.aj]`. */
+    val missionIndex: Int get() = 0
+    /** `k.bh[k.aj]` — per-mission behavior flag (`MISSION_BH` table). */
+    fun missionBh(): Int = Entity.MISSION_BH[missionIndex]
+    /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` kill/stat tally —
+     *  gated `aw > 0` and `k.aj != 7`. */
+    fun statTally(aw: Int) {}
+    /** `g.b()` (g.java:346, proven): player mid-attack — `I∈{1,2} && S` in
+     *  the attack set {67,68,69,81,112-115,183,184,216,217,286,287}. */
+    fun playerAttacking(): Boolean =
+        (player.gI == 1 || player.gI == 2) &&
+            player.S in intArrayOf(67, 68, 69, 81, 112, 113, 114, 115,
+                                   183, 184, 216, 217, 286, 287)
 }

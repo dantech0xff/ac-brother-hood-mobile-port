@@ -1146,7 +1146,7 @@ class Level0WorldTest {
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes()
         val e = requestMarkerAt(w, 39, 305, 150)
-        w.npcFsm.tickRequestMarker(e, p)
+        w.npcFsm.tickRequestMarker(e, p, Pad())
         assertTrue(p.gJ and 4 != 0, "bb(): S39 overlap -> g.g(4)")
         assertTrue(e in w.pendingRemove, "marker consumes itself via k.c")
     }
@@ -1157,7 +1157,7 @@ class Level0WorldTest {
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes()
         val e = requestMarkerAt(w, 30, 305, 150)
-        w.npcFsm.tickRequestMarker(e, p)
+        w.npcFsm.tickRequestMarker(e, p, Pad())
         assertTrue(p.gJ and 2 != 0, "bb(): S30 -> g.g(2)")
         assertEquals(91, p.S, "k.aS.i(91) hurt anim")
         assertTrue(15 in w.sfxLog, "k.A(15) sfx")
@@ -1170,7 +1170,7 @@ class Level0WorldTest {
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes()
         val e = requestMarkerAt(w, 39, 900, 150)
-        w.npcFsm.tickRequestMarker(e, p)
+        w.npcFsm.tickRequestMarker(e, p, Pad())
         assertTrue(p.gJ and 4 == 0)
         assertTrue(e !in w.pendingRemove)
     }
@@ -1211,7 +1211,7 @@ class Level0WorldTest {
         p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
         w.tick(emptyList())
         // ax16 S39 marker overlapping player -> J|=4
-        requestMarkerAt(w, 39, 305, 150).also { w.npcFsm.tickRequestMarker(it, p) }
+        requestMarkerAt(w, 39, 305, 150).also { w.npcFsm.tickRequestMarker(it, p, Pad()) }
         assertTrue(p.gJ and 4 != 0)
         // ax72 mountable candidate in mount band
         val m = Entity(72, null)
@@ -1840,4 +1840,109 @@ class Level0WorldTest {
         assertTrue(16 in w.sfxLog, "aq() A(16) fired on the context tap")
         assertTrue(p.S in intArrayOf(304, 305, 306), "aq() picked a reach anim, S=${p.S}")
     }
+
+    // ---- slice 31 — bb() L21 marker arms --------------------------------
+
+    @Test fun `S31 stealth prompt teleports player into S216 on context tap`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.gJ = 2                                        // hidden blade armed
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 31, 302, 150)
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.npcFsm.tickRequestMarker(e, p, pad)
+        assertEquals(216, p.S, "S31 + v(65568) -> aS.i(216)")
+        assertEquals(e.ak, p.ak); assertEquals(e.al, p.al)
+        assertTrue(29 in w.sfxLog, "A(29)")
+    }
+
+    @Test fun `S32 and S33 prompts pin S214 at +-45 with facing`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.gJ = 2
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val eL = requestMarkerAt(w, 32, 302, 150)
+        val padL = Pad(); padL.queuePress(Pad.M_CONTEXT); padL.commit(0)
+        w.npcFsm.tickRequestMarker(eL, p, padL)
+        assertEquals(214, p.S)
+        assertEquals(eL.ak - 45, p.ak); assertFalse(p.av)
+
+        val w2 = world(); w2.npcs.clear()
+        val p2 = w2.player; p2.gJ = 2
+        p2.setPositionPx(300, 150); p2.refreshBoxes()
+        val eR = requestMarkerAt(w2, 33, 302, 150)
+        val padR = Pad(); padR.queuePress(Pad.M_CONTEXT); padR.commit(0)
+        w2.npcFsm.tickRequestMarker(eR, p2, padR)
+        assertEquals(214, p2.S)
+        assertEquals(eR.ak + 45, p2.ak); assertTrue(p2.av)
+    }
+
+    @Test fun `S31 stays inert without the armed flag`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.gJ = 0                                        // J&2 unset -> G()
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 31, 302, 150)
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.npcFsm.tickRequestMarker(e, p, pad)
+        assertTrue(p.S != 216, "no blade bit -> no engage")
+    }
+
+    @Test fun `S16 rest arm damages overlapping player and clears af`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 16, 302, 150)
+        e.X[0] = 295; e.X[1] = 145; e.X[2] = 310; e.X[3] = 160  // overlap p
+        e.af = p                                              // bh[0]=4 path
+        w.npcFsm.tickRequestMarker(e, p, Pad())
+        assertNull(e.af, "L27 clears af")
+        assertTrue(p.x1 < 90, "X overlap -> aS.a(4) meter hit (x1=${p.x1})")
+    }
+
+    @Test fun `S17 knife flight hits idle player, bounce-arm on attack`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val k = requestMarkerAt(w, 17, 305, 150)
+        k.ag = 256; k.ah = 0
+        k.X[0] = 295; k.X[1] = 145; k.X[2] = 310; k.X[3] = 160
+        w.npcFsm.tickRequestMarker(k, p, Pad())
+        assertTrue(p.x1 < 90, "idle overlap -> a(4) pays meter")
+
+        val w2 = world(); w2.npcs.clear()
+        val p2 = w2.player
+        p2.gI = 1; p2.S = 67                                // g.b() attacking
+        p2.setPositionPx(300, 150); p2.refreshBoxes()
+        val k2 = requestMarkerAt(w2, 17, 305, 150)
+        k2.ag = 256; k2.ah = 0
+        k2.X[0] = 295; k2.X[1] = 145; k2.X[2] = 310; k2.X[3] = 160
+        w2.npcFsm.tickRequestMarker(k2, p2, Pad())
+        assertTrue(k2.bR, "L58 bounce flags bR")
+        assertEquals(90, p2.x1, "attacking player takes no hit")
+    }
+
+    @Test fun `S22 zero-rect marker removes itself`() {
+        val w = world()
+        w.npcs.clear()
+        val e = requestMarkerAt(w, 22, 9000, 9000)
+        e.W[0] = 0; e.W[1] = 0; e.W[2] = 0; e.W[3] = 0
+        w.npcFsm.tickRequestMarker(e, w.player, Pad())
+        assertTrue(e in w.pendingRemove, "W==null -> k.c(this)")
+    }
+
+    @Test fun `S15 anim end runs the rest sweep into S9`() {
+        val w = world()
+        w.npcs.clear()
+        val e = requestMarkerAt(w, 15, 9000, 9000)
+        e.clip = null                            // r(): clip==null -> finished
+        w.npcFsm.tickRequestMarker(e, w.player, Pad())
+        assertEquals(9, e.S, "r() -> bd() -> i(9)")
+    }
 }
+
