@@ -147,6 +147,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cH = 0                    // c() — X[0] snapshot (target x anchor)
     var cI = 0                    // c() — X[1] snapshot
     var cM = 0                    // c() — ax72 Z[0]==1 clears it (L58)
+    var cL = 0                    // mount-on counter (as() clears; au() oscillates)
     var z = false                 // g.z — cleared on grab (c() callers)
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
@@ -267,6 +268,79 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (r05 < X[1]) cD = -cD
         cJ = X[0]; cK = X[1]; cH = X[0]; cI = X[1]
         F = t
+    }
+
+    /** `g.a(int)` (g.java:126, proven): airborne fling — `a(43,32)`
+     *  masked enter, +10px down, `ah=r5`, `aj=1536`, drops the
+     *  standing-on + resolved links. `as()` aborts to this when the
+     *  lunge target vanishes. */
+    fun flingAirborne(r5: Int, w: LevelCellSource) {
+        enterStateMasked(43, 32, w)
+        al += 10; ah = r5; aj = 1536
+        standingOn = null
+        ac = null
+    }
+
+    /**
+     * `g.as()` (g.java:4242, proven) — the lunge-arc execution tick:
+     * pick the target (mount `i.at` wins unless an interact target is
+     * in front — L7/L10/L14 — which must be an ax11 `Z[19]==1` window),
+     * advance `(cH,cI)` by `(cC,cD)` for `cE` ticks, then land:
+     *  - ax72 → `i(277)` mount-on anim (Z[0]==4 skips both the land
+     *    and the anim — resolves `Z[4]` via `k.q` into `ac/aq/ar`
+     *    cart-track link instead, L30);
+     *  - ax11 → `i(277)` + THROW the victim — `F.ag/ah = ±cF·j.b`
+     *    along `cy`, `F.i(181/180)` by `F.g(this)` facing; S==298
+     *    victims get `F.i(168)`;
+     *  - anything else → `i(0)`; ax17 → silent (L63).
+     * `F == null` → `a(0)` airborne fling (L22).
+     */
+    fun lungeTick(w: LevelCellSource) {
+        val mount = Entity.at
+        val bound = g
+        F = when {
+            mount != null && (bound == null || !inFrontOf(bound)) -> mount
+            bound != null && bound.ax == 11 && bound.Z[19] == 1 &&
+                !bound.deadRelease() -> bound
+            else -> null
+        }
+        val f = F
+        if (f == null) { flingAirborne(0, w); return }       // L22 a(0)
+        cJ = X[0]; cK = X[1]
+        cH += cC; cI += cD; cE--
+        if (cE > 0) return                                    // L67 mid-arc
+        // arc end — snap the arc point onto the target
+        cH = f.ak; cI = (f.W[1] + f.W[3]) shr 1
+        if (f.ax == 72) {
+            if (f.Z[0] == 4) {                               // L30 cart link
+                if (f.Z[4] >= 0) {
+                    val r0 = w.findByAw(f.Z[4])
+                    if (r0 != null) {
+                        f.ac = r0
+                        r0.aq = f.ak - r0.ak; r0.ar = f.al - r0.al
+                    }
+                }
+            } else { ak = X[0]; al = X[1] }                  // L37 land
+        } else { ak = X[0]; al = X[1] }                      // L37 land
+        // L39
+        if (f.ax == 72) {
+            if (f.Z[0] in 0..4) {                            // L42
+                cL = 0
+                if (f.Z[0] != 4) setAnim(277)                // mount-on
+            } else setAnim(0)                                // L64
+        } else when (f.ax) {
+            11 -> {                                          // L52-L54
+                if (S == 298) f.setAnim(168)
+                else {
+                    cL = 0; setAnim(277)
+                    f.ag = (cF shr 8) * Trig.sin(cy)
+                    f.ah = -(cF shr 8) * Trig.sin(Trig.N - cy)
+                    f.setAnim(if (f.inFrontOf(this)) 181 else 180)
+                }
+            }
+            17 -> { }                                        // L63 silent
+            else -> setAnim(0)                               // L64
+        }
     }
 
     /** `i.p()` (i.java:214, proven): full release — clears the W/X/Y
