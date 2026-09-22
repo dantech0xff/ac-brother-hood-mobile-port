@@ -106,7 +106,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 else if (p.animFinished()) {
                     p.P = p.P or 64
                     p.interactGauge(world)
-                    // v(65568) -> ar() interact action — unported
+                    // L1879 (g.java:3445, proven): 65568 edge -> ar()
+                    if (pad.v(Pad.M_CONTEXT)) p.interactAction(world, pad)
                 }
             }
             311, 312 -> {                     // L1889

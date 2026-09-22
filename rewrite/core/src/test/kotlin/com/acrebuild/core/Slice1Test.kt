@@ -1578,4 +1578,184 @@ class Level0WorldTest {
         // re-transition (fall/land) which is the normal FSM working.
         assertNotEquals(303, p.S, "u(62430) -> i(0)")
     }
+
+    // ---- slice 29 — g.ar() the 65568 interact action (g.java:4030) ------
+
+    @Test fun `interactAction with no target returns to anim 0`() {
+        val w = world()
+        val p = w.player
+        p.g = null; p.S = 303
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        p.interactAction(w, pad)
+        assertEquals(0, p.S)
+        assertEquals(0, pad.edge and Pad.M_CONTEXT, "k.v() cleared latches")
+    }
+
+    @Test fun `interactAction picks the flat reach anim 301`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 0
+        val t = soldierAt(w, 330, 150)              // same level → r08=0
+        p.g = t
+        p.interactAction(w, Pad())
+        assertEquals(301, p.S)
+        assertTrue(16 in w.sfxLog)
+    }
+
+    @Test fun `interactAction picks the below-target anim 302`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 0
+        val t = soldierAt(w, 330, 230)              // Y-mid 80px below
+        t.refreshBoxes()
+        p.g = t
+        p.interactAction(w, Pad())
+        assertEquals(302, p.S)
+    }
+
+    @Test fun `interactAction S364 keeps its anim`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 364; p.K = 0
+        p.g = soldierAt(w, 330, 150)
+        p.interactAction(w, Pad())
+        assertEquals(364, p.S)
+    }
+
+    @Test fun `interactAction under-charged gauge skips the throw`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 3
+        val t = soldierAt(w, 330, 150); t.aB = 1000
+        p.g = t
+        p.interactAction(w, Pad())
+        assertEquals(1000, t.aB, "K<=3 → no damage")
+        w.tick(emptyList())
+        assertTrue(w.npcs.none { it.ax == 8 }, "no knife spawned")
+    }
+
+    @Test fun `interactAction K above 3 throws a knife and damages the target`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 6
+        val t = soldierAt(w, 330, 150); t.aB = 1000
+        p.g = t
+        p.interactAction(w, Pad())
+        // aB -= (bu[0]<<1 · K)/6 = (600·6)/6 = 600
+        assertEquals(400, t.aB)
+        w.tick(emptyList())
+        val knife = w.npcs.firstOrNull { it.ax == 8 }
+        assertNotNull(knife, "i.a(8,5,14,...) spawned the knife")
+        assertEquals(14, knife!!.S); assertEquals(300, knife.az)
+        assertTrue(knife.P and 512 != 0)
+    }
+
+    @Test fun `interactAction armed ax4 destructible fires S29`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 6
+        val d = Entity(4, null); d.setPositionPx(330, 150); d.refreshBoxes(); d.S = 30
+        w.npcs.add(d); p.g = d
+        p.interactAction(w, Pad())
+        assertEquals(29, d.S, "ax4 S30 → i(29) trigger")
+    }
+
+    @Test fun `interactAction ax58 lever advances S to S plus 1`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 6
+        val lever = Entity(58, null); lever.setPositionPx(330, 150)
+        lever.refreshBoxes(); lever.S = 0
+        w.npcs.add(lever); p.g = lever
+        p.interactAction(w, Pad())
+        assertEquals(1, lever.S, "lever S0 → i(1)")
+    }
+
+    @Test fun `interactAction ax58 lever S2 toggles to S3`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 6
+        val lever = Entity(58, null); lever.setPositionPx(330, 150)
+        lever.refreshBoxes(); lever.S = 2
+        w.npcs.add(lever); p.g = lever
+        p.interactAction(w, Pad())
+        assertEquals(3, lever.S)
+    }
+
+    @Test fun `S303 context edge fires the interact action`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.setAnim(303); p.K = 0
+        val t = soldierAt(w, 330, 150)
+        p.g = t
+        while (!p.animFinished()) p.advanceAnim()
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.tick(p, pad)
+        assertTrue(16 in w.sfxLog, "k.A(16) — ar() ran")
+        assertEquals(301, p.S, "flat reach anim")
+    }
+
+    @Test fun `hitReact weakens an ax11 soldier at the threshold`() {
+        val w = world()
+        w.npcs.clear()
+        val t = soldierAt(w, 330, 150)
+        t.Z[0] = 1; t.aB = Entity.WEAPON_DMG[0]   // aB <= bu[au]
+        t.aB = 200
+        assertTrue(t.hitReact(w))
+        assertEquals(2, t.Z[0]); assertEquals(144, t.S)
+        assertNotNull(w.player.ae, "aS.a(45,...) marker bound")
+        assertEquals(45, w.player.ae!!.S)
+    }
+
+    @Test fun `hitReact dead ax11 clears links and returns to anim 0`() {
+        val w = world()
+        w.npcs.clear()
+        val t = soldierAt(w, 330, 150)
+        t.aB = 0; t.ab = Entity(17, null); t.ae = Entity(14, null)
+        assertTrue(t.hitReact(w))
+        assertNull(t.ab); assertNull(t.ae); assertEquals(0, t.S)
+    }
+
+    @Test fun `hitReact ax17 civilian panics into S68`() {
+        val w = world()
+        val t = Entity(17, null); t.aB = 100; t.S = 0
+        t.setPositionPx(330, 150); t.refreshBoxes()
+        w.npcs.add(t)
+        assertTrue(t.hitReact(w))
+        assertEquals(68, t.S)
+        assertTrue(13 in w.sfxLog)
+    }
+
+    @Test fun `hitReact weakened ax11 staggers to S6`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player; p.S = 90               // not 67/68/69/286/287
+        val t = soldierAt(w, 330, 150)
+        t.Z[0] = 2; t.aB = 400
+        assertTrue(t.hitReact(w))
+        assertEquals(6, t.S)
+    }
+
+    @Test fun `hitReact sword strike pushes the victim out`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 68; p.av = false
+        val t = soldierAt(w, 310, 150)
+        t.Z[0] = 0; t.aB = 400
+        assertTrue(t.hitReact(w))
+        // S68 → L41 g() + c(6,156) → ax11 hit-anim 6 + sfx 13
+        assertEquals(6, t.S)
+        assertTrue(13 in w.sfxLog)
+    }
 }
