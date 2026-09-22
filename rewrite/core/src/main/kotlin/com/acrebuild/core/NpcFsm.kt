@@ -2168,3 +2168,188 @@ private fun NpcFsm.bossPushPast(e: Entity) {
     p.settleToGround(w)
     p.ag = 0
 }
+
+// ---------------------------------------------------------------------------
+// ax61 — Cesare multi-tool (i.aR, i.java:11276-11529): aura follower,
+// param-curve projectile (S8), knife-volley impact shell (S10), the
+// grab-struggle QTE overlay (S11/12/13), and the boss-aura pair (S18/19).
+// The S18 tail's `goto L171` is a decompiler-dropped label = method end.
+// ---------------------------------------------------------------------------
+
+/** `i.aR()` (i.java:11276-11529, proven) — the ax61 S-switch. */
+fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
+    e.refreshBoxes()                                            // t()
+    when (e.S) {
+        // L4 — param-curve projectile: quadratic Bezier (j.a/j.b,
+        // j.java:505/515 — `(P0·(i-t)² + 2·Pc·t(i-t) + P1·t²) >> 16`,
+        // i = 65536) from Z[0..1] through ctrl Z[4..5] to screen-space
+        // dest Z[8]-k.O / Z[9]-k.P over Z[7] ticks → land + i(10).
+        8 -> {
+            val t = (e.Z[6] * 65536) / e.Z[7]
+            val ti = 65536 - t
+            val tc = ti * t
+            val ti2 = ti * ti
+            val t2 = t * t
+            e.ak = ((e.Z[0] * ti2 + 2 * e.Z[4] * tc +
+                    (e.Z[8] - w.kO) * t2) shr 16) + w.kO
+            e.al = ((e.Z[1] * ti2 + 2 * e.Z[5] * tc +
+                    (e.Z[9] - w.kP) * t2) shr 16) + w.kP
+            e.Z[6]++
+            if (e.Z[6] >= e.Z[7]) {                              // L155 fall
+                e.ak = e.Z[8]
+                e.al = e.Z[9]
+                e.setAnim(10)
+                w.sfx(12)                                        // k.A(12)
+            }
+        }
+        // L9 — die at anim end
+        9 -> if (e.animFinished()) w.removeEntity(e)             // k.c(this)
+        // L13 — contact-harm shell (S10)
+        10 -> {
+            if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+                p.applyHit(4, 0, e, w)                           // aS.a(4,0,0,this)
+            }
+            if (e.animFinished()) w.removeEntity(e)
+        }
+        // L22 — S4/S5: T9 whiff sfx, then the shared harm arm
+        4, 5 -> {
+            if (e.T == 9) w.sfx(31)                              // k.A(31)
+            ax61HarmArm(e, w, p)
+        }
+        // L25 — S2/S17: the shared harm arm directly
+        2, 17 -> ax61HarmArm(e, w, p)
+        // L50 — S15 catch: Y-overlap grabs the player into S375 + the
+        // weapon-table drain `g.d(g.u[k.au])`; S0/S6 → r()→despawn only.
+        0, 6, 15 -> {
+            if (e.S == 15 && Entity.overlapI(e.Y, p.Y) && p.S != 375) {
+                p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                p.setAnim(375)
+                p.al = e.al
+                p.gDrain(w.GU[w.weaponSlot], w)                  // g.d(g.u[k.au])
+            }
+            if (e.animFinished()) e.P = e.P or 128 or 32         // L57
+        }
+        // L61 — aura: glue to the boss (null boss → frozen in place)
+        1 -> w.kAU?.let { e.ak = it.ak; e.al = it.al }
+        // L65 — QTE intro: anim end → input lock + i(12)
+        11 -> if (e.animFinished()) {
+            e.setAnim(12)
+            e.lockInput(w)                                       // k.o()
+        }
+        // L69-L99 — the grab-struggle QTE overlay
+        12 -> {
+            // L69/L71: touch-mode (k.k() = cm==1) spawns the clip9
+            // marker; pad mode tracks the hand indicator over the
+            // player — holding the touch point near it fills bl +9.
+            if (w.mounted) {
+                e.spawnAeMarker(w, 11, e.ak, e.al)               // a(11,ak,al)
+            } else {
+                e.spawnHand(w, p.ak, p.al - 85)                  // c(x,y)
+                e.moveHand(w, p.ak, p.al - 85)                   // d(x,y)
+                if (e.indicatorNearTouch(w)) e.bl += 9           // V() → +9
+            }
+            // L75: alternating-mash (or the touch fill) wins the QTE
+            if (e.mashQte(w)) {
+                // L79 — win: free the player, release the boss to S28
+                if (!w.mounted) e.dropIndicator(w)               // U()
+                e.P = e.P or 128 or 32
+                w.removeEntity(e)                                // k.c(this)
+                e.bl = 0
+                e.releaseAe()                                    // G()
+                p.al -= 20
+                p.flingAirborne(0, w)                            // aS.a(0)
+                w.kAU?.let {
+                    e.unlockInput(w)                             // k.p()
+                    it.setAnim(28)
+                    it.P = it.P and -65
+                }
+            } else if (p.S == 370 || p.S == 371) {
+                // L84→L92 — player still grabbed: wait for anim end,
+                // then the lose path → S13 throw + k.bJ latch
+                if (e.animFinished()) {
+                    if (w.kBj <= 0) w.kBj = 6
+                    e.releaseAe()                                // G()
+                    p.setAnim(374)
+                    e.setAnim(13)
+                    w.sfx(12)
+                }
+            } else {
+                // L84 — player broke the grab anims: remove + boss reset
+                e.P = e.P or 128 or 32
+                w.removeEntity(e)
+                e.bl = 0
+                e.releaseAe()
+                w.kAU?.let {
+                    e.unlockInput(w)
+                    it.setAnim(28)
+                    it.P = it.P and -65
+                }
+            }
+        }
+        // L99 — S13: grab-failed tail — the throw lands on anim end
+        13 -> if (e.animFinished()) {
+            p.applyHit(4, 0, e, w)                               // aS.a(4,0,0,this)
+            w.removeEntity(e)
+            w.kAU?.let {
+                e.unlockInput(w)
+                it.setAnim(28)
+                it.P = it.P and -65
+            }
+        }
+        // L105 — aura arm 1 (S19): despawn when the boss is gone, its
+        // ax5 counter-claim is actively working (k.C.ab()), or the boss
+        // sits in S18; otherwise glue on and promote to S18 once the
+        // boss enters the active-anim set {36..41}.
+        19 -> {
+            val b = w.kAU
+            if (b == null || (w.kC?.claimActive() == true) || b.S == 18) {
+                e.P = e.P or 128
+            } else {
+                e.P = e.P and -129
+                e.ak = b.ak; e.al = b.al
+                if (b.S in 36..41) e.setAnim(18)
+            }
+        }
+        // L131 — aura arm 2 (S18): same glue; reverts to S19 when the
+        // boss leaves {36..41} — S41 exits via the dropped L171 label
+        // (= method end → stay), so {36..41} all hold S18.
+        18 -> {
+            val b = w.kAU
+            if (b == null || b.S == 18) {
+                e.P = e.P or 128
+            } else {
+                e.P = e.P and -129
+                e.ak = b.ak; e.al = b.al
+                if (b.S !in 36..41) e.setAnim(19)
+            }
+        }
+        // L154 — S3/7/14/16/default: inert
+    }
+}
+
+/** `aR` L25-L46 (i.java:11330-11357, proven) — the shared contact-harm
+ *  arm for S∈{2,4,5,17}: X-box overlap vs the player, skipped while the
+ *  player is in {9,375,376,377}; player LEFT of the boss (`ak < aU.ak`)
+ *  escapes unharmed with av=false (L39), else `a(4,0,0,this)` and —
+ *  S2 only — the grab snap `i(375)` + vel0 + boss-y (L44); S17 instead
+ *  lands at L39 after the hit (av=false, no snap). r() → P|=128|32. */
+fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
+    if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+        if (p.S != 9 && p.S != 375 && p.S != 376 && p.S != 377) {
+            if (p.ak < (w.kAU?.ak ?: 0)) {
+                p.av = false                                       // L39
+            } else {
+                p.av = true                                        // L40
+                p.applyHit(4, 0, e, w)
+                if (e.S == 2) {                                    // L44
+                    p.setAnim(375)
+                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                    p.al = w.kAU?.al ?: p.al
+                } else if (e.S == 17) {                            // L43→L39
+                    p.av = false
+                }
+            }
+        }
+    }
+    if (e.animFinished()) e.P = e.P or 128 or 32                   // L46
+}

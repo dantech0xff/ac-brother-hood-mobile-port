@@ -2335,4 +2335,231 @@ class Level0WorldTest {
         assertEquals(0, w.iCi!![1], "ci[1] reset")
         assertFalse(w.iCj)
     }
+
+    // -- slice 35: ax61 aR() Cesare multi-tool (aura/projectile/QTE) ------
+
+    private fun ax61At(w: Level0World, x: Int, y: Int, clipIdx: Int?): Entity {
+        val e = Entity(61, clipIdx?.let { w.clips[it] })
+        e.setPositionPx(x, y); e.refreshBoxes()
+        w.npcs.add(e)
+        return e
+    }
+
+    /** Widen the X box after t() — converted clips all give zero-width
+     *  X at the arm states; the real ax61 hitboxes live in unconverted
+     *  clip71 (flagged gap). */
+    private fun widenX(e: Entity, x0: Int, x2: Int, y0: Int, y2: Int) {
+        e.X[0] = x0; e.X[1] = y0; e.X[2] = x2; e.X[3] = y2
+    }
+
+    @Test fun `ax61 S8 walks the quadratic Bezier then lands into S10`() {
+        val w = world(); w.npcs.clear()
+        val e = ax61At(w, 100, 100, null)
+        e.Z[0] = 0; e.Z[1] = 0
+        e.Z[4] = 400; e.Z[5] = -100
+        e.Z[8] = 1600; e.Z[9] = 800
+        e.Z[6] = 0; e.Z[7] = 16
+        e.S = 8
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(1, e.Z[6])
+        assertEquals(0, e.ak, "t=0 -> Bezier start point Z[0]")
+        w.npcFsm.tickAx61(e, w, w.player)
+        val t = 4096; val ti = 65536 - t
+        assertEquals((0 * ti * ti + 2 * 400 * ti * t + 1600 * t * t) shr 16, e.ak)
+        repeat(14) { w.npcFsm.tickAx61(e, w, w.player) }
+        assertEquals(1600, e.ak, "lands at Z[8]")
+        assertEquals(800, e.al, "lands at Z[9]")
+        assertEquals(10, e.S)
+        assertTrue(w.sfxLog.contains(12), "k.A(12) on landing")
+    }
+
+    @Test fun `ax61 S9 removes itself at anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = ax61At(w, 100, 100, null)
+        e.S = 9
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertTrue(e in w.pendingRemove, "k.c(this)")
+    }
+
+    @Test fun `ax61 S10 harm arm fires on X overlap then removes`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = ax61At(w, 300, 150, null)
+        e.S = 10
+        widenX(e, 290, 340, 130, 170)
+        w.npcFsm.ax61HarmArm(e, w, p)
+        assertTrue(18 in w.sfxLog, "L139 hurt sfx via aS.a(4,0,0,this)")
+        assertTrue(e.P and 128 != 0, "r() tail -> P|=128|32 (null clip)")
+    }
+
+    @Test fun `ax61 S2 harm grabs the player into S375 on the boss side`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        w.iBh = 8                                    // hit-lock: no ax61 counter
+        val p = w.player
+        p.setAnim(0); p.S = 0; p.av = false
+        p.setPositionPx(340, 150); p.refreshBoxes()  // right of boss
+        val e = ax61At(w, 320, 150, null)
+        e.S = 2
+        widenX(e, 300, 360, 130, 170)
+        w.npcFsm.ax61HarmArm(e, w, p)
+        assertEquals(375, p.S, "S2 harm -> grab snap i(375)")
+        assertEquals(boss.al, p.al, "player y snapped to boss")
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertTrue(p.av, "av=true on the boss's right side")
+    }
+
+    @Test fun `ax61 S2 harm skips a player left of the boss`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        val p = w.player
+        p.setAnim(0); p.S = 0; p.av = true
+        p.setPositionPx(200, 150); p.refreshBoxes()  // left of boss
+        val e = ax61At(w, 220, 150, null)
+        e.S = 2
+        widenX(e, 190, 260, 130, 170)
+        val before = w.sfxLog.size
+        w.npcFsm.ax61HarmArm(e, w, p)
+        assertFalse(p.av, "L39: av=false")
+        assertEquals(0, p.S, "no harm applied")
+        assertEquals(before, w.sfxLog.size, "no hurt sfx")
+    }
+
+    @Test fun `ax61 S15 catch grabs the falling player and drains g u`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setAnim(0); p.S = 0; p.ah = 4096; p.ag = 500
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = ax61At(w, 300, 150, 0)               // clip0 S15 Y box is real
+        e.S = 15
+        val hp = p.x1
+        w.npcFsm.tickAx61(e, w, p)
+        assertEquals(375, p.S, "catch -> i(375)")
+        assertEquals(0, p.ah); assertEquals(0, p.ag)
+        assertEquals(e.al, p.al)
+        assertEquals(hp - 5, p.x1, "g.d(g.u[k.au]=5) drained")
+    }
+
+    @Test fun `ax61 S1 aura follows the boss`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 500, 400); w.kAU = boss
+        val e = ax61At(w, 10, 10, null)
+        e.S = 1
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(boss.ak, e.ak); assertEquals(boss.al, e.al)
+    }
+
+    @Test fun `ax61 S11 locks input and enters S12 at anim end`() {
+        val w = world(); w.npcs.clear()
+        val e = ax61At(w, 100, 100, null)
+        e.S = 11
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(12, e.S)
+        assertTrue(w.kAm, "k.o() input lock")
+    }
+
+    @Test fun `ax61 S12 mash win frees the player and resets boss to S28`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        boss.P = boss.P or 64
+        w.kAm = true                                 // armed by the S11 intro
+        val p = w.player
+        p.S = 370
+        p.setPositionPx(300, 200); p.refreshBoxes()
+        val e = ax61At(w, 300, 150, 0)               // clip0 S12 12f -> r() false
+        e.S = 12
+        w.pad.commit(4112)
+        w.npcFsm.tickAx61(e, w, p)                   // bl -1+8 = 7
+        w.pad.commit(8256)
+        w.npcFsm.tickAx61(e, w, p)                   // +8 = 15 >= 10 -> win
+        assertTrue(e in w.pendingRemove, "k.c(this)")
+        assertEquals(43, p.S, "aS.a(0) -> airborne fling")
+        assertEquals(28, boss.S, "boss reset i(28)")
+        assertEquals(0, boss.P and 64, "boss P&=-65")
+        assertFalse(w.kAm, "k.p() unlock")
+    }
+
+    @Test fun `ax61 S12 lose path throws the player via S13`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        val p = w.player
+        p.S = 370                                    // still grabbed
+        val e = ax61At(w, 300, 150, null)
+        e.S = 12
+        w.npcFsm.tickAx61(e, w, p)                   // mash false, r() true
+        assertEquals(6, w.kBj, "k.bJ latch")
+        assertEquals(374, p.S, "player thrown i(374)")
+        assertEquals(13, e.S)
+        assertTrue(12 in w.sfxLog)
+    }
+
+    @Test fun `ax61 S12 aborts when the player left the grab anims`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        val p = w.player
+        p.S = 0                                      // broke out
+        val e = ax61At(w, 300, 150, null)
+        e.S = 12
+        w.npcFsm.tickAx61(e, w, p)
+        assertTrue(e in w.pendingRemove)
+        assertEquals(28, boss.S)
+        assertEquals(0, boss.P and 64)
+    }
+
+    @Test fun `ax61 S13 lands the throw hit on anim end`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 300, 150); w.kAU = boss
+        val e = ax61At(w, 300, 150, null)
+        e.S = 13
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertTrue(18 in w.sfxLog, "aS.a(4,0,0,this)")
+        assertTrue(e in w.pendingRemove)
+        assertEquals(28, boss.S)
+    }
+
+    @Test fun `ax61 S19 aura promotes to S18 when boss enters 36-41`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 500, 400); w.kAU = boss
+        boss.S = 37
+        val e = ax61At(w, 10, 10, null)
+        e.S = 19
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(18, e.S)
+        assertEquals(boss.ak, e.ak)
+        assertEquals(0, e.P and 128, "P&=-129 while active")
+    }
+
+    @Test fun `ax61 S19 despawns on missing boss, boss-S18, or live claim`() {
+        val w = world(); w.npcs.clear()
+        val e1 = ax61At(w, 0, 0, null); e1.S = 19
+        w.npcFsm.tickAx61(e1, w, w.player)
+        assertTrue(e1.P and 128 != 0, "aU==null -> P|=128")
+        val boss = bossAt(w, 100, 100); w.kAU = boss
+        boss.S = 18
+        val e2 = ax61At(w, 0, 0, null); e2.S = 19
+        w.npcFsm.tickAx61(e2, w, w.player)
+        assertTrue(e2.P and 128 != 0, "boss S18 -> P|=128")
+        boss.S = 0
+        w.kC = Entity(5, null).apply { ca = 0; cK = 0 }
+        val e3 = ax61At(w, 0, 0, null); e3.S = 19
+        w.npcFsm.tickAx61(e3, w, w.player)
+        assertTrue(e3.P and 128 != 0, "k.C.ab() -> P|=128")
+    }
+
+    @Test fun `ax61 S18 aura reverts to S19 when boss leaves 36-41`() {
+        val w = world(); w.npcs.clear()
+        val boss = bossAt(w, 500, 400); w.kAU = boss
+        val e = ax61At(w, 10, 10, null)
+        e.S = 18
+        boss.S = 40
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(18, e.S, "stays while boss in 36-41")
+        boss.S = 41
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(18, e.S, "S41 exits via dropped L171 -> stay")
+        boss.S = 0
+        w.npcFsm.tickAx61(e, w, w.player)
+        assertEquals(19, e.S, "reverts i(19)")
+    }
 }

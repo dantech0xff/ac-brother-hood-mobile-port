@@ -429,6 +429,7 @@ class Level0World(
     override var kAm = false                   // k.am
     override var kDd = false                   // k.dd
     override var gR = false                    // g.r — grab-QTE lock
+    override var kBj = 0                       // k.bJ — grab-QTE lose latch
     /** `k.J`/`k.K` — the held touch point; port aliases the last DOWN
      *  point `lastTouchX/Y` (inferred — J2ME tracks them separately). */
     override var kJ: Int get() = lastTouchX; set(v) { lastTouchX = v }
@@ -576,6 +577,7 @@ class Level0World(
             else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
             else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
             else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
+            else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
