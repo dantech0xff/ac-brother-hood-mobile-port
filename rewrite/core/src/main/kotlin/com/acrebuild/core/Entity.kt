@@ -146,6 +146,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // cd[7]=true only on the FIRST cd alloc;
                                    // eager alloc replicates via this flag
     var cb: IntArray? = null       // i.cb[4] — claim-script vars (k() allocs)
+    var cc: IntArray? = null       // i.cc[5] — op112/113 multi-choice state
+    var cf: IntArray? = null       // i.cf[5] — op109 carrier-track rect+angle
+    var cg: Entity? = null         // i.cg — op110 carrier-link A (inst field)
+    var ch: Entity? = null         // i.ch — op110 carrier-link B
+    var cQ: IntArray? = null       // i.cQ[10] — op106 dialog-line state
+    var cR = ""                   // i.cR — wrapped dialog text (bK)
+    var cS: IntArray? = null       // i.cS — wrapped-line count (bK)
+    var cT: Entity? = null         // i.cT — op106 dialog target entity
     var scriptStep = -1            // i.cK — script key counter (bJ resets -1,
                                    // k() arms 0; the g.cK lunge field is a
                                    // different class member — same letter)
@@ -158,7 +166,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // unbound (g.cM is the int orbit counter)
     var claimLatchY = -1           // i.cN — claim position-latch y (g.cN is
                                    // the int interact-gauge sub-tick)
-    var cP = -1                    // i.cP — pending claim-script index (bI)
+    var cP = -1                    // i.cP — op101 write / bI pending index
     var eventN = 0                 // i.n — record event id (ax5 r8[8]); `N`
                                    // (8.8 x pos) already owns the JVM name
     var bM: Entity? = null         // i.bM — held-entity two-way link
@@ -1700,7 +1708,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             16 -> { cd[8] = cd[8] xor true; cb?.let { it[3] = 20 } }       // L169
             17 -> w.kAQ = null                                             // L174
             18 -> w.kAv = true                                             // L175
-            19 -> { cd[9] = false; w.iCg = null; w.iCh = null }            // L176
+            19 -> { cd[9] = false; cg = null; ch = null }                  // L176 i.cg/ch
             20 -> lockInput(w)                                             // L150 k.o()
             23 -> {                                                        // L180-L185 aV.ad ax43
                 val link = w.kAV?.ad
@@ -1772,13 +1780,307 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.a(int,byte[],int,int,int)` (i.java:20043) — the ≥100-op decoder
-     * (107/108 QTE branch-returns, 105 dialogs, 111 spawns, menus, sfx).
-     * `inferred` stub for slice 43c: consume `k.t(op)` bytes, never halt;
-     * op108/113's `a()`-internal return<0 semantics are the port's 43c.
+     * `i.a(int,byte[],int,int,int)` (i.java:20043, proven): the ≥100-op
+     * decoder. `k.t(op)` = consumed length (`eI[op-100]`); ops fire only
+     * at `step == key` EXCEPT 108/113 which poll every step and return -1
+     * (= halt aa()) when they branch via `h(k.s(uid)); k(k.s(uid))`.
      */
-    private fun runBigOp(op: Int, blk: ByteArray, pc: Int, step: Int,
-                         key: Int, w: LevelCellSource): Int = w.kT(op)
+    private fun runBigOp(op: Int, blk: ByteArray, pc0: Int, step: Int,
+                         key: Int, w: LevelCellSource): Int {
+        var pc = pc0
+        val consumed = w.kT(op)
+        // L11: only 108/113 run their body while step != key
+        if (step != key && op != 108 && op != 113) return consumed
+        when (op) {
+            // L12: [uid i16][sub i16][arg i16] — uid 0 → this
+            100 -> {
+                val r02 = i16(blk, pc); pc += 2
+                val r03 = i16(blk, pc); pc += 2
+                val r04 = i16(blk, pc); pc += 2
+                val r05 = if (r02 != 0) w.findByAw(r02) else this
+                if (r05 != null) when (r03) {
+                    0, 1 -> if (r03 == 1 || r04 != 0)
+                        bigOp100Arg(r05, r04, w)
+                    2 -> w.removeEntity(r05)                             // L62 k.c
+                    3 -> { r05.cz = r04; r05.cA = 0 }                    // L63
+                    4 -> { w.kAb = true; r05.az = r04 }                  // L64-65
+                    5 -> r05.az = r04                                    // L65
+                    else -> {}
+                }
+            }
+            101 -> { cP = i16(blk, pc); pc += 2 }                        // L67 i.cP
+            // L68: [id u16][flag u16] — k.z/k.A are the same fn (A → z
+            // alias, k.java:7370) → sfx either way; flag is dead.
+            102 -> { w.sfx(u16(blk, pc)); pc += 4 }
+            103 -> { /* L301 — consume only */ }
+            104 -> {                                                     // L75 k.n(int)
+                w.kNSet(i16(blk, pc)); pc += 2
+            }
+            // L76: [r9 u8][str u16][r11 u8] dialog — cd[0]=true halt +
+            // k.b() → k.l(21) on accept; skip-latch path re-arms edges
+            // (k.v = k.w).
+            105 -> {
+                val r09 = u8(blk, pc); pc++
+                val r010 = u16(blk, pc); pc += 2
+                val r011 = u8(blk, pc); pc++
+                if (cd[1]) w.padRearm()
+                else {
+                    cd[0] = true
+                    if (w.kDialog(r09, r010, r011)) w.screenL(21)
+                }
+            }
+            // L84: [target-uid u16][strA u16][strB u16][r15 u16][r16 u8]
+            // dialog-box state on cT.cQ (ad()/bK() consume it later).
+            106 -> {
+                val r012 = u16(blk, pc); pc += 2
+                val r013 = u16(blk, pc); pc += 2
+                val r014 = u16(blk, pc); pc += 2
+                val r015 = u16(blk, pc); pc += 2
+                val r016 = u8(blk, pc); pc++
+                cT = if (r012 > 0) w.findByAw(r012) else this
+                val t = cT
+                if (t != null) {
+                    if (t.cQ == null) t.cQ = IntArray(10) { -1 }
+                    val q = t.cQ!!
+                    q[5] = r013; q[6] = r014; q[2] = -1; q[3] = r015
+                    q[8] = if (r016 <= 1) r016 else r016 - 2
+                    if (r012 > 0) q[7] = 1
+                    if (r016 > 1) q[9] = 1
+                }
+            }
+            // L106: [raw-mask u16] — arm the one-button prompt bA[0];
+            // mask normalized 32→65568, 4→16388, 16→4112, 64→8256,
+            // 256→33024 (key codes → pad masks); cb[2] = bit position
+            // (ct[] frame index).
+            107 -> {
+                val r019 = u16(blk, pc); pc += 2
+                if (cb == null) { cb = IntArray(4); cb!![1] = -1 }
+                val c = cb!!
+                var r16 = 0
+                while ((r019 shr r16) > 1) r16++
+                c[0] = when (r019) {
+                    32 -> 65568; 4 -> 16388; 16 -> 4112
+                    64 -> 8256; 256 -> 33024
+                    else -> r019
+                }
+                c[2] = r16
+                val pr = ScriptPrompt()
+                if (w.mounted) { pr.clipIdx = 9; pr.setState(CT[r16], -1) }
+                else { pr.clipIdx = 74; pr.setState(0, -1) }
+                scriptPrompts[0] = pr
+                c[1] = 0
+            }
+            // L133: [pass-uid u16][fail-uid u16] — poll every step while
+            // step < key: cb[0]-mask / touch-rect / strip press → cb[1]=1;
+            // mounted k.v(1020) → cb[1]=2. At step == key: success →
+            // h/k(k.s(r020)); anything else → h/k(k.s(r021)); -1 halt.
+            108 -> {
+                val r020 = u16(blk, pc); pc += 2
+                val r021 = u16(blk, pc); pc += 2
+                if (step < key) {
+                    val pr = scriptPrompts[0]
+                    if (pr != null && !w.mounted && pr.e != -1 &&
+                        w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
+                        pr.setState(1, 1)                                // hover
+                    val c = cb ?: IntArray(4).also { cb = it }
+                    if (w.padHeld(c[0]) ||
+                        (!w.mounted && pr != null &&
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
+                        (!w.mounted && w.pointerStrip())) {
+                        if (c[1] == 0) {
+                            c[1] = 1
+                            if (pr != null) {
+                                if (w.mounted)
+                                    pr.setState(CT[c[2]] + 1, 1)
+                                else pr.setState(-1, 1)
+                            }
+                            eventDisarm(w); unlockInput(w)               // O();k.p()
+                        }
+                    } else if (w.mounted && w.padHeld(1020) && c[1] == 0) {
+                        c[1] = 2
+                        pr?.setState(CT[c[2]] + 2, 1)
+                        eventDisarm(w); unlockInput(w)
+                    }
+                }
+                if (step == key) {
+                    eventDisarm(w); unlockInput(w)
+                    val decided = cb?.get(1) ?: 0
+                    if (decided == 1 && r020 > 0) {
+                        val idx = w.kSIndex(r020)
+                        bindScript(idx, w); scriptKeyStep(idx, w)
+                        return -1
+                    }
+                    if (decided != 1 && r021 > 0) {
+                        val idx = w.kSIndex(r021)
+                        bindScript(idx, w); scriptKeyStep(idx, w)
+                        return -1
+                    }
+                }
+            }
+            // L184: [x0][y0][x1][y1] carrier-track rect — cf[4] = the
+            // param-curve angle j.b(-dx, dy); armed on the last step only.
+            109 -> {
+                if (cf == null) cf = IntArray(5)
+                val f = cf!!
+                f[0] = i16(blk, pc); f[1] = i16(blk, pc + 2)
+                f[2] = i16(blk, pc + 4); f[3] = i16(blk, pc + 6); pc += 8
+                var dx = f[2] - f[0]; val dy = f[3] - f[1]
+                if (dx == 0) dx = 1
+                f[4] = Trig.atan2(dy, -dx)
+                if (step == key) cd[9] = true
+                else if (step > key) { cd[9] = false; cg = null; ch = null }
+            }
+            // L196: [uidA u16][uidB u16] — cg/ch entity pair; cd[9] arms
+            // at key, clears (with the links) once past it.
+            110 -> {
+                cg = w.findByAw(u16(blk, pc)); pc += 2
+                ch = w.findByAw(u16(blk, pc)); pc += 2
+                if (step == key) cd[9] = true
+                else if (step > key) { cd[9] = false; cg = null; ch = null }
+            }
+            // L203: [S u16][x u16][y u16][facing u8][az u16] — spawn the
+            // ax8 param projectile (k.bK-gated; the boss knife throw).
+            111 -> {
+                if (w.kBK) {
+                    val r032 = u16(blk, pc); pc += 2
+                    val r033 = u16(blk, pc); pc += 2
+                    val r034 = u16(blk, pc); pc += 2
+                    val r035 = u8(blk, pc); pc++
+                    val r036 = u16(blk, pc); pc += 2
+                    w.spawnParam(r032, r035 > 0, r033, r034, r036)
+                        ?.let { it.P = it.P or 512 }
+                }
+            }
+            // L209: [i0][i1][i2] u16 — choice list (indexes 0-9 kept);
+            // spawn one bA[i] prompt per choice; cc[4]=0, cb[1]=0.
+            112 -> {
+                val vals = intArrayOf(u16(blk, pc), u16(blk, pc + 2),
+                                      u16(blk, pc + 4)); pc += 6
+                if (cc == null) cc = IntArray(5)
+                val cArr = cc!!
+                var r162 = 0
+                for (i in 0 until 3)
+                    if (vals[i] in 0..9) { cArr[r162 + 1] = vals[i]; r162++ }
+                cArr[0] = r162
+                for (r173 in 0 until r162) {
+                    var pr = scriptPrompts[r173]
+                    if (pr == null) { pr = ScriptPrompt(); scriptPrompts[r173] = pr }
+                    if (w.mounted) {
+                        pr.clipIdx = 9; pr.setState(CT[cArr[r173 + 1]], -1)
+                    } else { pr.clipIdx = 74; pr.setState(0, -1) }
+                }
+                cArr[4] = 0
+                cb?.let { it[1] = 0 }
+            }
+            // L238: [pass-uid u16][fail-uid u16] — sequential multi-choice
+            // poll: press 1<<cc[1+cc[4]] (or touch/strip) → cc[4]++;
+            // mounted 1020 → deselect all + cc[4]=-1. At step == key:
+            // cc[4]==cc[0] → pass branch r040; cc[4]<cc[0] → fail r041.
+            113 -> {
+                val cArr = cc
+                if (step < key && cArr != null &&
+                    cArr[4] > -1 && cArr[4] < cArr[0]) {
+                    val r038 = cArr[4]
+                    val r037 = 1 shl cArr[1 + cArr[4]]
+                    val pr = scriptPrompts[r038]
+                    if (pr != null && !w.mounted && pr.e != -1 &&
+                        w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
+                        pr.setState(1, 1)
+                    if (w.padHeld(r037) ||
+                        (!w.mounted && pr != null &&
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
+                        (!w.mounted && w.pointerStrip())) {
+                        if (pr != null) {
+                            if (w.mounted)
+                                pr.setState(CT[cArr[1 + r038]] + 1, 1)
+                            else pr.setState(-1, 1)
+                        }
+                        cArr[4]++
+                        if (cArr[4] == cArr[0]) {
+                            eventDisarm(w); unlockInput(w)
+                        }
+                    } else if (w.mounted && w.padHeld(1020)) {
+                        for (r174 in 0 until cArr[0])
+                            scriptPrompts[r174]?.let {
+                                if (w.mounted)
+                                    it.setState(CT[cArr[1 + r174]] + 2, -1)
+                                else it.setState(-1, 1)
+                            }
+                        cArr[4] = -1
+                        eventDisarm(w); unlockInput(w)
+                    }
+                }
+                if (step == key) {
+                    eventDisarm(w); unlockInput(w)
+                    val r040 = u16(blk, pc); pc += 2
+                    val r041 = u16(blk, pc); pc += 2
+                    if (cArr != null) {
+                        if (cArr[4] == cArr[0] && r040 > 0) {
+                            val idx = w.kSIndex(r040)
+                            bindScript(idx, w); scriptKeyStep(idx, w)
+                            cc = null
+                            return -1
+                        }
+                        if (cArr[4] < cArr[0] && r041 > 0) {
+                            val idx = w.kSIndex(r041)
+                            bindScript(idx, w); scriptKeyStep(idx, w)
+                            cc = null
+                            return -1
+                        }
+                        cc = null
+                    }
+                }
+            }
+            // L299: [str-idx u16][countdown u16] — HUD objective line.
+            114 -> {
+                w.kAP = w.levelString(1 + w.kAj, u16(blk, pc)); pc += 2
+                w.kAO = u16(blk, pc); pc += 2
+            }
+            else -> {}
+        }
+        return consumed
+    }
+
+    /** op100's `r04` sub-switch (i.java L24 dispatch, proven). */
+    private fun bigOp100Arg(r05: Entity, r04: Int, w: LevelCellSource) {
+        when (r04) {
+            0 -> {                                                         // L25
+                r05.P = r05.P or 32 or 128
+                r05.P = r05.P and 16.inv()
+                r05.dropAeLink()                                           // G()
+            }
+            1 -> { r05.P = r05.P and 32.inv(); r05.P = r05.P and 128.inv() }
+            2 -> r05.P = r05.P or 16                                       // L27
+            3 -> { r05.P = r05.P and 32.inv(); r05.P = r05.P or 512 }      // L28
+            4 -> {                                                         // L29
+                r05.P = r05.P and 512.inv()
+                r05.ai = 0; r05.ag = 0; r05.aj = 0; r05.ah = 0
+            }
+            5 -> r05.P = r05.P xor 1024                                    // L31
+            6 -> r05.cd[7] = !r05.cd[7]                                    // L34
+            7 -> if (r05.ax == 0)                                          // L40 aS.aA^256
+                w.player.aA = w.player.aA xor 256
+            8 -> if (r05.ax == 11 && r05.Z[19] == 0) r05.Z[20] = 40        // L46
+            10 -> {                                                        // L51
+                r05.P = 32
+                if (r05.ax == 35) {
+                    r05.setAnim(0)
+                    val af = r05.af
+                    if (af != null && af.ax == 73) af.setAnim(152)
+                }
+            }
+            11 -> r05.P = r05.P or 32                                      // L59
+            12 -> r05.P = r05.P or 64                                      // L60
+            else -> {}
+        }
+    }
+
+    /** `i.G()` (i.java:4792, proven): deactivate the `ae` linked entity
+     *  (i.p() — box clear + child cascade) and drop the link. */
+    fun dropAeLink() {
+        ae?.deactivate()
+        ae = null
+    }
 
     /** `i.ac()` (i.java:20577, proven): ax ∈ {11,17,23,43,40,45,51} gets
      *  the claim-position latch (i.cM/i.cN) written by `h()`. */
@@ -1797,6 +2099,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         cb = null
         scriptOps = w.claimOps(ca)?.copyOf()
     }
+
+    /** `i.Y()` (i.java:19421, proven): script pause — `cd[0]=true`. */
+    fun pauseScript() { cd[0] = true }
+    /** `i.Z()` (i.java:19425, proven): script resume — `cd[0]=false`.
+     *  The dialog screen's dismiss path calls `k.C.Z()`. */
+    fun resumeScript() { cd[0] = false }
 
     /**
      * `i.h(int)` (i.java:19300, proven): bind claim-script `r5` — no-op
@@ -2243,6 +2551,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `k.bh[]` (k.java:8437, proven) — per-mission behavior flag;
          *  `bh[k.aj] == 3` picks the S16 settle arm (missions 1/4). */
         val MISSION_BH = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
+        /** `i.ct[]` (i.java:22335, proven) — key-prompt frame indexes for
+         *  the raw bit positions 0-9 (op107/112 prompt art). */
+        val CT = intArrayOf(39, 42, 45, 48, 51, 54, 57, 60, 63, 66)
+        /** `i.bA[]` (i.java:22336 `new a[4]`, proven) — script-QTE prompt
+         *  slots shared across claim runs (class `a` = the prompt sprite). */
+        val scriptPrompts = arrayOfNulls<ScriptPrompt>(4)
         /** `g.u[]` (g.java:6400, proven) — player meter cost per weapon
          *  tier, indexed by `k.au`: {5,10,15}. */
         val PLAYER_DMG = intArrayOf(5, 10, 15)
@@ -3148,6 +3462,31 @@ interface LevelCellSource {
     fun sfx(id: Int)
     fun shake()
 
+    // -- i.a() big-op plumbing (k.b/k.n(int)/k.v=k.w/pointer/spawn) -----
+    /** `k.b(idx,str,flag)` (k.java:430): queue the op105 dialog —
+     *  `bO=flag`, `bN[0]=idx>0?idx:-1`, then `b(9,1+aj,str,str)`;
+     *  `inferred` return = accepted. */
+    fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean = false
+    var bO: Int get() = 0; set(_) {}
+    var bN0: Int get() = 0; set(_) {}
+    /** `k.n(int)` (k.java:2869): `cO/cP` screen-transition statics —
+     *  `v>0 → cO=v,cP=true; else cO=-v,cP=false`. */
+    fun kNSet(v: Int) { kCO = if (v > 0) v else -v; kCP = v > 0 }
+    var kCO: Int get() = 0; set(_) {}
+    var kCP: Boolean get() = false; set(_) {}
+    /** `k.v = k.w` (i.java:20095) — re-arm the edge latch from held. */
+    fun padRearm() {}
+    /** `k.c(x,y,w,h)` (k.java:575): press-point in rect (`k.H/k.I`). */
+    fun pointerDownIn(x: Int, y: Int, w: Int, h: Int): Boolean = false
+    /** `k.d(x,y,w,h)` (k.java:599): move-point in rect (`k.J/k.K`). */
+    fun pointerMoveIn(x: Int, y: Int, w: Int, h: Int): Boolean = false
+    /** `k.j()` (k.java:579): press inside the bottom UI strip —
+     *  `H∈[36,364] && I∈(204,240)` inside, else `I∈[0,204]` outside. */
+    fun pointerStrip(): Boolean = false
+    /** `i.a(8,59,S,facing,x,y,az)` (i.java:6898, proven): spawn the ax8
+     *  param projectile (`aw=-1`, `P|=512`, clip `k.r(59)`). */
+    fun spawnParam(s: Int, facing: Boolean, x: Int, y: Int, az: Int): Entity? = null
+
     /** `m(-1)` wisp burst (i.java:21259) spawned through `a(74,54,1,…)`. */
     fun spawnWisp(src: Entity)
 
@@ -3506,4 +3845,21 @@ interface LevelCellSource {
     fun kS(i: Int): Int = -1
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
     var kSBound: Int get() = 0; set(_) {}
+}
+
+/**
+ * Class `a` (the prompt/hint sprite) — minimal port for the script-QTE
+ * prompts ops 107/112 spawn into `Entity.scriptPrompts` (`i.bA`).
+ * `clipIdx` = `a.a(k.z[n])` (74 = touch art, 9 = key art); `e` = state set
+ * by the two-int `a.a(state, flag)` (-1 = hidden/dismissed); `a`/`b` = the
+ * screen-space hit-test center (`inferred` — the original assigns it in
+ * the render path, never in the ops we ported).
+ */
+class ScriptPrompt {
+    var clipIdx = -1
+    var e = -1
+    var flag = 0
+    var a = 0
+    var b = 0
+    fun setState(s: Int, f: Int) { e = s; flag = f }
 }

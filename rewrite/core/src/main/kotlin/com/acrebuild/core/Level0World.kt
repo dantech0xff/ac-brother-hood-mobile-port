@@ -164,9 +164,17 @@ class Level0World(
     var cm = 0
     override val mounted: Boolean get() = cm == 1
     override fun setMounted() { cm = 1 }
-    /** `k.H`/`k.I` — the last touch point in view px (-1 = none). */
+    /** `k.H`/`k.I` — the pointer-RELEASE point in view px (-1 = none).
+     *  Proven k.java:549-553/1874-77: `pointerReleased` is the only
+     *  writer of `ch/ci`, and the frame loop re-reads them once then
+     *  resets — so `k.c`/`k.j` see a tap for exactly one tick. */
     var lastTouchX = -1
     var lastTouchY = -1
+    /** `k.J`/`k.K` — the live pointer point in view px (-1 = none);
+     *  `pointerPressed/Dragged/Released` all write `cj/ck` (k.java:543-566)
+     *  and `cl` clears them the frame after release. */
+    var lastMoveX = -1
+    var lastMoveY = -1
     override fun clipFor(idx: Int): Clip? = clips[idx]
     /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): touch point vs
      *  entity in view space — equivalent to world-space vs (k.H+k.O). */
@@ -243,7 +251,7 @@ class Level0World(
      *  J2ME pointer state; the port maps it onto the last touch coords
      *  (inferred — pointer plumbing predates the input queue). */
     override fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean =
-        lastTouchX in x until x + w && lastTouchY in y until y + h
+        lastTouchX in x..x + w && lastTouchY in y..y + h
 
     // -- marker/sweep globals -------------------------------------------------
     override var cFFlag = false                 // i.cF gauge-full static
@@ -503,8 +511,8 @@ class Level0World(
     override var kBj = 0                       // k.bJ — grab-QTE lose latch
     /** `k.J`/`k.K` — the held touch point; port aliases the last DOWN
      *  point `lastTouchX/Y` (inferred — J2ME tracks them separately). */
-    override var kJ: Int get() = lastTouchX; set(v) { lastTouchX = v }
-    override var kK: Int get() = lastTouchY; set(v) { lastTouchY = v }
+    override var kJ: Int get() = lastMoveX; set(v) { lastMoveX = v }
+    override var kK: Int get() = lastMoveY; set(v) { lastMoveY = v }
     override var kAn = false                   // k.an fade flag
     /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
      *  ported as the last-painted rect, `inferred`). */
@@ -516,6 +524,53 @@ class Level0World(
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
     override fun clearLatches() { pad.clearLatches() }   // k.v()
+    override fun padRearm() { pad.edge = pad.held }      // k.v = k.w
+    override var kCO = 0                               // k.cO transition count
+    override var kCP = false                           // k.cP direction
+    override var bO = 0                                // k.bO — dialog flag
+    override var bN0 = -1                              // k.bN[0] — dialog idx
+    /** `k.b(idx,str,flag)` (k.java:430, head proven): stores `bO`/`bN[0]`
+     *  then `b(9, 1+aj, str, str)` — the dialog-display call; `inferred`
+     *  accept-return (display pipeline unported). */
+    override fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean {
+        bO = flag
+        bN0 = if (idx > 0) idx else -1
+        dialogLine = strRef
+        return true
+    }
+    var dialogLine = -1                                // last b(9,·) str arg
+    override fun pointerDownIn(x: Int, y: Int, w: Int, h: Int): Boolean =
+        lastTouchX >= x && lastTouchY >= y &&
+            lastTouchX <= x + w && lastTouchY <= y + h &&
+            (lastTouchX != -1 || lastTouchY != -1)
+    override fun pointerMoveIn(x: Int, y: Int, w: Int, h: Int): Boolean =
+        lastMoveX >= x && lastMoveY >= y &&
+            lastMoveX <= x + w && lastMoveY <= y + h &&
+            (lastMoveX != -1 || lastMoveY != -1)
+    /** `k.j()` (k.java:579, proven): inside the bottom strip when
+     *  `H∈[36,364] && I∈(204,240)`; otherwise true iff `I∈[0,204]`.
+     *  (`ce/cf/cg` margins inferred at 36 — the `b.d+30` variant unmined.) */
+    override fun pointerStrip(): Boolean {
+        val hx = lastTouchX; val hy = lastTouchY
+        if (hx == -1 && hy == -1) return false
+        return if (hx < 36 || hx > 364 || hy <= 204 || hy >= 240)
+            hy in 0..204
+        else true
+    }
+    /** `i.a(8,59,S,facing,x,y,az)` (i.java:6898, proven) — op111's
+     *  boss-knife spawn: ax8 param entity, clip 59, `P|=512`. */
+    override fun spawnParam(s: Int, facing: Boolean, x: Int, y: Int,
+                            az: Int): Entity? {
+        val e = Entity(8, clips[59])
+        e.aw = -1; e.au = 0
+        e.az = az
+        e.ak = x; e.al = y
+        e.av = facing
+        e.P = e.P or 512
+        e.setAnim(s)
+        queueInsert(e)
+        return e
+    }
     /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. */
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
@@ -523,7 +578,22 @@ class Level0World(
     /** `k.l(int)` — 12 mission-fail, 15 mission-complete. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
+        else if (n == 21) dialogModal = true
     }
+    /** `j.c == 21` modal-dialog phase (screen-L target of op105's
+     *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
+     *  the original's dialog screen dismisses on input → `k.C.Z()`
+     *  (i.java:19425 `cd[0]=false`) resumes the script. The visual
+     *  `b(9,1+aj,str,str)` draw is unported (`inferred`); the lifecycle
+     *  contract — arm on 21, dismiss on next press → `resumeScript` —
+     *  is what the claim VM observes. The arming tick's own press can't
+     *  dismiss: the modal check runs at the top of the NEXT tick, so the
+     *  first fresh press edge is the dismiss — no cooldown needed. */
+    var dialogModal = false
+    /** Test-harness flag — when true, a modal dialog resolves the same
+     *  tick (emulates the player instantly tapping the screen-21 dismiss
+     *  edge). Real gameplay leaves it false: a press is required. */
+    var autoDismissDialog = false
     /** `g.g()` (g.java:3939): player dead. */
     override fun gG(): Boolean = player.x1 <= 0
     /** `k.s(int)` (k.java:7149): index of uid in `k.eH[]` or -1. */
@@ -637,6 +707,11 @@ class Level0World(
     private var pointerDown = false
     private var zoneMask = 0
 
+    /** Any DOWN edge in this tick's event list — the screen-21 dialog's
+     *  dismiss input (press anywhere, like the original's `k.v` edge). */
+    private fun sawPressPending(events: List<InputQueue.Event>): Boolean =
+        events.any { it.type == InputQueue.Type.DOWN }
+
     /** Raw InputQueue events are screen px in the 400x240 view. */
     private fun consume(events: List<InputQueue.Event>) {
         for (e in events) {
@@ -644,6 +719,7 @@ class Level0World(
                 InputQueue.Type.DOWN -> {
                     pointerDown = true
                     lastTouchX = e.x; lastTouchY = e.y   // k.H/k.I
+                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
                     zoneMask = zoneFor(e.x, e.y)
                     when (zoneMask) {
                         Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)
@@ -654,9 +730,15 @@ class Level0World(
                         Pad.M_DOWN -> pad.queuePress(Pad.M_CONTEXT)
                     }
                 }
-                InputQueue.Type.MOVE -> if (pointerDown) zoneMask = zoneFor(e.x, e.y)
+                InputQueue.Type.MOVE -> {
+                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
+                    if (pointerDown) zoneMask = zoneFor(e.x, e.y)
+                }
                 InputQueue.Type.UP, InputQueue.Type.CANCEL -> {
                     pointerDown = false; zoneMask = 0
+                    // k.H/k.I = release point, one tick (k.java:548-552)
+                    lastTouchX = e.x; lastTouchY = e.y
+                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
                 }
             }
         }
@@ -673,6 +755,16 @@ class Level0World(
 
     fun tick(events: List<InputQueue.Event>) {
         consume(events)
+        // k.H/k.I live for one frame (k.java:1874-77 — `H=ch;I=ci;ch=-1;
+        // ci=-1`); k.J/k.K persist while touching and clear the frame
+        // after release (the `cl` latch, k.java:1869-72).
+        val lastPointerEvent = events.lastOrNull {
+            it.type == InputQueue.Type.DOWN || it.type == InputQueue.Type.MOVE ||
+                it.type == InputQueue.Type.UP || it.type == InputQueue.Type.CANCEL }
+        val sawRelease = lastPointerEvent?.let {
+            it.type == InputQueue.Type.UP ||
+                it.type == InputQueue.Type.CANCEL } == true
+        try {
         pad.commit(if (pointerDown) zoneMask else 0)
         // k.F(aj) (k.java:4644): input events reset g.J to f0do[key]=5
         // (all 9 keys). ef[] is held-state per frame → set while held.
@@ -685,6 +777,20 @@ class Level0World(
             if (pad.v(Pad.M_CONTEXT)) reload()
             tickIndex++
             return
+        }
+
+        // j.c==21 dialog modal (k.l(21), i.java:20190): screen 21 isn't
+        // the play state — the original suspends the entity sim behind
+        // the dialog, which is what stops `ao()`/`N()` from re-arming the
+        // halted claimer while `cd[0]` holds. A press edge = the screen's
+        // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
+        if (dialogModal) {
+            if (autoDismissDialog) {                 // test harness: instant tap
+                kC?.resumeScript(); dialogModal = false
+            } else if (sawPressPending(events)) {
+                kC?.resumeScript(); dialogModal = false
+                pad.edge = 0        // eat the dismiss edge — not a gameplay tap
+            } else { tickIndex++; return }
         }
 
         player.collideSides(this, true)
@@ -743,5 +849,9 @@ class Level0World(
         else if (player.al > camY + VIEW_H) missionFail()
 
         tickIndex++
+        } finally {
+            lastTouchX = -1; lastTouchY = -1
+            if (sawRelease) { lastMoveX = -1; lastMoveY = -1 }
+        }
     }
 }
