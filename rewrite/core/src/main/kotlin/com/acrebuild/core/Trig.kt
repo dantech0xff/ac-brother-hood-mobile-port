@@ -13,7 +13,7 @@ object Trig {
     const val M = 256          // j.m — table scale (full circle = 256)
     const val N = 64           // j.n — 90° index
     private const val W = 128  // j.W — 180° index
-    private const val O = 192  // j.o — 270° index
+    const val O = 192          // j.o — 270° index (swing/orbit band edge)
     private const val X = 256  // j.X — 360° index / wrap modulus
     private val T = IntArray(N + 1) {
         (StrictMath.sin(it * StrictMath.PI / 128.0) * 256.0 + 0.5).toInt()

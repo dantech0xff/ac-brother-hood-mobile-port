@@ -3,6 +3,7 @@ package com.acrebuild.core
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -1435,5 +1436,146 @@ class Level0WorldTest {
         assertEquals(m.al - track.al, track.ar)
         assertEquals(0, p.cL)
         Entity.at = null
+    }
+
+    // -- slice 28: au() mounted orbit (g.java:4389) -------------------
+
+    @Test fun `orbit swing dismounts on W overlap with launch velocity`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(340, 150); p.refreshBoxes(); p.S = 277
+        val m = ax72MountAt(w, 340, 150, 0)          // Z[0]==0 pendulum
+        Entity.at = m; p.g = null
+        p.cB = 19; p.cy = 64; p.cx = 0; p.cF = 5120
+        p.mountOrbitTick(w, Pad())
+        assertEquals(22, p.S, "W-overlap -> i(22) dismount")
+        assertNull(p.F)
+        assertEquals(-20 * Trig.sin(64), p.ag, "ag = -(cF>>8)*j.b(cy)")
+        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        Entity.at = null
+    }
+
+    @Test fun `orbit wheel Z0==1 spins in then settles to S293`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val m = ax72MountAt(w, 340, 150, 1)          // Z[0]==1 wheel
+        Entity.at = m; p.g = null
+        p.cM = 0; p.cB = 200; p.cy = 100; p.cx = 20; p.cF = 0
+        repeat(20) { p.mountOrbitTick(w, Pad()) }
+        assertEquals(293, p.S, "cL decays to 0 -> i(293)")
+        assertEquals(2, p.cM)
+        assertEquals(Trig.O, p.cy, "orbit locks cy at the top")
+        Entity.at = null
+    }
+
+    @Test fun `orbit wheel Z0==2 clamped edge flings the player off`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277; p.av = false
+        val m = ax72MountAt(w, 340, 150, 2)          // Z[0]==2 wheel
+        Entity.at = m; p.g = null
+        p.cM = 1; p.cL = 25; p.cy = 220; p.cG = false; p.cF = 0; p.cB = 75
+        p.mountOrbitTick(w, Pad())
+        assertEquals(243, p.S, "Z[0]==2 edge -> i(243) fling")
+        assertEquals(3328, p.ag, "av=false -> +3328")
+        assertEquals(-6656, p.ah)
+        Entity.at = null
+    }
+
+    @Test fun `cart rides the arc and drags its track entity`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val m = ax72MountAt(w, 340, 150, 4)          // Z[0]==4 cart
+        val track = Entity(44, null)
+        track.aw = 7; track.aq = 10; track.ar = 20
+        track.setPositionPx(500, 300); track.S = 0
+        w.npcs.add(track)
+        m.ac = track
+        Entity.at = m; p.g = null
+        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = 64; p.cF = 0
+        w.cm = 1                                     // k.k() mounted
+        p.mountOrbitTick(w, Pad())
+        assertEquals(250, m.ak, "F.ak = cJ - cB*sin(cy)")
+        assertEquals(150, m.al, "F.al = cK + cB*sin(n-cy)")
+        assertEquals(240, track.ak, "track drags aq behind")
+        assertEquals(130, track.al)
+        Entity.at = null; w.cm = 0
+    }
+
+    @Test fun `cart detaches at track end and resets the player`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val m = ax72MountAt(w, 340, 150, 4)
+        val track = Entity(44, null)
+        track.aq = 10; track.ar = 20; track.S = 2    // track end
+        w.npcs.add(track)
+        m.ac = track
+        Entity.at = m; p.g = null
+        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = 64; p.cF = 0
+        w.cm = 1
+        p.mountOrbitTick(w, Pad())
+        assertNull(m.ac); assertEquals(160, m.P and 160)
+        assertEquals(-1, m.Z[4]); assertNull(p.F)
+        assertEquals(0, p.S, "detach -> i(0)")
+        Entity.at = null; w.cm = 0
+    }
+
+    @Test fun `orbit drags an ax11 victim along the orbit velocity`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val s = soldierAt(w, 340, 150)
+        s.Z[19] = 1; s.aB = 100
+        p.g = s; Entity.at = null
+        p.cF = 5120; p.cy = 64
+        p.mountOrbitTick(w, Pad())
+        assertSame(s, p.F)
+        assertEquals(-20 * Trig.sin(64), p.ag, "L200 drag vx")
+        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        p.g = null
+    }
+
+    @Test fun `S293 zipline ride ends with a(0) fling at Z3`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 293
+        val m = ax72MountAt(w, 340, 150, 1)
+        m.Z[3] = 30
+        Entity.at = m; p.g = null
+        p.cM = 2; p.cB = 24; p.cF = 0
+        p.mountOrbitTick(w, Pad())
+        assertEquals(43, p.S, "cB>=Z[3] -> al=W[3] + a(0) fling")
+        Entity.at = null
+    }
+
+    @Test fun `windup states 299-302 settle to S303 on anim end`() {
+        val w = world()
+        val p = w.player
+        p.setAnim(299)
+        while (!p.animFinished()) p.advanceAnim()
+        val pad = Pad(); pad.commit(0)
+        w.playerFsm.tick(p, pad)
+        assertEquals(303, p.S)
+    }
+
+    @Test fun `S303 dismounts while 62430 is held`() {
+        val w = world()
+        val p = w.player
+        p.S = 303
+        val pad = Pad(); pad.commit(62430)
+        w.playerFsm.tick(p, pad)
+        // u(62430) -> i(0) exits the arm; the post-tail may immediately
+        // re-transition (fall/land) which is the normal FSM working.
+        assertNotEquals(303, p.S, "u(62430) -> i(0)")
     }
 }
