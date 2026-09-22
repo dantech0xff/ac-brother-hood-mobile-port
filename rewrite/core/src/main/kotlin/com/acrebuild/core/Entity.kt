@@ -146,9 +146,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // cd[7]=true only on the FIRST cd alloc;
                                    // eager alloc replicates via this flag
     var cb: IntArray? = null       // i.cb[4] — claim-script vars (k() allocs)
+    var scriptStep = -1            // i.cK — script key counter (bJ resets -1,
+                                   // k() arms 0; the g.cK lunge field is a
+                                   // different class member — same letter)
     var scriptOps: IntArray? = null// i.cL — claim-script op buffer copy of
                                    // k.bz[ca] (g.cL is the int orbit field —
                                    // same decompiled letter, different type)
+    var y = 0                      // i.y (byte) — pending anim-request;
+                                   // `a(int)` writes 101 when y >= 0
     var claimLatchX = -1           // i.cM — claim position-latch x, -1 =
                                    // unbound (g.cM is the int orbit counter)
     var claimLatchY = -1           // i.cN — claim position-latch y (g.cN is
@@ -1252,7 +1257,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `i.ab()` (i.java:20564, proven): the k.a claim is actively
      *  working — `ca >= 0` (a counter bound) && `!cd[0]` (the flag bit
      *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
-    fun claimActive(): Boolean = ca >= 0 && !cd[0] && cK >= 0
+    fun claimActive(): Boolean = ca >= 0 && !cd[0] && scriptStep >= 0
 
     /** `i.f(int,int)` (i.java:6852, proven): the alternating-mash QTE
      *  meter — `bm` latches the last-pressed mask; only the OTHER mask's
@@ -1297,14 +1302,350 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.aa()` (i.java:19429) — the claim-counter script interpreter:
-     *  steps `cK` through the `k.by[ca]` opcode table driving the `cd[]`
-     *  flags. `inferred` STUB — the interpreter and its opcode table are
-     *  unmined; `bs()`/`bm()` only reach it when `ab()`/`claimActive()`
-     *  is true (a counter bound via `ca >= 0`), which level-0 crates
-     *  never do.
+     * `i.aa()` (i.java:19429, proven) — the claim-counter script VM.
+     * `scriptStep` (`i.cK`) ticks once per call (gated by `cd[1]` fast-
+     * forward or the `aH`/`aI`/`j.g` slow-mo beat) and each block's PC
+     * (`scriptOps[b]` = `i.cL`, seeded by `bJ` from `k.bz` = the block's
+     * first-group byte offset — bytecode `iload_8 - iload_6` at
+     * k.javap:23619, both decompilers mislabel it block size) walks the
+     * `[key:u16][cnt:u8][ops]` groups of `k.by[ca]`.
+     *
+     * Per tick, per block: the group at the PC is decoded; its ops run
+     * (each op self-gates on `key` vs `step`); the PC consumes the group
+     * iff `key <= step` (bytecode 2204-2238: `r06 == r02 || r06 < r02`,
+     * `inferred`-verified); a PC past `len-2` leaves `cd[5]` — all blocks
+     * done → `bI()` releases the claim.
+     *
+     * Ops (<100): 11/12/21/25/31 = 4B move-target lerp (op25 adds the
+     * `cM/cN` latch when the target is `this`; op11/12 are camera-space —
+     * `k.aa=false` + clamp to `k.br-400`/`k.bs-240`, op12 offsets
+     * -200/-120); 13 = focus `k.ae` on the uid of the referenced type-2
+     * block + `Z=false,aa=true`; 22/32 = `r14.i(anim)` (+256 sign fix;
+     * ax11/anim-139 adds `k.e(0,aw)`+`k.o(3)` stat ticks — bytecode
+     * i.javap:877-899, unconditional `i()`); 23/24 = `P |= m` / `P &= ~m`
+     * where `m = ((u16 + u8) << (16 + u8<<24)) >> 16`, `av` from bit0;
+     * 34-39 = arg-ops (`r013 = (op-34)%3+1` u16 args; 34-36 read a lead
+     * uid and only run when `k.q(uid)` finds nothing — "if-absent" arms;
+     * all fire only `r06 == r02`); 14-20/26-30/33/40/41-44 skip.
+     * Ops ≥100 → `a(op,…)` (i.java:20043) — `runBigOp`, slice 43c.
      */
-    fun runClaimScript(w: LevelCellSource) { /* unported: k.by table */ }
+    fun runClaimScript(w: LevelCellSource) {
+        if (cd[0]) return                                                  // L5
+        if (cd[2] && w.padHeld(0x20000)) {                                 // L14 skip latch
+            cd[1] = true
+            if (Entity.MISSION_BH[w.kAj] != 3) w.kM(w.kAd)                 // k.m(k.ad)
+            w.sfx(23)                                                      // k.A(23)
+        }
+        if (scriptStep >= 0) {                                             // L14→L22
+            cd[5] = true
+            val blocks = w.kBy[ca]
+            val r02 = scriptStep
+            // L18-L21: tick step — cd[1] fast-forward, else the aH slow-mo
+            // beat (every aI-th j.g)
+            if (cd[1] || !w.iAH || w.jG % w.iAI.toLong() == 0L) scriptStep++
+            val ops = scriptOps
+            var r13 = 0
+            while (ops != null && r13 < blocks.size && r13 < ops.size) {   // L24
+                var r14: Entity? = null
+                val blk = blocks[r13]
+                if (ops[r13] >= blk.size - 2) { r13++; continue }          // L336 done
+                val r04 = blk[0].toInt() and 0xFF
+                when (r04) {                                               // L26-L40
+                    0 -> w.kAb = false
+                    1 -> w.kZ = !w.kAa
+                    2 -> r14 = if (claimPositionType() && r13 == 0) this
+                               else w.findByAw(u16(blk, 2))
+                }
+                var pc = ops[r13]
+                val r06 = u16(blk, pc)                                     // group key
+                val r07 = u8(blk, pc + 2)                                  // op count
+                pc += 3
+                var r18 = 0; var r19 = 0; var r20 = -1
+                var r23 = 0
+                while (r23 < r07) {                                        // L45 op loop
+                    val op = u8(blk, pc); pc++
+                    if (op >= 100) {
+                        val consumed = runBigOp(op, blk, pc, r02, r06, w)
+                        if (consumed < 0) return                           // L50 halt
+                        pc += consumed
+                    } else when (op) {
+                        11, 12, 21, 25, 31 -> {                            // L54 move 4B
+                            val r010 = i16(blk, pc)
+                            val r011 = i16(blk, pc + 2); pc += 4
+                            if (r02 <= r06) {
+                                r18 = r010; r19 = r011
+                                if (r14 === this && op == 25) {
+                                    r18 = r010 + claimLatchX
+                                    r19 = r011 + claimLatchY
+                                }
+                                if (op == 12) { r18 -= 200; r19 -= 120 }
+                                if (op == 11 || op == 12) {                // L65-80 camera
+                                    w.kAa = false
+                                    r18 = r18.coerceIn(0, w.kBr - 400)
+                                    r19 = r19.coerceIn(0, w.kBs - 240)
+                                }
+                                r20 = r06
+                            }
+                        }
+                        13 -> {                                            // L82 focus 5B
+                            if (r02 == r06) {
+                                val tgt = blocks.getOrNull(u8(blk, pc))
+                                if (tgt != null &&
+                                    (tgt[0].toInt() and 0xFF) == 2) {
+                                    w.kAe = w.findByAw(u16(tgt, 2))
+                                    w.kZ = false; w.kAa = true
+                                }
+                            }
+                            pc += 5                                        // idx + 4 dead
+                        }
+                        22, 32 -> {                                        // L88 anim 2B
+                            var r024 = u16(blk, pc); pc += 2
+                            if (r06 <= r02) {
+                                if (r024 < 0) r024 += 256   // i16→u8 fixup
+                                if (r14 != null) {
+                                    if (r14.ax == 11 && r024 == 139) {     // kill count
+                                        w.kStatE(r14.aw); w.kStat(3)
+                                    }
+                                    r14.setAnim(r024)
+                                }
+                            }
+                        }
+                        23, 24 -> {                                        // L102/L112 mask 4B
+                            if (r06 <= r02) {
+                                val mask = ((u16(blk, pc) +
+                                             u8(blk, pc + 2)) shl
+                                            (16 + (u8(blk, pc + 3) shl 24))) shr 16
+                                if (r14 != null) {
+                                    if (op == 23) {
+                                        r14.P = r14.P or mask
+                                        r14.av = (r14.P and 1) != 0
+                                    } else {
+                                        r14.P = r14.P and mask.inv()
+                                        r14.av = (mask and 1) != 1
+                                    }
+                                }
+                            }
+                            pc += 4
+                        }
+                        34, 35, 36 -> {                                    // L121 uid-gate
+                            val uid = u16(blk, pc); pc += 2
+                            val found = w.findByAw(uid) != null
+                            pc = readArgOps(blk, pc, op, r02, r06,
+                                            execute = !found, w = w)
+                        }
+                        37, 38, 39 -> {                                    // L122 arg-ops
+                            pc = readArgOps(blk, pc, op, r02, r06,
+                                            execute = true, w = w)
+                        }
+                        else -> {}                                         // 14-20/26-30/33/40-44 skip
+                    }
+                    r23++
+                }
+                // L249-L255: group consumed when key <= step
+                if (r06 <= r02) ops[r13] = pc
+                if (ops[r13] < blk.size - 2) cd[5] = false
+                // L258-L332: move lerp while r20 >= 0
+                if (r20 >= 0) {
+                    if (r04 == 1) {                                        // camera
+                        w.kO += (r18 - w.kO) / (r20 - r02 + 1)
+                        w.kP += (r19 - w.kP) / (r20 - r02 + 1)
+                    } else if (r14 != null) {
+                        var r232 = (r18 - r14.ak) / (r20 - r02 + 1)
+                        var r102 = (r19 - r14.al) / (r20 - r02 + 1)
+                        if (w.iAH) {                                       // slow-mo halves
+                            r232 = (r232 shl 8) / w.iAI shr 8
+                            r102 = (r102 shl 8) / w.iAI shr 8
+                        }
+                        if ((r14.P and 512) != 0 || r14.claimActive()) {   // carry check
+                            if (r14.ax == 51 || r14.ax == 43) {
+                                val p = w.player
+                                if (p.ga === r14 || w.gc === r14) {        // g.a/g.c
+                                    p.ak += r232
+                                    if (r14.ax != 43) p.al += r102
+                                }
+                                for (f in w.kBb) {                         // follower scan
+                                    if (f == null) continue
+                                    f.offscreenScore(w)                    // u()
+                                    if ((f.P and 256) == 0 &&
+                                        ((f.au < 2 && (f.P and 32) == 0) ||
+                                         (f.P and 16) != 0) &&
+                                        (f.ax == 11 || f.ax == 23 ||
+                                         f.ax == 17 || f.ax == 9) &&
+                                        f.s === r14) {
+                                        f.ak += r232; f.al += r102
+                                    }
+                                }
+                            }
+                        }
+                        if (r14.aw != 205 ||
+                            (r14.S != 34 && r14.S != 35)) {                // L321 move
+                            r14.ak += r232; r14.al += r102
+                        }
+                        if (r14.ax == 11) {                                // L330 Z-resync
+                            r14.Z[3] = r14.ak; r14.Z[4] = r14.al
+                            r14.Z[9] = r14.ak + r14.Z[15]
+                            r14.Z[11] = r14.al + r14.Z[16]
+                            r14.Z[10] = r14.ak + r14.Z[15] + r14.Z[17]
+                            r14.Z[12] = r14.al + r14.Z[16] + r14.Z[18]
+                            r14.aA = 0
+                        }
+                        r14.refreshBoxes(); r14.inPlayV(w)                 // t();v()
+                    }
+                }
+                if (w.iCO != null) w.player.gMountAlign(w.iCO)             // L334 aS.b(cO)
+                r13++
+            }
+            if (cd[5]) releaseClaim(w)                                     // L338
+        }
+        velClampTail(w)                                                    // L341
+    }
+
+    /** `u16`/`i16`/`u8` little-endian readers on a block buffer. */
+    private fun u16(b: ByteArray, p: Int): Int =
+        (b[p].toInt() and 0xFF) or ((b[p + 1].toInt() and 0xFF) shl 8)
+    private fun i16(b: ByteArray, p: Int): Int =
+        ((b[p].toInt() and 0xFF) or ((b[p + 1].toInt() and 0xFF) shl 8)).toShort().toInt()
+    private fun u8(b: ByteArray, p: Int): Int = b[p].toInt() and 0xFF
+
+    /**
+     * `aa()` ops 34-39 — the arg-ops (i.java:19560-19819, proven):
+     * `r013 = ((op-34)%3)+1` u16 args; arg1 `r9` = sub-op index, arg2
+     * `r10` = `r2` operand (r013<2 leaves it -1); a 3rd arg is read but
+     * unused. 34-36 consume a lead uid first (caller) and run only when
+     * `k.q(uid)` misses; all run only at `r06 == r02`. Returns the new PC.
+     */
+    private fun readArgOps(blk: ByteArray, pc0: Int, op: Int, step: Int,
+                           key: Int, execute: Boolean,
+                           w: LevelCellSource): Int {
+        var pc = pc0
+        val r013 = (op - 34) % 3 + 1
+        var r9 = -1; var r10 = -1
+        if (r013 >= 1) { r9 = u16(blk, pc); pc += 2 }
+        if (r013 >= 2) { r10 = u16(blk, pc); pc += 2 }
+        if (r013 >= 3) pc += 2                                             // third arg unread
+        if (execute && key == step) runArgSub(r013, r9, r10, w)            // L135
+        return pc
+    }
+
+    /**
+     * The two arg-op sub-switches (i.java:19587-19819, proven). r013==1 →
+     * 26-case switch on `r12` (op37, 15× in data); r013==2 → 12-case on
+     * `r12` with `r2` operand (op38, 4× in data); r013==3 unreachable in
+     * data (op39 absent — the switch falls through in the original too).
+     */
+    private fun runArgSub(r013: Int, r9: Int, r10: Int, w: LevelCellSource) {
+        val r12 = r9; val r2 = r10
+        if (r013 == 1) when (r12) {
+            0 -> cd[2] = true                                              // L140
+            1 -> { w.screenL(15); if (w.kAj != 7) w.kStat(0) }             // L141
+            2 -> { w.kBx = -1; w.screenL(12) }                             // L144
+            3 -> cd[3] = true                                              // L145
+            4 -> { val v = w.kAV; if (v != null) v.Z[0] = 1 }              // L146
+            5 -> { val v = w.kAV; if (v != null) v.Z[0] = 0 }              // L147
+            6 -> eventDisarm(w)                                            // L148 i.O()
+            7 -> unlockInput(w)                                            // L149 k.p()
+            8 -> {                                                         // L152 k.C release
+                val c = w.kC
+                if (c != null && c.claimActive()) {                        // ab() gate
+                    w.kC = null
+                    w.removeEntity(c)                                      // k.c — no bI
+                }
+            }
+            9 -> cd[4] = true                                              // L156
+            10 -> cd[6] = cd[6] xor true                                   // L157
+            13 -> w.iCe = true                                             // L164
+            14 -> w.iCe = false                                            // L165
+            15 -> if (w.kBK) {                                             // L167 marker spawn
+                val m = w.spawnStatic(9, 47, 5, 400)
+                if (m != null) {
+                    m.P = 16; m.aC = 10
+                    m.ak = w.kO; m.al = w.kP
+                    m.Z[0] = 0; m.Z[1] = -1; m.Z[2] = 47
+                    w.queueInsert(m)
+                }
+            }
+            16 -> { cd[8] = cd[8] xor true; cb?.let { it[3] = 20 } }       // L169
+            17 -> w.kAQ = null                                             // L174
+            18 -> w.kAv = true                                             // L175
+            19 -> { cd[9] = false; w.iCg = null; w.iCh = null }            // L176
+            20 -> lockInput(w)                                             // L150 k.o()
+            23 -> {                                                        // L180-L185 aV.ad ax43
+                val link = w.kAV?.ad
+                if (link != null && link.ax == 43) {
+                    w.removeEntity(link)
+                    w.kAV?.ad = null
+                }
+            }
+            24 -> w.iZ = false                                             // L186 i.z static
+            25 -> w.iZ = true                                              // L187
+            else -> {}
+        } else if (r013 == 2) when (r12) {
+            0 -> w.player.P = w.player.P or r2                             // aS.P |= r2
+            1 -> w.player.P = w.player.P and r2.inv()                      // aS.P &= ~r2
+            2 -> {                                                         // a(101)+ad.a(101)
+                w.findByAw(r2)?.let { t -> t.aOp(101); t.ad?.aOp(101) }
+            }
+            3 -> {                                                         // y=0 + ad.y=0
+                w.findByAw(r2)?.let { t -> t.y = 0; t.ad?.y = 0 }
+            }
+            4 -> w.iBD = r2 != 0                                           // bD = r2 != 0
+            5 -> { w.kBw = -1; w.screenL(13) }                             // k.bw=-1; l(13)
+            6 -> w.iBQ = r2                                                // bQ = r2
+            7 -> { eventArm(r2, w); if (w.iAI <= 0) w.iAI = 1 }            // i.b(r2)+aI floor
+            8 -> {                                                         // L215: ae=q + aT=(ax!=0)
+                val t = w.findByAw(r2)
+                if (t != null) { w.kAe = t; w.kAT = t.ax != 0 }
+            }
+            9 -> {                                                         // L222 cO arm/clear
+                if (r2 <= 0) w.iCO = null
+                else {
+                    val t = w.findByAw(r2)
+                    if (t == null) w.iCO = null
+                    else if (t.ax == 43 && (t.S == 1 || t.S == 4)) w.iCO = t
+                    // wrong ax/S leaves cO untouched (L247)
+                }
+            }
+            10 -> if (w.kAU != null) {                                     // L235: by=r2 (i static)
+                w.iBy = r2
+                if (r2 >= 2) w.kAU!!.aB = 300
+                if (w.iBy == 3) w.kF?.let { w.removeEntity(it) }           // k.c(k.F)
+            }
+            11 -> if (w.kF != null) w.kAL = r2                             // k.aL = r2
+            else -> {}
+        }
+    }
+
+    /** `i.a(int)` (i.java:3777, proven): literally `if (y>=0) y=101` —
+     *  the r4 argument is ignored (structured i.java confirms). */
+    fun aOp(r4: Int) { if (y >= 0) y = 101 }
+
+    /** `g.b(i)` (g.java:480, proven): ax43 mount-align — `r6.t()` then
+     *  center `ak/al` on the mount's X-box when its `S ∈ {1,4}`. */
+    fun gMountAlign(target: Entity?) {
+        if (target == null || target.ax != 43) return
+        if (target.S != 1 && target.S != 4) return
+        target.refreshBoxes()
+        ak = (target.X[0] + target.X[2]) shr 1
+        al = (target.X[1] + target.X[3]) shr 1
+    }
+
+    /** `aa()`'s L341 tail (i.java:20011, proven): `k.C==this && cK>0 &&
+     *  !(aS.P&512)` → zero the player's `ag/ai/ah/aj` velocities. */
+    private fun velClampTail(w: LevelCellSource) {
+        if (w.kC !== this || scriptStep <= 0) return
+        val p = w.player
+        if ((p.P and 512) != 0) return
+        p.ag = 0; p.ai = 0; p.ah = 0; p.aj = 0
+    }
+
+    /**
+     * `i.a(int,byte[],int,int,int)` (i.java:20043) — the ≥100-op decoder
+     * (107/108 QTE branch-returns, 105 dialogs, 111 spawns, menus, sfx).
+     * `inferred` stub for slice 43c: consume `k.t(op)` bytes, never halt;
+     * op108/113's `a()`-internal return<0 semantics are the port's 43c.
+     */
+    private fun runBigOp(op: Int, blk: ByteArray, pc: Int, step: Int,
+                         key: Int, w: LevelCellSource): Int = w.kT(op)
 
     /** `i.ac()` (i.java:20577, proven): ax ∈ {11,17,23,43,40,45,51} gets
      *  the claim-position latch (i.cM/i.cN) written by `h()`. */
@@ -1319,7 +1660,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun reloadScriptOps(w: LevelCellSource) {
         cd[0] = false; cd[2] = false
-        cK = -1
+        scriptStep = -1
         cb = null
         scriptOps = w.claimOps(ca)?.copyOf()
     }
@@ -1346,10 +1687,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun scriptKeyStep(r5: Int, w: LevelCellSource) {
         if (r5 == -1) return
-        cK = 0; w.kAw = 0
+        scriptStep = 0; w.kAw = 0
         if (cb == null) { cb = IntArray(4); cb!![1] = -1 }
         if (w.kC !== this) return
-        if (cK <= 0) return
+        if (scriptStep <= 0) return
         if (w.player.P and 512 == 0) w.clearLatches()
     }
 
@@ -1389,7 +1730,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             val held = p.bM
             if (held == null || held.ax != 13) {      // L12
                 w.kN()
-                z = true
+                w.iZ = true                           // i.z static (i.java:110)
             } else {                                  // ax13 unlink arm
                 held.aA = 0
                 held.bM = null
@@ -1402,10 +1743,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (cd[3]) {                                  // L17 fast-path
             scriptOps = null
             reloadScriptOps(w)
-            cK = 0
+            scriptStep = 0
             return
         }
-        cK = -2
+        scriptStep = -2
         w.kAw = 0
         if (ax == 5) {                                // L17 ax5 ae-rebind
             val ae = w.kAe
@@ -2657,10 +2998,12 @@ interface LevelCellSource {
      *  unreachable). */
     val kY: Int get() = 0
     /** `k.O` — camera left edge in world px (subtract operand at
-     *  i.java:9837; ax14 pickups pin to `k.O+{20,380}` = the view edges). */
-    val kO: Int get() = 0
-    /** `k.P` — camera top edge in world px (u() center operand). */
-    val kP: Int get() = 0
+     *  i.java:9837; ax14 pickups pin to `k.O+{20,380}` = the view edges;
+     *  writable — `aa()`'s op11/12 camera lerp advances it). */
+    var kO: Int get() = 0; set(_) {}
+    /** `k.P` — camera top edge in world px (u() center operand; writable —
+     *  `aa()` op11/12 lerp). */
+    var kP: Int get() = 0; set(_) {}
     /** `k.ac` — camera view rect [x1,y1,x2,y2] world px (v()'s L83/L85). */
     val camRect: IntArray get() = IntArray(4)
     /** `k.bh[k.aj] == 3` — in-play phase (v()'s ax14 arm L61). */
@@ -2702,8 +3045,10 @@ interface LevelCellSource {
     var actionLock: Int
     /** `k.C` — the context entity (scene/dialog owner); unspawned → null. */
     var cEntity: Entity?
-    /** `k.ae` — the entity currently holding/pinning the player. */
-    var aeRef: Entity?
+    /** `k.ae` — the entity currently holding/pinning the player.
+     *  Unified on `kAe` (LevelCellSource member) — alias kept for
+     *  source-call sites (`aeRef` and `kAe` were the same `k.ae`). */
+    var aeRef: Entity? get() = kAe; set(v) { kAe = v }
     /** `g.a` — the player's vehicle/mount link (ax51/43/60/66 vehicles). */
     var vehicle: Entity?
     /** `g.i` — static control flag cleared by the L204 ledge-drop arm. */
@@ -2879,6 +3224,61 @@ interface LevelCellSource {
     fun kT(op: Int): Int = ScriptTables.EI[op - 100]
     /** `k.bz[ca]` — the claim-script op table (unported → null). */
     fun claimOps(ca: Int): IntArray? = null
+
+    // -- claim-script VM (`i.aa()` i.java:19429) world surface ------------
+    /** `k.br`/`k.bs` — world pixel bounds (op11/12 camera clamps). */
+    val kBr: Int get() = 0
+    val kBs: Int get() = 0
+    /** `j.g` — global tick counter (`j.g % aI` slow-mo step gate). */
+    val jG: Long get() = 0
+    /** `k.bb[]`/`k.bc` — the live entity array + count (follower scan). */
+    val kBb: List<Entity?> get() = emptyList()
+    val kBc: Int get() = 0
+    /** `k.ad` — camera-return claim mask fed to `k.m` (k.java:2346). */
+    var kAd: Int get() = 0; set(_) {}
+    /** `k.aV` — vehicle/mount entity singleton (Z[0] arms, `ad` ax43 link). */
+    var kAV: Entity? get() = null; set(_) {}
+    /** `k.aQ` — script-owned entity ref (sub-op 17 clears). */
+    var kAQ: Entity? get() = null; set(_) {}
+    /** `k.av` — script flag (sub-op 18 sets). */
+    var kAv: Boolean get() = false; set(_) {}
+    /** `k.aT` — follow-target kind flag (sub-op 8 writes by ax). */
+    var kAT: Boolean get() = false; set(_) {}
+    /** `k.aL` — int written when `k.F` exists (sub-op 11). */
+    var kAL: Int get() = 0; set(_) {}
+    /** `k.bK` — gate for the sub-op-15 marker spawn. */
+    var kBK: Boolean get() = false; set(_) {}
+    /** `k.bx`/`k.bw` — script fail-channel ints (sub-ops 2/5 write -1). */
+    var kBx: Int get() = 0; set(_) {}
+    var kBw: Int get() = 0; set(_) {}
+    /** `k.F` — claim-locked entity reference (sub-ops 10/11 gate). */
+    var kF: Entity? get() = null; set(_) {}
+    /** `i.ce`/`i.bD`/`i.bQ`/`i.cO`/`i.cg`/`i.ch`/`i.z` — `i` statics the
+     *  arg-ops write (i.java:153-204). */
+    var iCe: Boolean get() = false; set(_) {}
+    var iBD: Boolean get() = false; set(_) {}
+    var iBQ: Int get() = 0; set(_) {}
+    var iCO: Entity? get() = null; set(_) {}
+    var iCg: Entity? get() = null; set(_) {}
+    var iCh: Entity? get() = null; set(_) {}
+    var iZ: Boolean get() = false; set(_) {}
+    /** `k.e(int,int)`/`k.o(int)` (k.java:4314/4304, proven) — `ap[n]++`
+     *  stat counters; `k.o(3)` and `k.e(0,uid)` skip the increment when
+     *  `k.aj==7`. Callers pass the counter index. */
+    fun kStat(n: Int) {}
+    /** `k.e(0,gate)` (k.java:4314, proven): `ap[0]++` iff `gate>0 &&
+     *  k.aj!=7` — the kill-stat arm inside op22's ax11/139 branch. */
+    fun kStatE(gate: Int) {}
+    /** `k.m(int)` (k.java:2346) — camera return-to-player driver, mask-
+     *  gated by `k.ad`; internals are the unported camera system —
+     *  `inferred` stub. */
+    fun kM(mask: Int) {}
+    /** `i.b(int)`/`i.O()` — slow-mo arm/disarm; already ported as
+     *  `eventArm`/`eventDisarm` on Entity (no interface entry needed). */
+    /** `i.a(ax,S,...)` (i.java:6898, proven spawn form) — static spawn
+     *  returning the new entity (`aK` in callers). `a(9,47,5,400)` is the
+     *  sub-op-15 marker arm — `(ax,S,x?,y?)` arg mapping `inferred`. */
+    fun spawnStatic(ax: Int, s: Int, x: Int, y: Int): Entity? = null
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}
