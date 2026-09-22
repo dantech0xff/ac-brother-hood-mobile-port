@@ -1176,15 +1176,16 @@ class Level0WorldTest {
     }
 
     @Test fun `requestH gates on pending J bit then consumes ax16 link`() {
+        val w = world()
         val p = Entity(0, null)
         val mount = Entity(72, null)
         val req = Entity(16, null)
         req.W[0] = 5; req.W[1] = 6; req.W[2] = 15; req.W[3] = 16
         mount.ab = req
         Entity.at = mount
-        assertFalse(p.requestH(2), "J&2 not pending -> false")
+        assertFalse(p.requestH(2, w), "J&2 not pending -> false")
         p.gJ = 2
-        assertTrue(p.requestH(2), "pending bit -> consume path true (S!=38)")
+        assertTrue(p.requestH(2, w), "pending bit -> consume path true (S!=38)")
         assertEquals(2, p.gI)
         // i.H(): ab.p() released the ax16 request entity, link dropped
         assertNull(mount.ab, "i.at.H() cleared the ab link")
@@ -1757,5 +1758,86 @@ class Level0WorldTest {
         // S68 → L41 g() + c(6,156) → ax11 hit-anim 6 + sfx 13
         assertEquals(6, t.S)
         assertTrue(13 in w.sfxLog)
+    }
+
+    // -- slice 30: equip/context-action system -------------------------------
+
+    @Test fun `rebuildEquip packs J bits ascending, skips mask 4`() {
+        val w = world(); val p = w.player
+        // k.q() (k.java:~4600): bits {1,2,8,16} → ar[] dense ascending; 4 skipped
+        p.gJ = 1 or 2 or 4 or 8 or 16
+        w.rebuildEquip()
+        assertEquals(4, w.equipCount)
+        assertEquals(listOf(1, 2, 8, 16, -1), w.equipList.toList())
+    }
+
+    @Test fun `weapon cycle advances to next equip mask and locks`() {
+        val w = world(); val p = w.player
+        p.gJ = 1 or 2 or 8
+        w.rebuildEquip()
+        assertEquals(1, p.gI)
+        val pad = Pad()
+        pad.queuePress(Pad.M_CYCLE); pad.commit(0)
+        p.aZ = true                                   // o() gate
+        assertTrue(p.cycleEquip(w, pad))
+        assertEquals(2, p.gI, "ar[(idx+1)%as] = 2")
+        assertEquals(1, w.actionLock, "k.at = 1")
+        assertTrue(23 in w.sfxLog, "A(23)")
+        // a second press is gated by k.at
+        val pad2 = Pad(); pad2.queuePress(Pad.M_CYCLE); pad2.commit(0)
+        assertFalse(p.cycleEquip(w, pad2))
+    }
+
+    @Test fun `context dispatch arms equip 8 and equip 2`() {
+        val w = world(); val p = w.player
+        val pad = Pad()
+        // ap() I==8 arm (g.java:3860): zero h-vel + K/cN reset → i(303)
+        p.gI = 8; p.S = 0; p.ag = 100; p.K = 4; p.cN = 2
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        p.contextDispatch(w, pad)
+        assertEquals(303, p.S)
+        assertEquals(0, p.ag); assertEquals(0, p.K); assertEquals(0, p.cN)
+        // I==2 arm (g.java:3872): i(286) + A(29)
+        p.gI = 2; p.S = 0
+        val pad2 = Pad(); pad2.queuePress(Pad.M_CONTEXT); pad2.commit(0)
+        p.contextDispatch(w, pad2)
+        assertEquals(286, p.S)
+        assertTrue(29 in w.sfxLog)
+    }
+
+    @Test fun `mounted action picks reach anim, throws knife, damages target`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(200, 100); p.refreshBoxes(); p.S = 295; p.gI = 8; p.gJ = 8
+        val s = soldierAt(w, 240, 120)               // ~40 right, ~20 up → r07<=256 → 305
+        s.aB = 50
+        p.g = s
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        p.mountedInteractAction(w, pad)
+        assertTrue(16 in w.sfxLog, "A(16)")
+        assertTrue(p.S in intArrayOf(304, 305, 306), "reach anim picked, S=${p.S}")
+        assertEquals(305, p.S)
+        val knife = w.pendingInsert.firstOrNull { it.ax == 8 }
+        assertNotNull(knife, "i.a(_,5,14,av,L,M+30,300) spawned via k.b")
+        assertTrue(s.aB <= 50 - 200, "flat bu[au]=300 damage applied, aB=${s.aB}")
+    }
+
+    @Test fun `S295 arm consumes J8, runs gauge, taps into mounted action`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(200, 100); p.refreshBoxes()
+        p.gJ = 8
+        val s = soldierAt(w, 240, 120); s.aB = 400
+        p.g = s
+        p.setAnim(295)
+        // z=false (no groundedTail ran) → contextDispatch can't double-fire
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertEquals(8, p.gI, "requestH(8) consumed the pending bit")
+        assertTrue(19 in w.sfxLog, "A(19)")
+        assertTrue(16 in w.sfxLog, "aq() A(16) fired on the context tap")
+        assertTrue(p.S in intArrayOf(304, 305, 306), "aq() picked a reach anim, S=${p.S}")
     }
 }

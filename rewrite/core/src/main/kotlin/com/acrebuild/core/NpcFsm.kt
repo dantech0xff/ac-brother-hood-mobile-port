@@ -904,8 +904,8 @@ class NpcFsm(private val world: LevelCellSource) {
             30, 38 -> {
                 if (!Entity.overlapI(player.W, e.W)) return
                 val bit = if (e.S == 30) 2 else 8
-                player.requestAction(bit)
-                player.requestH(bit)
+                player.requestAction(bit, world)
+                player.requestH(bit, world)
                 player.setAnim(91)
                 world.sfx(15)
                 player.settleToGround(world)
@@ -913,7 +913,7 @@ class NpcFsm(private val world: LevelCellSource) {
             }
             39 -> {
                 if (!Entity.overlapI(player.W, e.W)) return
-                player.requestAction(4)
+                player.requestAction(4, world)
                 world.removeEntity(e)
             }
             else -> return                                   // L21 tail unported

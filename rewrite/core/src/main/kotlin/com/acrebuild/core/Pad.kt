@@ -60,5 +60,7 @@ class Pad {
         const val M_ANY_DIR = 94324
         /** Context/attack key (proven: `v(65568)` drives combos + assassinate). */
         const val M_CONTEXT = 65568
+        /** Weapon-cycle edge (`ao()` at g.java:3792). */
+        const val M_CYCLE = 131072
     }
 }
