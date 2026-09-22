@@ -76,7 +76,7 @@ class Level0World(
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
     // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
     // `bb[]` at the drain after the npc pass — never iterate-mutated.
-    private val pendingInsert = ArrayList<Entity>()
+    val pendingInsert = ArrayList<Entity>()     // k.b() drain buffer
     override fun removeEntity(e: Entity) {
         pendingRemove += e
         if (player.gd === e) player.gd = null
@@ -197,6 +197,39 @@ class Level0World(
         pendingInsert += e                        // k.b(r0)
         return e
     }
+
+    // -- equip/context statics (k.ar/as/at/C/ae + g.a/i/E) --------------------
+    override val equipList = IntArray(5) { -1 }   // k.ar[5]
+    override var equipCount = 0                 // k.as
+    override var actionLock = 0                 // k.at
+    override var cEntity: Entity? = null        // k.C
+    override var aeRef: Entity? = null          // k.ae
+    override var vehicle: Entity? = null        // g.a
+    override var iFlag = true                   // g.i
+    override var eFlag = false                  // g.E
+
+    /** `k.q()` (k.java:~4600, proven): rebuild `ar[]`/`as` from `player.gJ`
+     *  — iterates bits 0..4, takes set bits except mask-4, first-empty
+     *  slot in ascending order, then clears the source bit. */
+    override fun rebuildEquip() {
+        equipList.fill(-1)
+        var rest = player.gJ
+        var slot = 0
+        equipCount = 0
+        for (r5 in 0 until 5) {
+            val r0 = 1 shl r5
+            if ((rest and r0) == 0 || r0 == 4) continue
+            equipList[slot++] = r0
+            rest = rest and r0.inv()
+            equipCount++
+        }
+    }
+
+    /** `k.c(x,y,w,h)` — view-space touch-rect test. The original reads the
+     *  J2ME pointer state; the port maps it onto the last touch coords
+     *  (inferred — pointer plumbing predates the input queue). */
+    override fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean =
+        lastTouchX in x until x + w && lastTouchY in y until y + h
 
     /** `m(int)` particle burst (i.java:21259, proven): `a(74,54,1,
      *  player.az+1)` via the generic spawner (i.java:4799) — random angle

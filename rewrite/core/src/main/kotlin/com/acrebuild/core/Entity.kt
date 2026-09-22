@@ -1219,17 +1219,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
 
     /** `g.g(int)` (g.java:5266, proven): `J |= mask` — ORs an action-request
-     *  bit. The original also calls `k.q()` (queue refresh — unmined). */
-    fun requestAction(mask: Int) { gJ = gJ or mask }
+     *  bit, then `k.q()` rebuilds the `ar[]` equip list. */
+    fun requestAction(mask: Int, w: LevelCellSource) {
+        gJ = gJ or mask
+        w.rebuildEquip()
+    }
 
     /** `g.h(int)` (g.java:5270, proven): request/consume — when `r4!=0`
      *  requires `J&r4` pending; sets `I=r4`, forces `k.at=1`, and when the
      *  mount link's `ab` is an ax16 request entity runs its `H()` consume
      *  (internals unmined — recorded via `consumedH`). `r4==1` → true;
      *  `S!=38` → true; `S==38` repeats the consume and returns false. */
-    fun requestH(r4: Int): Boolean {
+    fun requestH(r4: Int, w: LevelCellSource): Boolean {
         if (r4 != 0 && (gJ and r4) == 0) return false
         gI = r4
+        w.actionLock = 1                       // k.at = 1
         at?.let { t -> if (t.ab?.ax == 16) t.consumeH() }
         if (r4 == 1) return true
         if (S != 38) return true
@@ -1239,6 +1243,112 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (link.ax != 16) return false
         t.consumeH()
         return false
+    }
+
+    /** `g.ao()` (g.java:3792, proven): weapon-cycle — `v(131072)` edge or
+     *  the 355,197,30x26 view button → `k.at==0 && k.as>1 &&
+     *  (k.C==null || P&512)` → `k.at=1`, `h(ar[(p(I)+1)%as])`, sfx 23.
+     *  `k.p(I)` = lowest-set-bit index ≡ position in the sorted-dense
+     *  `ar[]`, so `indexOf` is equivalent. */
+    fun cycleEquip(w: LevelCellSource, pad: Pad): Boolean {
+        if (!pad.v(Pad.M_CYCLE) && !w.touchRect(355, 197, 30, 26)) return false
+        if (w.actionLock != 0) return false
+        if (w.equipCount <= 1) return false
+        if (w.cEntity != null && (P and 512) == 0) return false
+        w.actionLock = 1
+        val idx = w.equipList.indexOf(gI).let { if (it < 0) 0 else it }
+        requestH(w.equipList[(idx + 1) % w.equipCount], w)
+        w.sfx(23)
+        return true
+    }
+
+    /** `i.y()` (i.java:1211, proven): directional edge flag — moving picks
+     *  `bb`/`bc` by `sign(ag)`, stationary picks by facing `av`. */
+    fun edgeFlag(): Boolean =
+        if (ag < 0) bb else if (ag > 0) bc else if (av) bb else bc
+
+    /** `g.o()` (g.java:6369, proven shape): grounded-or-mounted gate for
+     *  the weapon cycle — `aZ` or standing on ax51/15/43. `g.a` vehicle
+     *  static approximated by `standingOn` (inferred). */
+    fun groundOrVehicle(): Boolean =
+        aZ || standingOn?.ax == 51 || standingOn?.ax == 15 || standingOn?.ax == 43
+
+    /**
+     * `g.ap()` (g.java:3817, proven): the 65568 context dispatcher —
+     *  `I==4 && aA<2 → h(1)` head; on `v(65568)` (blocked while riding an
+     *  ax10 zipline `ac` — inferred: the decompile's r0 flag only arms on
+     *  `ac.ax!=10`), dispatch by equip `I`:
+     *   1 → zero h-vel; unless crouch-rope (`S==79 && a.ax==51 &&
+     *       a.aD!=0`) → `i(S==79?81:67)` sword swing; `k.E.K()` unported;
+     *   8 → `S!=79` → `ai=ag=0; K=0; cN=0; i(303)` standing gauge;
+     *   2 → `i(286)` + sfx 29 knife anim.
+     *  `g.a` vehicle static approximated by `standingOn` (inferred). */
+    fun contextDispatch(w: LevelCellSource, pad: Pad) {
+        if (gI == 4 && aA < 2) requestH(1, w)
+        if (!pad.v(Pad.M_CONTEXT)) return
+        if (ac?.ax == 10) return                       // L8-L12 zipline block
+        when (gI) {
+            1 -> {
+                ag = 0; ah = 0; aj = 0
+                val v = standingOn
+                if (S == 79 && v != null && v.ax == 51 && v.aD != 0) return
+                setAnim(if (S == 79) 81 else 67)
+                // k.E?.K() — held-entity release unported
+            }
+            8 -> {
+                if (S != 79) {
+                    ai = 0; ag = 0; K = 0; cN = 0
+                    setAnim(303)
+                }
+            }
+            2 -> { setAnim(286); w.sfx(29) }
+        }
+    }
+
+    /**
+     * `g.aq()` (g.java:3958, proven): the MOUNTED 65568 action — `g==null`
+     *  → `i(295)` + `k.v()`; else sfx16, pick the mounted reach anim by
+     *  W-box steepness `r06/r05` (<=64→306, <=256→305, <=1024→304,
+     *  `r06==0`→306 — no below-target arm unlike `ar()`). Then `K=6`
+     *  FORCED, `r08=bu[au]` (no ×2) → always throws
+     *  `i.a(_,5,14,av,L,M+30,300)` and applies: ax4 `S30→i(29)`, ax58
+     *  lever `i(S+1)`/`i(3)`, else `g.aB -= bu[au]` + `g.C()`. */
+    fun mountedInteractAction(w: LevelCellSource, pad: Pad) {
+        val t = g
+        if (t == null) {
+            setAnim(295)
+            pad.clearLatches()                           // k.v()
+            return
+        }
+        w.sfx(16)
+        val r02 = (W[1] + W[3]) shr 1
+        val r04 = (t.W[1] + t.W[3]) shr 1
+        val r05 = kotlin.math.abs(((t.W[0] + t.W[2]) shr 1) - ((W[0] + W[2]) shr 1))
+        val r06 = kotlin.math.abs(r04 - r02) shl 8
+        if (r05 <= 0 || r06 <= 0) {
+            if (r06 == 0) setAnim(306)
+        } else {
+            val r07 = r06 / r05
+            if (r07 <= 64) setAnim(306)
+            else if (r07 <= 256) setAnim(305)
+            else if (r07 <= 1024) setAnim(304)
+        }
+        K = 6                                            // forced full gauge
+        val r08 = WEAPON_DMG[w.weaponSlot]               // i.bu[k.au] — no <<1
+        if (K <= 3) return
+        w.spawnProjectile(av, L, M + 30)                 // i.a(_,5,14,av,L,M+30,300)
+        when {
+            t.ax == 4 -> if (t.S == 30) t.setAnim(29)
+            t.ax == 58 -> when (t.S) {
+                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                2 -> t.setAnim(3)
+                else -> {}
+            }
+            else -> {
+                t.aB -= (r08 * K) / 6
+                t.hitReact(w)                            // g.C()
+            }
+        }
     }
 
     /**
@@ -1533,4 +1643,30 @@ interface LevelCellSource {
     /** `i.a(_,5,14,av,x,y,300)` (i.java:6898, proven): the ax8 knife
      *  projectile — clip5 anim14 az300, `P|=512`, `aw=-1, au=0`, `k.b`. */
     fun spawnProjectile(av: Boolean, x: Int, y: Int): Entity
+
+    // -- equip/context statics (k.ar/as/at/C/ae + g.a/i/E) --------------------
+    /** `k.ar[5]` — equip list built from `player.gJ` bits by `k.q()`
+     *  (bit-4 skipped); entries are the J masks {1,2,8,16}, -1 padded. */
+    val equipList: IntArray get() = IntArray(5) { -1 }
+    /** `k.as` — count of live `equipList` entries. */
+    var equipCount: Int
+    /** `k.at` — one-shot cycle/action lock (`g.h()` sets it, `ao()` gates). */
+    var actionLock: Int
+    /** `k.C` — the context entity (scene/dialog owner); unspawned → null. */
+    var cEntity: Entity?
+    /** `k.ae` — the entity currently holding/pinning the player. */
+    var aeRef: Entity?
+    /** `g.a` — the player's vehicle/mount link (ax51/43/60/66 vehicles). */
+    var vehicle: Entity?
+    /** `g.i` — static control flag cleared by the L204 ledge-drop arm. */
+    var iFlag: Boolean
+    /** `g.E` — static flag; `ap()` at L2057 requires it false. */
+    var eFlag: Boolean
+    /** `k.q()` (k.java:~4600, proven): rebuild `equipList`/`equipCount` from
+     *  `player.gJ` bits {1,2,8,16} — mask 4 is skipped; first empty slot
+     *  fills in ascending bit order. */
+    fun rebuildEquip() {}
+    /** `k.c(x,y,w,h)` — view-space touch-rect hit test (`ao()`'s 355,197
+     *  weapon-cycle button); default false when no touch UI is ported. */
+    fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean = false
 }

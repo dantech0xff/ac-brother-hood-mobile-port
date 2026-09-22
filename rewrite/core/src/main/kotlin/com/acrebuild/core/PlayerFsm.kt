@@ -55,6 +55,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     fun tick(p: Entity, pad: Pad) {
         p.cp = true; p.cq = true; p.ct = true; p.cw = true; p.zz = true
+        // g.z is per-arm state: locomotion arms set it (groundedTail), the
+        // combo/mount/QTE arms leave it false so the L2057 ap() arm only
+        // fires from grounded control — same role as the original clears
+        // (g.java:591/2126/4984/5126).
+        p.z = false
         // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
         if (p.gt > 0) p.gt--
         if (p.bh > 0) p.bh--
@@ -110,6 +115,33 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     if (pad.v(Pad.M_CONTEXT)) p.interactAction(world, pad)
                 }
             }
+            // L204 (g.java:2541, proven): the mounted-gauge loop — `J&8`
+            // pending → `h(8)`; sfx19; `I==8` runs `aB()` then a 65568 tap
+            // with a bound `g` → `aq()`; the `y()` edge flag drops the
+            // mount (a=null) + air-throw `a(0)` + `i=false` + `k.ae=this`.
+            295 -> {
+                if (p.gJ and 8 != 0) p.requestH(8, world)
+                world.sfx(19)
+                if (p.gI == 8) {
+                    p.interactGauge(world)
+                    if (pad.v(Pad.M_CONTEXT) && p.g != null)
+                        p.mountedInteractAction(world, pad)
+                }
+                if (p.edgeFlag()) {
+                    world.vehicle = null            // g.a = null
+                    p.flingAirborne(0, world)       // g.a(0)
+                    world.iFlag = false             // g.i = false
+                    world.aeRef = p                 // k.ae = this
+                }
+            }
+            // L218 (g.java:2560, proven): mounted reach-anim end → gauge
+            304, 305, 306 -> {
+                if (p.animFinished()) { p.K = 0; p.cN = 0; p.setAnim(295) }
+            }
+            // L1926-L1947 (g.java:3455+): S297 + the S296/307-309/276/
+            // 278-281/285/288-290/314/316 family all fall into the shared
+            // postTail chain (ab/aR/aO bookkeeping) — no dedicated arm.
+            297 -> { }
             311, 312 -> {                     // L1889
                 p.collideSides(world, true)
                 if (p.animFinished()) {
@@ -233,6 +265,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- grounded family tail (L682) ----------------------------------------
     private fun groundedTail(p: Entity, pad: Pad) {
+        p.z = true    // g.z — the locomotion arms set it (L890/1834/4976
+                      // equivalents all live inside this tail)
         if (p.aO <= 12 || p.aR <= 12) {
             if (p.S == 79) {
                 p.ag = 0; p.ah = 0
@@ -242,13 +276,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // L2886 (proven): down-edge into a wall → am() climb-up S63
             if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
             if (ledgeDrop257(p, pad)) return
-            // ap() attack entry (proven subset): v(65568) tap + I==1 sword →
-            // ag=ah=aj=0 then i(67), or i(81) from crouch S79.
-            if (pad.v(Pad.M_CONTEXT) && p.gI == 1) {
-                p.ag = 0; p.ah = 0; p.aj = 0
-                p.setAnim(if (p.S == 79) 81 else 67)
-                return
-            }
+            // The I==1 sword arm of `ap()` moved to postTail with the rest
+            // of the equip/context dispatcher (L2057 arm, g.java:3817).
             if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
             if (!l(p, pad)) {
                 p.cq = false
@@ -544,6 +573,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.av && pad.x(Pad.M_RIGHT)) { if (pad.aA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
             if (!p.av && pad.x(Pad.M_LEFT)) { if (pad.aA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
         }
+        // -- L2048-L2064 equip/context arms (g.java:~3711, proven) ---------
+        // L2048: `o()` gate → `ao()` weapon cycle
+        if (p.groundOrVehicle()) p.cycleEquip(world, pad)
+        // L2051-L2054 (proven): `aA` counter bookkeeping — `aA==0 → aA=1`,
+        // then `aA&4 → aA&=-5` clears bit2 every tick.
+        if (p.aA == 0) p.aA = 1
+        if (p.aA and 4 != 0) p.aA = p.aA and 4.inv()
+        // L2057: `z && i.bn==false && E==false → ap()` context dispatch
+        if (p.z && !bn && !world.eFlag) p.contextDispatch(world, pad)
     }
 
     /**
