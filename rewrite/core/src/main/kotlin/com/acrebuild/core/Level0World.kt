@@ -377,6 +377,7 @@ class Level0World(
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
+            else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -513,7 +514,13 @@ class Level0World(
      *  point `lastTouchX/Y` (inferred — J2ME tracks them separately). */
     override var kJ: Int get() = lastMoveX; set(v) { lastMoveX = v }
     override var kK: Int get() = lastMoveY; set(v) { lastMoveY = v }
-    override val kAc: IntArray? = null         // k.ac[] — unmined
+    override var kAn = false                   // k.an fade flag
+    /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
+     *  ported as the last-painted rect, `inferred`). */
+    override var volPaintRect: IntArray? = null
+    /** `k.ac` — the same camera view rect as `camRect` (aliased;
+     *  ax35's off-screen containment test reads it via this name). */
+    override val kAc: IntArray? get() = camRect
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun clearLatches() { pad.clearLatches() }   // k.v()
@@ -810,6 +817,7 @@ class Level0World(
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
