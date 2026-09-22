@@ -97,6 +97,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gd: Entity? = null         // g.d  — S36 owning trigger (i.java:12912)
     var gD = false                 // g.D  — S53 gate (g.java:2054; producer
                                    // arm unported — stays false this slice)
+    // -- ax4 destructible fields (init arm L161, i.java:3132) --
+    var aD = 0                     // r8[4]
+    var nl = 0                     // i.n (r8[8]; `n` clashes with 8.8 `N`
+                                   // on the JVM, like o/O)
+    var m = 0                      // r8[9] — burst count for the S6/8 arm
+    var i = 0                      // i.i — L166 sets 2 on non-S7 records
+    // -- ax74 wisp fields (bN S1, i.java:21341+; spawned via a(74,54,1,az)) --
+    var j = 0                      // flight-radius counter (j += 15/tick)
+    var aq = 0                     // launch anchor x px (i.aq)
+    var ar = 0                     // launch anchor y px (i.ar)
+    var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
+    var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
+                                   // i.java:922/937; producer arms unported)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -545,4 +558,26 @@ interface LevelCellSource {
     /** `k.c(e)` — mark entity removed; applied after the npc tick pass
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
+
+    // -- k.a(i,prio,rect) context claim (k.java:816): strictly-lower --
+    var claimPrio: Int                    // k.co (6 = unclaimed)
+    var claimed: Entity?                  // k.L
+    fun claim(e: Entity, prio: Int, w: IntArray)
+    fun clearClaim()                      // k.m()
+
+    // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870) -----------------
+    var marker: Entity?
+    fun setMarker(x: Int, y: Int, tag: Int)
+    fun clearMarker(tag: Int)
+
+    // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
+    var aq: Int
+    val apStats: IntArray
+    var shake: Int
+    val sfxLog: List<Int>
+    fun sfx(id: Int)
+    fun shake()
+
+    /** `m(-1)` wisp burst (i.java:21259) spawned through `a(74,54,1,…)`. */
+    fun spawnWisp(src: Entity)
 }

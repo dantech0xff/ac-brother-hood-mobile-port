@@ -31,6 +31,7 @@ class Level0World(
         val ENTITY_CLIP = mapOf(
             11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
             44 to 32,
+            4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             10 to 6,      // clip6 not converted yet — triggers spawn clipless
         )
     }
@@ -68,11 +69,91 @@ class Level0World(
     val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
     private val pendingRemove = HashSet<Entity>()
+    // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
+    // `bb[]` at the drain after the npc pass — never iterate-mutated.
+    private val pendingInsert = ArrayList<Entity>()
     override fun removeEntity(e: Entity) {
         pendingRemove += e
         if (player.gd === e) player.gd = null
         if (lockTarget === e) lockTarget = null
+        if (claimed === e) clearClaim()
+        if (marker === e) { marker = null; markerTag = -1 }
     }
+
+    // -- k.a(i,prio,rect) context-claim system (k.java:816, proven) -------
+    // Strictly-lower priority wins (co starts at 6 = unclaimed); an equal
+    // bid only steals when prio==1&&co==1. Claim persists until released
+    // via k.m() (clearClaim) — there is no per-frame reset. cp = claimed
+    // rect padded ±10 (k.java:850). ax51's Y-swap unexercised (unspawned).
+    override var claimPrio = 6       // k.co — written only via claim()/
+                                     // clearClaim() (interface exposes set)
+    override var claimed: Entity? = null  // k.L
+    val claimPad = IntArray(4)       // k.cp
+    override fun claim(e: Entity, prio: Int, w: IntArray) {
+        if (prio < 0 || prio >= 6) return
+        if (prio >= claimPrio && !(prio == 1 && claimPrio == 1)) return
+        claimPrio = prio; claimed = e
+        claimPad[0] = w[0] - 10; claimPad[1] = w[1] - 10
+        claimPad[2] = w[2] + 10; claimPad[3] = w[3] + 10
+    }
+    override fun clearClaim() { claimPrio = 6; claimed = null }
+
+    // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870-902, proven) --------
+    // Singleton ax14 entity S54 on clip9 (r(9)); later k.c calls just move
+    // it. k.k(aw) removes it on tag match (or any when tag==-1); the
+    // original plays out via N.p() — port removes on the drain.
+    override var marker: Entity? = null
+    private var markerTag = -1       // k.cq
+    override fun setMarker(x: Int, y: Int, tag: Int) {
+        val m = marker
+        if (m == null) {
+            val e = Entity(14, clips[9]).apply {
+                setAnim(54); az = 302; setPositionPx(x, y)
+            }
+            marker = e; markerTag = tag; pendingInsert += e   // k.b(aK)
+        } else m.setPositionPx(x, y)
+    }
+    override fun clearMarker(tag: Int) {
+        if (marker == null) return
+        if (markerTag == tag || tag == -1) {
+            marker?.let { pendingRemove += it }
+            marker = null; markerTag = -1
+        }
+    }
+
+    // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
+    override var aq = 0              // k.aq — global tally (ax4 S5 += m)
+    override val apStats = IntArray(16)  // k.ap — per-slot counters (k.o)
+    override var shake = 0           // k.az side of k.s() (k.java:5338;
+                                     // the dE threshold ladder is unported)
+    override val sfxLog = mutableListOf<Int>()  // k.A(int) — audio unported
+    override fun sfx(id: Int) { sfxLog += id }
+    override fun shake() { shake++ } // k.s()
+
+    /** `m(int)` particle burst (i.java:21259, proven): `a(74,54,1,
+     *  player.az+1)` via the generic spawner (i.java:4799) — random angle
+     *  aD = j.a(0,360), launch radius cap aE = j.a(70,90), aC=2 drift legs,
+     *  anchor (aq,ar) = src pos, P=528, af=src, aG=1 → k.b(aK) joins npcs. */
+    override fun spawnWisp(src: Entity) {
+        val w = Entity(74, clips[54]).apply {
+            aw = -1
+            setAnim(1); az = player.az + 1
+            setPositionPx(src.ak, src.al); av = src.av
+            aD = jRand(0, 360); aE = jRand(70, 90)
+            aA = 0; j = 0; aC = 2
+            aq = src.ak; ar = src.al
+            P = 528; af = src; aG = 1
+        }
+        pendingInsert += w                        // k.b(aK)
+    }
+
+    /** `j.a(lo,hi)` (j.java:322, proven): lo + |nextInt| % (hi-lo). */
+    private fun jRand(lo: Int, hi: Int): Int {
+        if (hi == lo) return hi
+        val r = rng.nextInt()
+        return lo + (if (r >= 0) r else -r) % (hi - lo)
+    }
+
     var camX = 0
         private set
     var camY = 0
@@ -132,7 +213,10 @@ class Level0World(
     private fun spawnEntities() {
         npcs.clear()
         pendingRemove.clear()
+        pendingInsert.clear()
         lockTarget = null
+        clearClaim()
+        marker = null; markerTag = -1
         for (f in level.entities) {
             if (f.size < 7) continue
             val type = f[0]
@@ -147,6 +231,7 @@ class Level0World(
             if (type == 11) npcFsm.initSoldier(e, f.toList())
             else if (type == 44) npcFsm.initDoor(e, f.toList())
             else if (type == 10) npcFsm.initTrigger(e, f.toList())
+            else if (type == 4) npcFsm.initDestructible(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -296,11 +381,18 @@ class Level0World(
         for (n in npcs) {
             if (n.ax == 44) npcFsm.tickDoor(n, player)
             else if (n.ax == 10) npcFsm.tickTrigger(n, player)
+            else if (n.ax == 4) npcFsm.tickDestructible(n, player)
+            else if (n.ax == 74) npcFsm.tickWisp(n, player)
+            else if (n.ax == 14) n.advanceAnim()   // k.N marker: S54 loop
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()
+        }
+        if (pendingInsert.isNotEmpty()) {         // k.b(aK) drain
+            npcs += pendingInsert
+            pendingInsert.clear()
         }
         fireCheckpoints()
         fireScrollTriggers()
