@@ -21,16 +21,17 @@ package com.acrebuild.core
  *                    37/38/39 → 2*argc (args only)
  *                    >=100 → eI[op-100]
  * ```
- * `by[s][b]` = the raw block bytes + a 2-byte tail holding the block
- * content size — the interpreter's done-check is `cL[b] >= len-2`.
+ * `by[s][b]` = the raw block bytes + a 2-byte tail = `u16(bz[s][b])` —
+ * the byte offset of the first step-group inside the block (4 for type
+ * 0/1, 6 for type 2/3). PROVEN from javap: `iload_8 - iload_6` at
+ * k.javap.txt:23619 = header-end minus block-start; both decompilers
+ * merged the two locals and printed `r72 - r07` = block size instead.
+ * The interpreter's done-check `cL[b] >= len-2` compares against the
+ * buffer size, so the tail's VALUE is dead — but it is `bz` in the
+ * original, and `bz` is also what `bJ()` seeds the per-block PC with.
  *
- * `bz[s][b]` = byte offset of the FIRST step-group inside the block
- * (the header size: 4 for type 0/1, 6 for type 2/3 — high-confidence;
- * `bJ()` copies `bz` into the `cL` per-block PC and `aa()` reads group
- * keys at `r03[cL[b]]`, which only works when `cL` starts on a key;
- * the decompiled `bz = r72 - r07` reads as the block size but a
- * size-seeded PC would complete every block instantly — flagged
- * `high-confidence`, and the appended tail value is dead either way).
+ * `bz[s][b]` = that same first-group offset (proven — see above; a
+ * size-seeded PC would complete every block instantly).
  */
 class ScriptTables(
     /** `k.eH` — script uid per script index; `k.s(uid)` scans this. */
@@ -95,8 +96,8 @@ class ScriptTables(
                     val len = pc - start
                     val block = ByteArray(len + 2)
                     d.copyInto(block, 0, start, start + len)
-                    block[len] = (len and 0xFF).toByte()       // size tail
-                    block[len + 1] = ((len shr 8) and 0xFF).toByte()
+                    block[len] = (header and 0xFF).toByte()    // u16(bz)
+                    block[len + 1] = ((header shr 8) and 0xFF).toByte()
                     by[s][b] = block
                 }
             }

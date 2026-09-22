@@ -149,10 +149,11 @@ class Level0World(
     override fun sfx(id: Int) { sfxLog += id }
     override fun shake() { shake++ } // k.s()
 
-    /** `k.O` — camera left edge (the pickup pin anchor, i.java:9837). */
-    override val kO: Int get() = camX
-    /** `k.P` — camera top edge (u()'s view-center operand). */
-    override val kP: Int get() = camY
+    /** `k.O` — camera left edge (the pickup pin anchor, i.java:9837;
+     *  writable — op11/12 camera arms lerp it). */
+    override var kO: Int get() = camX; set(v) { camX = v }
+    /** `k.P` — camera top edge (u()'s view-center operand; writable). */
+    override var kP: Int get() = camY; set(v) { camY = v }
     /** `k.ac` — camera view rect [x1,y1,x2,y2] (v() on-screen check). */
     override val camRect: IntArray get() =
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
@@ -217,7 +218,6 @@ class Level0World(
     override var equipCount = 0                 // k.as
     override var actionLock = 0                 // k.at
     override var cEntity: Entity? = null        // k.C
-    override var aeRef: Entity? = null          // k.ae
     override var vehicle: Entity? = null        // g.a
     override var iFlag = true                   // g.i
     override var eFlag = false                  // g.E
@@ -449,6 +449,45 @@ class Level0World(
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
     override val kAj = 0                       // k.aj — level index 0
+    /** Slice-43b claim-script VM state (aa() arms): world bounds for the
+     *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
+     *  the `k.*`/`i.*` statics the arg-op sub-switches write. */
+    override val kBr: Int get() = level.worldW   // k.br — level width px
+    override val kBs: Int get() = level.worldH   // k.bs — level height px
+    override val jG: Long get() = tickIndex      // j.g — 62ms tick counter
+    override val kBb: List<Entity> get() = npcs  // k.bb follower list
+    override val kBc: Int get() = npcs.size      // k.bc
+    override var kAd = 0                         // k.ad — k.m() mask
+    override var kAV: Entity? = null             // k.aV
+    override var kAQ: Entity? = null             // k.aQ
+    override var kAv = false                     // k.av
+    override var kAT = false                     // k.aT
+    override var kAL = 0                         // k.aL
+    override var kBK = false                     // k.bK — never set true in JAR
+    override var kBx = 0                         // k.bx — l(12) sentinel
+    override var kBw = 0                         // k.bw — l(13) sentinel
+    override var kF: Entity? = null              // k.F
+    override var iCe = false                     // i.ce static
+    override var iBD = false                     // i.bD static
+    override var iBQ = 0                         // i.bQ static
+    override var iCO: Entity? = null             // i.cO mount-align link
+    override var iCg: Entity? = null             // i.cg
+    override var iCh: Entity? = null             // i.ch
+    override var iZ = false                      // i.z static (sub-op 24/25)
+    override fun kStat(n: Int) {                 // k.o(n) (k.java:4304)
+        if (n != 3 || kAj != 7) apStats[n]++
+    }
+    override fun kStatE(gate: Int) {             // k.e(0,gate) (k.java:4314)
+        if (gate > 0 && kAj != 7) apStats[0]++
+    }
+    override fun spawnStatic(ax: Int, s: Int, x: Int, y: Int): Entity? {
+        // i.a(ax,s,5,400) marker arm — arg mapping `inferred`; marker
+        // entities are invisible logic nodes so a null clip is fine.
+        val e = Entity(ax, null)
+        e.S = s
+        e.ak = x; e.al = y
+        return e
+    }
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
     override var kAO = 0                       // k.aO — message countdown
     override var kAP: String? = null           // k.aP — HUD message text

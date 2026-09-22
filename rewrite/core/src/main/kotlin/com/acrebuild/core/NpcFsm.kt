@@ -1732,7 +1732,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (!e.animFinished()) return
                 e.setAnim(0)
                 e.ak = e.Z[6]; e.al = e.Z[1]
-                e.claimLatchX = -1; e.scriptOps = null; e.cK = 0
+                e.claimLatchX = -1; e.scriptOps = null; e.scriptStep = 0
                 return
             }
             0 -> {}                                          // → L22
@@ -1768,7 +1768,7 @@ class NpcFsm(val world: LevelCellSource) {
                 }
             }
             // L53 — board arm (bound/moving/script-blocked → L64)
-            if (p.ac !== e && e.ah == 0 && e.cK != -2) {
+            if (p.ac !== e && e.ah == 0 && e.scriptStep != -2) {
                 val old = p.ac
                 if (old != null && old.ax == 40)             // L61 swap
                     old.releaseClaim(w)
@@ -1794,7 +1794,7 @@ class NpcFsm(val world: LevelCellSource) {
         // L75 → L81: past the far end, or script-forced (cK == -2 while
         // a claim is bound) → kick the departure fall and eject a rider
         // still hanging in anim 164.
-        if (r7 || (e.ca != -1 && e.cK == -2)) {
+        if (r7 || (e.ca != -1 && e.scriptStep == -2)) {
             if (e.ah == 0) {                                 // L81
                 e.ca = -1
                 e.ah = 512
