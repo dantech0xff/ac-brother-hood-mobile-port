@@ -80,6 +80,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var bh = 0                       // i.bh hit-flash counter (visual pending)
     var gy = 0                       // g.y — apex marker: al at S43/148/0 entry
                                      // (i.java:271, proven; ax==0 only)
+    // -- ax10 trigger fields (init arm L96, i.java:2882; L111 field map) --
+    var aE = 0                       // r8[4]
+    var oId = -1                     // i.o (r8[12] link id; `o` clashes
+                                     // with fixed-point `O` on the JVM)
+    var pv = 0                       // i.p (r8[13]; `p` clashes with `P`)
+    var aG = 0                     // r8[14] slope/effect anchor
+    var ay = 0                     // r8[15]
+    // player-singleton fields published into by ax10 zones (g class statics)
+    var gB = false                 // g.B  — S33 effect-zone flag (i.java:12896)
+    var gL = 0                     // g.l  — S33 slope factor (i.java:12898)
+    var gA = false                 // g.A  — S33 zone active (i.java:12900)
+    var gn = 0                     // g.n  — S36 context zone center-x
+    var go = 0                     // g.o  — S36 context zone bottom-y
+    var gk = -1                    // g.k  — S36 context param (i.java:12910)
+    var gd: Entity? = null         // g.d  — S36 owning trigger (i.java:12912)
+    var gD = false                 // g.D  — S53 gate (g.java:2054; producer
+                                   // arm unported — stays false this slice)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -525,4 +542,7 @@ interface LevelCellSource {
     var lockTarget: Entity?
     /** `k.q(uid)` lookup source (proven: entity list search by `aw`). */
     val npcs: List<Entity>
+    /** `k.c(e)` — mark entity removed; applied after the npc tick pass
+     *  (the original unlinks dead triggers rather than mutating mid-pass). */
+    fun removeEntity(e: Entity)
 }
