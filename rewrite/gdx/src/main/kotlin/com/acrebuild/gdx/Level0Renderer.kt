@@ -189,6 +189,17 @@ class Level0Renderer {
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
 
+        // mission-fail banner — k.java:1782 (proven): b(93,67,214,true,true)
+        // solid dark box over the frozen world; y-down→y-up: box (93,47) 214x126.
+        if (world.failed) {
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 93f, 47f, 214f, 126f)
+            batch.setColor(0.8f, 0.15f, 0.15f, 1f)
+            batch.draw(white, 95f, 49f, 210f, 2f)
+            batch.draw(white, 95f, 169f, 210f, 2f)
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
+
         batch.end()
         fbo.end()
 

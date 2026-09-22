@@ -372,7 +372,7 @@ class Level0WorldTest {
         assertTrue(w.player.x1 < 90, "counter should pay meter u[0]=5 (x1=${w.player.x1})")
     }
 
-    @Test fun `player knocked out at zero meter respawns at spawn`() {
+    @Test fun `player knocked out at zero meter shows fail screen then reloads`() {
         val w = world()
         val spawn = w.player.ak to w.player.al
         repeat(5) { w.tick(emptyList()) }
@@ -381,10 +381,32 @@ class Level0WorldTest {
         // reset g.t iframes between hits (each drain sets t=10)
         repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
         assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
+        // KO → k.l(12): fail screen freezes the world until the context tap
         w.tick(emptyList())
-        assertEquals(90, w.player.x1, "respawn should refill the meter")
-        assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
+        assertTrue(w.failed, "x1<=0 must raise the mission-fail screen")
         assertEquals(1, w.deaths)
+        val pos = w.player.ak to w.player.al
+        repeat(5) { w.tick(emptyList()) }
+        assertEquals(pos, w.player.ak to w.player.al, "world frozen while failed")
+        // v(65568) edge = retry → f(false) full level reload
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertFalse(w.failed, "context edge should dismiss the fail screen")
+        assertEquals(90, w.player.x1, "reload refills the meter")
+        assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
+    }
+
+    @Test fun `mission fail reload restores killed entities`() {
+        val w = world()
+        val soldier = w.npcs.first { it.ax == 11 }
+        soldier.setAnim(139) // corpse
+        repeat(20) { w.player.applyHit(18, 0, null, w); w.player.gt = 0 }
+        w.tick(emptyList())
+        assertTrue(w.failed)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertFalse(w.failed)
+        assertTrue(w.npcs.none { it.S == 139 }, "reload must respawn entities (f(false))")
     }
 
     @Test fun `iframes block a second drain for 10 ticks`() {

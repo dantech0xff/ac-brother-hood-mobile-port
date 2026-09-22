@@ -45,7 +45,9 @@ class Level0World(
 
     var tickIndex: Long = 0L
         private set
-    var deaths = 0                     // knockout count (instrumentation)
+    var deaths = 0                     // mission-fail count (instrumentation)
+    var failed = false                 // j.c==12 mission-fail screen active
+        private set
 
     val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
@@ -55,9 +57,22 @@ class Level0World(
         private set
 
     init {
+        resetPlayerToSpawn()
+        spawnEntities()
+    }
+
+    private fun resetPlayerToSpawn() {
         val spawn = level.playerSpawn() ?: (100 to 200)
         player.setPositionPx(spawn.first, spawn.second)
+        player.x1 = 90
         player.setAnim(0)
+        player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
+        player.gt = 0; player.bh = 0
+    }
+
+    private fun spawnEntities() {
+        npcs.clear()
+        lockTarget = null
         for (f in level.entities) {
             if (f.size < 7) continue
             val type = f[0]
@@ -72,6 +87,22 @@ class Level0World(
             else for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             npcs += e
         }
+    }
+
+    /**
+     * `k.l(12)` mission fail (i.java:1389 proven — player below the camera
+     * bottom, or `d()` knockout with x[1]<=0): the original swaps to the
+     * j.c=12 fail screen; confirm (`v(65568)`, k.java:1804) then runs
+     * `f(false)` = full level reload. Ported as `failed` + reload().
+     */
+    private fun missionFail() {
+        if (!failed) { failed = true; deaths++ }
+    }
+
+    private fun reload() {
+        resetPlayerToSpawn()
+        spawnEntities()
+        failed = false
     }
 
     // -- input ------------------------------------------------------------
@@ -117,6 +148,13 @@ class Level0World(
         pad.commit(if (pointerDown) zoneMask else 0)
         playerFsm.tickCount = tickIndex
 
+        // mission-fail screen: world frozen; context edge = retry (reload)
+        if (failed) {
+            if (pad.v(Pad.M_CONTEXT)) reload()
+            tickIndex++
+            return
+        }
+
         player.collideSides(this, true)
         playerFsm.tick(player, pad)
         player.integrate()
@@ -124,19 +162,15 @@ class Level0World(
 
         for (n in npcs) npcFsm.tick(n, player)
 
-        // player knockout (d() → x[1]<=0 → G()/H() detach + k.l(12) mission
-        // fail — checkpoint reload unmined): inferred respawn at spawn + meter
-        if (player.x1 <= 0) {
-            val spawn = level.playerSpawn() ?: (100 to 200)
-            player.setPositionPx(spawn.first, spawn.second)
-            player.x1 = 90
-            player.setAnim(0)
-            player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
-            deaths++
-        }
-
         camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
         camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))
+
+        // knockout: d() → x[1]<=0 → k.l(12) (proven)
+        if (player.x1 <= 0) missionFail()
+        // below camera bottom: i.java:1389 (proven) — al > k.P + 240 → l(12).
+        // Fires when the player falls past where the clamped camera can follow.
+        else if (player.al > camY + VIEW_H) missionFail()
+
         tickIndex++
     }
 }
