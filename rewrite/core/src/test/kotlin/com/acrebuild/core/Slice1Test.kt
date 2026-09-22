@@ -1995,5 +1995,162 @@ class Level0WorldTest {
         w.npcFsm.tickRequestMarker(e, w.player, Pad())
         assertEquals(9, e.S, "r() -> bd() -> i(9)")
     }
-}
+    // ---- slice 33 — ax21 bD() mission director ---------------------------
 
+    private fun directorAt(w: Level0World): Entity {
+        val e = Entity(21, w.clips[7])
+        e.aA = 0; e.aB = 100; e.aw = 50
+        e.setPositionPx(500, 200); e.refreshBoxes()
+        w.npcs.add(0, e)
+        return e
+    }
+
+    private fun linkedAt(w: Level0World, aw: Int, x: Int, y: Int): Entity {
+        val e = Entity(11, w.clips[7])
+        e.aw = aw; e.aB = 10; e.S = 1
+        e.setPositionPx(x, y); e.refreshBoxes()
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `aA0 arms the director into waypoint chase when bV=0`() {
+        val w = world()
+        w.npcs.clear()
+        w.iBV = 0
+        val d = directorAt(w)
+        d.Z[12] = 42
+        // c.a(short[]): {pad,id,a,b,c,d,e,f,g}
+        w.waypoints.add(intArrayOf(0, 42, 800, 300, 0, 2, 0, 4 or 128, -1))
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertTrue(w.kAi, "k.ai = true")
+        assertEquals(8, d.aA, "cB found -> waypoint chase aA=8")
+        assertEquals(800, d.aq); assertEquals(300, d.ar)
+        assertTrue(w.iBT, "i.bT = true")
+        assertEquals(16, d.P and 16, "P |= 16")
+        assertEquals(-1, w.iCD); assertEquals(-1, w.iCE)
+        assertEquals(4, w.dirWp!!.f, "f &= 127 clears the consumed bit")
+    }
+
+    @Test fun `aA0 routes to the kill-bitmap router when bV=1`() {
+        val w = world()
+        w.npcs.clear()
+        w.iBV = 1
+        val d = directorAt(w)
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(6, d.aA, "bV>0 with no cB -> aA=6")
+        assertEquals(2, d.l and 2, "bV==1 -> l |= 2")
+    }
+
+    @Test fun `aA8 chase sets velocity toward the waypoint`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 8
+        w.waypoints.add(intArrayOf(0, 42, 900, 300, 0, 2, 0, 4, -1))
+        w.dirWp = w.waypoints.find(42)
+        d.aq = 900; d.ar = 300
+        d.bY = 500; d.bZ = 300              // dy=0 — inside minor snap
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(4 shl 8, d.ag, "major axis ±(f<<8) toward aq")
+        assertEquals(300, d.bZ, "dy<=ratio -> bZ snaps to ar")
+        assertEquals(w.kY, d.ah, "L96 tail: ah += k.Y every tick")
+        assertEquals(8, d.aA, "not arrived -> still chasing")
+    }
+
+    @Test fun `aA8 arrival on last node routes to aA=6`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 8
+        w.waypoints.add(intArrayOf(0, 42, 900, 300, 0, 0, 0, 8, -1))
+        w.dirWp = w.waypoints.find(42)
+        d.aq = 900; d.ar = 300
+        d.bY = 900; d.bZ = 300              // inside f=8 of both axes
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(6, d.aA, "g==-1 -> cB=null -> aA=6")
+        assertEquals(-1, d.aC, "aC-- consumed")
+    }
+
+    @Test fun `aA6 full kill bitmap clears respawners and enters finale`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 6; d.l = 62
+        val r1 = linkedAt(w, 60, 600, 200)   // Z[13] respawner
+        val r2 = linkedAt(w, 61, 700, 200)   // Z[14] respawner
+        d.Z[13] = 60; d.Z[14] = 61
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertTrue(r1 in w.pendingRemove, "k.c(Z[13])")
+        assertTrue(r2 in w.pendingRemove, "k.c(Z[14])")
+        assertEquals(7, d.aA, "l&62==62 -> aA=7")
+        assertTrue(d.k, "router sets k")
+    }
+
+    @Test fun `aA7 finale freezes player and flings them when director in play`() {
+        val w = world()
+        w.npcs.clear()
+        // aS.v(): au<=i needs the player near cam-center — one world tick
+        // puts the camera on the player so a(k.ac, Y) overlaps
+        val q = InputQueue()
+        w.tick(q.drainTo(q.headSequence()))
+        val d = directorAt(w)
+        d.aA = 7; d.S = 2                    // ax21 v(): S>=2 -> in play
+        w.player.ag = 99
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertTrue(w.iBj, "i.bj")
+        assertEquals(0, w.player.ag)
+        assertEquals(w.kY, w.player.ah, "v() -> ah = k.Y")
+        assertTrue(w.pendingInsert.isNotEmpty(), "floatie a(24,40,9) queued")
+    }
+
+    @Test fun `aA7 finale completes the mission when player out of play`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 7; d.S = 2                    // director in play
+        // player Y empty -> aS.v() false -> k.l(15)
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertTrue(w.missionWon, "k.l(15) ported as missionWon flag")
+        assertTrue(w.pendingInsert.isEmpty(), "no floatie spawned")
+    }
+
+    @Test fun `L237 watcher flags dead linked entity into S16 and l bit`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 2                             // pass-through phase -> tail only
+        val l0 = linkedAt(w, 60, 600, 200)
+        l0.aB = 0; l0.clip = null            // r(): clip null -> finished
+        d.Z[0] = 60
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(16, l0.S, "i0 dead -> i(16)")
+        assertEquals(2, d.l and 2, "l |= 2")
+    }
+
+    @Test fun `attach sync rides linked entities at aq offsets`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 2
+        val l0 = linkedAt(w, 60, 0, 0)
+        l0.aB = 10; l0.clip = w.clips[7]
+        l0.aq = 15; l0.ar = -5               // offsets bound at arm time
+        d.Z[0] = 60
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(d.ak + 15, l0.ak)
+        assertEquals(d.al - 5, l0.al)
+    }
+
+    @Test fun `charge gauge mirrors Z3 hp when cF is set`() {
+        val w = world()
+        w.npcs.clear()
+        val d = directorAt(w)
+        d.aA = 2
+        w.iQ = true; w.cFFlag = true
+        val boss = linkedAt(w, 63, 600, 200)
+        boss.aB = 77
+        d.Z[3] = 63
+        w.npcFsm.tickDirector(d, w.player, Pad())
+        assertEquals(77, d.aB, "cF -> aB = Z[3].aB")
+    }
+}

@@ -260,7 +260,7 @@ class Level0World(
     }
 
     /** `j.a(lo,hi)` (j.java:322, proven): lo + |nextInt| % (hi-lo). */
-    private fun jRand(lo: Int, hi: Int): Int {
+    override fun jRand(lo: Int, hi: Int): Int {
         if (hi == lo) return hi
         val r = rng.nextInt()
         return lo + (if (r >= 0) r else -r) % (hi - lo)
@@ -373,6 +373,36 @@ class Level0World(
     private fun missionFail() {
         if (!failed) { failed = true; deaths++ }
     }
+
+    /** `k.l(15)` mission-complete — ported as a flag (screen flow
+     *  `inferred`, unmined). */
+    var missionWon = false
+    override fun missionComplete() { missionWon = true }
+
+    // -- ax21 director statics (i.bD, i.java:72-184 + k fields) --------------
+    override var iBV = 0                       // i.bV — script-written
+    override var iBU = 0                       // i.bU — gauge cap
+    override var iBW = false                   // i.bW — pending transition
+    override var iBX = 0                       // i.bX
+    override var iBT = false                   // i.bT — director armed
+    override var iBj = false                   // i.bj — finale freeze
+    override var iQ = false                    // i.q — gauge-charge mode
+    override var iCC = 0                       // i.cC — waypoint phase
+    override var iCD = -1                      // i.cD — active phase
+    override var iCE = -1                      // i.cE — f(int) gate
+    override val waypoints = WaypointPool()    // c.m/l/j
+    override var dirWp: WaypointNode? = null   // i.cB
+    override var kB: Entity? = null            // k.B — arena boundary
+    override var kAi = false                   // k.ai — director active
+    override var kR = 0                        // k.R
+    override var kAE = 0                       // k.aE
+    override var kAH = 0                       // k.aH
+    override var kAR = 0                       // k.aR — chase row
+    override val kBu: Int get() = level.worldH // k.bu — level height px
+    /** `k.bk[]` record-type table — unmined (inferred, default 0). */
+    override fun kBk(i: Int): Int = 0
+    override fun jNextInt(): Int = rng.nextInt()
+    override fun queueInsert(e: Entity) { pendingInsert += e }
 
     /**
      * ax2 `aY()` (i.java:13477): W-rect overlap (`a(this.W, k.aS.W)`) —
@@ -509,6 +539,7 @@ class Level0World(
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
             else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
+            else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

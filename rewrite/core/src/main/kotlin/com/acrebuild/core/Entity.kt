@@ -136,6 +136,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
+    // -- mission-director + barrage fields (i.java:18003+, bD/bG/d/p/g) ------
+    var ao = 0                     // i.ao — floatie aim target x
+    var ap = 0                     // i.ap — floatie aim target y
+    var bY = 0                     // i.bY — waypoint prev-x px (bZ reused)
+    var bs = 0                     // i.bs — respawn slot index (Z[bs+1])
+    var iE = false                 // i.E — director engaged flag
+    var cIDone = false             // i.cI — attack-script done (bool)
+    var cJDone = false             // i.cJ — transition ack (bool)
+    var cHGrid: Array<IntArray>? = null   // i.cH — int[7][2] knife targets
     // -- g.c(i) grab-lunge state (g.java:4115) -----------------------------
     var F: Entity? = null         // g.F — grab/lunge target (c() sets, as() binds)
     var cE = 0                    // c() — lunge length = the anim's total frames
@@ -1562,6 +1571,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.bq` — static cleared on grab (`c()` head, g.java:4118). */
         var bq = 0
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
+        /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
+         *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */
+        fun pointInBox(x: Int, y: Int, W: IntArray): Boolean =
+            x >= W[0] && x <= W[2] && y >= W[1] && y <= W[3]
+
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
     }
@@ -1816,6 +1830,419 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         return r6
     }
+
+    // ================= mission-director helpers (i.java:18003+) =============
+    // `bD()` itself lives in NpcFsm.tickDirector; these are the entity-side
+    // helpers it and its linked pursuers call.
+
+    /** `i.b(boolean)` (i.java:6635, proven): `ad` follower mirror — `ad.P|=1`
+     *  when `ad.av` else `&=-2`; copies pos/vel/impulse; `ad.t()`. */
+    fun syncAd(world: LevelCellSource) {
+        val d = ad ?: return
+        if (d.av) d.P = d.P or 1 else d.P = d.P and -2
+        d.ak = ak; d.al = al
+        d.ag = ag; d.ah = ah; d.ai = ai; d.aj = aj
+        d.settleToGround(world)
+    }
+
+    /** `i.bE()` (i.java:18917): waypoint-coords → world — `ak=bY; al=k.P+bZ`. */
+    fun posFromWaypoint(world: LevelCellSource) { ak = bY; al = world.kP + bZ }
+
+    /** `i.bF()` (i.java:18921): world → waypoint-coords — `bY=ak; bZ=al-k.P`. */
+    fun posToWaypoint(world: LevelCellSource) { bY = ak; bZ = al - world.kP }
+
+    /** `i.u()` (i.java:700, proven): off-screen distance score into `au` —
+     *  `|ak-(k.O+200)|/400 + |al-(k.P+120)|/240` for ax13/ax21 (and ax67
+     *  riding `k.bk[Z[0]]==49`), `r6/400+r7/120` otherwise, ax67-on-27 →
+     *  `r6/800+r7/240`. Same shape as `markerVisible` (ax16 → /120 arm). */
+    fun offscreenScore(world: LevelCellSource) {
+        var r6 = ak - (world.kO + 200); if (r6 < 0) r6 = -r6
+        var r7 = al - (world.kP + 120); if (r7 < 0) r7 = -r7
+        au = when {
+            ax == 21 || (ax == 13 && aG == 4) -> (r6 / 400) + (r7 / 240)
+            ax == 67 && world.kBk(Z[0]) == 49 -> (r6 / 400) + (r7 / 240)
+            ax == 67 -> if (world.kBk(Z[0]) == 27) (r6 / 800) + (r7 / 240)
+                        else (r6 / 400) + (r7 / 120)
+            else -> (r6 / 400) + (r7 / 120)
+        }
+    }
+
+    /** `i.v()` (i.java:730, proven): "is-in-play" predicate — ax49 → true;
+     *  ax29 `S==24 && T>=54` → true; ax10/40/60 `P&16` → true; ax27 `S==6
+     *  && Z[1]>0` → true; ax21 `S>=2` → true else falls to the score arm;
+     *  `u()` → `au > i` → false (out of play); in-range → ax60 true,
+     *  ax11 `Z[8]==888` true, ax14 `S==76`/`W==null`/`aS.W` overlap,
+     *  ax37/10/60/78(S==3) → `a(k.ac,W)`, else `a(k.ac,Y)`. */
+    fun inPlayV(world: LevelCellSource): Boolean {
+        if (ax == 49) return true
+        if (ax == 29 && S == 24 && T >= 54) return true
+        if (ax == 10 || ax == 40 || ax == 60) {
+            if ((P and 16) != 0) return true
+        }
+        if (ax == 27 && S == 6 && Z[1] > 0) return true
+        if (ax == 21 && S >= 2) return true
+        offscreenScore(world)
+        if (au > i) return false
+        if (ax == 60) return true
+        if (ax == 11 && Z[8] == 888) return true
+        if (ax == 14) {
+            if (S == 76) return true
+            if (W.isEmpty()) return true
+            if (world.missionBh() == 3 || S == 69 || S == 70 || S == 71)
+                return overlapI(world.camRect, W)
+            return overlapI(world.playerRect(), W)
+        }
+        if (ax == 37 || ax == 10 || ax == 60 || (ax == 78 && S == 3))
+            return overlapI(world.camRect, W)
+        return overlapI(world.camRect, Y)
+    }
+
+    /** `i.f(int)` static (i.java:18023, proven): one-shot phase gate —
+     *  `cE != x → cE = x; true`. */
+    fun directorGate(x: Int, world: LevelCellSource): Boolean =
+        if (world.iCE != x) { world.iCE = x; true } else false
+
+    /** `i.a(int,int,int,int)` (i.java:4799, proven): the `aK` child factory —
+     *  `ax/clip/anim/az`, pos+facing copied from `this`, `t()`, NOT `k.b` —
+     *  the caller mutates `aK` then inserts it (ported: caller adds the
+     *  returned entity to `pendingInsert`). */
+    fun spawnChildFx(world: LevelCellSource, ax: Int, clip: Int,
+                     anim: Int, az: Int): Entity {
+        val r0 = Entity(ax, world.clipFor(clip))
+        r0.aw = -1; r0.au = 0
+        r0.setAnim(anim)
+        r0.az = az
+        r0.ak = ak; r0.al = al; r0.av = av
+        r0.settleToGround(world)
+        return r0
+    }
+
+    /** `i.p(int,int)` (i.java:18031, proven): damage-number popup —
+     *  `a(24,40,31,az+10)` (ax24 `S==19` → 40), `ao/ap` offset, `P|=16,
+     *  af=this`. */
+    fun popupDmg(world: LevelCellSource, r8: Int, r9: Int) {
+        val anim = if (ax == 24 && S == 19) 40 else 31
+        val aK = spawnChildFx(world, 24, 40, anim, az + 10)
+        aK.av = false
+        aK.ak = ak + r8; aK.al = al + r9
+        aK.ao = r8; aK.ap = r9
+        aK.ag = 0; aK.ah = 0
+        aK.settleToGround(world)
+        aK.P = aK.P or 16
+        aK.af = this
+        world.queueInsert(aK)
+    }
+
+    /** `i.g(int)` (i.java:18922, proven): 4-way knife barrage — one
+     *  `a(24,40,r8+16,az+1)` floatie per call: r8 0→(ah=256,ag=-1280),
+     *  1→(256,0), 2→(256,+1280)+j++(j>5→j=0,cI=true), 3→homing arc at
+     *  the player (`ag = ±|Δx|·(1280-k.Y)/|Δy|`). `k.A(27)` at tail. */
+    fun spawnBarrage(world: LevelCellSource, r8: Int) {
+        val aK = spawnChildFx(world, 24, 40, r8 + 16, az + 1)
+        aK.av = false
+        aK.ak = ak; aK.al = W[3]
+        when (r8) {
+            0 -> { aK.ah = 256; aK.ag = -1280 }
+            1 -> { aK.ah = 256; aK.ag = 0 }
+            2 -> {
+                aK.ah = 256; aK.ag = 1280
+                j++
+                if (j > 5) { j = 0; cIDone = true }
+            }
+            3 -> {
+                aK.ah = 1280
+                aK.ao = (world.playerRect()[0] + world.playerRect()[2]) shr 1
+                aK.ap = (world.playerRect()[1] + world.playerRect()[3]) shr 1
+                val r0 = aK.ao - aK.ak
+                var r9 = aK.ap - aK.al; if (r9 == 0) r9 = 1
+                val r03 = (kotlin.math.abs(r0) * (1280 - world.kY)) /
+                    kotlin.math.abs(r9)
+                aK.ag = if (r0 >= 0) r03 else -r03
+                cIDone = true
+            }
+        }
+        aK.settleToGround(world)
+        aK.P = aK.P or 16
+        aK.af = this
+        aK.bR = false
+        world.queueInsert(aK)
+        world.sfx(27)
+    }
+
+    /** `i.bH()` (i.java:19282, proven): attack-anim pick 33/34/35 by player
+     *  geometry — `r02 = |((al+W[3])-W[1]) - aS.al + 44|` vs `r0=|ak-aS.ak|`
+     *  (feet-gap vs x-gap): `r02>r0-5 → 33`; `r02>=r0+5 → 33`; `ak>aS.ak →
+     *  34`; `ak<aS.ak → 35`; `ak==aS.ak → 33`. */
+    fun pickAttackAnim(world: LevelCellSource): Int {
+        val r0 = kotlin.math.abs(ak - world.player.ak)
+        val r02 = kotlin.math.abs(((al + W[3]) - W[1]) - world.player.al + 44)
+        if (r02 > r0 - 5) return 33
+        if (r02 >= r0 + 5) return 33
+        if (ak > world.player.ak) return 34
+        if (ak < world.player.ak) return 35
+        return 33
+    }
+
+    /** `i.bG()` (i.java:18938-19280, proven): the linked-pursuer attack
+     *  script — `l|=1`; when `!cI` runs the `p`-dispatch, then the tail
+     *  every-call arm (`r()` → `cJ=true`, alive/dead anim pushes):
+     *
+     *  - `pv==0`: windup `i(28)` → `r()` → `i(14)` + `g(0..2)` spread
+     *  - `pv==1`: (tail only)
+     *  - `pv==2`: `S==18→r()→(n=5; homing a(24,40,13) — arc-aim at aS with
+     *    `j`-counter barrage (j==3→`ag>>2`, aG 1/2 flips, `ah=k.Y+128`);
+     *    j>=4→j=0,n=0,cI=true); else `i(29)`; finishing `r()` → `i(18)`
+     *  - `pv==3`: `k` → (j==2&&S27→r()→i(24); S24→wait; else i(27));
+     *    else `aZ` toggle + j0 grid-scatter (60-pt pool, 7 picks avoiding
+     *    `k.B.W`, `a(24,40,12)` at each, `cH` targets, n=30,j=1) / j1
+     *    countdown → j2 / j2 = 7 homing knives `a(24,40,11)` → j=0,cI
+     *  - `pv==4`: `k.B.l&{2,12}` → `l&=-2`; `S∈[30,32]@T==0` → spawn
+     *    `a(24,40,S+11)` (0→ag0,1→-1280@W0,2→+1280@W2+j++>5→cI,3→homing)
+     *    always `cI=true` + second `a(24,40,44)` + `k.A(12)`; `S∈[33,35]`
+     *    → `i(S-3)`
+     *
+     *  tail (`!cI` skipped it — runs always): `r()` → `cJ=true`;
+     *  `pv∈{0,1}`: dead→`i(16)` alive→`i(13)`; `pv∈{2,3}`:
+     *  dead→`i((pv-1)*4+16)` alive→`i((pv-1)*4+13)`; `pv==4`: dead→`i(36)`
+     *  alive→`i(bH())`+`aF=n,cI=false`. */
+    fun respawnAttack(world: LevelCellSource) {
+        l = l or 1
+        if (!cIDone) {
+            cJDone = false
+            when (pv) {
+                0 -> {
+                    if (S != 28 && S != 14) setAnim(28)
+                    else if (animFinished() && S == 28) {
+                        setAnim(14)
+                        spawnBarrage(world, 0)
+                        spawnBarrage(world, 1)
+                        spawnBarrage(world, 2)
+                    }
+                }
+                2 -> {
+                    if (S != 18 && S != 29) setAnim(29)
+                    else if (animFinished()) {
+                        if (S != 18) setAnim(18)
+                        else {
+                            nl = 5
+                            val aK = spawnChildFx(world, 24, 40, 13, az - 1)
+                            aK.av = false
+                            aK.ak = ak; aK.al = W[3]
+                            aK.posToWaypoint(world)
+                            aK.ah = -512
+                            aK.ao = (world.playerRect()[0] +
+                                world.playerRect()[2]) shr 1
+                            var r9 = 240 - aK.bZ
+                            if (r9 < 60) r9 = 60
+                            // inferred: `j.a(0, j.c(0)>>8)` — `j.m` reads as
+                            // the constant 0 (decompiler fold) → j.c(0) =
+                            // Int.MAX_VALUE → range (0, MAX>>8)
+                            val r02 = (kotlin.math.abs(
+                                world.jRand(0, Int.MAX_VALUE shr 8)) *
+                                ((-512) - world.kY)) / kotlin.math.abs(r9)
+                            aK.ap = aK.bZ + world.jRand(60, r9)
+                            aK.ag = if ((world.jNextInt() and 1) == 0) r02
+                                    else -r02
+                            aK.settleToGround(world)
+                            aK.P = aK.P or 16
+                            aK.af = this
+                            aK.bR = false
+                            world.queueInsert(aK)
+                            aK.j = (aK.ap shl 8) / (aK.ah - world.kY)
+                            if (j == 3) {
+                                val r03 = aK.ag shr 2
+                                aK.k = true
+                                aK.ag = r03
+                                if (aG == 1 && r03 > 0) aK.ag = -r03
+                                if (aG == 2 && r03 < 0) aK.ah = world.kY + 128
+                            }
+                            j++
+                            if (j >= 4) { j = 0; nl = 0; cIDone = true }
+                            else aC = 0
+                            setAnim(18)
+                        }
+                    }
+                }
+                3 -> {
+                    if (!k) {
+                        // L57-L61 — gauge-charge engage: hold S22, arm the
+                        // gauge (`i.q=true`, `i.bU=aB`), clear the `l` parity
+                        // bit and RETURN (skips the L153 tail entirely).
+                        if (S != 22) {
+                            setAnim(22)
+                            world.iQ = true
+                            world.iBU = aB
+                        }
+                        l = l and -2
+                        return
+                    }
+                    if (j == 2) {
+                        // L64-L73 — knife-fan follow-through
+                        if (S == 27 && animFinished()) setAnim(24)
+                        if (S == 24) return
+                        if (S != 27) setAnim(27)
+                        return
+                    }
+                    run {
+                        // L77 — aZ toggles the scatter vs boundary-fill arm
+                        aZ = !aZ
+                        when (j) {
+                            0 -> {
+                                val r04 = Array(60) { IntArray(2) }
+                                for (r10 in 0 until 6) for (r92 in 0 until 10) {
+                                    r04[r10 * 10 + r92][0] = r92 * 40 + 20 +
+                                        world.jNextInt() % 20
+                                    r04[r10 * 10 + r92][1] = r10 * 40 + 20 +
+                                        world.jNextInt() % 20
+                                }
+                                cHGrid = Array(7) { IntArray(2) }
+                                var r93 = 0
+                                while (r93 < 7) {
+                                    var r05 = kotlin.math.abs(
+                                        world.jNextInt() % 60)
+                                    while (r04[r05][0] == -1)
+                                        r05 = kotlin.math.abs(
+                                            world.jNextInt() % 60)
+                                    val kB = world.kB
+                                    if (aZ) {
+                                        if (kB != null && pointInBox(
+                                                r04[r05][0], r04[r05][1],
+                                                kB.W)) {
+                                            if ((world.jNextInt() and 1) == 0)
+                                                r04[r05][1] = kB.W[1]
+                                            else r04[r05][1] = kB.W[3]
+                                        }
+                                    } else if (kB == null || !pointInBox(
+                                            r04[r05][0], r04[r05][1], kB.W)) {
+                                        r04[r05][0] = world.jRand(
+                                            kB?.W?.get(0) ?: 0,
+                                            kB?.W?.get(2) ?: 400)
+                                        r04[r05][1] = world.jRand(
+                                            kB?.W?.get(1) ?: 0,
+                                            kB?.W?.get(3) ?: 240)
+                                    }
+                                    val aK = spawnChildFx(
+                                        world, 24, 40, 12, az + 1)
+                                    aK.ag = 0; aK.ah = world.kY
+                                    aK.av = false
+                                    aK.bY = r04[r05][0] + world.kO
+                                    aK.bZ = r04[r05][1]
+                                    cHGrid!![r93][0] = r04[r05][0] + world.kO
+                                    cHGrid!![r93][1] = r04[r05][1]
+                                    aK.posFromWaypoint(world)
+                                    aK.aC = 50
+                                    aK.P = aK.P or 16
+                                    aK.af = this
+                                    world.queueInsert(aK)
+                                    r04[r05][0] = -1
+                                    r93++
+                                }
+                                nl = 30; j = 1; aC = 0
+                            }
+                            1 -> {
+                                nl--
+                                if (nl < 0) { j = 2; nl = 0 }
+                                aC = 0
+                            }
+                            2 -> {
+                                for (r94 in 0 until 7) {
+                                    val aK = spawnChildFx(
+                                        world, 24, 40, 11, az + 1)
+                                    aK.av = false
+                                    aK.ak = ak; aK.al = W[1]
+                                    aK.posToWaypoint(world)
+                                    aK.aC = 20; aK.cz = 20; aK.cA = 0
+                                    aK.ap = r94
+                                    val r06 = (cHGrid?.get(r94)?.get(0) ?: 0) -
+                                        aK.bY
+                                    val r07 = (cHGrid?.get(r94)?.get(1) ?: 0) -
+                                        aK.bZ
+                                    aK.ag = (r06 shl 8) / 20
+                                    aK.ah = ((r07 shl 8) / 20) + world.kY
+                                    aK.settleToGround(world)
+                                    aK.P = aK.P or 16
+                                    aK.af = this
+                                    aK.bR = false
+                                    world.queueInsert(aK)
+                                }
+                                j = 0; cIDone = true
+                            }
+                        }
+                    }
+                }
+                4 -> {
+                    val kBl = world.kB?.l ?: 0
+                    if ((kBl and 2) != 0 || (kBl and 12) != 0)
+                        l = l and -2
+                    if (S in 30..32 && T == 0) {
+                        val r12 = S - 30
+                        val aK = spawnChildFx(world, 24, 40, r12 + 41, az + 1)
+                        aK.av = false
+                        aK.ak = ak; aK.al = W[3]
+                        when (r12) {
+                            0 -> { aK.ah = 256; aK.ag = 0 }
+                            1 -> { aK.ah = 256; aK.ag = -1280; aK.ak = W[0] }
+                            2 -> {
+                                aK.ah = 256; aK.ag = 1280; aK.ak = W[2]
+                                j++
+                                if (j > 5) { j = 0; cIDone = true }
+                            }
+                            3 -> {
+                                aK.ah = 1280
+                                aK.ao = (world.playerRect()[0] +
+                                    world.playerRect()[2]) shr 1
+                                aK.ap = (world.playerRect()[1] +
+                                    world.playerRect()[3]) shr 1
+                                val r08 = aK.ao - aK.ak
+                                var r11 = aK.ap - aK.al
+                                if (r11 == 0) r11 = 1
+                                val r010 = (kotlin.math.abs(r08) *
+                                    (1280 - world.kY)) /
+                                    kotlin.math.abs(r11)
+                                aK.ag = if (r08 >= 0) r010 else -r010
+                                cIDone = true
+                            }
+                        }
+                        cIDone = true
+                        aK.settleToGround(world)
+                        aK.P = aK.P or 16
+                        aK.af = this
+                        aK.bR = false
+                        world.queueInsert(aK)
+                        val keep = aK.ak
+                        val aK2 = spawnChildFx(world, 24, 40, 44, az + 1)
+                        aK2.ak = keep; aK2.al = W[3]
+                        aK2.P = aK2.P or 16
+                        aK2.af = this
+                        aK2.bR = false
+                        world.queueInsert(aK2)
+                        world.sfx(12)
+                    }
+                    if (S in 33..35) setAnim(30 + S - 33)
+                }
+            }
+        }
+        // L153 tail — runs every call
+        when (pv) {
+            0, 1 -> if (animFinished()) {
+                cJDone = true
+                setAnim(if (aB > 0) 13 else 16)
+            }
+            2, 3 -> if (animFinished()) {
+                cJDone = true
+                val r012 = (pv - 1) shl 2
+                setAnim(if (aB > 0) r012 + 13 else r012 + 16)
+            }
+            4 -> if (animFinished()) {
+                cJDone = true
+                if (aB > 0) {
+                    setAnim(pickAttackAnim(world))
+                    aF = nl
+                    cIDone = false
+                } else setAnim(36)
+            }
+        }
+    }
 }
 
 /** Minimal cell-source interface so `e()`/probes work against the level. */
@@ -1954,4 +2381,56 @@ interface LevelCellSource {
     fun playerInvulnerable(): Boolean = godMode || player.gt != 0
     /** `g.g()` (g.java:3939, proven): player dead — `x[1] <= 0`. */
     fun playerDead(): Boolean = player.x1 <= 0
+
+    // -- mission-director statics (bD/d/bG, i.java:72-184 + k fields) --------
+    /** `i.bV` — kill-bitmap routing value (level script writes; 0 = pure
+     *  waypoint chase, 1 = single-pursuit `l|2`, 2 = dual `l|62&-17`). */
+    var iBV: Int
+    /** `i.bU` — charge-gauge cap written by the bG p3 `!k` arm. */
+    var iBU: Int
+    /** `i.bW`/`i.bX` — pending phase transition (aA=6 router arms). */
+    var iBW: Boolean
+    var iBX: Int
+    /** `i.bT` — director armed flag (aA=0 tail / aA=7 clears). */
+    var iBT: Boolean
+    /** `i.bj` — finale freeze flag (aA=7). */
+    var iBj: Boolean
+    /** `i.q` — gauge-charge mode: bD L326 mirrors `aB` vs sums it. */
+    var iQ: Boolean
+    /** `i.cC` — waypoint-phase cursor (0-6). */
+    var iCC: Int
+    /** `i.cD` — active waypoint-phase (-1 init). */
+    var iCD: Int
+    /** `i.cE` — `f(int)` one-shot transition gate (-1 init). */
+    var iCE: Int
+    /** `c.m`/`c.l`/`c.j` — the 400-slot mission-waypoint node pool
+     *  (c.java, proven). `find(id)` = `c.a(int)`. */
+    val waypoints: WaypointPool
+    /** `cB` — the director's current waypoint node (i-static `cB`). */
+    var dirWp: WaypointNode?
+    /** `k.B` — arena-boundary entity (bG scatter/boundary reads `k.B.W/l`). */
+    var kB: Entity?
+    /** `k.ai` — director-active flag (aA=0 sets, bD reads). */
+    var kAi: Boolean
+    /** `k.R` — director int register (-1 at aA=0). */
+    var kR: Int
+    /** `k.aE`/`k.aH` — director timers (aE>0 → `aH=80` at arming). */
+    var kAE: Int
+    var kAH: Int
+    /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
+    var kAR: Int
+    /** `k.bu` — level pixel height used by the `aR` row formula. */
+    val kBu: Int get() = 0
+    /** `k.bk[]` — per-record type table read by `u()`'s ax67 arms
+     *  (`inferred` — table unmined; default 0). */
+    fun kBk(i: Int): Int = 0
+    /** `j.a(lo,hi)` (j.java:328, proven): `lo + |nextInt| % (hi-lo)`. */
+    fun jRand(lo: Int, hi: Int): Int = lo
+    /** `j.j.nextInt()` — raw RNG (bG scatter/homing arms). */
+    fun jNextInt(): Int = 0
+    /** `k.b(e)` — deferred entity insert (`pendingInsert` in the world). */
+    fun queueInsert(e: Entity) {}
+    /** `k.l(15)` — mission-complete screen-state (level flow `inferred`:
+     *  ported as a flag; the screen transition itself is unmined). */
+    fun missionComplete() {}
 }
