@@ -344,7 +344,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     }
 
     // -- l() grounded input helper (proven) ----------------------------------
-    private fun l(p: Entity, pad: Pad): Boolean {
+    fun l(p: Entity, pad: Pad): Boolean {
         p.aF = 0; p.cp = true; p.cq = true; p.zz = true
         if (p.S == 79) {
             if (pad.u(Pad.M_LEFT)) {
