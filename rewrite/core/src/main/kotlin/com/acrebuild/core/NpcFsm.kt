@@ -1595,3 +1595,576 @@ private fun NpcFsm.directorChase(e: Entity, flag: Boolean): Boolean {
     e.posFromWaypoint(w)
     return false
 }
+
+// ============================================================================
+// Slice 34 — i.aP() ax29 boss duel FSM (i.java:10328-11076)
+// ============================================================================
+
+/** `d.a` (d.java:9, proven): the `aQ()` attack-pick table —
+ *  `{16,15,7,17,9,8,5,14,10,33}`; by3 remaps value 5→40, 6→39
+ *  (i.java:11159-11169). */
+private val BOSS_PICK_TABLE = intArrayOf(16, 15, 7, 17, 9, 8, 5, 14, 10, 33)
+
+/** `i.aQ()` (i.java:11108-11170, proven): the boss attack picker.
+ *  `r9` bands: by0 → table[7]; by3 `ci[2]>=160` idle-window → 3;
+ *  `ci[3]>=80 && v() && aB<=500` → finisher arm (by1 first-time → 9 +
+ *  `e(17)` + `cm`, else 7); `r0>100` → `ci[1]>=48` idle-window → 2,
+ *  else `4|8(by3)`; `60<r0<=100` → `ci[1]>=48&&aS.aZ` → 6 +
+ *  `a(true,0)`, `ci[0]>=32` → 1; `r0<=60` → `ci[0]>=32` → 0 else 5.
+ *  `r02<0||>=10` → L124 `i(0)`. */
+private fun NpcFsm.bossPick(e: Entity) {
+    val w = world
+    val p = w.player
+    val ci = w.iCi
+    val r0 = kotlin.math.abs(p.ak - e.ak)
+    var r9 = -1
+    var r02 = -1
+    val idleSet = p.S == 0 || p.S == 1 || p.S == 7 || p.S == 12 ||
+        p.S == 79 || p.S == 32 || p.S == 6
+    if (w.iBy == 0) {
+        e.ah = 0; e.ag = 0
+        r02 = 7
+    } else {
+        var done = false
+        // L6 — by3 counter-window (ci[2]>=160, player idle, in-play)
+        if (w.iBy == 3 && (ci?.get(2) ?: 0) >= 160 && e.inPlayV(w) &&
+            idleSet && p.S != 9 && p.S != 375) {
+            e.ah = 0; e.ag = 0
+            ci?.let { it[2] = 0 }
+            r02 = 3
+        }
+        // L31 — finisher/barrage arm (ci[3]>=80 && v() && aB<=500)
+        if ((ci?.get(3) ?: 0) >= 80 && e.inPlayV(w) && e.aB <= 500) {
+            e.ah = 0; e.ag = 0
+            var r92 = 7
+            if (w.iBy == 1 && !w.iCm) {
+                r92 = 9
+                e.bossAura(w, 17, e.ak, e.al, e.az - 1)
+                w.iCm = true
+            }
+            ci?.let { it[3] = 0 }
+            r02 = r92
+            done = true
+        }
+        if (!done) {
+            // L44 — distance bands
+            if (r0 > 100) {
+                if ((ci?.get(1) ?: 0) >= 48 && e.inPlayV(w) &&
+                    idleSet && p.S != 9 && p.S != 375) {
+                    e.ah = 0; e.ag = 0
+                    r9 = 2
+                    ci?.let { it[1] = 0 }
+                    w.iCj = false
+                } else {
+                    r9 = if (w.iBy == 3) 8 else 4
+                }
+            } else if (r0 > 60) {
+                if ((ci?.get(1) ?: 0) >= 48 && p.aZ) {
+                    e.ah = 0; e.ag = 0
+                    r9 = 6
+                    e.startTrail()
+                }
+                if ((ci?.get(0) ?: 0) >= 32) {
+                    e.ah = 0; e.ag = 0
+                    r9 = 1
+                    ci?.let { it[0] = 0 }
+                }
+            } else {
+                if ((ci?.get(0) ?: 0) >= 32) {
+                    e.ah = 0; e.ag = 0
+                    r9 = 0
+                    ci?.let { it[0] = 0 }
+                } else {
+                    r9 = 5
+                }
+            }
+            r02 = r9                                          // L89
+        }
+    }
+    // L90 — table lookup; L124 = i(0) for r02<0 or >=len
+    if (r02 < 0 || r02 >= BOSS_PICK_TABLE.size) {
+        e.ah = 0; e.ag = 0
+        e.setAnim(0)
+        return
+    }
+    w.iCi?.let { it[4] = 0 }
+    var r8 = BOSS_PICK_TABLE[r02]
+    if (w.iBy == 3) {
+        if (r8 == 5) r8 = 40
+        if (r8 == 6) r8 = 39
+    }
+    e.setAnim(r8)
+}
+
+/** `i.aP()` (i.java:10328-11076, proven): the ax29 boss duel FSM.
+ *  Re-pins `k.aU`/`P|=16` every tick; `by==2` dormant. The by-switch
+ *  arms `r0` (counter eligibility): by0 `false`; by1 while
+ *  `S∈{8,0,9,11}` or `S==7&&T>9`; by3 unconditional `true`. L23
+ *  `r0 && W∩aS.X` runs the
+ *  by-specific counter/stagger arm. Tail: `ci[5]` counters, `cn` ramp,
+ *  by3 exhaust, S8 settle, arena clamp, then the L215 S-switch. */
+fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
+    val w = world
+    val p = player
+    w.kAU = e
+    e.P = e.P or 16
+    if (w.iBy == 2) return
+    // by-switch → r0 (L6-L22, i.java:11057-11075 — the decompiler merges
+    // `goto L23` after each arm: L7 by0 r0=false; L9 by1 state-gated;
+    // L21 by3 `r0 = true` unconditional; L22 default r0=false)
+    var r0 = false
+    when (w.iBy) {
+        0 -> r0 = false                       // L7 — by0 has no counter arm anyway
+        1 -> {
+            if (e.S == 11 || e.S == 8 || e.S == 0 || e.S == 9) r0 = true
+            else if (e.S == 7 && e.T > 9) r0 = true
+        }
+        3 -> r0 = true                        // L21 — unconditional
+        else -> r0 = false
+    }
+    // L23 — counter/stagger eligibility (box overlap + r0)
+    if (r0 && Entity.overlapI(e.W, p.X)) {
+        when (w.iBy) {
+            1 -> {
+                // L29 — RNG counter vs stagger (200+cn / 1000)
+                if (w.jRand(0, 1000) <= 200 + w.iCn) {
+                    // L32 r02 arm — counter pose + player-punish
+                    e.ah = 0; e.ag = 0
+                    e.setAnim(21)
+                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                        w.playerAttacking() && p.S != 8) {
+                        p.setAnim(8)
+                        w.kE?.let { it.P = it.P or 128 }
+                    }
+                } else {
+                    // L42 — stagger: save S, S20, spark, aB-40
+                    w.iCo = e.S
+                    e.ah = 0; e.ag = 0
+                    e.endTrail()
+                    e.setAnim(20)
+                    w.sfx(32)                                   // k.A(32)
+                    e.spawnFx8(w, 50, 1, e.av, e.ak, e.al - 40, 300)
+                    e.aB -= 40
+                    if (e.aB <= 300) {
+                        e.setAnim(13)
+                        // q(Z[3]) ax10 S55 → face flip
+                        val r03 = w.npcs.firstOrNull { it.aw == e.Z[3] }
+                            ?: if (p.aw == e.Z[3]) p else null
+                        if (r03 != null && r03.ax == 10 && r03.S == 55) {
+                            e.av = r03.ak < e.ak
+                        }
+                    }
+                }
+            }
+            3 -> {
+                // L56 — S28/4 stagger arm; else attack-window counter
+                if (e.S == 28 || e.S == 4) {
+                    w.iCo = e.S
+                    e.ah = 0; e.ag = 0
+                    e.endTrail()
+                    w.iCk?.let { it.P = it.P or 128; it.P = it.P or 32 }
+                    e.setAnim(20)
+                    w.sfx(32)
+                    e.spawnFx8(w, 50, 1, e.av, e.ak, e.al - 40, 300)
+                    e.aB -= 40
+                    if (e.aB <= 0) {
+                        e.setAnim(13)
+                        val r04 = w.npcs.firstOrNull { it.aw == e.Z[4] }
+                            ?: if (p.aw == e.Z[4]) p else null
+                        if (r04 != null && r04.ax == 10 && r04.S == 55) {
+                            e.av = r04.ak < e.ak
+                        }
+                    }
+                } else if (e.S != 20 && e.S != 26) {
+                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                        w.playerAttacking() && p.S != 8) {
+                        p.setAnim(8)
+                        w.kE?.let { it.P = it.P or 128 }
+                    }
+                }
+            }
+        }
+    }
+    // L89-L104 — r05 gate: S∈{14,35,15,16,7,17,4} skips ci increment
+    val r05 = e.S == 14 || e.S == 35 || e.S == 15 || e.S == 16 ||
+        e.S == 7 || e.S == 17 || e.S == 4
+    if (!r05 && w.iBy >= 1) {
+        var ci = w.iCi
+        if (ci == null || ci.size < 5) {
+            ci = IntArray(5)
+            w.iCi = ci
+        }
+        when (w.iBy) {
+            1 -> { ci[0]++; ci[1]++; ci[3]++ }
+            3 -> { ci[0]++; ci[1]++; ci[2]++; ci[3]++ }
+        }
+    }
+    // L123/L130 — cn ramp: S20@T0 +100 cap 800; S21 clears
+    if (e.S == 20 && e.T == 0) {
+        w.iCn = w.iCn + 100
+        if (w.iCn >= 800) w.iCn = 800
+    }
+    if (e.S == 21) w.iCn = 0
+    // L133 — a() (push-past/mount check) skipped for attack states
+    if (e.S != 2 && e.S != 38 && e.S != 4 && e.S != 5 && e.S != 40 &&
+        e.S != 13 && e.S != 26 && e.S != 17 && e.S != 8 && e.S != 39) {
+        bossPushPast(e)
+    }
+    // L154-L169 — by3 exhaust: cp>=48 → S28 i(0) / S20 i(16)+e(5)
+    if (w.iBy == 3 && (e.S == 28 || e.S == 20)) {
+        w.iCp = w.iCp + 1
+        if (w.iCp >= 48) {
+            if (e.S == 28) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+                w.iCp = 0
+            } else if (e.S == 20) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(16)
+                e.bossAura(w, 5, e.ak, e.al, e.az + 1)
+                w.iCi?.let { it[0] = 0 }
+                w.iCp = 0
+            }
+        }
+    }
+    // L169-L184 — S8 falls straight into L184; the arena clamp arm
+    // covers S∈{8,39,20,21&&r(),5,40,4}, each starting `a(true);t()`.
+    val arenaArm = e.S == 8 || e.S == 39 || e.S == 20 ||
+        (e.S == 21 && e.animFinished()) || e.S == 5 || e.S == 40 || e.S == 4
+    if (arenaArm) {
+        e.settleToGround(w)
+        e.refreshBoxes()
+        var r12 = w.kR
+        var r13 = w.kSBound
+        // L187: S∈{5,4,40} clamp against the `k.ac[]` arena rect instead
+        if (e.S == 5 || e.S == 4 || e.S == 40) {
+            r12 = w.kAc?.get(0) ?: r12
+            r13 = w.kAc?.get(2) ?: r13
+        }
+        if (e.W[0] <= r12 || e.W[2] >= r13) {
+            if (!e.av) e.ak = r12 + (e.ak - e.W[0])
+            else e.ak = r13 + (e.ak - e.W[2])
+            if (e.S == 5 || e.S == 4 || e.S == 40) {
+                e.ah = 0; e.ag = 0
+                w.iCk?.let { it.P = it.P or 128; it.P = it.P or 32 }
+            } else {
+                e.ah = 0; e.ag = 0
+                if (w.iBy == 3) e.setAnim(38) else e.setAnim(2)
+                e.startTrail()
+            }
+        }
+    }
+    // L215 — the S-switch
+    when (e.S) {
+        // L216 — S13 stagger-retreat (away from facing)
+        13 -> { e.ag = if (e.av) -1280 else 1280 }
+        // L220 — S14/35 barrage: face, punish-check, spawn knives
+        14, 35 -> {
+            e.facePlayer(w)
+            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                w.playerAttacking() && p.S != 8) {
+                p.setAnim(8)
+                w.kE?.let { it.P = it.P or 128 }
+            }
+            val r122 = if (w.iBy == 3) 3 else 1
+            if (e.X[0] != e.X[2]) {
+                for (r132 in 0 until r122) {
+                    var r14 = p.al
+                    if (!p.aZ) {
+                        // i.e(cx,cy) cell read — player-specific arms
+                        // unreachable on the boss (inferred collisionCell)
+                        val r016 = w.collisionCell(p.ak / 20, r14 / 20)
+                        if (r016 < 12 && r016 != 5 && r016 != 3) r14 += 10
+                    }
+                    var r15 = p.ak
+                    if (r122 == 3) r15 = p.ak + (r132 - 1) * 100
+                    e.spawnPathFx(w, e.X[0], e.X[1], r15, r14, 61, 71, 8, p.az + 1)
+                    e.spawnBossFx(w, 9, r15, r14, e.az)
+                }
+            }
+            if (e.animFinished()) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+            }
+        }
+        // L269 — S20 stagger walk (toward facing), ci[4]++
+        20 -> {
+            e.ag = if (e.av) 1024 else -1024
+            w.iCi?.let { it[4]++ }
+            if (e.animFinished()) {
+                e.ah = 0; e.ag = 0
+                if (w.iBy != 3) e.setAnim(0)
+                else if (w.iCo == 28) e.setAnim(28) else e.setAnim(0)
+            }
+        }
+        // L300+L302 — S15/16/6: inert + punish-check + r()→i(0)
+        15, 16, 6 -> {
+            e.ah = 0; e.ag = 0
+            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                w.playerAttacking() && p.S != 8) {
+                p.setAnim(8)
+                w.kE?.let { it.P = it.P or 128 }
+            }
+            if (e.animFinished()) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+            }
+        }
+        // L314 — S7 grab-QTE
+        7 -> {
+            e.ah = 0; e.ag = 0
+            if (e.T <= 6) {
+                w.gR = true
+                p.setAnim(1)
+                p.ah = 0; p.ag = 0
+                w.kE?.let { it.P = it.P or 128 }
+                p.av = !e.av
+                if (pad.v(16388)) w.iCj = true
+                if (!w.iCj) {
+                    e.spawnMarker(w, 21, p.ak, p.al - 60)
+                    e.ae?.let { it.ak = p.ak; it.al = p.al - 100 }
+                } else {
+                    e.releaseAe()
+                }
+            }
+            if (e.T == 7) {
+                w.gR = false
+                e.timewarp(w, 4)                                 // b(4)
+                e.lockInput(w)                                   // k.o()
+                if (p.ad == null) {
+                    p.ad = e.spawnChildFx(w, -999, 9, 100, 300)
+                }
+                p.ad?.let {
+                    it.av = e.av
+                    it.ak = if (e.av) e.W[0] else e.W[2]
+                    it.al = e.al - 50
+                    it.ag = if (e.av) -38400 else 38400
+                }
+                if (w.iCj) {
+                    p.setAnim(10)
+                    p.ag = if (p.av) 4096 else -4096
+                } else {
+                    p.applyHit(4, 0, e, w)      // aS.a(4,0,0,this) — arg pair collapsed
+                }
+                e.releaseAe()                                    // G()
+                w.sfx(16)                                        // k.A(16)
+            }
+            if (e.T == 9) {
+                e.timewarpOff(w)                                 // O()
+                if (w.iCj) {
+                    e.ah = 0; e.ag = 0
+                    if (w.iBy == 3) {
+                        e.facePlayer(w)
+                        e.ah = 0; e.ag = 0
+                        e.setAnim(3)
+                        e.bossAura(w, 0, e.ak, e.al, e.az + 1)
+                    }
+                    w.iCj = false
+                    e.unlockInput(w)                             // k.p()
+                }
+            }
+            if (e.animFinished()) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+                w.iCj = false
+                e.unlockInput(w)
+            }
+        }
+        // L373 — S8/39 stalk (keep walking while |dx|<=60)
+        8, 39 -> {
+            e.facePlayer(w)
+            e.ag = if (e.av) 1024 else -1024
+            if (kotlin.math.abs(p.ak - e.ak) > 60) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+            }
+        }
+        // L363 — S9/37 retreat-stalk: |dx|<100 → i(0); r()→Q+aQ
+        9, 37 -> {
+            e.facePlayer(w)
+            e.ag = if (e.av) -1536 else 1536
+            if (kotlin.math.abs(p.ak - e.ak) < 100) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+            } else if (e.animFinished()) {
+                e.facePlayer(w)
+                bossPick(e)
+            }
+        }
+        // L388 — S4 strike: lunge, W∩aS.W → i(6)+e(2); r()→trail-end+i(0)
+        4 -> {
+            e.ag = if (e.av) 2560 else -2560
+            if (Entity.overlapI(e.W, p.W)) {
+                e.ah = 0; e.ag = 0
+                e.setAnim(6)
+                e.bossAura(w, 2, e.ak, e.al, 300)
+            }
+            if (e.animFinished()) {
+                e.endTrail()
+                e.ah = 0; e.ag = 0
+                e.setAnim(0)
+                w.iCk?.let { it.P = it.P or 128; it.P = it.P or 32 }
+            }
+        }
+        // L442 — S28: just face
+        28 -> e.facePlayer(w)
+        // L458 — S26 block: k.E arm, marker-80, 65568-counter via ax5
+        26 -> {
+            e.facePlayer(w)
+            w.kE?.let { it.P = it.P or 128 }
+            e.spawnMarker(w, 80, e.ak, e.al - 85)
+            if (Entity.overlapI(e.W, p.W) || Entity.overlapI(e.W, p.X)) {
+                if (pad.v(65568)) {
+                    p.ah = 0; p.ag = 0
+                    e.releaseAe()
+                    val r133 = e.Z[if (w.iBy == 3) 2 else 1]
+                    val r023 = w.npcs.firstOrNull { it.aw == r133 }
+                        ?: if (p.aw == r133) p else null
+                    if (r023 != null && r023.ax == 5) {
+                        r023.P = r023.P or 16
+                        r023.claimKC(w)
+                    }
+                }
+            }
+            if (e.animFinished()) {
+                e.releaseAe()
+                e.setAnim(27)
+            }
+        }
+        // L255 — S21 counter pose: punish-check + r()→Q+aQ
+        21 -> {
+            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                w.playerAttacking() && p.S != 8) {
+                p.setAnim(8)
+                w.kE?.let { it.P = it.P or 128 }
+            }
+            if (e.animFinished()) {
+                e.facePlayer(w)
+                if (e.animFinished()) bossPick(e)
+            }
+        }
+        // L285 — S0/36 idle: cl ax61 add + ci[4]>=16 → 41|aQ
+        0, 36 -> {
+            if (w.iCl == null) {
+                val aK = e.spawnChildFx(w, 61, 71, 19, 99)
+                aK.ak = e.ak; aK.al = e.al
+                w.iCl = aK
+                w.queueInsert(aK)
+            }
+            w.iCl?.let {
+                it.az = e.az - 1
+                it.P = it.P and -129
+                it.P = it.P or 16
+                it.P = it.P or 512
+            }
+            e.endTrail()
+            e.facePlayer(w)
+            w.iCi?.let { it[4]++ }
+            if ((w.iCi?.get(4) ?: 0) >= 16) {
+                if (w.iBy == 3) e.setAnim(41) else bossPick(e)
+            }
+        }
+        // L381 — S41 by3 opener: r()→aQ
+        41 -> {
+            if (e.animFinished()) bossPick(e)
+        }
+        // L385 — S3 windup: r()→Q+i(4)+e(1)+a(true,0)
+        3 -> {
+            if (e.animFinished()) {
+                e.facePlayer(w)
+                e.ah = 0; e.ag = 0
+                e.setAnim(4)
+                e.bossAura(w, 1, e.ak, e.al, 300)
+                e.startTrail()
+            }
+        }
+        // L401 — S2/38/5/40 advance: vel by S, r()→idle-check→grab|idle
+        2, 38, 5, 40 -> {
+            if (e.S == 2 || e.S == 38) e.ag = if (e.av) -5120 else 5120
+            else e.ag = if (e.av) 3840 else -3840
+            if (e.animFinished()) {
+                e.endTrail()
+                e.ah = 0; e.ag = 0
+                e.facePlayer(w)
+                val idle = p.S == 0 || p.S == 1 || p.S == 7 || p.S == 12 ||
+                    w.playerAttacking() || p.S == 79 || p.S == 32 || p.S == 6
+                if (idle && e.inPlayV(w) && p.S != 9 && p.S != 375) {
+                    e.setAnim(7)
+                    w.iCi?.let { it[1] = 0 }
+                } else {
+                    e.ah = 0; e.ag = 0
+                    e.setAnim(0)
+                }
+                w.iCj = false
+            }
+        }
+        // L445 — S17 finisher: T==len-3 snap player + i(370) + d(11)
+        17 -> {
+            val clip = e.clip
+            if (clip != null && e.T == clip.frameCount(e.S) - 3) {
+                p.ah = 0; p.ag = 0
+                p.aj = 0; p.ai = 0
+                p.al = e.al
+                p.setAnim(370)
+                e.spawnBossFx(w, 11, p.ak, p.al, 99)
+            }
+            if (e.animFinished()) e.P = e.P or 64
+        }
+        // L452 — S25 outro: r()→k.E arm + i(26)
+        25 -> {
+            if (e.animFinished()) {
+                w.kE?.let { it.P = it.P or 128 }
+                e.ah = 0; e.ag = 0
+                e.setAnim(26)
+            }
+        }
+        // L480 — S27: r()→aB+=160 + i(0)
+        27 -> {
+            if (e.animFinished()) {
+                e.aB += 160
+                e.setAnim(0)
+            }
+        }
+        // L484 — S33: r()→i(14)+ci[3]=0
+        33 -> {
+            if (e.animFinished()) {
+                e.setAnim(14)
+                w.iCi?.let { it[3] = 0 }
+            }
+        }
+        // L495 — all other states inert
+        else -> {}
+    }
+}
+
+/** `i.a()` (i.java:914, reachable subset for ax29): the push-past arm —
+ *  `W∩aS.W` while `aS.S<=43` and the player walks into the boss pushes
+ *  the player out to the box edge (`ai=0`, `ag=0` via the L63 tail).
+ *  The ax15-mount / S131/146 / `g.a` / `S==139` guards stay as
+ *  early-outs; `k.aS.S==6&&ax==11` and `S==18&&aS.S==12` are proven
+ *  skips. `y()` = wall-in-motion-direction. */
+private fun NpcFsm.bossPushPast(e: Entity) {
+    val w = world
+    val p = w.player
+    if (e.S == 139) return
+    if (p.S == 6 && e.ax == 11) return
+    if (e.S == 18 && p.S == 12) return
+    if (e.S == 131 || e.S == 146) return
+    if (!Entity.overlapI(p.W, e.W)) return
+    if (p.S > 43) return
+    val pHalf = (p.W[2] - p.W[0]) / 2
+    val eHalf = (e.W[2] - e.W[0]) / 2
+    if (p.ak < e.ak && p.ag < 0 && !p.forwardWall()) {
+        p.ak = e.ak - pHalf - eHalf
+        p.ai = 0
+        p.ag = -1
+    } else if (p.ak > e.ak && p.ag > 0 && !p.forwardWall()) {
+        p.ak = e.ak + pHalf + eHalf
+        p.ai = 0
+        p.ag = 1
+    } else {
+        return
+    }
+    p.settleToGround(w)
+    p.ag = 0
+}

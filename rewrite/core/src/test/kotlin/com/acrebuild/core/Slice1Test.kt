@@ -2153,4 +2153,186 @@ class Level0WorldTest {
         w.npcFsm.tickDirector(d, w.player, Pad())
         assertEquals(77, d.aB, "cF -> aB = Z[3].aB")
     }
+
+    // -- slice 34: ax29 boss duel FSM (i.aP / i.aQ) -------------------
+
+    private fun bossAt(w: Level0World, x: Int, y: Int): Entity {
+        val e = Entity(29, w.clips[7])
+        e.aw = 60; e.aB = 500
+        e.setPositionPx(x, y); e.refreshBoxes()
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `boss tick pins kAU and P16 even while dormant`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        w.iBy = 2                                  // dormant tier
+        w.npcFsm.tickBoss(b, w.player, Pad())
+        assertSame(b, w.kAU, "k.aU = this")
+        assertNotEquals(0, b.P and 16, "P |= 16")
+        assertEquals(0, b.S, "by==2 -> return, no arms")
+    }
+
+    @Test fun `by1 overlap at maxed counter ramp always enters S21`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(0)
+        w.iBy = 1; w.iCn = 800       // 200+800 >= jRand(0,1000) max -> counter arm
+        val p = w.player
+        p.setAnim(0)
+        p.X[0] = b.W[0]; p.X[1] = b.W[1]; p.X[2] = b.W[2]; p.X[3] = b.W[3]
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(21, b.S, "RNG <= 200+cn -> i(21)")
+        assertEquals(0, w.iCn, "S21 clears cn")
+    }
+
+    @Test fun `by3 S28 overlap staggers to S20 saves co and drains aB`() {
+        val w = world(); w.npcs.clear()
+        w.boundMaxX = 100000               // keep the arena clamp from snapping
+        val b = bossAt(w, 300, 150)
+        b.setAnim(28)
+        w.iBy = 3
+        w.iCk = Entity(61, w.clips[7])
+        val p = w.player
+        p.X[0] = b.W[0]; p.X[1] = b.W[1]; p.X[2] = b.W[2]; p.X[3] = b.W[3]
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(20, b.S, "S28 -> stagger i(20)")
+        assertEquals(28, w.iCo, "co = saved state")
+        assertEquals(460, b.aB, "aB -= 40")
+        assertNotEquals(0, w.iCk!!.P and 128, "ck.P |= 128")
+        assertNotEquals(0, w.iCk!!.P and 32, "ck.P |= 32")
+        assertTrue(32 in w.sfxLog, "k.A(32)")
+    }
+
+    @Test fun `by3 r0 is unconditional so S0 overlap punishes the player`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(0)
+        w.iBy = 3
+        val p = w.player
+        p.setAnim(67)                            // g.b() attacking
+        p.X[0] = b.W[0]; p.X[1] = b.W[1]; p.X[2] = b.W[2]; p.X[3] = b.W[3]
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(8, p.S, "attack-window counter -> aS.i(8)")
+    }
+
+    @Test fun `ci counters increment per by tier`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(1)                             // inert state
+        w.iBy = 3; w.iCi = null
+        w.npcFsm.tickBoss(b, w.player, Pad())
+        val ci = w.iCi!!
+        assertEquals(1, ci[0]); assertEquals(1, ci[1])
+        assertEquals(1, ci[2]); assertEquals(1, ci[3])
+        assertEquals(0, ci[4])
+    }
+
+    @Test fun `cn ramps +100 on S20 frame0 capped at 800`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(20); b.T = 0
+        w.iBy = 1; w.iCn = 750
+        w.iCi = IntArray(5)
+        w.npcFsm.tickBoss(b, w.player, Pad())
+        assertEquals(800, w.iCn, "cn capped at 800")
+    }
+
+    @Test fun `by3 exhaust after 48 ticks in S28 returns to idle`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(50, 150); p.refreshBoxes()   // off the boss box
+        val b = bossAt(w, 300, 150)
+        b.setAnim(28)
+        w.iBy = 3; w.iCp = 47; w.iCi = IntArray(5)
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(0, b.S, "cp>=48 -> i(0)")
+        assertEquals(0, w.iCp)
+    }
+
+    @Test fun `aQ by0 always picks table index 7 which is S14`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.clip = null                            // setAnim unbounded
+        b.setAnim(0)
+        w.iBy = 0; w.iCi = IntArray(5)
+        w.iCi!![4] = 16                          // idle timer -> aQ()
+        w.npcFsm.tickBoss(b, w.player, Pad())
+        assertEquals(14, b.S, "d.a[7] = 14")
+    }
+
+    @Test fun `S7 grab locks the player and arms the throw at T7`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(7)
+        w.iBy = 1
+        val p = w.player
+        p.setPositionPx(b.ak, b.al); p.refreshBoxes()
+        b.T = 3
+        val pad = Pad(); pad.commit(16388)   // QTE press inside the T<=6 window
+        w.npcFsm.tickBoss(b, p, pad)
+        assertTrue(w.gR, "g.r locked during grab")
+        assertEquals(1, p.S, "player i(1) held")
+        assertTrue(w.iCj, "16388 press sets cj")
+        b.T = 7
+        // cj -> player i(10) break (no applyHit -> boss is not countered)
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertFalse(w.gR, "g.r released at T7")
+        assertNotNull(p.ad, "ad projectile spawned")
+        assertTrue(w.kAm, "k.o() locks input")
+        assertTrue(16 in w.sfxLog, "k.A(16)")
+        assertEquals(10, p.S, "cj -> aS.i(10)")
+        assertEquals(7, b.S, "cj path leaves the boss in S7")
+        b.T = 9
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertFalse(w.iCj, "cj cleared at T9")
+        assertFalse(w.kAm, "k.p() unlocks input")
+    }
+
+    @Test fun `S4 strike overlap becomes S6 punish`() {
+        val w = world(); w.npcs.clear()
+        w.boundMaxX = 100000
+        val p = w.player
+        val b = bossAt(w, p.ak, p.al)
+        b.settleToGround(w)                  // pre-settle so a(true) is a no-op
+        p.setPositionPx(b.ak, b.al); p.refreshBoxes()
+        b.setAnim(4)
+        w.iBy = 1
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(6, b.S, "W overlap -> i(6)")
+        assertNotNull(w.iCk, "e(2) aura spawned")
+    }
+
+    @Test fun `S26 block counter claims the ax5 entity on pad 65568`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 300, 150)
+        b.setAnim(26)
+        w.iBy = 1
+        val p = w.player
+        p.setPositionPx(b.ak, b.al); p.refreshBoxes()
+        val ax5 = Entity(5, w.clips[7])
+        ax5.aw = 77; ax5.aB = 10
+        w.npcs.add(ax5)
+        b.Z[1] = 77                              // by1 -> q(Z[1])
+        val pad = Pad(); pad.commit(65568)
+        w.npcFsm.tickBoss(b, p, pad)
+        assertNotEquals(0, ax5.P and 16, "ax5 P |= 16")
+        assertSame(ax5, w.kC, "N() claims k.C")
+    }
+
+    @Test fun `S2 advance completion grabs an idle adjacent player`() {
+        val w = world(); w.npcs.clear()
+        val b = bossAt(w, 200, 150)
+        b.clip = null                            // animFinished -> true
+        b.setAnim(2)
+        w.iBy = 1; w.iCi = IntArray(5)
+        val p = w.player
+        p.setAnim(0)
+        p.setPositionPx(240, 150); p.refreshBoxes()
+        w.npcFsm.tickBoss(b, p, Pad())
+        assertEquals(7, b.S, "idle+inPlay -> grab i(7)")
+        assertEquals(0, w.iCi!![1], "ci[1] reset")
+        assertFalse(w.iCj)
+    }
 }

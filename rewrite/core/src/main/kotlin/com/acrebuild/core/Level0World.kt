@@ -394,7 +394,10 @@ class Level0World(
     override var dirWp: WaypointNode? = null   // i.cB
     override var kB: Entity? = null            // k.B — arena boundary
     override var kAi = false                   // k.ai — director active
-    override var kR = 0                        // k.R
+    /** `k.R` — the camera left bound: one static reused by ax37 scroll
+     *  triggers (boundMinX), the bD director (`k.R=-1` init arm), and the
+     *  aP arena clamp — aliased to `boundMinX` (proven same field). */
+    override var kR: Int get() = boundMinX; set(v) { boundMinX = v }
     override var kAE = 0                       // k.aE
     override var kAH = 0                       // k.aH
     override var kAR = 0                       // k.aR — chase row
@@ -403,6 +406,38 @@ class Level0World(
     override fun kBk(i: Int): Int = 0
     override fun jNextInt(): Int = rng.nextInt()
     override fun queueInsert(e: Entity) { pendingInsert += e }
+
+    // -- ax29 boss FSM (i.aP) statics ----------------------------------
+    override var kAU: Entity? = null           // k.aU
+    override var kE: Entity? = null            // k.E
+    override var kC: Entity? = null            // k.C
+    override var iBy = 0                       // i.by — boss phase tier
+    override var iCi: IntArray? = null         // i.ci[5]
+    override var iCj = false                   // i.cj
+    override var iCk: Entity? = null           // i.ck — aura entity
+    override var iCl: Entity? = null           // i.cl — idle add
+    override var iCm = false                   // i.cm
+    override var iCn = 0                       // i.cn — counter ramp
+    override var iCo = 0                       // i.co — saved state
+    override var iCp = 0                       // i.cp — exhaust
+    override var iAH = false                   // i.aH — slow-mo flag
+    override var iAI = 0                       // i.aI
+    override var iAJ = 0                       // i.aJ
+    override var kX = 0                        // k.X
+    override var kW = 0                        // k.W
+    override var kAw = 0                       // k.aw
+    override var kAm = false                   // k.am
+    override var kDd = false                   // k.dd
+    override var gR = false                    // g.r — grab-QTE lock
+    /** `k.J`/`k.K` — the held touch point; port aliases the last DOWN
+     *  point `lastTouchX/Y` (inferred — J2ME tracks them separately). */
+    override var kJ: Int get() = lastTouchX; set(v) { lastTouchX = v }
+    override var kK: Int get() = lastTouchY; set(v) { lastTouchY = v }
+    override val kAc: IntArray? = null         // k.ac[] — unmined
+    override fun padHeld(mask: Int): Boolean = pad.v(mask)
+    /** `k.S` — camera right bound (`boundMaxX`), also the aP arena
+     *  clamp right edge (same static in the original). */
+    override var kSBound: Int get() = boundMaxX; set(v) { boundMaxX = v }
 
     /**
      * ax2 `aY()` (i.java:13477): W-rect overlap (`a(this.W, k.aS.W)`) —
@@ -540,6 +575,7 @@ class Level0World(
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
             else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
             else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
+            else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
