@@ -58,6 +58,9 @@ class Level0World(
             74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
             80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
                           // entry-057: J(57)=null → invisible/vestigial, proven)
+            54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
+            30 to 36,     // ax30 runner variant (bi[30]=36, proven)
+            24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
         )
     }
 
@@ -97,6 +100,23 @@ class Level0World(
     override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
+
+    // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
+    // {uid,x,y,param-d,c,f,g} in f[1..7]; ax54/ax30 runners resolve their
+    // Z[1..4] uid chain into entity-shifted copies (aw(), uid base 10000).
+    // Declared before init{} — spawnEntities() calls waypointPool.clear().
+    val waypointPool = Waypoint.Pool()
+
+    // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
+    // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
+    var projectilePool: Array<Entity?>? = null
+    /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
+     *  arming clears bit128 (`P &= -129`) marking the slot live again. */
+    fun projectileAlloc(): Int {
+        val pool = projectilePool ?: return -1
+        for (i in pool.indices) if (((pool[i]?.P ?: 0) and 128) != 0) return i
+        return -1
+    }
     // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
     // `bb[]` at the drain after the npc pass — never iterate-mutated.
     val pendingInsert = ArrayList<Entity>()     // k.b() drain buffer
@@ -366,7 +386,11 @@ class Level0World(
         lockTarget = null
         clearClaim()
         marker = null; markerTag = -1
+        waypointPool.clear()
+        projectilePool = null
         for (f in level.entities) {
+            if (f.isEmpty()) continue
+            if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
             if (f.size < 7) continue
             val type = f[0]
             // ax67: per-record clip from bk[kind] (i.java:2633); others use
@@ -406,6 +430,8 @@ class Level0World(
             else if (type == 78) npcFsm.initAx78(e, f.toList(), this)
             else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
             else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
+            else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
+            else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -418,6 +444,10 @@ class Level0World(
             if (checkpointDead.contains(e.aw)) e.setAnim(139)
             npcs += e
         }
+        // R() (i.java:8131 proven): after all entities+waypoints load,
+        // ax54/ax30 runners resolve their Z[1..4] uid chain via aw().
+        for (e in npcs) if (e.ax == 54 || e.ax == 30)
+            npcFsm.resolveRunnerWaypoints(e, this)
     }
 
     /**
@@ -462,6 +492,7 @@ class Level0World(
     override fun kBk(i: Int): Int = 0
     override fun jNextInt(): Int = rng.nextInt()
     override fun queueInsert(e: Entity) { pendingInsert += e }
+
 
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
@@ -860,6 +891,7 @@ class Level0World(
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
             else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
+            else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
