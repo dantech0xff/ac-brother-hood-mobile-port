@@ -73,6 +73,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gt = 0                       // g.t iframe timer: 10 after drain, 5 after
                                      // volume hit, 100 after teleport; --/tick
     var bh = 0                       // i.bh hit-flash counter (visual pending)
+    var gy = 0                       // g.y — apex marker: al at S43/148/0 entry
+                                     // (i.java:271, proven; ax==0 only)
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -88,6 +90,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
             U = 0
             a = 0
             P = P and -65
+            // i.java:265-275 (proven): on the player (ax==0), entering
+            // anim 43/148/0 stamps g.y = al (apex/fall-origin marker);
+            // entering anim 50 zeroes the meter (g.e(0)).
+            if (ax == 0 && (n == 43 || n == 148 || n == 0)) gy = al
+            if (ax == 0 && n == 50) x1 = 0
         }
     }
 
@@ -389,6 +396,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
         al--
         if (aS == 4 && aR < 12) al += 20   // L15 edge bump
         ah = 1
+        // d() fall-damage gate (g.java:4690-4700, proven): falls of
+        // >=20 cells (al - g.y >= 400px) without iframes call
+        // a(21,0,0,this) → the raw op21 drain. Original `return`s after
+        // the op (landing squat skipped); we apply it then continue the
+        // land so the transition can't re-fire — inferred control flow.
+        if ((al - gy) / 20 >= 20 && gt == 0 && ax == 0) {
+            applyHit(21, 0, this, world)
+        }
         if (platformVariant) {
             aj = 0; ai = 0; ah = 0; ag = 0; aC = 18; setAnim(102)
         } else {
@@ -466,6 +481,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
             // knocks down — proven via the S∈{67,…} guard inside d())
             18 -> { drainMeter(5); setAnim(43) }
             20 -> setAnim(43)
+            // op21 fall damage (i.java:4535 L55, proven): raw drain —
+            // bypasses d() gates; caller (land) already checked h()+the
+            // 20-cell gate
+            21 -> x1 = (x1 - (105 * ((al - gy) / 20)) / 20).coerceAtLeast(0)
             26 -> {
                 if (attacker != null) av = attacker.av
                 ag = if (av) 4096 else -4096
