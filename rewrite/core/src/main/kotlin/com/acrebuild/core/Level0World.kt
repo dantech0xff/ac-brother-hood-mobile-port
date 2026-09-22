@@ -385,7 +385,8 @@ class Level0World(
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
             else if (type == 6) npcFsm.initAx6(e, f.toList())
             else if (type == 19) npcFsm.initAx19(e, f.toList())
-            else if (type == 42) npcFsm.initAx42(e, f.toList())            else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
+            else if (type == 42) npcFsm.initAx42(e, f.toList())
+            else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 13) npcFsm.initAx13(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -832,7 +833,8 @@ class Level0World(
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
             else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
             else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
+            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
             else npcFsm.tick(n, player)
         }
