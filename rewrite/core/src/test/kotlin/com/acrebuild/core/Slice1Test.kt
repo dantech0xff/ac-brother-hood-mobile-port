@@ -156,7 +156,7 @@ private fun world(): Level0World {
             36 to Clip.load(asset("clips/clip36/clip.acpk")),
             40 to Clip.load(asset("clips/clip40/clip.acpk")),
             20 to Clip.load(asset("clips/clip20/clip.acpk")),
-            71 to Clip.load(asset("clips/clip71/clip.acpk")),
+            21 to Clip.load(asset("clips/clip21/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -6293,7 +6293,7 @@ class Slice58Test {
 
 class Slice60Test {
     private fun ax60At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
-        val e = Entity(60, w.clips[71])
+        val e = Entity(60, w.clips[21])
         val rec = mutableListOf(60, 1, x, y)
         rec += f.toList()
         while (rec.size < 22) rec += 0
@@ -6390,14 +6390,13 @@ class Slice60Test {
         assertTrue(e.ah < 0, "reverse velocity")
     }
 
-    @Test fun `mount — gB player inside S15 rail box → ga bind + carry`() {
+    @Test fun `mount — gB player inside S13 box → ga bind + carry`() {
         val w = world()
-        // S15 (ceiling rail): only clip-71 anim among 11/13/14/15 with a
-        // real W rect [-24,-56,42,58]; W[0]=Z[5] left-bound stretch makes
-        // the overlap corridor. c(true) runs for S∈{13,15}.
-        val e = ax60At(w, 100, 200, -4, 15, 0, -1, 0, 0)
+        // clip21 anim13 W=(0,-36,22,36): box above the anchor; W[0]=Z[5]
+        // stretches the left edge to the bound. c(true) runs for S∈{13,15}.
+        val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
         e.refreshBoxes()
-        w.player.setPositionPx(e.W[0] + 10, e.W[1] + 10)   // inside W
+        w.player.setPositionPx((e.W[0] + e.W[2]) shr 1, (e.W[1] + e.W[3]) shr 1)
         w.player.setAnim(19)                               // gB member
         w.player.refreshBoxes()
         assertTrue(Entity.overlapStrict(w.player.W, e.W), "fixture overlap")
@@ -6409,16 +6408,17 @@ class Slice60Test {
         assertTrue(w.player.ak > before, "ride-carry ak += ag>>8")
     }
 
-    @Test fun `S13 pair handoff — degenerate X is a no-op (clip71 has no X rects)`() {
+    @Test fun `S13 pair handoff — X overlap swaps velocity`() {
         val w = world()
-        // every clip-71 anim has an empty which=1 rect, so a(n.X,e.X) is
-        // false in the original too — the L92 swap never fires for this
-        // clip family. Asserts the faithful dead path.
-        val pair = ax60At(w, 102, 200, 4, 11, 0, -1, 0, 0)
+        // clip21 anim13 X=(17,-36,16,36) right-extended; anim11
+        // X=(-11,-36,16,36) left-extended. Pair parked just left of e's
+        // right box ��� the L92 swap fires.
+        val pair = ax60At(w, 115, 200, 4, 11, 0, -1, 0, 0) // S11 member
         val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
         e.ag = 1024
         w.npcFsm.tickAx60(e, w, w.player)
-        assertEquals(0, pair.ag, "no X rect → no handoff")
+        assertEquals(1024, pair.ag, "pair gets Z[1]<<8 push")
+        assertEquals(-1024, e.ag, "self reverses")
     }
 
     @Test fun `zone scan — ax10 S39 overlap latches k for Z4=3`() {
@@ -6427,9 +6427,10 @@ class Slice60Test {
         w.npcs.add(zone)
         val e = ax60At(w, 100, 200, 5, 10, 0, -1, 0, 0)
         e.Z[4] = 3
-        // overlapping W boxes
-        e.W[0] = 90;  e.W[1] = 190; e.W[2] = 120; e.W[3] = 220
-        zone.W[0] = 95; zone.W[1] = 195; zone.W[2] = 115; zone.W[3] = 225
+        e.refreshBoxes()
+        // zone inside the lift's real W corridor
+        zone.W[0] = e.W[0] + 1; zone.W[1] = e.W[1] + 1
+        zone.W[2] = e.W[2] - 1; zone.W[3] = e.W[3] - 1
         w.npcFsm.tickAx60(e, w, w.player)
         assertTrue(e.k, "S10 + Z[4]==3 + zone → latch k")
     }

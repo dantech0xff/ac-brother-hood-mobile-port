@@ -98,7 +98,9 @@ CLIPS = {
     "clip36": ("pack-3", "entry-036-marker-003"),  # ax30 runner (bi[30]=36)
     "clip40": ("pack-3", "entry-040-marker-003"),  # ax24 projectile (bi[24]=40)
     "clip20": ("pack-3", "entry-020-marker-003"),  # ax58 lever/counterweight (bi[58]=20)
-    "clip71": ("pack-3", "entry-071-marker-003"),  # ax60 lift/piston platform (bi[60]=71)
+    "clip21": ("pack-3", "entry-021-marker-003"),  # ax60 lift/piston platform (bi[60]=21)
+    "clip71": ("pack-3", "entry-071-marker-003"),  # ax61 Cesare multi-tool (bi[61]=71)
+    "clip38": ("pack-3", "entry-038-marker-003"),  # ax69 assassination target (bi[69]=38)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index

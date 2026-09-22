@@ -12,6 +12,8 @@ status: done
   platform: vertical lifts (S 9/10/16/17), horizontal movers (S 11/13/14/15),
   auto-bounce (`Z[4]=2`), lever-driven (`Z[4]=3` via ax58 `bf()`), and
   S13↔S11 counterweight pairs (`Z[4]=1`).
+- **Correction**: first pass wired clip71 (`bi[61]`); the true `bi[60]`
+  index is 21 — fixed before PR.
 - Init `L259` (i.java:3394-3440, proven): `Z[0]=r8[7]` link uid,
   `Z[1]=r8[4]` speed, `Z[2]=r8[8]` delay, `r8[9]==1`→`Z[4]=2`,
   `P|=4096` for ride S, `Z[3]=` anchor (al for S9/16 else ak), probes
@@ -42,11 +44,12 @@ status: done
   S16/17 `W[3]=Z[5]`, S13/15 `W[0]=Z[5]`, S11/14 `W[2]=Z[5]`. With
   clip-71's mostly-empty W rects this yields a zero-width/-height strip
   covering the whole travel corridor.
-- Clip: `bi[60]=71` (k.java:8442, proven) → `clip71.acpk` converted
-  (20 anims, 93 modules). Only anims 10/15 carry real W rects; every
-  which=1 (X) rect is empty — so the L92 pair-swap (`a(n.X,e.X)`) is
-  unreachable for this clip family in the original too (faithful dead
-  code, verified).
+- Clip: `bi[60]=21` (k.java:8442, proven — index 60 of the `bi` array;
+  71 is `bi[61]`, Cesare's clip) → `clip21.acpk` converted (18 anims,
+  11 modules, one frame each). Rects: anim9/10/16/17 `W=(1,0,36,37)`
+  platform box, anim11 `W=(0,-36,16,36)` + `X=(-11,-36,16,36)` left,
+  anim13 `W=(0,-36,22,36)` + `X=(17,-36,16,36)` right — so the L92
+  pair-swap (`a(n.X,e.X)`) IS reachable for the S13/S11 pairs.
 
 ## Port
 
@@ -54,11 +57,12 @@ status: done
   `initAx60` — verbatim goto-arm transcription with `file:line` cites;
   `e.s`/`e.ac` links, `e.runnerBz`=`i.bz`, `e.k` latch.
 - `Entity.refreshBoxes` gained the ax60 `t()` tail (`S→W edge = Z[5]`).
-- `ENTITY_CLIP[60]=71`, init `type==60→initAx60`, tick `ax==60→tickAx60`.
-- `convert_slice1.py`: added `clip71` → `rewrite/generated/clips/clip71/`.
+- `ENTITY_CLIP[60]=21`, init `type==60→initAx60`, tick `ax==60→tickAx60`.
+- `convert_slice1.py`: added `clip21` → `rewrite/generated/clips/clip21/`
+  (`clip71` also generated, parked for the ax61 wiring slice).
 - Tests: 11 cases — init flags/probes/`i(r8[5])`, link resolution (bind/
   miss/ax58), ride anim 50, auto-bounce, lever bf/unlatch, mount+carry
-  via S15's real rect, pair-swap dead-path, zone latch.
+  inside S13's real box, pair-swap velocity handoff, zone latch.
 
 ## Records found
 

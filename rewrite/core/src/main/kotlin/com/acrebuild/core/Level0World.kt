@@ -63,7 +63,7 @@ class Level0World(
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
             56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
             58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
-            60 to 71,     // ax60 lift/piston platform (bi[60]=71, proven)
+            60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
         )
     }
 
