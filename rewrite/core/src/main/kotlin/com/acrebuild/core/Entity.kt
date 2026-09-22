@@ -71,6 +71,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var az = 0
     var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
+    var ac: Entity? = null           // `ac` — resolved link target (ax44 door
+                                     // slaves resolve Z[5] via `a(k.q(Z[5]))`)
     var l = 0                        // attack level fed to a(op,l,..)
     var hitsTaken = 0                // slice-3 instrumentation (inferred counter)
     var gt = 0                       // g.t iframe timer: 10 after drain, 5 after

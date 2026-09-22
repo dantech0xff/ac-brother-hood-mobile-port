@@ -30,6 +30,7 @@ class Level0World(
         // Entity type -> clip index (k.bi[]; only decoded clips carried).
         val ENTITY_CLIP = mapOf(
             11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
+            44 to 32,
         )
     }
 
@@ -133,6 +134,7 @@ class Level0World(
                 av = (f[6] and 1) != 0
             }
             if (type == 11) npcFsm.initSoldier(e, f.toList())
+            else if (type == 44) npcFsm.initDoor(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -178,7 +180,8 @@ class Level0World(
             for (n in npcs) {
                 if (n.ax == 70 || n.S == 139) continue
                 n.setPositionPx(n.homeX, n.homeY)
-                n.setAnim(0)
+                // doors re-materialize at their record's base bank (Z[4]=f5)
+                n.setAnim(if (n.ax == 44) n.Z[4] else 0)
             }
         }
     }
@@ -278,7 +281,9 @@ class Level0World(
         player.integrate()
         player.advanceAnim()
 
-        for (n in npcs) npcFsm.tick(n, player)
+        for (n in npcs) {
+            if (n.ax == 44) npcFsm.tickDoor(n, player) else npcFsm.tick(n, player)
+        }
         fireCheckpoints()
         fireScrollTriggers()
 

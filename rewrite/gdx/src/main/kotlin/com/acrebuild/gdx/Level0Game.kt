@@ -34,6 +34,7 @@ class Level0Game : ApplicationAdapter() {
         val clips = HashMap<Int, Clip>()
         clips[0] = Clip.load(Gdx.files.internal("clips/clip0/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
+        clips[32] = Clip.load(Gdx.files.internal("clips/clip32/clip.acpk").readBytes())
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space.
         for (ts in intArrayOf(10, 11, 12)) {

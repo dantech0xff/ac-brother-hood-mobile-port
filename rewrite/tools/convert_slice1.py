@@ -69,6 +69,7 @@ VISUAL_LAYERS = ["ep", "eu", "er"]
 CLIPS = {
     "clip0": ("pack-3", "entry-000-marker-130"),   # player (z[0])
     "clip7": ("pack-3", "entry-007-marker-130"),   # shared NPC family
+    "clip32": ("pack-3", "entry-032-marker-003"),  # ax44 door/gate (bi[44]=32)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
