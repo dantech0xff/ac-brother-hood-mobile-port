@@ -5187,3 +5187,268 @@ fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
     e.integrate()
     if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)   // bF() tail
 }
+
+// ============================================================ ax24 = ba()
+// Projectile FSM (i.java:13742, proven) — flight arm for S∈0..4|22..28
+// (retire to pool on offscreen; aG 1=trail / 3=chain / else hit), then a
+// 45-state per-S table: impact anims, homing legs, lobbed arcs, the S20
+// heal-shrine arm, pinned S31/40 children, explode S35/36.
+// `bc()`/`bd()` = projectile-vs-entity sweeps (i.java:14396/14538).
+
+/** `i.p(int,int)` (i.java:18031, proven): lay a child ax24 at an offset —
+ *  S19 parents spawn S40, others S31. */
+private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
+    val s = if (e.ax == 24 && e.S == 19) 40 else 31
+    val child = e.spawnChildFx(w, 24, 40, s, e.az + 10)
+    child.av = false
+    child.ak = e.ak + dx; child.al = e.al + dy
+    child.ao = dx; child.ap = dy
+    child.ag = 0; child.ah = 0
+    child.refreshBoxes()
+    child.P = child.P or 16
+    child.af = e
+    w.queueInsert(child)
+}
+
+/** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
+ *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
+ *  semantics; `d(8,…)` floatie spawns remain unported (noted). */
+private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
+    var hit = false
+    for (r0 in w.npcs) {
+        if (e.X == null) break
+        when (r0.ax) {
+            54 -> {                                        // L26-fallback arm
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30) continue
+                r0.ad?.let { if (Entity.overlapStrict(it.W, e.X)) {
+                    it.setAnim(2); w.countKill(r0.aw); r0.setAnim(10)
+                    hit = true } }
+                if (Entity.overlapStrict(r0.W, e.X)) { r0.setAnim(10)
+                    w.countKill(r0.aw); hit = true }
+                if (hit) { e.setAnim(9); return true }
+            }
+            30 -> {
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30 ||
+                    e.af!!.ax == 56) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                r0.aB -= 20; r0.cGCount = 6
+                if (r0.aB <= 0) {
+                    r0.cGCount = 0; r0.setAnim(10); w.countKill(r0.aw)
+                    r0.ad?.setAnim(2)
+                }
+                e.setAnim(9); hit = true; return true
+            }
+            56 -> {
+                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 56 ||
+                    e.af!!.ax == 30) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                r0.setAnim(10); w.countKill(r0.aw)
+                e.setAnim(9); hit = true; return true
+            }
+            67 -> {
+                if (r0.S != 19 && r0.S != 21 && r0.S != 23 && r0.S != 32 &&
+                    r0.S != 35 && r0.S != 38 && r0.S != 41 && r0.S != 43) continue
+                if (!Entity.overlapStrict(r0.W, e.X)) continue
+                if (e.S != 9) r0.aB--
+                if (r0.aB <= 0) r0.setAnim(r0.S + 1)
+                e.setAnim(9); hit = true
+            }
+            24 -> {
+                if (r0.S != 19 || !Entity.overlapStrict(r0.W, e.X)) continue
+                r0.setAnim(20); e.setAnim(9); hit = true
+            }
+            32 -> {
+                if ((r0.l and 1) == 0) continue
+                if (r0.S in 21..27 && !w.iCF) break          // cF gate → abort sweep
+                if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
+                if (r0.aB > 0) {
+                    r0.aB -= Entity.WEAPON_K[w.weaponSlot]
+                    when (r0.iP) {
+                        0 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(15); r0.cGCount = 0 }
+                        2 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(19); r0.cGCount = 0 }
+                        3 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(25); r0.cGCount = 0 }
+                        4 -> if (r0.aB > 0) r0.cGCount = 6
+                             else { r0.setAnim(36); r0.cGCount = 0 }
+                    }
+                }
+                hit = true
+            }
+        }
+    }
+    return hit
+}
+
+/** `i.bd()` (i.java:14538, proven): non-flying sweep — ax19 S2→i(3),
+ *  ax17/ax23 damage `H[k.au]` via `aB` with death anims. */
+private fun NpcFsm.projSweepBd(e: Entity, w: Level0World): Boolean {
+    var hit = false
+    for (r0 in w.npcs) {
+        if (e.X == null) break
+        if (!Entity.overlapStrict(r0.W, e.X)) continue
+        if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); hit = true }
+        if (e.S != 17) continue
+        when (r0.ax) {
+            17 -> { if (r0.S != 69) {
+                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
+                if (r0.aB <= 0) r0.setAnim(129) else r0.setAnim(68)
+                hit = true } }
+            23 -> { if (r0.S == 79) {
+                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
+                if (r0.aB <= 0) r0.setAnim(79) else r0.setAnim(73)
+                hit = true } }
+        }
+    }
+    return hit
+}
+
+/** `i.ba()` (i.java:13742, proven transcription). */
+fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
+    val inFlight = (e.S in 0..4) || (e.S in 22..28)      // L7/L15 gate
+    if (inFlight && (e.P and 128) == 0) {                // live projectiles
+        if (!e.inPlayV(w)) {                             // L17 offscreen retire
+            e.P = e.P or 128; e.P = e.P and -17
+            e.aG = -1; e.af = null; e.c = null
+        } else when (e.aG) {
+            1 -> {                                       // L23 trail type
+                val r1 = e.aC; e.aC = r1 - 1
+                if (r1 < 0) {
+                    runnerBurst(e, 9, false, w)          // a(9,false)
+                    // if (e.S == 22) → d(9,ak,al) floatie — unported
+                    e.P = e.P or 128; e.P = e.P and -17; e.af = null
+                }
+            }
+            3 -> {                                       // L31 chain type
+                val c = e.c
+                if (c != null && Entity.overlapStrict(e.W, c.W)) {
+                    e.aG = -1; e.setAnim(9)
+                    when (c.ax) { 56 -> c.setAnim(10); 64 -> c.setAnim(5) }
+                    w.countKill(e.aw); e.c = null
+                }
+            }
+            else -> {                                    // L44 player hit
+                if (Entity.overlapStrict(e.W, p.W)) {
+                    p.applyHit(38, 0, e, w)              // k.aS.a(38,0,0,this)
+                    e.aG = -1; e.af = null
+                    if (e.S in 0..4) { w.removeEntity(e); return }
+                }
+            }
+        }
+    }
+    when (e.S) {
+        6 -> {                                           // L171 drop line
+            if (e.al > e.ap) e.setAnim(9)
+            e.ap += w.kX
+            if (projSweepBc(e, w)) e.setAnim(9)
+        }
+        7 -> { val r = e.aC - 1; e.aC = r; if (r < 0) e.setAnim(9) }  // L166
+        8 -> if (e.animFinished()) { w.removeEntity(e); return }    // L87
+        9, 10 -> {                                       // L65 impact anim
+            if (e.T == 1 && e.U == 0) w.sfx(12)          // L67 sfx
+            e.refreshBoxes()                             // L69 t()
+            if (Entity.MISSION_BH[w.kAj] == 3) {
+                e.ah = 0; e.ag = 0
+                if (e.af == p) projSweepBc(e, w)
+                else if (e.X != null && Entity.overlapStrict(e.X, p.W))
+                    p.applyHit(38, 0, e, w)              // L75
+            } else {
+                projSweepBd(e, w)                        // L79 bd()
+                if (e.X != null && Entity.overlapStrict(e.X, p.W))
+                    p.applyHit(4, 0, e, w)
+            }
+            if (e.animFinished()) { e.af = null; w.removeEntity(e); return }
+        }
+        11 -> {                                          // L94 homing leg
+            val af = e.af ?: return
+            val cH = af.cHWaypoints ?: return
+            e.aC--
+            if (e.aC <= 0) {
+                e.ag = 0; e.ah = w.kY
+                e.bY = cH[e.ap][0]; e.bZ = cH[e.ap][1]
+                e.posFromWaypoint(w); e.setAnim(9)
+            } else {
+                val r0 = cH[e.ap][0] - e.bY; val r02 = cH[e.ap][1] - e.bZ
+                e.ag = (r0 shl 8) / e.aC; e.ah = ((r02 shl 8) / e.aC) + w.kY
+            }
+        }
+        12 -> { e.aC--; if (e.aC < 0) { w.removeEntity(e); return } } // L90
+        13 -> { if (e.animFinished()) e.setAnim(14); e.j--            // L101
+            if (e.bZ <= e.ap - 30) e.setAnim(45)
+            else if (e.projK) e.setAnim(45)
+            else if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        14 -> { e.j--                                    // L103 lobbed
+            if (e.bZ <= e.ap - 30) e.setAnim(45)
+            else if (e.projK) e.setAnim(45)
+            else if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        15 -> {                                          // L134
+            if (e.T == 1 && e.U == 0) w.sfx(12)
+            if (e.animFinished()) w.removeEntity(e)
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        in 16..18, in 41..43 -> {                        // L148
+            if (!e.inPlayV(w)) { w.removeEntity(e); return }
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                if (e.S in 16..18) { w.removeEntity(e); return }
+                p.applyHit(38, 0, e, w)
+            }
+        }
+        19 -> {                                          // L178 lay-child
+            if (!e.projB) { projLay(e, 0, 0, w); e.projB = true }
+        }
+        20 -> {                                          // L181 heal shrine
+            e.az = 100; e.P = e.P and -129
+            if (Entity.overlapStrict(p.W, e.W)) {
+                w.iBB = true; w.iBC = true; w.iBD = true
+                w.iBF = 100; w.iBE = 999; w.iBG = -1
+                p.setAnim(21)
+                val r03 = 100 - w.kAE
+                w.kAF = if (e.aB >= r03) r03 else e.aB
+                w.iBh = 0                                  // bh = 0 (i.bh)
+                // e = 30 — i.e static unmapped (script var)
+                if (w.kAJ != 0) { w.kX = w.kAJ; w.kAJ = 0 }
+                w.sfx(25)
+            }
+        }
+        31, 40 -> {                                      // L53 pinned child
+            val af = e.af
+            if (af == null) {
+                e.ag = 0; e.ah = 0
+                if (e.animFinished()) { w.removeEntity(e); return }
+            } else {
+                e.ak = af.ak + e.ao; e.al = af.al + e.ap
+                if (af.ax == 24 && af.S == 19) { e.ag = 0; e.ah = 0 }
+            }
+        }
+        35 -> {                                          // L193 explode-arm
+            e.projB = true
+            if (Entity.overlapStrict(e.W, p.W) ||
+                e.e(w, e.ak / 20, e.al / 20) >= 20) {
+                e.setAnim(36); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+            }
+        }
+        36 -> {                                          // L199 explode
+            e.projB = true
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) p.applyHit(4, 0, e, w)
+            if (e.animFinished()) { w.removeEntity(e); return }
+        }
+        44 -> if (e.animFinished()) { w.removeEntity(e); return }   // L163
+        45 -> {                                          // L117 lobbed sib
+            e.j--
+            if (e.bZ <= e.ap) {
+                if (e.projK && e.j <= 0) { e.projK = false; e.setAnim(15) }
+                else if (!e.projK) e.setAnim(15)
+            }
+            if (e.X != null && Entity.overlapStrict(e.X, p.W)) {
+                e.setAnim(9); p.applyHit(38, 0, e, w) }
+        }
+        else -> {}                                       // L206 inert
+    }
+    e.integrate()
+}
