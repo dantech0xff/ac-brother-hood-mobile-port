@@ -5,6 +5,7 @@ import com.acrebuild.core.DeterministicRandom
 import com.acrebuild.core.InputQueue
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
+import com.acrebuild.core.ScriptTables
 import com.acrebuild.core.TickEngine
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
@@ -57,8 +58,11 @@ class Level0Game : ApplicationAdapter() {
             .readString("UTF-8").split("\n")
             .filter { it.isNotEmpty() }
             .map { it.replace("\\n", "\n") }
+        // `j.e(7)` claim-script table (k.by/bz/eH, k.java:6196).
+        val scripts = ScriptTables.load(
+            Gdx.files.internal("level0/scripts.bin").readBytes())
         world = Level0World(level, clips, DeterministicRandom(SEED),
-            levelStrings = levelStrings)
+            levelStrings = levelStrings, scripts = scripts)
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)

@@ -142,6 +142,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ca = -1                    // i.ca — bound claim-counter index (-1 = none)
     val cd = BooleanArray(10)      // i.cd[10] — claim-script flags (h() allocs
                                    // in the original; eagerly allocated here)
+    private var cdAllocated = false // i.java:19302 — the original sets
+                                   // cd[7]=true only on the FIRST cd alloc;
+                                   // eager alloc replicates via this flag
     var cb: IntArray? = null       // i.cb[4] — claim-script vars (k() allocs)
     var scriptOps: IntArray? = null// i.cL — claim-script op buffer copy of
                                    // k.bz[ca] (g.cL is the int orbit field —
@@ -1329,7 +1332,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun bindScript(r5: Int, w: LevelCellSource) {
         if (claimLatchX != -1) return
-        cd[7] = true
+        if (!cdAllocated) { cdAllocated = true; cd[7] = true }   // h() alloc
         ca = r5
         if (ca >= 0) reloadScriptOps(w)
         if (claimPositionType()) { claimLatchX = ak; claimLatchY = al }
@@ -2868,6 +2871,12 @@ interface LevelCellSource {
     /** `k.eH` — the script-handle uid table (script-loaded; empty until
      *  the table port lands). */
     val kEh: IntArray get() = IntArray(0)
+    /** `k.by` — claim-script op blocks per script index. */
+    val kBy: Array<Array<ByteArray>> get() = emptyArray()
+    /** `k.bz` — first-group byte offset per block (`i.cL` seeds). */
+    val kBz: Array<IntArray> get() = emptyArray()
+    /** `k.t(int)` (k.java:7162, proven): `eI[op-100]` payload length. */
+    fun kT(op: Int): Int = ScriptTables.EI[op - 100]
     /** `k.bz[ca]` — the claim-script op table (unported → null). */
     fun claimOps(ca: Int): IntArray? = null
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */

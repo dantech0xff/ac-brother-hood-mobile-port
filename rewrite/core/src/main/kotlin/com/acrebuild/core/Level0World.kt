@@ -23,6 +23,9 @@ class Level0World(
     val rng: DeterministicRandom,
     /** `j.g` level-string table (pack-14 entry-001 for level 0). */
     val levelStrings: List<String> = emptyList(),
+    /** `k.by`/`k.bz`/`k.eH` script tables (`j.e(7)` of the mission pack,
+     *  k.java:6196). Null = no scripts (spawn smoke/tests w/o assets). */
+    val scripts: ScriptTables? = null,
 ) : LevelCellSource {
 
     companion object {
@@ -102,7 +105,9 @@ class Level0World(
     // Hoisted above `init`: `spawnEntities` reads it via kSIndex during
     // ax5 record init — property order matters (backing field is null
     // until the initializer runs).
-    override var kEh = IntArray(0)             // k.eH — script handles
+    override var kEh = scripts?.eH ?: IntArray(0)  // k.eH — script uids
+    override val kBy = scripts?.by ?: emptyArray() // k.by — op blocks
+    override val kBz = scripts?.bz ?: emptyArray() // k.bz — group offsets
     override fun claim(e: Entity, prio: Int, w: IntArray) {
         if (prio < 0 || prio >= 6) return
         if (prio >= claimPrio && !(prio == 1 && claimPrio == 1)) return
@@ -475,8 +480,9 @@ class Level0World(
     override fun gG(): Boolean = player.x1 <= 0
     /** `k.s(int)` (k.java:7149): index of uid in `k.eH[]` or -1. */
     override fun kSIndex(x: Int): Int = kEh.indexOf(x)
-    /** `k.bz[ca]` — claim-script op table (unported → null). */
-    override fun claimOps(ca: Int): IntArray? = null
+    /** `k.bz[ca]` (k.java:20039 seed): first-group offsets per block. */
+    override fun claimOps(ca: Int): IntArray? = kBz.getOrNull(ca)
+    override fun kT(op: Int): Int = ScriptTables.EI[op - 100]
     override var gj = false                        // g.j context latch
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
