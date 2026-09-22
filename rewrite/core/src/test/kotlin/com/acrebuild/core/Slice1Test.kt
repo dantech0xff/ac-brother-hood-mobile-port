@@ -218,9 +218,9 @@ class Level0WorldTest {
         var t = 0
         while (w.player.ah != 0 && t++ < 600) w.tick(emptyList())
         val q = InputQueue()
-        // hold LEFT (player faces right at spawn): opposite-direction press
-        // turns + runs without firing the tap-edge vault jump.
-        q.post(InputQueue.Type.DOWN, 100, 120)
+        // hold RIGHT: the tap edge fires the proven vault-jump (S233), and
+        // the aS-edge-bump in land() keeps aZ correct after landing.
+        q.post(InputQueue.Type.DOWN, 300, 120)
         var seen = false
         repeat(200) {
             w.tick(q.drainTo(q.headSequence()))

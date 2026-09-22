@@ -394,7 +394,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         refreshBoxes()
         al = ((W[3] + 1) / 20) * 20
         al--
-        if (aS == 4 && aR < 12) al += 20   // L15 edge bump
+        // g.java:4674-4688 (proven): edge bump pushes the anchor down one
+        // cell when the landing came through aS (probe row still in air),
+        // so aR re-reads the floor and aZ becomes true. Normal landing:
+        // aR<12 && (aS>=12 || aS==5); platform variant: aS==4 && aR!=4.
+        if (platformVariant) {
+            if (aR != 4 && aS == 4) al += 20
+        } else {
+            if (aR < 12 && (aS >= 12 || aS == 5)) al += 20
+        }
         ah = 1
         // d() fall-damage gate (g.java:4690-4700, proven): falls of
         // >=20 cells (al - g.y >= 400px) without iframes call

@@ -20,17 +20,30 @@ into `PlayerFsm.tick` after `postTail`. Same literal also appears at
 Regression test: `long falls cannot tunnel through floors` — drops the
 player 20 cells onto real ground and asserts `al` never passes the floor.
 
-## Side discovery (open gap, not fixed here)
+## Fix 2 (proven): `d()` edge bump — the E2E "pocket jitter" / S5-pin
 
-While debugging the run-anim test: landing on cell **18** leaves `aZ=false`
-(x() semantics: `aZ = aR != 18` — proven), so `ax()`/`aw()` bail and S5 can
-pin. Original land gate is `aR>=12 || aS>=12 || aR/aS∈{4,5}` — 18 IS in the
->=12 solid range yet marked non-standing. Likely a hazard/special tile;
-the E2E "pocket jitter" may be the same tile. Needs a dedicated pass on what
-cell 18 is (damage/slippery?) before changing behavior — flagged `unknown`.
+`g.java:4664-4688` `d(boolean r8)` — after `al = ((W[3]+1)/20)*20; al--`, the
+original bumps `al += 20` whenever the landing was detected through `aS`
+(below-feet row) instead of `aR` (feet row):
 
-Also changed the run-anim test to hold LEFT (opposite facing) so the press
-edge doesn't fire the proven `v(8)` directional-vault (S233) first.
+```
+r8=false (normal land):  if aR<12 && (aS>=12 || aS==5) → al += 20
+r8=true  (platform-4):   if aR!=4 && aS==4            → al += 20
+```
+
+The port only bumped for `aS==4 && aR<12`, so landings via `aS` left the
+feet probe row in air (`aR=0` → x() early-return → `aZ` stays false) →
+`ax()`/`aw()` bail → the player pins in S5 and jitters S5↔S43 on pocket
+floors. Fixed `Entity.land` to the two-arm proven bump.
+
+NOTE: the earlier "cell 18" theory was wrong — level-0's `et` plane contains
+ZERO cells of value 18; the pin was the missing bump, and `aZ=false` came
+from the `aR<10 && aR!=5` early-return with `aR=0`, not `aR==18`.
+Cell-18 semantics remain unmined but no longer block this fix.
+
+Also reverted the run-anim test to hold RIGHT — the tap-edge vault (S233)
+plus the fixed bump now lands the player with correct `aZ`, so hold-right
+reaches run anims 12/32 through the real input path.
 
 ## Checks
 
