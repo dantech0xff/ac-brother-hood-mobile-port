@@ -443,6 +443,7 @@ class Level0World(
             else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
+            else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -905,6 +906,9 @@ class Level0World(
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
 
+
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
@@ -914,6 +918,8 @@ class Level0World(
             else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
             else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
+            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
+
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

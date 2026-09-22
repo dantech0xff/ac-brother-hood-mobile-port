@@ -5762,8 +5762,12 @@ class Slice54Test {
         w.player.setPositionPx(500, 600)                           // aim target
         e.X[0] = e.ak - 10; e.X[2] = e.ak + 10
         e.X[1] = e.al - 10; e.X[3] = e.al + 10
-        // S5 arm with U==0 && animFinished → burst runs Z[10]=1 shot
-        e.setAnim(5); e.T = e.clip!!.frameCount(5) - 1; e.U = 0
+        // S5 arm with U==0 && animFinished → burst runs Z[10]=1 shot;
+        // s() runs first each tick, so stage the pre-wrap state that lands
+        // T=last,U=0 (clip19 anim5 last frame has dur 1)
+        e.setAnim(5)
+        e.T = e.clip!!.frameCount(5) - 2
+        e.U = e.clip!!.frameDuration(5, e.T) - 1
         w.tick(emptyList())
         val shot = w.projectilePool!![0]!!
         assertEquals(16, shot.P and 16)
@@ -5886,7 +5890,8 @@ class Slice55Test {
         // Z5=2 shots, Z6=2 bursts, Z7=1 aF → fires on first window tick
         val e = ax56At(w, 100, w.kP + 10, 0, 0, 0, 0,0, 2, 2, 1, 900, 7, 0, 0, 1280)
         e.runnerBz = true
-        e.setAnim(5); e.T = 3; e.U = 0
+        e.setAnim(5)
+        e.T = 2; e.U = e.clip!!.frameDuration(5, 2) - 1   // s() wraps → T=3,U=0
         w.player.setPositionPx(400, 500)
         w.tick(emptyList())
         assertNotNull(w.projectilePool)
@@ -5900,7 +5905,8 @@ class Slice55Test {
         e.runnerBz = true
         e.setAnim(10)
         val clip = e.clip!!
-        e.T = clip.frameCount(10) - 1
+        e.T = clip.frameCount(10) - 2                    // s() wraps → T=last,U=0
+        e.U = clip.frameDuration(10, e.T) - 1
         w.tick(emptyList())
         assertEquals(-1, e.az)
         assertEquals(64, e.P and 64, "r() → P|=64")

@@ -4757,6 +4757,8 @@ fun NpcFsm.initAx54(e: Entity, f: List<Int>, w: Level0World) {
     else if (e.Z[8] == 1 && e.Z[9] == 1) e.Z[9] = 0   // L226
     e.aC = e.Z[6]; e.aD = e.Z[11]; e.aF = e.Z[12]
     e.nl = e.Z[14]
+    e.setAnim(rf(5))                                   // L392 tail: i(r8[5])
+    e.refreshBoxes()                                   // L427 tail: t()
     if (e.Z[0] == 0) return                            // L392 — no child
     e.az = if (e.ax == 30) 99 else -1                  // L233/L234
     // r8[0] = 68; ad = new i(r8): ax68 child spawned from the same record
@@ -4946,6 +4948,7 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
  *  the homing delta is the waypoint's position in the scroll frame, so
  *  `bt.a/b` act as a direction vector × `bt.f` speed — verbatim. */
 fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()                                            // e() s() preamble
     if (!e.runnerBz) e.runnerBz = e.al > w.kP + e.Z[7]          // L7 latch
     val chainDone = e.bs >= e.runnerC
     if (e.runnerBz && e.Z[0] != 3 && chainDone && !e.inPlayV(w)) {
@@ -5095,6 +5098,11 @@ fun NpcFsm.initAx56(e: Entity, f: List<Int>, w: Level0World) {
     e.aq = e.ak; e.ar = e.al
     if (e.Z[10] == 1) e.aq += e.Z[11]                 // L253 x-shift
     else if (e.Z[10] == 2) e.ar += e.Z[11]            // y-shift
+    val bj = intArrayOf(19, 68)                        // k.bj (k.java:8443)
+    val sel = rf(7)
+    e.clip = w.clips[if (sel in bj.indices) bj[sel] else 19]  // L21 aa=k.r(bj[r8[7]])
+    e.setAnim(rf(5))                                   // L392 tail: i(r8[5])
+    e.refreshBoxes()                                   // L427 tail: t()
 }
 
 /** `i.az()` (i.java:8600+, proven): still traveling — pos != (aq,ar)
@@ -5119,6 +5127,7 @@ private fun NpcFsm.runnerTravelAnim(e: Entity, x: Int, y: Int) {
  *  k.P+240; no waypoint chain — (aq,ar) destination + az() travel check;
  *  burst fires on frame `T==3 && U==0` with timers Z[7]/Z[6]. */
 fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
+    e.advanceAnim()                                            // e() s() preamble
     if (!e.runnerBz) e.runnerBz = e.al > w.kP                 // L7 latch
     if (!e.runnerBz) return                                 // L10 unarmed
     if (!e.inPlayV(w) && e.al > w.kP + 240) {               // L14 offscreen
