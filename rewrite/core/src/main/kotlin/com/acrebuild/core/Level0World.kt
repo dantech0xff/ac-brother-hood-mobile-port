@@ -66,6 +66,9 @@ class Level0World(
             60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
             43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
             69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
+            64 to 6,      // ax64 harrier — bi[64]=-1 (clipless record spawn);
+                          // unconverted index → null clip, matching the
+                          // original's own clipless record path
         )
     }
 
@@ -461,6 +464,7 @@ class Level0World(
             else if (type == 50) npcFsm.initAx50(e, f.toList())
             else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
+            else if (type == 64) npcFsm.initAx64(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -541,7 +545,7 @@ class Level0World(
     override var iAH = false                   // i.aH — slow-mo flag
     override var iAI = 0                       // i.aI
     override var iAJ = 0                       // i.aJ
-    override var kX = 0                        // k.X
+    override var kX = -7                       // k.X (k.java:2334 init, proven)
     override var kW = 0                        // k.W
     override var kAw = 0                       // k.aw
     override var kAe: Entity? = null           // k.ae — player link entity
@@ -625,6 +629,29 @@ class Level0World(
     /** `k.ac` — the same camera view rect as `camRect` (aliased;
      *  ax35's off-screen containment test reads it via this name). */
     override val kAc: IntArray? get() = camRect
+    override var iBi = false                     // i.bi — ax64 grab hitlag
+    override val gS = false                      // g.s — cutscene (no producer)
+    /** `k.aX` pooled-shot slots (k.java:8423 `aW=50`, proven) — lazily
+     *  grown to 50 `new i()`-blank slots (ax=0, clipless — the ax64
+     *  tether/barrage spawn config never touches ax/aa; `inferred`); the
+     *  spawner's `P &= -129` un-reserves the slot → `P&128` = free. */
+    val shotPool = ArrayList<Entity>()
+    override fun allocShot(): Entity? {
+        if (shotPool.size < 50) shotPool += Entity(0, null).apply { P = P or 128 }
+        return shotPool.firstOrNull { (it.P and 128) != 0 }
+    }
+    override fun tickShotPool() {
+        for (s in shotPool) {
+            if ((s.P and 128) != 0) continue
+            s.aC--
+            if (s.aC < 0) { s.P = s.P or 128; continue }   // slot freed
+            s.am += s.ag; s.an += s.ah
+            s.ah += kY                                     // k.Y bias (0 today)
+            s.N = s.am; s.O = s.an
+            s.ak = s.am shr 8; s.al = s.an shr 8
+            s.refreshBoxes()
+        }
+    }
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
@@ -986,6 +1013,7 @@ class Level0World(
             else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
             else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
             else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
+            else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
@@ -995,6 +1023,7 @@ class Level0World(
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()
         }
+        tickShotPool()                            // k.aX pool step (inferred)
         if (pendingInsert.isNotEmpty()) {         // k.b(aK) drain
             npcs += pendingInsert
             pendingInsert.clear()

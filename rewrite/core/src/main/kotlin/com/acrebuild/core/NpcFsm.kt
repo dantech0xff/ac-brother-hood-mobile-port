@@ -2272,6 +2272,8 @@ class WaypointNode {
     var e = 0             // c.e — `aC` per-node delay
     var f = 0             // c.f — byte: arrive tolerance | flag bits (&127)
     var g = 0             // c.g — next node id (-1 end)
+    var h = 0; var i = 0  // c.h/c.i — entity-relative offsets written on
+                          // bound `F` nodes (i.java:8198/8405); records +0
 }
 
 /** `c.m`/`c.l`/`c.j` (c.java): 400-slot pool; `c.a(short[])` parses a record
@@ -7347,4 +7349,384 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
         }
         else -> { contextK(e, w, p); damageIntakeSentinel(e, w, p) } // L53
     }
+}
+
+// ===========================================================================
+// Slice 65 — ax64 `bl()` grabber/harrier NPC (i.java:15391-15897, proven
+// transcription; marker-clip / pool-visual paths labeled `inferred`).
+//
+// Record (L321, i.java:3474): Z[0..9] = r8[7..16]; Z[1] = r8[8] + 7;
+// aC = Z[8]; az = 301; then L395 `i(r8[5])` + L427 `t()`.
+// bi[64] = -1 (k.java static table) → record-spawned ax64 is clipless;
+// gameplay spawns come through `i.a(ax,clip,…)` (i.java:6898) which binds
+// `aa` per call site — the spawn sites are unmined and level-0's pack-6
+// record set carries no ax64 entries, so W may be degenerate (the original
+// has the same behaviour for clipless instances).
+// Z[2..5] = waypoint uids (patrol chain), Z[6] = death-anim pick (S4/S5),
+// Z[7] = post-arrival hop (S6) vs drop (S3), Z[8] = stalk budget (S7),
+// Z[9] = barrage interval.
+// ===========================================================================
+
+/** (proven i.java:15400-15436) — `p.S` states the S7 stalk may latch onto:
+ *  switch arms send {0,4,5,17,18,30,31,32,33} → r04=true, else false. */
+private val AX64_VULN = intArrayOf(0, 4, 5, 17, 18, 30, 31, 32, 33)
+
+/** `i.b(int,int,int,int)` (i.java:8026, proven): direction index 0-4 from
+ *  a (x0,y0)→(x1,y1) subpixel vector — the pooled-shot's `i(0, dir)` pick. */
+private fun dirIndex5(x0: Int, y0: Int, x1: Int, y1: Int): Int {
+    val dx = x1 - x0; val dy = y1 - y0
+    if (dx != 0 && abs(dx) > 5120) {
+        val slope = dy * 100 / dx
+        if (slope == 0 || abs(dy) <= 5120) return 2
+        return if (slope >= 0) (if (dx > 0) 3 else 1)
+               else (if (dx > 0) 1 else 3)
+    }
+    return if (dy < 0) 0 else 4
+}
+
+/** `bl()` record init — L321 (i.java:3474, proven). `f` = the full record
+ *  (f[0]=ax …); Z[0..9] read r8[7..16] = f[7..16]. */
+fun NpcFsm.initAx64(e: Entity, f: List<Int>) {
+    e.az = 301
+    for (i in 0 until 10) e.Z[i] = if (7 + i < f.size) f[7 + i] else 0
+    e.Z[1] += 7                                        // r8[8] - (-7)
+    e.aC = e.Z[8]
+    e.setAnim(if (f.size > 5) f[5] else 0)             // L395 tail: i(r8[5])
+    e.refreshBoxes()                                   // L427 tail: t()
+}
+
+/** `i.a(k.aS, this, 1, false)` (i.java:8637, proven): the tether shot —
+ *  a pooled `k.aX` slot lobbed player→harrier at speed 2048 + `k.Y` bias
+ *  (ax64 arm, L15), anim = `dirIndex5`, `P` flags {&-129,&-33,|16,|1 on
+ *  left}, af=spawner, c=player, aC=`n`, `k.A(16)` sfx. `av()`==-1 → skip. */
+private fun ax64Tether(e: Entity, p: Entity, w: LevelCellSource) {
+    val s = w.allocShot() ?: return                  // i.java:8641 L33
+    s.am = (p.W[0] + p.W[2]) shl 7                   // W-center <<8 (sum<<7)
+    s.an = (p.W[1] + p.W[3]) shl 7
+    s.ao = (e.W[0] + e.W[2]) shl 7
+    s.ap = (e.W[1] + e.W[3]) shl 7
+    e.ao = s.ao; e.ap = s.ap                         // owner caches target
+    val dx = s.ao - s.am; val dy = s.ap - s.an
+    val d = e.h(dx, dy)
+    if (d != 0) {                                    // L12-15
+        s.ag = dx * 2048 / d
+        s.ah = dy * 2048 / d + w.kY
+    }
+    s.av = s.ao < s.am                               // L17-20
+    s.P = if (s.av) s.P or 1 else s.P and -2         // L23
+    s.N = s.am; s.O = s.an
+    s.ak = s.am shr 8; s.al = s.an shr 8
+    s.P = s.P and -129 and -33 or 16                 // L24
+    s.setAnim(dirIndex5(s.am, s.an, s.ao, s.ap))     // L27: i(0, b(…))
+    s.refreshBoxes()                                 // L28: t()
+    s.aG = 0                                         // L31 (ax64 arm)
+    s.af = e; s.c = p
+    s.aC = e.nl                                      // aC = this.n
+    w.sfx(16)                                        // k.A(16)
+}
+
+/** `i.a(int, boolean)` (i.java:7826, proven): the barrage shot — pooled
+ *  slot, `am/an` = this W-center <<8 (the ax64 arm's `L32` writes are
+ *  elided by the decompiler — W-center is the consistent source;
+ *  `inferred`), `ao/ap` = `r8` ? owner-aim `ao/ap` : `F` or the player's
+ *  W-center (ax64's `F` is never bound → player arm; `inferred`),
+ *  speed 1280 + `k.Y` (L101→L102), anim = `dirIndex5`, `aG = -1` (L128),
+ *  `k.A(16)`. count spread arc (r7>1) unused by ax64's `a(1,false)` —
+ *  `inferred` for the r7>1 geometry which is omitted here. */
+private fun ax64Barrage(e: Entity, p: Entity, w: LevelCellSource) {
+    val s = w.allocShot() ?: return                  // L140: pool empty
+    s.am = (e.W[0] + e.W[2]) shl 7
+    s.an = (e.W[1] + e.W[3]) shl 7
+    s.ao = (p.W[0] + p.W[2]) shl 7                   // r8=false → player arm
+    s.ap = (p.W[1] + p.W[3]) shl 7
+    val dx = s.ao - s.am; val dy = s.ap - s.an
+    val d = e.h(dx, dy)
+    if (d != 0) {                                    // L82→L101→L102
+        s.ag = dx * 1280 / d
+        s.ah = dy * 1280 / d + w.kY
+    }
+    s.av = s.ao < s.am                               // L104-107
+    s.P = if (s.av) s.P or 1 else s.P and -2         // L110
+    s.N = s.am; s.O = s.an
+    s.ak = s.am shr 8; s.al = s.an shr 8
+    s.P = s.P and -129 and -33 or 16                 // L111
+    s.setAnim(dirIndex5(s.am, s.an, s.ao, s.ap))     // L119: i(0, b(…))
+    s.refreshBoxes()                                 // L120: t()
+    s.aG = -1                                        // L128 (ax64 arm)
+    s.af = e; s.aC = e.nl                            // L129: af=this,aC=n
+    w.sfx(16)                                        // L139: k.A(16)
+}
+
+/** `u()` (i.java:700) + `v()` (i.java:730) reduced to the ax64 path
+ *  (proven gates that apply; ax64 hits none of the special-cases):
+ *  `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120`; alive while `au<=i` or
+ *  the `Y` foot box overlaps the `k.ac` view rect. */
+private fun ax64Alive(e: Entity, w: LevelCellSource): Boolean {
+    e.au = abs(e.ak - (w.kO + 200)) / 400 + abs(e.al - (w.kP + 120)) / 120
+    if (e.au <= e.i) return true
+    val view = w.kAc ?: return false
+    return Entity.overlapStrict(view, e.Y)
+}
+
+/** `bl()` — the ax64 harrier FSM (i.java:15391-15897). Head arm runs only
+ *  at S7; then the S-switch. */
+fun NpcFsm.tickAx64(e: Entity, w: LevelCellSource, p: Entity) {
+    if (e.aA < 0) e.aA = 0                           // L6
+
+    if (e.S == 7) ax64StalkArm(e, w, p)              // L6-86 head
+
+    when (e.S) {                                     // L87
+        0 -> ax64S0(e, w, p)
+        1 -> ax64S1(e, w, p)
+        2 -> ax64S2(e, w, p)
+        3, 4, 5 -> ax64S345(e, w, p)
+        6 -> ax64S6(e, w)
+        7 -> ax64S7(e, w, p)
+        else -> {}                                   // L313
+    }
+}
+
+/** L6-86 (proven): the S7 stalk head — latch a pad mask (`bl`) onto the
+ *  directional grab marker (`p.ae`), then bind on `k.v(bl)` EDGE. The
+ *  `ae.S==66 → L19` re-entry loop in the decompile (i.java:15863-15867)
+ *  can only spin — collapsed to the same reposition arm as S60
+ *  (`inferred`). */
+private fun ax64StalkArm(e: Entity, w: LevelCellSource, p: Entity) {
+    val dx = abs(e.ak - p.ak)
+    val dy = abs(e.al - p.al)
+    val dist = e.h(dx, dy)                           // k.h (k.java:6839)
+    // L11-29: vulnerable player anim, not already bound, harrier strictly
+    // below the player (L19 ax64 arm), then the range gates. The r02<=100
+    // check routes ax64 to the same L29 arm either way (proven).
+    var arm = false
+    if (p.S in AX64_VULN && !e.runnerG &&
+        e.al > p.al && dx > 25 && dist < 200) {
+        val m = p.ae
+        if (m == null) {
+            p.releaseAe()                            // L5/L11: G() on null
+            when {
+                // L33-37: above-side markers — dead code for ax64 (L19
+                // gate forces al>p.al) but kept verbatim.
+                e.al < p.al ->
+                    if (e.ak < p.ak) { p.ae = w.spawnPickup(42, e.ak + 20, e.al); e.bl = 2 }
+                    else { p.ae = w.spawnPickup(48, e.ak - 20, e.al); e.bl = 8 }
+                e.al > p.al ->                     // L39-43
+                    if (e.ak < p.ak) { p.ae = w.spawnPickup(60, e.ak, e.al - 40); e.bl = 128 }
+                    else { p.ae = w.spawnPickup(66, e.ak, e.al - 40); e.bl = 512 }
+                else -> p.releaseAe()              // L39 equal-y arm
+            }
+            arm = true                               // L51
+        } else {                                     // L45 (ax64 arm)
+            if (m.S == 60 || m.S == 66) {            // L50 / L19-loop (see hdr)
+                m.ak = e.ak; m.al = e.al - 40
+            }
+            arm = true                               // L51
+        }
+    }
+    // L53-67 (proven): stale/mismatched marker cleanup — left side
+    // releases {42,60}, right side releases {48}; ak>p.ak && S==66 jumps
+    // L10→L76 (skips the bind/reposition block entirely).
+    var tailOnly = false
+    val m = p.ae
+    if (m == null) arm = false
+    else when {
+        e.ak < p.ak ->
+            if (m.S == 42 || m.S == 60) { p.releaseAe(); arm = false }
+            else arm = false                         // L61: ak<=p.ak → L67
+        e.ak == p.ak -> arm = false                  // L61 → L67
+        else ->                                      // ak > p.ak
+            if (m.S == 48) { p.releaseAe(); arm = false }
+            else if (m.S == 66) tailOnly = true      // → L10 → L76
+            else arm = false
+    }
+    if (!tailOnly) {
+        // L68-72 (proven): armed + unbound + pad EDGE on the latch mask →
+        // spawn the tether shot and latch G.
+        if (arm && !e.runnerG && w.padHeld(e.bl)) {
+            ax64Tether(e, p, w)
+            e.runnerG = true
+        }
+        // L74 (proven): pin the marker to (ak, al-20) every armed tick.
+        if (arm) p.ae?.let { it.ak = e.ak; it.al = e.al - 20 }
+    }
+    // L76-86 (proven): tail cleanup — left releases S60, right releases
+    // S66.
+    val m2 = p.ae
+    if (m2 != null) {
+        if (e.ak < p.ak && m2.S == 60) p.releaseAe()
+        else if (e.ak > p.ak && m2.S == 66) p.releaseAe()
+    }
+}
+
+/** L88-183 (proven): S0 — lob-window check, then waypoint patrol crawl. */
+private fun ax64S0(e: Entity, w: LevelCellSource, p: Entity) {
+    val dy = p.al - e.al                             // L88 r06
+    if (dy in 151..189 && abs(e.ak - p.ak) < 100) {  // L96-101 lob setup
+        e.cx = if (dy != 0) (abs(e.ak - p.ak) * 5 shl 8) / dy else 1280
+        e.aq = p.ak; e.ar = p.al + 32
+        e.cz = dy / 5; if (dy % 5 != 0) e.cz++
+        e.ar += e.cz * (-7)
+        e.cA = 0
+        e.setAnim(1); e.cy = 0                       // L103: i(1); cy=false
+        return
+    }
+    if (e.aA >= 4) { ax64DiveTarget(e, p); return }  // L109
+    val wp = w.waypoints.find(e.Z[2 + e.aA])         // c.a(Z[2+aA])
+    if (wp == null) {                                // L179: vel0 + aA++ + Z0 facing
+        e.ag = 0; e.ah = 0; e.aA++
+        when (e.Z[0]) { 0 -> e.av = true; 2 -> e.av = false }
+        return                                       // L312/L324/L181/L183
+    }
+    e.Z[1] = (wp.f and 127) - w.kX                   // waypoint pace
+    val wdx = wp.a - e.ak; val wdy = wp.b - e.al
+    if (abs(wdx) > e.Z[1] || abs(wdy) > e.Z[1]) {    // L150: crawl toward
+        if (abs(wdx) > abs(wdy)) {                   // x-dominant
+            if (wdx >= 0) { e.av = false; e.ag = e.Z[1] shl 8 }
+            else { e.av = true; e.ag = -(e.Z[1] shl 8) }
+            if (abs(wdy) < e.Z[1]) e.ah = 0
+            else e.ah = if (wdy >= 0) abs(wdy) * abs(e.ag) / abs(wdx)
+                        else -(abs(wdy) * abs(e.ag) / abs(wdx))
+        } else {                                     // y-dominant (L166-177)
+            e.ah = if (wdy >= 0) e.Z[1] shl 8 else -(e.Z[1] shl 8)
+            if (abs(wdx) < e.Z[1]) e.ag = 0
+            // VERBATIM quirk (L174/L177): the |wdx| terms cancel, so ag
+            // is ±|ah| — not proportional. Preserved as decompiled.
+            else if (wdx >= 0) { e.av = true; e.ag = abs(e.ah) }
+            else { e.av = false; e.ag = -abs(e.ah) }
+        }
+        return
+    }
+    // arrived inside the waypoint square — L140-148 (proven)
+    e.aA++
+    // aA<4 → re-fetch the NEXT waypoint and check its `c` hop flag;
+    // aA>=4 → the OLD node stays in hand (verbatim L144).
+    val next = if (e.aA < 4) w.waypoints.find(e.Z[2 + e.aA]) else wp
+    if (next == null) return                         // L144
+    if (next.cFlag != 0) { e.setAnim(1); e.cy = 1 }  // L146-148: hop entry
+    // c==0 → L315 return
+}
+
+/** L109-132 (proven): the aA>=4 dive target — anchor ±100/±190 toward the
+ *  player (clamped), +32 bias, cz = |dy|/5 ceil, cx = (|dx|·5<<8)/|dy|. */
+private fun ax64DiveTarget(e: Entity, p: Entity) {
+    e.setAnim(1); e.cy = 0                           // i(1); cy=false
+    e.aq = if (e.ak < p.ak) minOf(e.ak + 100, p.ak) else maxOf(e.ak - 100, p.ak)
+    e.ar = if (e.al < p.al) minOf(e.al + 190, p.al) else maxOf(e.al - 190, p.al)
+    e.ar += 32
+    val adx = abs(e.ak - e.aq); val ady = abs(e.al - e.ar)
+    e.cx = if (ady != 0) (adx * 5 shl 8) / ady else 1280
+    e.cz = ady / 5; if (ady % 5 != 0) e.cz++
+    e.ar += e.cz * (-7)
+    e.cA = 0
+}
+
+/** L186-232 (proven): S1 — waypoint-hop (`cy`) or target-dive flight. */
+private fun ax64S1(e: Entity, w: LevelCellSource, p: Entity) {
+    if (e.cy != 0) {                                 // L186-190
+        val wp = w.waypoints.find(e.Z[2 + e.aA]) ?: return  // r016
+        val ddx = wp.a - e.ak; val ddy = wp.b - e.al
+        val framesLeft = (e.clip?.frameCount(e.S) ?: 0) - 1 - e.T  // r019
+        if (e.animFinished()) {                      // r() → arrive
+            e.aA++; e.ak = wp.a; e.al = wp.b
+            e.setAnim(0); e.ag = 0; e.ah = 0
+            return
+        }
+        if (framesLeft != 0) {                       // L190: lerp
+            e.ag = (ddx shl 8) / framesLeft
+            e.ah = (ddy shl 8) / framesLeft
+        }
+        return
+    }
+    val tdx = e.aq - e.ak; val tdy = e.ar - e.al     // L192
+    e.cA++
+    if (e.cA > e.cz) { e.cA = e.cz; e.aq = -1; e.ar = -1 }  // timeout
+    if (e.aq != -1 || e.ar != -1) {                // L200 fly
+        if (abs(tdx) < 5) { e.ag = 0; e.ak = e.aq }
+        else e.ag = if (tdx > 0) e.cx else -e.cx   // L203-205
+        if (abs(tdy) < 5) { e.ah = 0; e.al = e.ar }
+        else e.ah = if (tdy > 0) 1280 else -1280   // L210-212
+    }
+    // L214 (proven): snap+grab on W overlap (cutscene-gated by g.s).
+    if (!w.gS && Entity.overlapStrict(e.W, p.W)) {
+        e.ak = p.ak; e.al = p.al
+        e.setAnim(2); e.aC = 30; e.aq = -1; e.ar = -1
+        return
+    }
+    // L220-226: arrival when position==target, or target cleared.
+    if ((e.ak != e.aq || e.al != e.ar) && (e.aq != -1 || e.ar != -1)) return
+    // L227-231 (proven): arrival tail — hop (Z7>0 → S6) or drop (S3).
+    e.ag = 0; e.ah = 0; e.aq = -1; e.ar = -1
+    if (e.Z[7] > 0) { e.setAnim(6); e.ah = w.kX + 1 } else e.setAnim(3)
+    e.cz = e.clip?.frameCount(e.S) ?: 0            // cz = aa.b(S)
+    e.cA = 0
+}
+
+/** L263-322 (proven): S2 — grab hold. Mirror player velocity + y; keep the
+ *  clip-74 prompt alive; hold expiry kills the player (g.d(999)); the
+ *  `i.f(4112,8256)` mash escape releases every S2-bound ax64 sibling. */
+private fun ax64S2(e: Entity, w: LevelCellSource, p: Entity) {
+    e.ag = p.ag; e.ah = p.ah; e.al = p.al          // mirror (L263)
+    val m = p.ae
+    // L266-269 (proven; marker's clip-identity check relaxed to ax14/S —
+    // our markers spawn on clip9, `inferred`): bad marker → re-spawn it at
+    // the view centre.
+    val markerOk = m != null && m.ax == 14 && m.S == 0
+    if (!markerOk) {
+        p.releaseAe()
+        p.spawnAeMarker(w, 0, w.kO + 200, w.kP + 120)   // p.c(k.O+200,k.P+120)
+    }
+    if (e.aC <= 0) {                               // L271: hold expired
+        p.gDrain(999, w)                           // g.d(999)
+        p.releaseAe(); w.iBi = false
+        e.setAnim(if (e.Z[6] != 0) 5 else 4)       // L276
+        return
+    }
+    e.aC--                                         // L278
+    w.iBi = true                                   // i.bi = true
+    p.setAnim(15)                                  // p.i(15)
+    if (w.iBB) { w.iBC = false; w.iBD = false; w.iBE = 999; w.iBG = 100 }
+    p.moveMarker(w, w.kO + 200, w.kP + 120)        // p.d(k.O+200, k.P+120)
+    if (p.markerTouched(w)) p.bl += 9              // L281-285: touch → +9
+    if (!p.mashQte(w)) return                      // L285→L322: not escaped
+    // escape (proven, L285-298): release + anim 9 + reset S2 siblings.
+    p.bl = 0; w.kStatE(e.aw); w.iBi = false
+    p.releaseAe(); p.setAnim(9)
+    for (n in w.npcs) {
+        if (n.ax != 64 || n.S != 2) continue
+        n.ag = 0; n.ah = 0
+        n.setAnim(if (n.Z[6] != 0) 5 else 4)
+        n.cz = n.clip?.frameCount(n.S) ?: 0        // cz = aa.b(S)
+        n.cA = 0
+    }
+}
+
+/** L300-306 (proven): S3/4/5 (+ S2's bad-marker arm) — despawn tail. */
+private fun ax64S345(e: Entity, w: LevelCellSource, p: Entity) {
+    // L300 zeros `aS.bl` only on the S4/S5/S2-fail entry; S3 enters at L301
+    // and skips that arm (proven — i.java:15801/15803).
+    if (e.S != 3) p.bl = 0
+    e.ag = 0; e.ah = 0; e.cA = e.T                 // L301
+    if (!e.animFinished()) return                  // r() gate
+    if (p.S == 15) p.setAnim(4)                    // L304: revive held-hurt
+    w.removeEntity(e)                              // L306: k.c(this)
+}
+
+/** L234-237 (proven): S6 — anim end → S7 stalk; below cam-bottom → sink. */
+private fun ax64S6(e: Entity, w: LevelCellSource) {
+    if (e.animFinished()) e.setAnim(7)             // r() → i(7)
+    if (e.al > w.kP - 20) e.ah = w.kY
+}
+
+/** L240-258 (proven): S7 — stalk budget + barrage + hover + despawn. */
+private fun ax64S7(e: Entity, w: LevelCellSource, p: Entity) {
+    e.Z[8]--
+    e.aC--
+    if (e.aC <= 0) { e.aC = e.Z[9]; ax64Barrage(e, p, w) }  // a(1,false)
+    e.ah = w.kY shr 1                              // L243 hover
+    e.ag = if (abs(e.ak - p.ak) <= 10) 0
+           else if (e.ak < p.ak) 512 else -512     // L246-249
+    if (e.runnerG) e.ag = 0                        // L252: bound → still
+    if (e.Z[8] < 0) e.ah = w.kY shr 1              // L255
+    if (e.al > w.kP - 20) e.ah = w.kY              // L258
+    if (!ax64Alive(e, w)) w.removeEntity(e)        // L261→L306: v()==false
 }
