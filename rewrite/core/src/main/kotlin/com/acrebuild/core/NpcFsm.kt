@@ -4003,6 +4003,186 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
+// =====================================================================
+// ax15 — bu() (i.java:16693, proven): grapple/hang volume. bi[15]=25.
+// S6/S8 run the body: player pushed out horizontally, captured into a
+// hang (e(r1) → aS.i(108) + g.a claim), or claimed by the key arms.
+// S9 → P|=16 (passive marker). S10 → P|=16 + bt() falling sweep.
+// S7 → respawn-or-remove. Level-0 record aw=124 is the S9 marker.
+// =====================================================================
+
+/** init arm — `case 15` (i.java:2669) → L362 (:3553, proven):
+ *  `az = r8[7]`; r8[5] ∈ {9,10} → `Z = int[8], Z[4] = -1`;
+ *  r8[5] ∈ {6,8} → `Z = int[4]`; both then `Z[0]=r8[8], Z[1]=ak,
+ *  Z[2]=al, Z[3]=0`; other r8[5] → no Z. Shared `i(r8[5]) + t()`. */
+fun NpcFsm.initAx15(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    when (rf(5)) {
+        9, 10 -> { e.Z.fill(0); e.Z[4] = -1 }
+        6, 8 -> { }                                          // Z=int[4]: same
+        else -> { }
+    }
+    if (rf(5) == 9 || rf(5) == 10 || rf(5) == 6 || rf(5) == 8) {
+        e.Z[0] = rf(8); e.Z[1] = e.ak; e.Z[2] = e.al; e.Z[3] = 0
+    }
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `bu()` verbatim (i.java:16693-16924, proven). S6/S8 → the L7 body;
+ *  S9 → `P|=16`; S10 → `P|=16` + `bt()`; S7 → `L198`; else → `L204`
+ *  (`b = false` tail on every arm except S7's remove-return). */
+fun NpcFsm.tickAx15(e: Entity, w: Level0World, p: Entity) {
+    when (e.S) {
+        9 -> { e.P = e.P or 16; e.b = false }                          // L4
+        10 -> { e.P = e.P or 16; e.sweepHostiles(w); e.b = false }     // L5
+        7 -> {                                                       // L198
+            if (e.animFinished()) {
+                if (e.Z[3] == 1) { w.removeEntity(e); return }       // L203 early
+                e.setAnim(6); e.ak = e.Z[1]; e.al = e.Z[2]
+            }
+            e.b = false
+        }
+        6, 8 -> { ax15Body(e, w, p); e.b = false }                   // L7→L204
+        else -> e.b = false                                          // L204
+    }
+}
+
+/** L7-L195 body of `bu()` (proven; the decompiler's L103/L99 goto
+ *  loop is an artifact — side pushout applies each matching side
+ *  once, `high-confidence` on that collapse). */
+private fun ax15Body(e: Entity, w: Level0World, p: Entity) {
+    // L9: claimable ax43 overlay overlapping → collapse to S7 + mark.
+    if (e.S == 6) {
+        val g = p.ga
+        if (g != null && g.ax == 43 && g.S == 1 &&
+            Entity.overlapStrict(g.W, e.W)) {
+            e.setAnim(7); e.Z[3] = 1
+        }
+    }
+    // L17
+    val r1 = e.S
+    val r9 = r1 == 10 && e.Z[0] != -1                              // L20-L23
+    e.collideSides(w, true)                                        // a(true)
+    if (p.S == 50) { p.ac = null; e.ag = 0; return }               // L27-ish
+    if (e.P and 128 != 0) { w.removeEntity(e); return }            // L29 cull
+    e.ag = 0
+    if (p.ga !== e && Math.abs(p.ak - e.ak) < 60) {
+        if (Math.abs(p.al - e.al) < 30) e.pushContact(w)           // L34 a()
+        // L37 hang-below path — in front + below midY + |Δal|<20
+        if (p.inFrontOf(e) &&
+            p.al > (e.W[1] + e.W[3]) shr 1 &&
+            Math.abs(p.al - e.al) < 20) {
+            if (p.S == 77) e.hangOnEdge(w, r1)
+            else {
+                // L46 — locomotion-state capture/pushout
+                if (p.gC()) {
+                    if (Entity.overlapStrict(p.W, e.W)) {
+                        // L51-L57: horizontal pushout + hang attempt
+                        p.ag = 0; p.ah = 0
+                        if (p.ak - e.ak < 0) {
+                            p.ak = e.ak - ((e.W[2] - e.W[0]) shr 1) -
+                                    (p.W[2] - p.ak)
+                        } else if (p.ak - e.ak > 0) {
+                            p.ak = e.ak + ((e.W[2] - e.W[0]) shr 1) +
+                                    (p.ak - p.W[0])
+                        }
+                        e.hangOnEdge(w, r1)                        // L57
+                    } else if (p.ac === e) {
+                        ax15Capture(e, w, p)                       // L50→L59
+                    }
+                }
+            }
+        } else {
+            ax15Capture(e, w, p)                                   // L59
+        }
+    }
+    // L119 — release check when the block claimed the player
+    if (p.ga === e && p.S !in 107..109 && p.S != 209 &&
+        !Entity.overlapStrict(p.W, e.W)) {
+        p.ga = null
+    }
+    // L130 — unsupported + unridden + no pending link → fall
+    if (!e.supportedByGround(w) && e.s == null && !r9) {
+        e.ag = 0; e.ah = 4096
+    }
+    // L137 — grounded → settle flags
+    if (e.supportedByGround(w)) { e.bd = true; e.ai = 0; e.ah = 0 }
+    // L141 — neighbor sweep over k.bd (= w.npcs)
+    for (n in w.npcs) {
+        // L156 ax44 door overlapping an S6 block → i(7) collapse anim
+        if (n.ax == 44 && n.S == 0 && r1 == 6 &&
+            Entity.overlapStrict(n.X, e.W)) {
+            e.setAnim(7)
+        }
+        // ax66 platform ride — mount on overlap, unmount on leave,
+        // carry by its velocity (L167/L172/L195)
+        if (n.ax == 66) {
+            if (Entity.pointInBox(e.ak, e.al, n.W) && e.s !== n) {
+                e.s = n; e.al = n.W[1] + 1; e.ag = 0; e.ah = 0
+            }
+            if (e.s === n && !Entity.overlapStrict(e.W, n.W)) e.s = null
+            if (e.s === n) { e.ak += n.ag shr 8; e.al += n.ah shr 8 }
+        }
+        // ax11 soldier shove — i(2) + lateral pushout (L185/L190)
+        if (n.ax == 11 && Entity.overlapStrict(e.W, n.W) &&
+            (n.S == 3 || n.S == 4 || n.S == 23 || n.S == 22)) {
+            n.setAnim(2); n.aA = 0
+            n.ak = if (n.ak > e.ak) {
+                e.W[2] + (n.W[2] - n.W[0]) / 2 + 2
+            } else {
+                e.W[0] - (n.W[2] - n.W[0]) / 2 - 2
+            }
+            n.ag = 0; n.ah = 0
+        }
+    }
+}
+
+/** L59-L119 capture arm of `bu()` (proven except the L94/L103/L99
+ *  pushout-fling — `high-confidence`, decompiler label loop collapsed
+ *  to the symmetric two-side form). */
+private fun ax15Capture(e: Entity, w: Level0World, p: Entity) {
+    // L59 gates
+    if (p.ga != null) return                                       // →L130
+    if (p.al >= (e.W[1] + e.W[3]) shr 1) return
+    if (!Entity.pointInBox(p.ak, p.al, e.W)) return
+    if (p.S == 20 && p.T <= 1) return                              // mid-rise skip
+    // L69 — free state (or S34) → capture attempt
+    if (p.gB() || p.S == 34) {
+        // L73 — inside the span → claim
+        if (p.ak <= e.W[0] || p.ak >= e.W[2]) {
+            // L94/L99 — outside span: side pushout + a(2560) fling
+            if (p.ak <= e.ak && p.ag > 0) {
+                p.ak = e.ak - (p.W[2] - p.W[0]) / 2 - (e.W[2] - e.W[0]) / 2
+                p.ai = 0; p.ag = 0
+                p.flingAirborne(2560, w)
+            } else if (p.ak > e.ak && p.ag < 0) {
+                p.ak = e.ak + (p.W[2] - p.W[0]) / 2 + (e.W[2] - e.W[0]) / 2
+                p.ai = 0; p.ag = 0
+                p.flingAirborne(2560, w)
+            }
+            return
+        }
+        p.ga = e                                                   // g.a = this
+        p.setAnim(5); p.al = e.W[1] + 1
+        p.ag = 0; p.ah = 0; p.aj = 0
+        if (w.padHeld(16388) || w.padDown(16388) ||
+            (p.av && (w.padHeld(2) || w.padDown(2))) ||
+            (!p.av && (w.padHeld(8) || w.padDown(8)))) {
+            p.setAnim(22)                                          // L92 vault
+        }
+    } else if (p.S == 62) {
+        p.flingAirborne(2560, w)                                   // L108 arm a
+    } else if (p.S == 63) {
+        // wall-climb nudge: hop ±10 through the block, flip, reset
+        p.ak += if (p.av) -10 else 10
+        p.av = !p.av
+        p.setAnim(0)
+    }
+}
+
+
 // ---------------------------------------------------------------------------
 // ax6 `an()` (i.java:7220-7248) — overlap-trigger marker (one-shot flags).
 // ax19 `aO()` (i.java:10261-10299) — meter-restore pickup + fx burst.
