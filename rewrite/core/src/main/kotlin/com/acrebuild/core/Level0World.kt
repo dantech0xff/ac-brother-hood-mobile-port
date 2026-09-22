@@ -406,7 +406,15 @@ class Level0World(
             if (f.isEmpty()) continue
             if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
             if (f.size < 7) continue
-            val type = f[0]
+            // Retype head (i.java:2640-2651, proven): ax11 records whose
+            // spawn anim r8[5]∈{80,93} become ax47 ledge sentinels; ax17
+            // records with r8[5]==120 become ax50 pouncers. The switch
+            // dispatch sees the retyped ax — apply before clip lookup.
+            val type = when {
+                f[0] == 11 && f.size > 5 && (f[5] == 80 || f[5] == 93) -> 47
+                f[0] == 17 && f.size > 5 && f[5] == 120 -> 50
+                else -> f[0]
+            }
             // ax67: per-record clip from bk[kind] (i.java:2633); others use
             // the bi[] table. decorClip(-1)/missing clip → record skipped.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
@@ -449,6 +457,8 @@ class Level0World(
             else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
             else if (type == 69) npcFsm.initAx69(e, f.toList(), this)
             else if (type == 73) npcFsm.initAx73(e, f.toList())
+            else if (type == 47) npcFsm.initAx47(e, f.toList())
+            else if (type == 50) npcFsm.initAx50(e, f.toList())
             else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
@@ -715,6 +725,33 @@ class Level0World(
     }
     override var gc: Entity? = null                // g.c crate-top link
     override var iBq = 0                           // i.bq floor-Y latch
+    override var kN: Entity? = null                // k.N prompt marker
+    override var kCq = -1                          // k.cq bound uid
+    override var gP = 0                            // g.p kill-bonus flag
+    /** `k.c(int,int,int)` (k.java:870, proven): the ax14/clip9/S54/az302
+     *  prompt marker — created once then repositioned every call; `cq` is
+     *  bound to the requesting entity's uid. */
+    override fun showPrompt(x: Int, y: Int, aw: Int) {
+        if (kN == null) {
+            kN = Entity(14, clips[9]).apply {
+                this.aw = -1; au = 0
+                setAnim(54); az = 302
+                setPositionPx(x, y); av = false
+                refreshBoxes()
+            }
+            pendingInsert += kN!!
+            kCq = aw
+        }
+        kN?.setPositionPx(x, y)
+    }
+    /** `k.k(int)` (k.java:888, proven): `cq==aw || aw==-1` → `N.p()` +
+     *  `N=null` + `cq=-1`. */
+    override fun clearPrompt(aw: Int) {
+        val n = kN ?: return
+        if (kCq == aw || aw == -1) {
+            n.deactivate(); pendingRemove += n; kN = null; kCq = -1
+        }
+    }
     var gs = false                                 // g.s transition bool
     var gT = 0                                     // g.t transition int
     override fun gH(): Boolean = gs || gT != 0     // g.h() latch
@@ -947,6 +984,8 @@ class Level0World(
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
             else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
             else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
+            else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
+            else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
