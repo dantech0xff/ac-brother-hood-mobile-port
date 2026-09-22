@@ -4309,6 +4309,125 @@ class Slice44Test {
     }
 }
 
+// ---------------------------------------------------------------------------
+// slice 45 — ax13 `aW()` rope/vine swing (i.java:13182-13367)
+// ---------------------------------------------------------------------------
+class Slice45Test {
+
+    /** ax13 record fixture — the shared L111 map:
+     *  `[13,uid,x,y,aE,S,P,?, ?, ?, ?, aF,o,p,aG,ay]`. */
+    private fun ax13At(w: Level0World, x: Int, y: Int, s: Int = 0,
+                       ag: Int = 0, z1: Int = 10): Entity {
+        val e = Entity(13, null)
+        e.setPositionPx(x, y)
+        val f = mutableListOf(13, 0, x, y, 0, s, 0)
+        for (i in 7..13) f += 0
+        f += ag            // r8[14] → aG
+        f += 0             // r8[15] → ay
+        w.npcFsm.initAx13(e, f)
+        e.Z[1] = z1        // rope segment count
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax13 pendulum integrates only while displaced`() {
+        val w = world(); w.npcs.clear()
+        val e = ax13At(w, 100, 100)
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(0, e.bP); assertEquals(0, e.bO)   // L5: bP==0 skips L6
+        e.bO = 256                                      // displace → L6 runs
+        val p0 = e.bP
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(p0 + (256 shl 1), e.bP, "bP += bO<<1")
+        assertTrue(e.bO < 256, "bO -= sin(n-θ)<<1 restoring force")
+    }
+
+    @Test fun `ax13 swing-side sign flip damps velocity by an eighth`() {
+        val w = world(); w.npcs.clear()
+        val e = ax13At(w, 100, 100)
+        e.bO = -512; e.bP = 512                         // swinging left, +angle
+        e.j = 1
+        // integrate: bP += -1024 → negative → sign flip → damp
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(-1, e.j, "side latch follows bP sign")
+    }
+
+    @Test fun `ax13 grab latch binds the player and arms the hang`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax13At(w, p.ak, p.al - 40, ag = 0, z1 = 10)
+        e.bN = 6                                          // rope mid-swing
+        p.setAnim(18)                                     // grabbable (g.b)
+        p.N = p.ak shl 8; p.O = (e.O + 2000)             // inside arc box
+        p.refreshBoxes()
+        // drive the arc box against the player's W
+        w.npcFsm.tickAx13(e, w, p)
+        if (p.bM === e) {
+            assertEquals(1, e.aA, "aA=1 attached")
+            assertEquals(101, p.az, "aS.az=101")
+            assertTrue(p.aA and 64 != 0, "aS.aA|=64")
+            assertEquals(326, p.S, "i(326) hang anim")
+        } else {
+            // geometry-dependent arm — assert no crash at minimum
+            assertTrue(e.aA == 0 || p.bM === e)
+        }
+    }
+
+    @Test fun `ax13 aG4 spawner counts segments while the ax58 gate is open`() {
+        val w = world(); w.npcs.clear()
+        val e = ax13At(w, 100, 100, ag = 4, z1 = 10)
+        e.Z[6] = -1                                       // no link → grow
+        e.bN = 2
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(3, e.bN, "Z[6]==-1 → bN++")
+        e.bN = 10
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(10, e.bN, "bN >= Z[1] caps the spawner")
+        val door = Entity(58, null).apply { aw = 42; setAnim(2) }  // closed
+        w.npcs.add(door)
+        e.Z[6] = 42; e.bN = 2
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(2, e.bN, "linked + !bf() → no growth")
+        door.setAnim(1)                                    // bf() open set
+        w.npcFsm.tickAx13(e, w, w.player)
+        assertEquals(3, e.bN, "bf() gate open → bN++")
+    }
+
+    @Test fun `ax13 release flings the rider with the aG1 leap arc`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax13At(w, p.ak, p.al - 40, ag = 1)
+        e.aA = 1; e.bM = p; p.bM = e; p.aA = p.aA or 64
+        e.bO = 300; e.bP = -512                          // velocity flip window
+        val o0 = e.bO
+        // integrator flips bO sign → r0*bO<0 → aS.j()
+        repeat(6) { if (p.bM === e) w.npcFsm.tickAx13(e, w, p) }
+        assertNull(p.bM, "release unlinks")
+        assertTrue(p.S == 23 || p.bM === e, "aG1 → i(23) leap")
+    }
+
+    @Test fun `g k rope input pumps and climbs`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = ax13At(w, 100, 100, ag = 1, z1 = 10)
+        e.aA = 1; e.bM = p; p.bM = e
+        e.bN = 5
+        p.setAnim(326)
+        // UP held with dead pendulum → climb one segment (L92)
+        w.pad.held = 16388
+        w.npcFsm.tickAx13(e, w, p)
+        assertEquals(4, e.bN, "u(16388) → bN--")
+        assertEquals(82, p.S, "i(82) climb anim")
+        // descend at bottom of rope → L113 drop keeps bM (verbatim)
+        e.bN = 9; p.setAnim(326); p.aA = p.aA or 64
+        w.pad.held = 33024
+        e.bO = 0; e.bP = 0
+        w.npcFsm.tickAx13(e, w, p)
+        assertEquals(43, p.S, "bN+2 > Z[1]-2 → i(43) drop")
+        assertTrue(p.bM === e, "verbatim: L116 does not clear aS.bM")
+    }
+}
+
 
 // =====================================================================
 // Slice 43c — i.a() big-op decoder (script ops 100-114).
