@@ -1337,4 +1337,103 @@ class Level0WorldTest {
         assertEquals(0, p.cx, "L66 clears cx")
         assertSame(victim, p.F)
     }
+
+    // -- slice 27: as() the lunge execution (g.java:4242) -------------------
+
+    @Test fun `lungeTick lands on the ax72 mount and mounts on with S277`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 272
+        val m = ax72MountAt(w, 340, 150, 0)          // Z[0]==0 swing mount
+        Entity.at = m; p.g = null
+        p.cE = 1; p.cH = p.X[0]; p.cI = p.X[1]; p.cC = 10; p.cD = 0
+        p.lungeTick(w)
+        assertEquals(277, p.S, "ax72 Z[0]!=4 -> i(277) mount-on")
+        assertEquals(0, p.cL, "L42 clears cL")
+        assertEquals(p.X[0], p.ak, "L37 lands at the attackbox point")
+        assertSame(m, p.F)
+        Entity.at = null
+    }
+
+    @Test fun `lungeTick mid-arc advances the arc point and returns`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 272
+        val m = ax72MountAt(w, 340, 150, 0)
+        Entity.at = m; p.g = null
+        p.cE = 3; p.cH = 100; p.cI = 200; p.cC = 5; p.cD = -2
+        p.lungeTick(w)
+        assertEquals(272, p.S, "mid-arc keeps the lunge anim")
+        assertEquals(105, p.cH); assertEquals(198, p.cI)
+        assertEquals(2, p.cE)
+        Entity.at = null
+    }
+
+    @Test fun `lungeTick with no target flings airborne a(0)`() {
+        val w = world()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 272
+        Entity.at = null; p.g = null
+        p.cE = 5
+        p.lungeTick(w)
+        assertEquals(43, p.S, "F==null -> g.a(0) masked enter S43")
+        assertEquals(0, p.ah); assertEquals(1536, p.aj)
+    }
+
+    @Test fun `lungeTick throws the ax11 victim along cy`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 272
+        val s = soldierAt(w, 340, 150)
+        s.Z[19] = 1; s.aB = 100; s.av = true        // faces left -> p in front
+        p.g = s; Entity.at = null
+        p.cE = 1; p.cH = p.X[0]; p.cI = p.X[1]; p.cC = 0; p.cD = 0
+        p.cF = 5120; p.cy = 32
+        p.lungeTick(w)
+        assertEquals(277, p.S, "ax11 victim -> i(277)")
+        assertEquals(0, p.cL)
+        assertEquals(20 * Trig.sin(32), s.ag, "F.ag = (cF>>8)*j.b(cy)")
+        assertEquals(-20 * Trig.sin(Trig.N - 32), s.ah, "F.ah = -(cF>>8)*j.b(n-cy)")
+        assertEquals(181, s.S, "F.g(this) true -> i(181)")
+        p.g = null
+    }
+
+    @Test fun `lungeTick S298 victim plays i168 and the player keeps S298`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 298
+        val s = soldierAt(w, 340, 150)
+        s.Z[19] = 1; s.aB = 100
+        p.g = s; Entity.at = null
+        p.cE = 1; p.cH = p.X[0]; p.cI = p.X[1]
+        p.lungeTick(w)
+        assertEquals(168, s.S, "S==298 -> F.i(168)")
+        assertEquals(298, p.S, "player keeps the carry anim")
+        p.g = null
+    }
+
+    @Test fun `lungeTick ax72 Z0==4 links the cart track without mounting`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 272
+        val m = ax72MountAt(w, 340, 150, 4)          // Z[0]==4 cart
+        val track = Entity(44, null)
+        track.aw = 7; track.setPositionPx(500, 300)
+        w.npcs.add(track)
+        m.Z[4] = 7
+        Entity.at = m; p.g = null
+        p.cE = 1; p.cH = p.X[0]; p.cI = p.X[1]
+        p.lungeTick(w)
+        assertEquals(272, p.S, "Z[0]==4 skips i(277) — stays for au()")
+        assertSame(track, m.ac, "L30 ac -> the Z[4] track entity")
+        assertEquals(m.ak - track.ak, track.aq)
+        assertEquals(m.al - track.al, track.ar)
+        assertEquals(0, p.cL)
+        Entity.at = null
+    }
 }

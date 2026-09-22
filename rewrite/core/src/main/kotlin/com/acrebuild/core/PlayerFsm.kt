@@ -83,6 +83,18 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     p.setAnim(if (p.Q == 79) 79 else 0)
                 }
             }
+            // L1863 — lunge states tick the arc (g.java:886-906 dispatch)
+            272, 273, 274, 275, 292 -> {
+                val mount = Entity.at
+                if (mount != null && mount.Z[0] == 4 && p.cE <= 0) {
+                    // Z[0]==4 cart, arc done -> au() orbit (unported)
+                } else p.lungeTick(world)
+            }
+            298 -> {                          // L1293
+                if (p.animFinished()) p.P = p.P or 64
+                val mount = Entity.at
+                if (mount != null && mount.S != 168) p.lungeTick(world)
+            }
             199 -> case199(p, pad)
             5 -> landArm(p, pad)              // L464
             6 -> {                            // L139
