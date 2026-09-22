@@ -239,7 +239,12 @@ def pack_level():
         "layers": {k: {"entry": LAYER_ENTRIES[k], "tileset": TILESETS.get(k),
                        "dims": [dims[k]["width"], dims[k]["height"]]}
                    for k in LAYER_ENTRIES},
-        "strings": "pack-14/entry-001-strings.json"}, indent=1))
+        "strings": "pack-14/entry-001-strings.json",
+        "scripts": "pack-6/entry-007 (k.by/bz/eH, k.java:6196)"}, indent=1))
+    # `j.e(7)` of the mission pack → k.by/bz/eH script tables
+    # (k.java:6190-6320) — carried raw; ScriptTables.load parses it.
+    (out / "scripts.bin").write_bytes(
+        (pack_dir / "entry-007-marker-003.bin").read_bytes())
 
     for name, clip in TILESETS.items():
         src_dir = next((SPR / "pack-15").glob(f"entry-{clip:03d}-*"))
