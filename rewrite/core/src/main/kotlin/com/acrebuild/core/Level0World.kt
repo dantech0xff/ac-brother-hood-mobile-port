@@ -70,6 +70,31 @@ class Level0World(
     var camY = 0
         private set
 
+    /** ax37 scroll-bound trigger (i.java:7053 al()).
+     *  W = zone rect ak+f7,al+f8,+f9,+f10 ; X = bound rect ak+f11..f14 ;
+     *  mask = Z[0]=f15 ; mode = Z[3]=f18 (1: fire while overlap a(),
+     *  0: fire on full containment b()). All level-0 records carry
+     *  Z[2]==-1 → the linked-entity gate is unexercised and unported. */
+    data class ScrollTrigger(val zone: IntArray, val bound: IntArray,
+                             val mask: Int, val mode: Int)
+
+    val scrollTriggers: List<ScrollTrigger> = level.entities
+        .filter { it.size >= 19 && it[0] == 37 }
+        .map { f ->
+            ScrollTrigger(
+                intArrayOf(f[2] + f[7], f[3] + f[8],
+                           f[2] + f[7] + f[9], f[3] + f[8] + f[10]),
+                intArrayOf(f[2] + f[11], f[3] + f[12],
+                           f[2] + f[11] + f[13], f[3] + f[12] + f[14]),
+                f[15], f[18])
+        }
+
+    // k.R/k.T/k.S/k.U — camera scroll bounds written by ax37 triggers
+    // (consumed at k.java:2430-2486: camX∈[R, S-400], camY∈[T, U-240];
+    // <=0 means unset).
+    var boundMinX = 0; var boundMinY = 0
+    var boundMaxX = 0; var boundMaxY = 0
+
     init {
         resetPlayerToSpawn()
         spawnEntities()
@@ -108,7 +133,8 @@ class Level0World(
                 av = (f[6] and 1) != 0
             }
             if (type == 11) npcFsm.initSoldier(e, f.toList())
-            else for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
+            else if (type != 37)
+                for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
             // Z[0]∈{1,2} (red-uniform variant), aH=0 otherwise; the player
             // uses bo[bL][0]=0 for level 0 (bo={{0,-1},{3,1},{5,2},{6,3}},
@@ -162,6 +188,40 @@ class Level0World(
         spawnEntities()
         failed = false
     }
+
+    /**
+     * ax37 `al()` (i.java:7053) — scroll-bound trigger.
+     * mode==1 (Z[3]): fire while player W overlaps the zone (`a()`);
+     * mode==0: fire when player W is fully inside (`b()` = contained).
+     * Payload per Z[0] bits, each gated on zone∩viewport `a(this.W,k.ac)`:
+     * &1→k.R=X[0] (camX floor), &4→k.T=X[1] (camY floor),
+     * &2→k.S=X[2] (camX+400 ceiling), &8→k.U=X[3] (camY+240 ceiling).
+     * Z[2]==-1 records skip the linked-entity gate (all level-0 data).
+     * `k.ah`/`k.n()` context registration and bound-reset-on-snap
+     * (k.java:2447-2449) unported — bounds persist until overwritten
+     * (inferred: level-0 data only ever expands the bound forward).
+     */
+    private fun fireScrollTriggers() {
+        val view = intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
+        for (t in scrollTriggers) {
+            val pw = player.W
+            val fired = if (t.mode == 1) rectsOverlap(pw, t.zone)
+                        else rectContains(pw, t.zone)
+            if (!fired) continue
+            if (!rectsOverlap(t.zone, view)) continue
+            if (t.mask and 1 != 0) boundMinX = t.bound[0]
+            if (t.mask and 4 != 0) boundMinY = t.bound[1]
+            if (t.mask and 2 != 0) boundMaxX = t.bound[2]
+            if (t.mask and 8 != 0) boundMaxY = t.bound[3]
+        }
+    }
+
+    private fun rectsOverlap(a: IntArray, b: IntArray) =
+        a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+
+    private fun rectContains(inner: IntArray, outer: IntArray) =
+        inner[0] >= outer[0] && inner[1] >= outer[1] &&
+        inner[2] <= outer[2] && inner[3] <= outer[3]
 
     // -- input ------------------------------------------------------------
 
@@ -220,9 +280,16 @@ class Level0World(
 
         for (n in npcs) npcFsm.tick(n, player)
         fireCheckpoints()
+        fireScrollTriggers()
 
         camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
         camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))
+        // ax37 scroll bounds (k.java:2430-2486 proven): camera target is
+        // clamped inside [R, S-400]x[T, U-240] when each bound is set (>0).
+        if (boundMinX > 0 && camX < boundMinX) camX = boundMinX
+        if (boundMaxX > 0 && camX > boundMaxX - VIEW_W) camX = boundMaxX - VIEW_W
+        if (boundMinY > 0 && camY < boundMinY) camY = boundMinY
+        if (boundMaxY > 0 && camY > boundMaxY - VIEW_H) camY = boundMaxY - VIEW_H
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) missionFail()

@@ -489,4 +489,17 @@ class Level0WorldTest {
         assertEquals(44, slot0)
         assertEquals(0, w.player.palette)
     }
+
+    @Test fun `ax37 trigger writes camera bounds on containment i7053`() {
+        val w = world()
+        assertEquals(28, w.scrollTriggers.size)
+        // aw=133: zone (913,553)-(1133,853), mask=9 (minX+maxY), mode=0
+        w.player.setPositionPx(1050, 750)
+        w.tick(emptyList())          // camera still at spawn → view-gate holds
+        w.tick(emptyList())          // camera arrived → fire
+        assertEquals(853, w.boundMaxY, "X[3]=al-50+300=853 → k.U")
+        w.player.setPositionPx(5000, 900)   // target camY 740 > ceiling
+        w.tick(emptyList())
+        assertTrue(w.camY <= 613, "camY ceiling = U-240 = 613, got ${w.camY}")
+    }
 }
