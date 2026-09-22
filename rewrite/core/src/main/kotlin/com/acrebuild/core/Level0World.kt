@@ -35,6 +35,7 @@ class Level0World(
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             10 to 6,      // clip6 not converted yet — triggers spawn clipless
+            14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
         )
     }
@@ -71,7 +72,7 @@ class Level0World(
 
     val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
-    private val pendingRemove = HashSet<Entity>()
+    val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
     // `k.aK` insert buffer (k.b(i), proven): entities spawned mid-tick join
     // `bb[]` at the drain after the npc pass — never iterate-mutated.
     private val pendingInsert = ArrayList<Entity>()
@@ -111,7 +112,7 @@ class Level0World(
         val m = marker
         if (m == null) {
             val e = Entity(14, clips[9]).apply {
-                setAnim(54); az = 302; setPositionPx(x, y)
+                setAnim(54); az = 302; au = 0; setPositionPx(x, y)
             }
             marker = e; markerTag = tag; pendingInsert += e   // k.b(aK)
         } else m.setPositionPx(x, y)
@@ -145,20 +146,24 @@ class Level0World(
     /** `k.aS.W` — player hitbox. */
     override fun playerRect(): IntArray = player.W
 
+    /** `k.q(o)` (k.java:5887, proven): resolve a linked entity by `aw` —
+     *  `aS.aw==o → aS` else the `bb[]` scan (our npcs list). */
+    override fun findByAw(aw: Int): Entity? =
+        if (player.aw == aw) player else npcs.firstOrNull { it.aw == aw }
+
     /**
-     * `i.a(int,int,int)` (i.java:9810, proven): spawn an ax14 clip9 entity
-     * (the pickup/marker family) — `a(14, 9, anim, az=302)` via the 4-arg
-     * generic spawner (i.java:6898: P|=512, aw=-1, au=0), position (x,y).
+     * `i.a(int,int,int)` (i.java:9810) → `a(ax,clip,anim,az)` spawner
+     * (i.java:4799, proven): `aw=-1, au=0, ax=14, clip9, i(anim), az=302`,
+     * caller pos/facing (overridden to (x,y), av=false by i.a()), `t()` —
+     * which early-returns for ax14 leaving the zero-W `aX()` guard.
+     * NOTE: no `P|=512` — that's the 7-arg particle spawner's flag.
      */
     override fun spawnPickup(anim: Int, x: Int, y: Int): Entity {
         val e = Entity(14, clips[9]).apply {
-            aw = -1
+            aw = -1; au = 0
             setAnim(anim); az = 302
             setPositionPx(x, y); av = false
-            P = P or 512
-            refreshBoxes()          // ax14 t() early-returns — W stays the
-                                    // record-empty zero rect until aX()
-                                    // is ported; harmless (v() reads Y).
+            refreshBoxes()          // t() early-returns for ax14 → W zero
         }
         pendingInsert += e                        // k.b(aK)
         return e
@@ -271,6 +276,7 @@ class Level0World(
             else if (type == 10) npcFsm.initTrigger(e, f.toList())
             else if (type == 4) npcFsm.initDestructible(e, f.toList())
             else if (type == 67) npcFsm.initDecor(e, f.toList())
+            else if (type == 14) npcFsm.initPickup(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -423,7 +429,7 @@ class Level0World(
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
             else if (n.ax == 74) npcFsm.tickWisp(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
-            else if (n.ax == 14) n.advanceAnim()   // k.N marker: S54 loop
+            else if (n.ax == 14) npcFsm.tickPickup(n, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

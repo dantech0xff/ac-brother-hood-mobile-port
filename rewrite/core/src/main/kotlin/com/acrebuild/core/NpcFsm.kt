@@ -815,4 +815,75 @@ class NpcFsm(private val world: LevelCellSource) {
         ae.ak = if (r02 >= 0) world.kO + 20 else world.kO + 400 - 20
         ae.al = y
     }
+
+    /**
+     * ax14 record init — L88 arm (i.java:2868, proven): `az=200`, `aD=f7`,
+     * `aE=f8` (arming threshold), `o=f11` (linked entity `aw`, -1=none),
+     * `j=f12` (watch state), `P|=512`, `o!=-1 → P|=128` (hidden until
+     * armed), `f4==1 → aA=1` (persistent marker). Then the generic L419
+     * fill (i.java:3699): `W = [ak+f7, al+f8, +f9, +f10]` — record
+     * pickups get a live box; `a()`-spawned ones keep W empty → their
+     * `aX()` is a no-op (inert visuals like the S71 edge arrow).
+     */
+    fun initPickup(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = 200
+        e.aD = rf(7); e.aE = rf(8)
+        e.oId = rf(11); e.j = rf(12)
+        e.P = e.P or 512
+        if (e.oId != -1) e.P = e.P or 128
+        if (rf(4) == 1) e.aA = 1
+        e.setAnim(rf(5))
+        e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
+        e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
+    }
+
+    /**
+     * ax14 `aX()` (i.java:13410, proven) — pickup/marker lifecycle:
+     * - head: `W==null → return` (spawned visuals are inert). Our W is
+     *   always allocated, so the all-zero W stands in for null.
+     * - `a(aS.Y,W) && !aS.f()` → `aF=1`, `P&~128` (armed + unhidden).
+     * - `S==107` → follow the player (`ak/al = aS.ak/al`).
+     * - linked (`o!=-1`, resolved via `k.q` = scan by `aw`): in-play waits
+     *   `bZ>=aE`, then unhides, `ah=k.Y`, `aC=15` countdown → `k.c(this)`;
+     *   waits while target `P&32` (held) or `P&128` (hidden). Off-play:
+     *   hide when the player leaves (`P|=128`), consume when `r5.S==j`
+     *   and `aA!=1`.
+     * - unlinked: once armed (`aF==1`), player leaving W → `aA==1` hides
+     *   (`P|=128`), otherwise `k.c(this)` — the pickup is collected.
+     */
+    fun tickPickup(e: Entity, player: Entity) {
+        e.advanceAnim()
+        if (e.W.contentEquals(Entity.ZERO_RECT)) return      // L6 W==null
+        if (Entity.overlapI(player.Y, e.W) && !player.isHolding()) {
+            e.aF = 1
+            e.P = e.P and -129
+        }
+        if (e.S == 107) { e.ak = player.ak; e.al = player.al }
+        val r5 = if (e.oId != -1) world.findByAw(e.oId) else null
+        if (r5 != null) {
+            if (world.inPlay) {
+                if (e.bZ < e.aE) return                      // L17 wait arm
+                e.P = e.P and -129
+                e.ah = world.kY
+                if (e.aC <= 0) e.aC = 15
+                e.P = e.P or 16
+                if (r5.P and 32 != 0) return                 // held → wait
+                if (r5.P and 128 != 0) return                // hidden → wait
+                e.aC--
+                if (e.aC <= 0) world.removeEntity(e)
+                return
+            }
+            if (e.aF == 1 && !Entity.overlapI(player.Y, e.W))
+                e.P = e.P or 128
+            if (r5.S != e.j) return                          // watch state
+            if (e.aA == 1) return                            // persistent
+            world.removeEntity(e)
+            return
+        }
+        if (e.aF != 1) return                                // never touched
+        if (Entity.overlapI(player.Y, e.W)) return           // still inside
+        if (e.aA == 1) { e.P = e.P or 128; return }          // hide, keep
+        world.removeEntity(e)                                // collected
+    }
 }

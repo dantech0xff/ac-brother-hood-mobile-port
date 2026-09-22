@@ -810,7 +810,7 @@ class Level0WorldTest {
         val ae = w.player.ae
         assertNotNull(ae, "spawned pickup bound to player.ae")
         assertEquals(14, ae!!.ax); assertEquals(71, ae.S); assertEquals(302, ae.az)
-        assertTrue(ae.P and 512 != 0); assertEquals(-1, ae.aw)
+        assertEquals(-1, ae.aw); assertEquals(0, ae.au)   // i.a() spawner fields
         // r02 = player.ak - Wcenter; player left of center → pin k.O+380
         val edge = if (w.player.ak - ((e.W[0] + e.W[2]) shr 1) >= 0) 20 else 380
         assertEquals(w.camX + edge, ae.ak)
@@ -852,5 +852,125 @@ class Level0WorldTest {
         w.npcFsm.tickDecor(e, w.player)
         assertNull(w.player.ae)
         assertEquals(0, old.W[0])          // p() zeroed the boxes
+    }
+
+    // ---- slice 23: ax14 aX() pickup/marker lifecycle (i.java:13410) ----
+
+    private fun recordPickup(w: Level0World, rec: List<Int>): Entity {
+        val e = Entity(14, w.clips[9])
+        e.setPositionPx(rec[2], rec[3])
+        w.npcFsm.initPickup(e, rec)
+        w.npcs += e
+        return e
+    }
+
+    @Test fun `ax14 record init maps L88 fields + L419 W fill`() {
+        val w = world()
+        // [14, aw, x, y, f4, f5, f6, f7, f8, f9, f10, f11, f12]
+        val e = recordPickup(w, listOf(14, 10, 500, 500, 1, 69, 0, -10, -20, 40, 30, 55, 7))
+        assertEquals(200, e.az)
+        assertEquals(-10, e.aD); assertEquals(-20, e.aE)
+        assertEquals(55, e.oId); assertEquals(7, e.j)
+        assertTrue(e.P and 512 != 0)
+        assertTrue(e.P and 128 != 0)        // o != -1 → hidden
+        assertEquals(1, e.aA)               // f4==1 → persistent
+        assertEquals(69, e.S)
+        // L419: W = [ak+f7, al+f8, +f9, +f10] = [490, 480, 530, 510]
+        assertEquals(490, e.W[0]); assertEquals(480, e.W[1])
+        assertEquals(530, e.W[2]); assertEquals(510, e.W[3])
+    }
+
+    @Test fun `ax14 spawned pickup is inert under aX (zero-W guard)`() {
+        val w = world()
+        val e = w.spawnPickup(71, 500, 500)
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        // aX() returns on null-W — no arming, no removal
+        assertEquals(0, e.aF)
+        assertFalse(w.npcs.contains(e) && e in w.pendingRemove)
+    }
+
+    @Test fun `ax14 unlinked pickup arms then collects when player leaves`() {
+        val w = world()
+        val e = recordPickup(w, listOf(14, 11, 500, 500, 0, 69, 0, -30, -40, 60, 80, -1, 0))
+        assertTrue(e.P and 128 == 0)        // o==-1 → starts visible
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(1, e.aF)               // touched → armed
+        // player steps out of W → collected (k.c)
+        w.player.setPositionPx(900, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertTrue(e in w.pendingRemove)    // collected via k.c(this)
+    }
+
+    @Test fun `ax14 persistent marker hides on leave, unhides on return`() {
+        val w = world()
+        val e = recordPickup(w, listOf(14, 12, 500, 500, 1, 69, 0, -30, -40, 60, 80, -1, 0))
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(1, e.aF)
+        w.player.setPositionPx(900, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertTrue(e.P and 128 != 0)        // hidden, not removed
+        assertFalse(e in w.pendingRemove)
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertTrue(e.P and 128 == 0)        // unhidden again
+    }
+
+    @Test fun `ax14 S107 marker follows the player anchor`() {
+        val w = world()
+        val e = recordPickup(w, listOf(14, 13, 500, 500, 0, 107, 0, -30, -40, 60, 80, -1, 0))
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(w.player.ak, e.ak); assertEquals(w.player.al, e.al)
+        w.player.setPositionPx(600, 400); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(600, e.ak); assertEquals(400, e.al)
+    }
+
+    @Test fun `ax14 linked waits then counts down aC to removal`() {
+        val w = world()
+        // link target with aw=55 — prepend so k.q's firstOrNull finds it
+        // before any level-0 entity that may share the aw value
+        val target = Entity(11, w.clips[7]).apply { aw = 55 }
+        w.npcs.add(0, target)
+        // aE=0 → bZ(0)>=aE fires immediately
+        val e = recordPickup(w, listOf(14, 14, 500, 500, 0, 69, 0, -30, -40, 60, 80, 55, 7))
+        assertTrue(e.P and 128 != 0)        // starts hidden (o!=-1)
+        w.player.setPositionPx(900, 500); w.player.refreshBoxes()
+        w.npcFsm.tickPickup(e, w.player)
+        assertTrue(e.P and 128 == 0)        // unhidden by the L23 arm
+        assertTrue(e.P and 16 != 0)
+        assertEquals(14, e.aC)              // 15 then one decrement
+        repeat(14) { w.npcFsm.tickPickup(e, w.player) }
+        assertTrue(e in w.pendingRemove)  // aC hit 0 → k.c(this)
+    }
+
+    @Test fun `ax14 linked waits while target P&32 (held) or P&128`() {
+        val w = world()
+        val target = Entity(11, w.clips[7]).apply { aw = 55; P = 32 }
+        w.npcs.add(0, target)
+        val e = recordPickup(w, listOf(14, 15, 500, 500, 0, 69, 0, -30, -40, 60, 80, 55, 7))
+        w.player.setPositionPx(900, 500); w.player.refreshBoxes()
+        repeat(3) { w.npcFsm.tickPickup(e, w.player) }
+        assertEquals(15, e.aC)              // armed but held → no countdown
+        target.P = 128
+        repeat(3) { w.npcFsm.tickPickup(e, w.player) }
+        assertEquals(15, e.aC)              // hidden → still waits
+    }
+
+    @Test fun `holding a carried prop suppresses pickup arming (g_f)`() {
+        val w = world()
+        val e = recordPickup(w, listOf(14, 16, 500, 500, 0, 69, 0, -30, -40, 60, 80, -1, 0))
+        w.player.setPositionPx(500, 500); w.player.refreshBoxes()
+        // player carrying: ci in front + <120 x + <20 y → g.f() true
+        val prop = Entity(4, w.clips[3]).apply { setPositionPx(560, 505) }
+        w.player.ci = prop; w.player.av = false  // facing right, prop right
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(0, e.aF)               // f() true → no arm this tick
+        w.player.ci = null
+        w.npcFsm.tickPickup(e, w.player)
+        assertEquals(1, e.aF)
     }
 }
