@@ -28,6 +28,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var al: Int = 0                  // anchor y, px
     var homeX: Int = 0               // record home (re-materialize target)
     var homeY: Int = 0
+    var palette = 0                  // aH — clip palette slot (b.l(int))
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
