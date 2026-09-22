@@ -140,7 +140,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
     var bm = 0                     // i.bm — mash-QTE input latch (4112/8256)
     var ca = -1                    // i.ca — bound claim-counter index (-1 = none)
-    val cd = BooleanArray(8)       // i.cd — per-counter in-progress flags
+    val cd = BooleanArray(10)      // i.cd[10] — claim-script flags (h() allocs
+                                   // in the original; eagerly allocated here)
+    var cb: IntArray? = null       // i.cb[4] — claim-script vars (k() allocs)
+    var scriptOps: IntArray? = null// i.cL — claim-script op buffer copy of
+                                   // k.bz[ca] (g.cL is the int orbit field —
+                                   // same decompiled letter, different type)
+    var claimLatchX = -1           // i.cM — claim position-latch x, -1 =
+                                   // unbound (g.cM is the int orbit counter)
+    var claimLatchY = -1           // i.cN — claim position-latch y (g.cN is
+                                   // the int interact-gauge sub-tick)
+    var cP = -1                    // i.cP — pending claim-script index (bI)
+    var eventN = 0                 // i.n — record event id (ax5 r8[8]); `N`
+                                   // (8.8 x pos) already owns the JVM name
+    var bM: Entity? = null         // i.bM — held-entity two-way link
+                                   // (bI's ax13 arm clears it)
     var bl = 0                     // i.bl — foot-contact flag (cleared on
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
@@ -1288,6 +1302,157 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  never do.
      */
     fun runClaimScript(w: LevelCellSource) { /* unported: k.by table */ }
+
+    /** `i.ac()` (i.java:20577, proven): ax ∈ {11,17,23,43,40,45,51} gets
+     *  the claim-position latch (i.cM/i.cN) written by `h()`. */
+    fun claimPositionType(): Boolean =
+        ax == 11 || ax == 17 || ax == 23 || ax == 43 || ax == 40 ||
+        ax == 45 || ax == 51
+
+    /**
+     * `i.bJ()` (i.java:20024, proven): reload the script-op buffer —
+     * `cd[0]=cd[2]=false`, `cK=-1`, `cb=null`, `cL` = copy of
+     * `k.bz[ca]`. `claimOps` is the k.bz accessor (table unported → null).
+     */
+    fun reloadScriptOps(w: LevelCellSource) {
+        cd[0] = false; cd[2] = false
+        cK = -1
+        cb = null
+        scriptOps = w.claimOps(ca)?.copyOf()
+    }
+
+    /**
+     * `i.h(int)` (i.java:19300, proven): bind claim-script `r5` — no-op
+     * unless `cM == -1` (the latch is unbound); allocates `cd` with
+     * `cd[7]=true`, stores `ca=r5`, runs `bJ()` when `ca>=0`, then latches
+     * `cM/cN` to the current position for `claimPositionType`.
+     */
+    fun bindScript(r5: Int, w: LevelCellSource) {
+        if (claimLatchX != -1) return
+        cd[7] = true
+        ca = r5
+        if (ca >= 0) reloadScriptOps(w)
+        if (claimPositionType()) { claimLatchX = ak; claimLatchY = al }
+    }
+
+    /**
+     * `i.k(int)` (i.java:19325, proven): script key-step — `r5==-1` no-op;
+     * `cK=0`, `k.aw=0`, `cb` alloc (`cb[1]=-1` on first alloc only); the
+     * `k.C==this && cK>0` tail is dead code after the `cK=0` write
+     * (decompiled form kept verbatim) — `!(aS.P&512)` would → `k.v()`.
+     */
+    fun scriptKeyStep(r5: Int, w: LevelCellSource) {
+        if (r5 == -1) return
+        cK = 0; w.kAw = 0
+        if (cb == null) { cb = IntArray(4); cb!![1] = -1 }
+        if (w.kC !== this) return
+        if (cK <= 0) return
+        if (w.player.P and 512 == 0) w.clearLatches()
+    }
+
+    /**
+     * `i.N()` (i.java:7284, proven): claim the `k.C` context slot — a
+     * previous holder that still `ab()`-claims is released (`bI()`) and
+     * removed (`k.c`); then binds `h/k(k.s(aG))` and arms `P|16`.
+     */
+    fun bindContext(w: LevelCellSource) {
+        val cur = w.kC
+        if (cur != null && cur.claimActive()) {
+            cur.releaseClaim(w)
+            w.removeEntity(cur)
+            w.kC = null
+        }
+        w.kC = this
+        bindScript(w.kSIndex(aG), w)
+        scriptKeyStep(w.kSIndex(aG), w)
+        P = P or 16
+    }
+
+    /**
+     * `i.bI()` (i.java:19346, proven): full claim release — when `k.C==this`:
+     * clears `k.Z/aa/ab`, `g.a`, and the `aS.bM` link (ax13 unlink arm);
+     * `k.n()` + `z=true` (non-ax13 path). Then the L13 tail: `cd[2]=false`,
+     * `cd[3]` → `cL=null`+`bJ`+`cK=0` fast-path; else `cK=-2`, `k.aw=0`,
+     * the ax5 `k.ae` rebind (`aS`, or `g.a` when its ax==43) + bh==3
+     * `aS.al-=k.X` when `!k.Z`; the `cP` pending-script handoff;
+     * `k.C=null`, `cd[4]` → `bJ`; `ax==58` → return; `ax==5` +
+     * `Z[1]∈{20,21}` → `P&=-17`, otherwise `k.c(this)` removal.
+     */
+    fun releaseClaim(w: LevelCellSource) {
+        val p = w.player
+        if (w.kC === this) {                          // pre-L13 release arm
+            w.kZ = false; w.kAa = false; w.kAb = false
+            if (p.ga != null) p.ga = null
+            val held = p.bM
+            if (held == null || held.ax != 13) {      // L12
+                w.kN()
+                z = true
+            } else {                                  // ax13 unlink arm
+                held.aA = 0
+                held.bM = null
+                p.bM = null
+                p.aA = p.aA and -65
+            }
+        }
+        // L13
+        cd[2] = false
+        if (cd[3]) {                                  // L17 fast-path
+            scriptOps = null
+            reloadScriptOps(w)
+            cK = 0
+            return
+        }
+        cK = -2
+        w.kAw = 0
+        if (ax == 5) {                                // L17 ax5 ae-rebind
+            val ae = w.kAe
+            val aeActive = ae != null && ae.ax == 10 && ae.S == 52   // i.ai()
+            if (!(ae === p || aeActive))
+                w.kAe = if (p.ga != null && p.ga!!.ax == 43) p.ga else p
+            if (Entity.MISSION_BH[w.kAj] == 3 && !w.kZ) p.al -= w.kX
+        }
+        if (w.kC !== this) return                     // L35
+        if (cP != -1) {                               // L37 pending handoff
+            bindScript(w.kSIndex(cP), w)
+            scriptKeyStep(w.kSIndex(cP), w)
+            cP = -1
+            return
+        }
+        // L40
+        w.kC = null
+        if (cd[4]) { reloadScriptOps(w); return }     // L45
+        if (ax == 58) return                          // L47
+        if (ax == 5) {                                // L49
+            if (Z[1] == 20 || Z[1] == 21) { P = P and -17; return }   // L52
+            w.removeEntity(this); return              // L54
+        }
+        w.removeEntity(this)                          // L54
+    }
+
+    /**
+     * `i.b(int)` (i.java:7604, proven): arm the ax5-S3 countdown event —
+     * `aH=true`, `aI=r3`, `k.aw=0`; on bh[k.aj]==3 (missions 1/4) saves
+     * `k.X→aJ` (or `k.W` when set) and scales `k.X /= r3`.
+     */
+    fun eventArm(r3: Int, w: LevelCellSource) {
+        w.iAH = true; w.iAI = r3; w.kAw = 0
+        if (Entity.MISSION_BH[w.kAj] != 3) return
+        w.iAJ = w.kX
+        if (w.kW != 0) { w.iAJ = w.kW; w.kX = w.kW; w.kW = 0 }
+        w.kX /= r3
+    }
+
+    /**
+     * `i.O()` (i.java:7623, proven): disarm — `aH=false`, `k.aw=0`; on
+     * bh==3 restores `k.X` from `aJ` (or `k.W`) and clears `aJ`.
+     */
+    fun eventDisarm(w: LevelCellSource) {
+        w.iAH = false; w.kAw = 0
+        if (Entity.MISSION_BH[w.kAj] != 3) return
+        if (w.kW != 0) w.iAJ = w.kW
+        if (w.iAJ != 0) w.kX = w.iAJ
+        w.iAJ = 0
+    }
 
     /**
      * `i.P()` (i.java:7699, proven): dead check — `aB<=0 → G()` releases
@@ -2672,6 +2837,39 @@ interface LevelCellSource {
     var kX: Int get() = 0; set(_) {}
     var kW: Int get() = 0; set(_) {}
     var kAw: Int get() = 0; set(_) {}
+    /** `k.ae` (k.java:97) — the player's current link entity: the bI ax5
+     *  arm rebinds it to `aS` (or `g.a` when that entity's ax==43); `ai()`
+     *  reads it (ax==10 && S==52). */
+    var kAe: Entity? get() = null; set(_) {}
+    /** `k.ah` — entity ref cleared by `k.n()` (k.java:2861). */
+    var kAh: Entity? get() = null; set(_) {}
+    /** `k.Z`/`k.aa`/`k.ab` (k.java:89-91) — claim-script static flags
+     *  cleared by `bI()`; `k.Z` also gates the bh==3 `al-=k.X` shift. */
+    var kZ: Boolean get() = false; set(_) {}
+    var kAa: Boolean get() = false; set(_) {}
+    var kAb: Boolean get() = false; set(_) {}
+    /** `k.aj` — level/mission index into `MISSION_BH` (bh[aj]==3 →
+     *  missions 1/4 — the k.X time-scale missions). */
+    val kAj: Int get() = 0
+    /** `k.T`/`k.U` — camera bounds (boundMinY/boundMaxY aliases). */
+    var kT: Int get() = 0; set(_) {}
+    var kU: Int get() = 0; set(_) {}
+    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0` — drops the
+     *  link entity and clears all four camera bounds. */
+    fun kN() {}
+    /** `k.l(int)` — screen transition: 12 mission-fail, 15 mission-
+     *  complete (ported as world flags). */
+    fun screenL(n: Int) {}
+    /** `g.g()` (g.java:3939, proven): player dead — `x[1] <= 0`. */
+    fun gG(): Boolean = false
+    /** `k.s(int)` (k.java:7149, proven): index of uid `x` inside `k.eH[]`
+     *  (the script-handle table) or -1. */
+    fun kSIndex(x: Int): Int = -1
+    /** `k.eH` — the script-handle uid table (script-loaded; empty until
+     *  the table port lands). */
+    val kEh: IntArray get() = IntArray(0)
+    /** `k.bz[ca]` — the claim-script op table (unported → null). */
+    fun claimOps(ca: Int): IntArray? = null
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}

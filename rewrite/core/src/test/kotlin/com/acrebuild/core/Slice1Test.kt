@@ -131,6 +131,7 @@ class Level0WorldTest {
         val level = LevelPack.load(asset("level0/level0.aclv"))
         val clips = mapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
+            1 to Clip.load(asset("clips/clip1/clip.acpk")),
             3 to Clip.load(asset("clips/clip3/clip.acpk")),
             7 to Clip.load(asset("clips/clip7/clip.acpk")),
             9 to Clip.load(asset("clips/clip9/clip.acpk")),
@@ -3182,5 +3183,119 @@ class Level0WorldTest {
         p.S = 18; p.av = true; ridePlayer(w, e, 18)
         w.npcFsm.tickZoneInteract(e, w, p)
         assertFalse(p.av, "Z3=1 -> av=false")
+    }
+
+    // -- slice 40: ax5 aq() mission logic -------------------------------
+
+    private fun ax5At(w: Level0World, x: Int, y: Int, s: Int,
+                      z0: Int = 0, z1: Int = 0, z2: Int = -1,
+                      aG: Int = -1): Entity {
+        val e = Entity(5, w.clips[1])
+        e.setPositionPx(x, y)
+        // ax5's W comes from the record (L414 arm), not t() — fill a
+        // 20px rect at (x,y) so the fixture's overlap is real.
+        e.W[0] = x; e.W[1] = y; e.W[2] = x + 20; e.W[3] = y + 20
+        e.S = s; e.Z[0] = z0; e.Z[1] = z1; e.Z[2] = z2; e.aG = aG
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax5 init arm loads L180 record fields`() {
+        val w = world(); w.npcs.clear()
+        val e = Entity(5, w.clips[1])
+        //            0    1   2  3  4   5   6  7   8   9   10  11  12  13  14  15  16  17
+        val f = listOf(5,  42,  0, 0, 77, 3,  0, 9,  4, 12, 88, 66, 0,  0,  1,  0,  5,  6)
+        w.npcFsm.initMissionLogic(e, f, w)
+        assertEquals(300, e.az)
+        assertEquals(77, e.aE); assertEquals(9, e.aF)
+        assertEquals(4, e.eventN); assertEquals(12, e.aG)
+        assertEquals(88, e.aD); assertEquals(66, e.m)
+        assertEquals(1, e.Z[0]); assertEquals(0, e.Z[1])
+        assertEquals(5, e.Z[2]); assertEquals(6, e.Z[3])
+        assertTrue(e.P and 128 != 0, "P|128")
+        assertTrue(e.P and 16 != 0, "Z3!=-1 -> P|16")
+        assertEquals(3, e.S, "i(r8[5])")
+    }
+
+    @Test fun `ax5 S3 arms countdown on player overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax5At(w, p.ak, p.al, 3)
+        e.aF = 7; e.eventN = 5
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertTrue(w.iAH, "b(n) armed")
+        assertEquals(5, w.iAI)
+        assertEquals(35, e.aC, "aC = aF * n")
+    }
+
+    @Test fun `ax5 S3 expires to P32 and removal`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax5At(w, p.ak + 5000, p.al, 3)   // off-player: arm block skipped
+        w.iAH = true; e.aC = 1
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertFalse(w.iAH, "O() disarmed")
+        assertTrue(e.P and 32 != 0, "P|32")
+        assertTrue(w.pendingRemove.contains(e), "k.c(this)")
+    }
+
+    @Test fun `ax5 S4 completes mission on overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax5At(w, p.ak, p.al, 4)
+        p.refreshBoxes()
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertTrue(w.missionWon, "k.l(15)")
+    }
+
+    @Test fun `ax5 S4 gated by dead player and anim50`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        var e = ax5At(w, p.ak, p.al, 4)
+        p.x1 = 0                                          // g.g() dead
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertFalse(w.missionWon)
+        p.x1 = 90; p.S = 50                               // anim-50 exempt
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertFalse(w.missionWon)
+        e = ax5At(w, p.ak + 5000, p.al, 4)                // no overlap
+        p.S = 0
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertFalse(w.missionWon)
+    }
+
+    @Test fun `ax5 S10 fails mission`() {
+        val w = world(); w.npcs.clear()
+        val e = ax5At(w, w.player.ak, w.player.al, 10)
+        w.npcFsm.tickMissionLogic(e, w, w.player)
+        assertTrue(w.failed, "k.l(12)")
+    }
+
+    @Test fun `ax5 S8 Z2==-1 binds context on overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.refreshBoxes()
+        val e = ax5At(w, p.ak, p.al, 8, z2 = -1, aG = 7)
+        w.npcFsm.tickMissionLogic(e, w, p)
+        // L169 -> !ab() -> ao() -> bind + P|16 + k.C claim
+        assertTrue(w.kC === e, "k.C claimed")
+        assertTrue(e.P and 16 != 0, "P|16 armed")
+        assertTrue(e.cd[7], "h() bound script slot")
+    }
+
+    @Test fun `ax5 S8 Z1==1 resolves on linked P16`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val guard = Entity(11, w.clips[7])
+        guard.aw = 55; guard.P = guard.P or 16
+        guard.setPositionPx(p.ak, p.al); guard.refreshBoxes()
+        w.npcs.add(guard)
+        p.refreshBoxes()
+        val e = ax5At(w, p.ak, p.al, 8, z1 = 1, z2 = 55, aG = 7)
+        w.npcFsm.tickMissionLogic(e, w, p)
+        assertTrue(w.kC === e, "P16 on target -> resolve bind")
     }
 }

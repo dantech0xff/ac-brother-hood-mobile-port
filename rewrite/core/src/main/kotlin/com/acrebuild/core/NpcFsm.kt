@@ -1168,6 +1168,243 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
+    // ============================================================ ax5  = aq()
+    // Mission-logic entity (i.java:7343-7605, proven transcription): the
+    // script/milestone host — invisible clip (bi[5]=1, no module bitmaps).
+    // S arms:
+    //   3  — countdown event: proximity arms `b(n)` → `aC = aF·n` ticks;
+    //        expiry runs `O()` disarm + P|32 + k.c removal.
+    //   4  — kill zone: `aS.S!=50 && !g.g() && overlap` → k.l(15) mission win.
+    //   8  — Z[1]-mode watcher on linked entity `k.q(Z[2])`: P-bit/mode
+    //        checks → L169 resolve (`!ab → ao()` bind, `ab → aa()` step).
+    //   9  — Z[1]==16 claim stepper: overlap + `k.q(Z[2])==k.C && ab` → bI.
+    //   10 — k.l(12) mission-fail zone.
+    // Record init (i.java:3162 L180, `case 5 → L180` at i.java:2659):
+    //   az=300, aE=r8[4], aF=r8[7], n=r8[8], aG=r8[9], aD=r8[10], m=r8[11],
+    //   P|=128, Z[0..3]=r8[14..17]; Z[3]!=-1 → P|16; S==8 && aG!=-1 &&
+    //   Z[1]<16 → h(k.s(aG)) pre-bind + P|512; S==9 → P|512. i(r8[5]) tail.
+
+    /** `i.j(i)` (i.java:7318, proven): linked-watch predicate — `r` null →
+     *  true; ax ∈ {11,17,29,27} && `!P()` (still alive) → true. */
+    private fun iJ(r: Entity?): Boolean {
+        if (r == null) return true
+        if ((r.ax == 11 || r.ax == 17 || r.ax == 29 || r.ax == 27) &&
+            !r.deadRelease()) return true
+        return false
+    }
+
+    /** `i.ao()` (i.java:7249, proven): context bind — player-overlap +
+     *  aG!=-1 + Z[0] gate (Z0==1 requires the 65568 edge); sets `aS.P`
+     *  facing bit by `aS.av`, then the `k.C` slot claim = `N()` body. */
+    private fun eventBind(e: Entity, w: LevelCellSource, p: Entity) {
+        if (!Entity.overlapI(p.W, e.W)) return               // L5
+        if (e.aG == -1) return                               // L7
+        when (e.Z[0]) {                                      // L7/L11
+            0 -> {}
+            1 -> { if (!w.padHeld(65568)) return }
+            else -> return
+        }
+        if (p.av) p.P = p.P or 1 else p.P = p.P and -2       // L13/L15/L17
+        e.bindContext(w)                                     // L19/L21 = N()
+    }
+
+    /** `i.ap()` (i.java:7300, proven): forward the `k.s(Z[3])` script to
+     *  the `k.q(aG)`-linked entity when its `cd[5]` flag allows; on fire
+     *  the zone removes itself (`k.c(this)`). */
+    private fun forwardScript(e: Entity, w: LevelCellSource) {
+        val r0 = w.findByAw(e.aG) ?: return                  // L5
+        if (w.kSIndex(e.Z[3]) == -1) return                  // L7
+        if (r0.cd[5]) {                                      // L9/L15
+            r0.bindScript(w.kSIndex(e.Z[3]), w)
+            r0.scriptKeyStep(w.kSIndex(e.Z[3]), w)
+            w.removeEntity(e)
+        }
+    }
+
+    /** `aq()` L169/L172 (i.java:7592, proven): the resolution tail —
+     *  `!ab → ao()` binds the context, `ab → aa()` steps the script. */
+    private fun missionResolve(e: Entity, w: LevelCellSource, p: Entity) {
+        if (!e.claimActive()) eventBind(e, w, p)             // ao()
+        if (e.claimActive()) e.runClaimScript(w)             // aa()
+    }
+
+    /**
+     * ax5 record init — L180 arm (i.java:3162, proven). `rf(i)` = record
+     * field i (bounds-guarded 0). `i(r8[5])` anim + the S8 pre-bind
+     * (`h(k.s(aG))` + P|512) and the S9 P|512 arm.
+     */
+    fun initMissionLogic(e: Entity, f: List<Int>, w: LevelCellSource) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = 300
+        e.aE = rf(4)
+        e.aF = rf(7)
+        e.eventN = rf(8)
+        e.aG = rf(9)
+        e.aD = rf(10)
+        e.m = rf(11)
+        e.P = e.P or 128
+        for (i in 0..3) e.Z[i] = rf(14 + i)
+        if (e.Z[3] != -1) e.P = e.P or 16
+        // L395→L414 ax5 arm (i.java:3719-3727, proven): `i(r8[5])` then
+        // `W = [ak, al, ak+r8[12], al+r8[13]]` — ax5 gets its OWN W fill
+        // (not the ax10/37/42 r8[7..10] arm, not t()'s clip rects).
+        e.setAnim(rf(5))
+        e.W[0] = e.ak; e.W[1] = e.al
+        e.W[2] = e.W[0] + rf(12); e.W[3] = e.W[1] + rf(13)
+        if (e.S == 8 && e.aG != -1 && e.Z[1] < 16) {         // L184
+            e.bindScript(w.kSIndex(e.aG), w)
+            e.P = e.P or 512
+        }
+        if (e.S == 9) e.P = e.P or 512                       // L191
+    }
+
+    /** `i.aq()` (i.java:7343, proven transcription) — the ax5 S-switch. */
+    fun tickMissionLogic(e: Entity, w: LevelCellSource, p: Entity) {
+        when (e.S) {
+            // ---------- S3 — countdown event ----------
+            3 -> {                                           // L5
+                if (w.iAH) {                                 // armed → tick
+                    e.aC--
+                    if (e.aC > 0) return                     // L223
+                    e.eventDisarm(w)                         // O()
+                    e.P = e.P or 32
+                    w.removeEntity(e)                        // k.c(this)
+                    return
+                }
+                // L11 — proximity arm
+                if (!Entity.overlapI(p.W, e.W)) return       // L224
+                e.eventArm(e.eventN, w)                      // b(this.n)
+                if (w.iAI <= 0) w.iAI = 1                    // L15
+                e.aC = e.aF * e.eventN
+                return
+            }
+            // ---------- S4 — kill zone ----------
+            4 -> {                                           // L178
+                if (p.S == 50) return                        // L180
+                if (w.gG()) return                           // player dead
+                if (!Entity.overlapI(p.W, e.W)) return       // L228
+                w.screenL(15)                                // k.l(15)
+                return
+            }
+            // ---------- S10 — mission-fail zone ----------
+            10 -> { w.screenL(12); return }                  // L175
+            // ---------- S9 — claim stepper ----------
+            9 -> {                                           // L186
+                if (e.Z[1] != 16) return                     // L229
+                if (!Entity.overlapI(p.W, e.W)) return       // L188
+                if (e.Z[2] == -1) return                     // L231
+                val r02 = w.findByAw(e.Z[2]) ?: return       // L194
+                if (r02 !== w.kC) return                     // L196 gate
+                if (r02.claimActive()) r02.releaseClaim(w)   // L196/L234
+                return
+            }
+            // ---------- S8 — Z[1]-mode linked watcher ----------
+            8 -> {                                           // L18
+                if (e.Z[2] == -1) { missionResolve(e, w, p); return }  // L169
+                val r0 = w.findByAw(e.Z[2])
+                when (e.Z[1]) {
+                    0 -> {                                   // L22/L29
+                        if (r0 != null && !iJ(r0) && r0.animFinished())
+                            return                           // L22 fall-out
+                        if (r0 == null || r0.ax == 73 || r0.ax == 17 ||
+                            r0.ax == 11 || r0.ax == 29)
+                            missionResolve(e, w, p)          // L29→L169
+                        return
+                    }
+                    1 -> {                                   // L40/L42
+                        if (r0 == null) return
+                        if (r0.P and 16 != 0) missionResolve(e, w, p)
+                        return
+                    }
+                    2 -> {                                   // L45/L47
+                        if (r0 == null) return
+                        if (r0.P and 32 != 0) missionResolve(e, w, p)
+                        return
+                    }
+                    3 -> {                                   // L50/L65
+                        if (e.claimActive()) { missionResolve(e, w, p); return }
+                        if (r0 == null || r0.ax == 73 || r0.ax == 17 ||
+                            r0.ax == 11 || r0.ax == 29 || r0.ax == 27) {
+                            if (r0 == null ||
+                                (iJ(r0) && r0.animFinished()))  // L69/L71
+                                eventBind(e, w, p)           // L72 ao()
+                        }
+                        return
+                    }
+                    4 -> {                                   // L75/L79
+                        if (e.claimActive()) { missionResolve(e, w, p); return }
+                        if (r0 == null) return               // L205
+                        if (r0.P and 16 != 0) eventBind(e, w, p)
+                        return
+                    }
+                    5 -> {                                   // L83/L87
+                        if (e.claimActive()) { missionResolve(e, w, p); return }
+                        if (r0 == null) return               // L207
+                        if (r0.P and 32 != 0) eventBind(e, w, p)
+                        return
+                    }
+                    10 -> {                                  // L91/L93
+                        if (r0 != null &&
+                            (!iJ(r0) || !r0.animFinished()))
+                            missionResolve(e, w, p)          // L169
+                        return
+                    }
+                    11 -> {                                  // L100
+                        if (r0 == null || r0.P and 16 == 0)
+                            missionResolve(e, w, p)
+                        return
+                    }
+                    12 -> {                                  // L105
+                        if (r0 == null || r0.P and 32 == 0)
+                            missionResolve(e, w, p)
+                        return
+                    }
+                    13 -> {                                  // L110/L118
+                        if (r0 == null || (iJ(r0) && r0.animFinished())) {
+                            if (e.claimActive()) e.releaseClaim(w)  // bI()
+                        }
+                        missionResolve(e, w, p)              // → L169
+                        return
+                    }
+                    14 -> {                                  // L121
+                        if (r0 != null && r0.P and 16 != 0 &&
+                            e.claimActive()) e.releaseClaim(w)
+                        missionResolve(e, w, p)              // → L169
+                        return
+                    }
+                    15 -> {                                  // L128
+                        if (r0 != null && r0.P and 32 != 0 &&
+                            e.claimActive()) e.releaseClaim(w)
+                        missionResolve(e, w, p)              // → L169
+                        return
+                    }
+                    17 -> {                                  // L135/L143
+                        if (r0 == null || (iJ(r0) && r0.animFinished())) {
+                            if (e.aG != -1 && e.Z[3] != -1)
+                                forwardScript(e, w)          // ap()
+                        }
+                        return                               // L213
+                    }
+                    18 -> {                                  // L149/L153
+                        if (r0 == null || r0.P and 16 == 0) return
+                        if (e.aG != -1 && e.Z[3] != -1)
+                            forwardScript(e, w)              // ap()
+                        return                               // L217
+                    }
+                    19 -> {                                  // L159/L163
+                        if (r0 == null || r0.P and 32 == 0) return
+                        if (e.aG != -1 && e.Z[3] != -1)
+                            forwardScript(e, w)              // ap()
+                        return                               // L221
+                    }
+                    else -> missionResolve(e, w, p)          // 6,7,8,9,16,
+                                                           // default → L169
+                }
+            }
+            else -> return                                   // L222 — 5,6,7
+        }                                                    //  + default
+    }
+
     // ============================================================ ax67 = bB()
     // Decor/interactive props (i.java:17584). Clip binds at record init to
     // `k.r(bk[kind])` — the prop's OWN kind→clip table, NOT `bi[67]`

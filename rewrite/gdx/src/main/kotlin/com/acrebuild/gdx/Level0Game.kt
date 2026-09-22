@@ -33,6 +33,7 @@ class Level0Game : ApplicationAdapter() {
         val level = LevelPack.load(levelBytes)
         val clips = HashMap<Int, Clip>()
         clips[0] = Clip.load(Gdx.files.internal("clips/clip0/clip.acpk").readBytes())
+        clips[1] = Clip.load(Gdx.files.internal("clips/clip1/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
         clips[32] = Clip.load(Gdx.files.internal("clips/clip32/clip.acpk").readBytes())
         clips[3] = Clip.load(Gdx.files.internal("clips/clip3/clip.acpk").readBytes())
