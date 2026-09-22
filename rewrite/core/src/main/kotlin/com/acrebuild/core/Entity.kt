@@ -132,6 +132,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var g: Entity? = null          // g.g interact target (az() scan)
     var gJ = 0                      // g.J action-request bits (g.g(mask));
     var ab: Entity? = null        // i.ab link — mount gate in g.h consume
+    var bm = 0                     // i.bm — mash-QTE input latch (4112/8256)
+    var ca = -1                    // i.ca — bound claim-counter index (-1 = none)
+    val cd = BooleanArray(8)       // i.cd — per-counter in-progress flags
     var bl = 0                     // i.bl — foot-contact flag (cleared on
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
@@ -1214,6 +1217,35 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ad = null; ae = null; af = null
     }
 
+    /** `i.a(int,int,int)` (i.java:9810, proven): bind `ae` to a fresh
+     *  ax14/clip9 marker (anim `n`, az=302, (x,y), av=false) — no-op
+     *  while an `ae` is already bound. */
+    fun spawnAeMarker(w: LevelCellSource, anim: Int, x: Int, y: Int) {
+        if (ae != null) return
+        ae = w.spawnPickup(anim, x, y)
+    }
+
+    /** `i.ab()` (i.java:20564, proven): the k.a claim is actively
+     *  working — `ca >= 0` (a counter bound) && `!cd[0]` (the flag bit
+     *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
+    fun claimActive(): Boolean = ca >= 0 && !cd[0] && cK >= 0
+
+    /** `i.f(int,int)` (i.java:6852, proven): the alternating-mash QTE
+     *  meter — `bm` latches the last-pressed mask; only the OTHER mask's
+     *  edge adds +8 to `bl`, absence decays -1/tick; `bl>=10` wins and
+     *  resets. The r5/r6 args are ignored in the original (masks
+     *  hardcoded 4112 LEFT / 8256 RIGHT). */
+    fun mashQte(w: LevelCellSource): Boolean {
+        if (bl <= 0) bl = -1
+        if (bm != 4112 && w.padHeld(4112)) { bm = 4112; bl += 8 }
+        else if (bm == 8256) bl--
+        else if (w.padHeld(8256)) { bm = 8256; bl += 8 }
+        else bl--
+        if (bl < 0) bl = 0
+        if (bl >= 10) { bl = 0; return true }
+        return false
+    }
+
     /**
      * `i.G()` (i.java:4792, proven): deactivate the player's live `ae`
      * pickup indicator and drop the reference.
@@ -1698,7 +1730,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun gDrain(amt: Int, w: LevelCellSource) {
         if (w.godMode) return
         if (gt != 0) return
-        if (nearLeftWall(w)) return
+        // `k.aS.c()` (g.java:421) — mid-combo anims 112-115 block the drain;
+        // earlier read had this as nearLeftWall — corrected.
+        if (S in 112..115) return
         if (S == 67 || S == 183 || S == 184) return
         if (S == 205) return
         w.iBh = 8
@@ -2607,6 +2641,8 @@ interface LevelCellSource {
     var iAH: Boolean get() = false; set(_) {}
     var iAI: Int get() = 0; set(_) {}
     var iAJ: Int get() = 0; set(_) {}
+    /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
+    var kBj: Int get() = 0; set(_) {}
     /** `k.X`/`k.W`/`k.aw` — time-scale statics touched by b(int)/O(). */
     var kX: Int get() = 0; set(_) {}
     var kW: Int get() = 0; set(_) {}
@@ -2616,6 +2652,8 @@ interface LevelCellSource {
     var kDd: Boolean get() = false; set(_) {}
     /** `g.r` — grab-QTE lock flag on the player (g.java:23). */
     var gR: Boolean get() = false; set(_) {}
+    /** `g.u[]` (g.java:6400) — per-weapon damage TO the player; index k.au. */
+    val GU: IntArray get() = intArrayOf(5, 10, 15)
     /** `k.J`/`k.K` — held touch point (screen px) for `V()`/ax61 QTE. */
     var kJ: Int get() = 0; set(_) {}
     var kK: Int get() = 0; set(_) {}
