@@ -57,6 +57,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var R = -1                       // queued combo/finisher anim (g.R)
     var cl = false                   // combo window flag (g.cl)
     var gI = 1                       // weapon selector (g.I; 1=sword proven)
+    var x1 = 100                     // g.x[1] stamina/counter meter (init inferred)
     var aF = 0
     var k = false                    // NPC patrol-active flag
     var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
@@ -411,11 +412,29 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *      (recorded on `hitsTaken`; floatie/sfx spawners deferred).
      * Player HP field is unmined — no death check here yet.
      */
+    /**
+     * `c(i attacker)` counter-stagger (proven, i.java:4379): face the
+     * attacker, `ag = ±1536` knockback away, floatie `a(8,5,14)` skipped,
+     * `i(9)` stagger (i(6) for ax61 omitted).
+     */
+    fun counteredBy(attacker: Entity) {
+        av = attacker.ak < ak
+        ag = if (av) 1536 else -1536
+        setAnim(9)
+    }
+
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
         var r10 = op
         if (r10 == 4 && PlayerFsm.isAttackState(S)) r10 = 18
         when (r10) {
-            4 -> hitsTaken++
+            // i.a(op4) L116-L131: struck while meter payable → c(attacker)
+            // (auto-counter; u[au] meter cost), else hurt-mark k.A(18)
+            4 -> {
+                val canCounter = attacker != null && x1 > 0 && S != 9 &&
+                    attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61
+                if (canCounter) { x1 -= 5; attacker.counteredBy(this) }
+                else hitsTaken++
+            }
             18, 20 -> setAnim(43)
             26 -> {
                 if (attacker != null) av = attacker.av

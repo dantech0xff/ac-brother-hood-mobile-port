@@ -330,4 +330,21 @@ class Level0WorldTest {
         assertTrue(sawFinisher, "weakened lock + tap → finisher anim")
         assertTrue(s.aB <= 0, "finisher should zero the victim (aB=${s.aB})")
     }
+
+    @Test fun `npc strike on a metered player counters the attacker`() {
+        val w = world()
+        val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        w.player.x1 = 100
+        // soldier mid-strike (S12 X-arc on frames 1-5), player grounded in it
+        s.setAnim(12)
+        var staggered = false
+        for (i in 0 until 120) {
+            w.player.setPositionPx(s.ak + (if (s.av) -20 else 20), s.al)
+            w.player.ag = 0; w.player.ah = 0
+            w.tick(emptyList())
+            if (s.S == 9) { staggered = true; break }
+        }
+        assertTrue(staggered, "strike on metered player should counter → attacker S9")
+        assertTrue(w.player.x1 < 100, "counter should pay meter u[0]=5 (x1=${w.player.x1})")
+    }
 }
