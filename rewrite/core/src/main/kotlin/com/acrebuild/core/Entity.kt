@@ -148,6 +148,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cI = 0                    // c() — X[1] snapshot
     var cM = 0                    // c() — ax72 Z[0]==1 clears it (L58)
     var cL = 0                    // mount-on counter (as() clears; au() oscillates)
+    var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
+    var K = 0                     // g.K — interact-gauge anim frame (aB())
     var z = false                 // g.z — cleared on grab (c() callers)
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
@@ -341,6 +343,223 @@ open class Entity(val ax: Int, var clip: Clip?) {
             17 -> { }                                        // L63 silent
             else -> setAnim(0)                               // L64
         }
+    }
+
+    /** `g.at()` (g.java:4376, proven): position on the orbit —
+     * `ak = cH + cB·j.b(cy)>>8; al = cI - cB·j.b(j.n-cy)>>8`. */
+    fun orbitPosition() {
+        ak = cH + ((cB * Trig.sin(cy)) shr 8)
+        al = cI - ((cB * Trig.sin(Trig.N - cy)) shr 8)
+    }
+
+    /**
+     * `g.av()` (g.java:4733, proven) — the wall-embed unstick probe
+     * called at the tail of every `au()` arm: probes cells 20px up;
+     * `aO >= 20` (solid overhead) → `a(0)` fling then continue;
+     * `aO < 20` or `ah >= 0` → return. While falling with `bq == 0`,
+     * a ≥20 cell at the feet-side edge zeroes `ai/ag` and steps `ak`
+     * back 10px. `bq != 0` skips the unstick (the `goto L27` lands on
+     * shared tail code the decompiler merged — inferred).
+     */
+    fun wallProbe(w: LevelCellSource) {
+        al -= 20; probeCells(w); al += 20
+        if (aO >= 20) flingAirborne(0, w)
+        if (aO < 20) return
+        if (ah >= 0) return
+        if (bq != 0) return                       // L27 — inferred
+        refreshBoxes()
+        val r0 = W[3]; val r02 = W[0] - 1; val r03 = W[2] + 1
+        if (ag == 0) return
+        if (ag > 0) {
+            if (e(w, r03 / 20, r0 / 20) >= 20) { ai = 0; ag = 0; ak -= 10 }
+        } else {
+            if (e(w, r02 / 20, r0 / 20) >= 20) { ai = 0; ag = 0; ak += 10 }
+        }
+    }
+
+    /** `g.aB()` (g.java:5800, proven): the interact-gauge stepper —
+     * advances `K` through clip-10 anim 41 frames (anim 29 while
+     * `S == 295`), `cN` sub-ticks per frame, and pins `L/M` onto
+     * `g`'s W box. No-op while `g` or clip-10 is missing. */
+    fun interactGauge(w: LevelCellSource) {
+        val t = g ?: return
+        val clip = w.clipFor(10) ?: return          // k.z[10] L22
+        if (clip.frameDuration(41, K) == 0) return  // L10
+        if (cN < clip.frameDuration(41, K)) { cN++; return }
+        K++; cN = 0
+        var r6 = clip.frameCount(41)
+        if (S == 295) r6 = clip.frameCount(29)
+        if (K >= r6) K = 0                          // L17/L19
+        L = (t.W[0] + t.W[2]) shr 1
+        M = ((t.W[1] + t.W[3]) shr 1) - 10
+    }
+
+    // -- g.au() the mounted-orbit FSM (g.java:4389) -------------------------
+
+    /**
+     * `g.au()` (g.java:4389, proven) — the mounted/orbit tick for
+     * S∈{277,293} and the L1863/L1889 tails. Same F-bind as `as()`.
+     * `cJ/cK` = drag anchor (player pos, or the X-box point for
+     * Z0==4 carts); `cH/cI` re-pins to the mount center each tick.
+     * `cy < n` fall-throughs in the source (L43/L61/L93) are
+     * decompiler merges of the `cy -= cx` clamp — ported as such
+     * (inferred).
+     */
+    fun mountOrbitTick(w: LevelCellSource, pad: Pad) {
+        val mount = Entity.at
+        val bound = g
+        F = when {                                    // same bind as as()
+            mount != null && (bound == null || !inFrontOf(bound)) -> mount
+            bound != null && bound.ax == 11 && bound.Z[19] == 1 &&
+                !bound.deadRelease() -> bound
+            else -> null
+        }
+        val f = F ?: run { flingAirborne(0, w); return }  // L22 a(0)
+        if (f.ax == 72 && f.Z[0] == 4) { cJ = X[0]; cK = X[1] }  // L28
+        else { cJ = ak; cK = al }                       // L30
+        cH = f.ak; cI = (f.W[1] + f.W[3]) shr 1         // L31
+        if (f.ax != 72) {
+            // L190/L194/L200 — a dragged ax11/17 victim: S293 sinks the
+            // player 6px/tick until `cB >= 15` then flings off at W[3];
+            // otherwise applies the orbit drag velocity each tick.
+            if (f.ax != 11 && f.ax != 17) return
+            if (S == 293) {
+                cB += 6; al += 6
+                if (cB >= 15) { al = W[3]; flingAirborne(0, w) }
+                cK = al
+            } else {
+                ag = -(cF shr 8) * Trig.sin(cy)
+                ah = (cF shr 8) * Trig.sin(Trig.N - cy)
+            }
+            return
+        }
+        when (f.Z[0]) {
+            0 -> orbitSwing(w, f)                     // L35
+            3 -> orbitSlide(w, f)                     // L53
+            1, 2 -> orbitWheel(w, f)                  // L69/L107/L151
+            4 -> orbitCart(w, f, pad)                 // L162
+            else -> { }                               // L188
+        }
+    }
+
+    /** `au()` L35-L51 (Z0==0, proven): pendulum swing — `cB` decays
+     * `cF>>8`/tick, `cy` pulled into the `(n,o)` band by `±cx`; on
+     * W-overlap with the mount → `i(22)` dismount launch
+     * `ag = -(cF>>8)·j.b(cy)`, `ah = (cF>>8)·j.b(n-cy)`, collide,
+     * wall-zero `ag`, `F = null`; then `av()`. */
+    private fun orbitSwing(w: LevelCellSource, f: Entity) {
+        cB -= cF shr 8
+        if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+        orbitPosition()
+        if (overlapI(W, f.W)) {
+            setAnim(22)
+            ag = -(cF shr 8) * Trig.sin(cy)
+            ah = (cF shr 8) * Trig.sin(Trig.N - cy)
+            val r0 = ak
+            ak += ag shr 8
+            collideSides(w, false)
+            if (hitWall()) ag = 0
+            ak = r0
+            refreshBoxes()
+            F = null
+        }
+        wallProbe(w)
+    }
+
+    /** `au()` L53-L66 (Z0==3, proven): same swing; W-overlap just
+     * unlinks `F` and `i.at` (no launch). */
+    private fun orbitSlide(w: LevelCellSource, f: Entity) {
+        cB -= cF shr 8
+        if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+        orbitPosition()
+        if (overlapI(W, f.W)) { F = null; Entity.at = null }
+        wallProbe(w)
+    }
+
+    /**
+     * `au()` L69/L81/L96/L107/L151 (Z0==1/2, proven) — the wheel orbit:
+     * cM==0 spin-in — `cB` decays with a 75 floor until `|cy-o| <= cx`
+     * → `cM=1`, `cL = 16·m/360` (Z0==1) or `35·m/360` (Z0==2, which
+     * also pins `cB = 75`); cM==1 oscillates `cy` by ±10 (Z0==2) or
+     * ±5 inside `(o±cL)` — clamped edges toggle `cG` and Z0==2 flings
+     * the player `ag=±3328, ah=-6656, i(243)`; Z0==1 decays `cL` to 0
+     * → `i(293)`, `cM=2`, `cy = o`. S==293 + Z0==1 rides the zipline:
+     * `cB+=6, al+=6`, `cB >= Z[3]` → `al=W[3]; a(0)` (L153).
+     */
+    private fun orbitWheel(w: LevelCellSource, f: Entity) {
+        if (cM == 0) {
+            cB -= cF shr 8                            // L69/L76 floor 75
+            if (cB < 75) cB = 75
+            if (f.Z[0] == 2) cx = 15 * Trig.M / 360
+            if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+            if (Math.abs(cy - Trig.O) <= cx) {        // L96 top band
+                cL = if (f.Z[0] == 2) 35 * Trig.M / 360 else 16 * Trig.M / 360
+                cM = 1
+                if (f.Z[0] == 2 && cB > 75) cB = 75   // L101-L103 cap
+            }
+        } else if (cM == 1) {
+            if (cy < Trig.O - cL || cy > Trig.O + cL) {      // L113 band
+                cy = if (cy < Trig.O) Trig.O - cL else Trig.O + cL
+                cG = !cG                                    // L119-L122
+                if (f.Z[0] == 2) {                          // edge fling
+                    ag = if (av) -3328 else 3328
+                    ah = -6656
+                    setAnim(243)
+                    return
+                }
+            }
+            if (f.Z[0] == 1) cL--                           // L131
+            if (f.Z[0] == 2) cy += if (cG) -10 else 10      // L134
+            else cy += if (cG) -5 else 5                    // L140
+            if (cL <= 0 && S != 293) {                      // L146
+                setAnim(293); cM = 2; cy = Trig.O; orbitPosition()
+            }
+        }
+        // L151/L153 — S293 rides the Z0==1 zipline
+        if (S == 293 && f.Z[0] == 1) {
+            cB += 6; al += 6
+            if (cB >= f.Z[3]) { al = W[3]; flingAirborne(0, w) }
+            cK = al
+            return
+        }
+        orbitPosition()                                   // L158
+        cJ = ak; cK = al                                  // L159
+    }
+
+    /**
+     * `au()` L162-L186 (Z0==4, proven) — the track cart: hand indicator
+     * to view center when `!k.k()`; context press/hold — or, when not
+     * mounted, the indicator sitting on the touch point — applies the
+     * `cB -= (cF>>8)>>2` brake; the cart then rides
+     * `F.ak = cJ - cB·j.b(cy)`, `F.al = cK + cB·j.b(n-cy)` and drags
+     * the `F.ac` track entity along `aq/ar` behind it. Track `S∈{2,3}`
+     * or `cB < 20` detaches: `ac=null; F.P|=160; Z[4]=-1; F=null;
+     * i(0); a(false)` + `G()`/`U()` indicator release; `av()`.
+     */
+    private fun orbitCart(w: LevelCellSource, f: Entity, pad: Pad) {
+        if (!w.mounted) moveHand(w, 200 + w.kO, 120 + w.kP)      // L162
+        val brake = pad.v(Pad.M_CONTEXT) || pad.u(Pad.M_CONTEXT) ||
+            (!w.mounted && indicatorNearTouch(w))               // L167→L172
+        if (brake) cB -= (cF shr 8) shr 2
+        val r03 = (cB * Trig.sin(cy)) shr 8                     // L173
+        val r04 = (cB * Trig.sin(Trig.N - cy)) shr 8
+        f.ak = cJ - r03
+        f.al = cK + r04
+        val ac = f.ac ?: run { wallProbe(w); return }           // L186
+        if (ac.S == 2 || ac.S == 3 || cB < 20) {                // L178→L181
+            f.ac = null
+            f.P = f.P or 160
+            f.Z[4] = -1
+            F = null
+            setAnim(0)
+            collideSides(w, false)
+            if (w.mounted) releaseAe() else dropIndicator(w)    // L184 G()/U()
+            wallProbe(w)
+            return
+        }
+        ac.ak = f.ak - ac.aq                                    // L178 drag
+        ac.al = f.al - ac.ar
+        wallProbe(w)
     }
 
     /** `i.p()` (i.java:214, proven): full release — clears the W/X/Y

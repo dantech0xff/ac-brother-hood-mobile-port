@@ -87,13 +87,36 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             272, 273, 274, 275, 292 -> {
                 val mount = Entity.at
                 if (mount != null && mount.Z[0] == 4 && p.cE <= 0) {
-                    // Z[0]==4 cart, arc done -> au() orbit (unported)
+                    p.mountOrbitTick(world, pad)      // L1863 tail — cart
                 } else p.lungeTick(world)
             }
             298 -> {                          // L1293
                 if (p.animFinished()) p.P = p.P or 64
                 val mount = Entity.at
                 if (mount != null && mount.S != 168) p.lungeTick(world)
+            }
+            // mounted/riding states — L1872 + siblings (g.java:886-925)
+            277, 293 -> p.mountOrbitTick(world, pad)
+            294, 310 -> { }                     // L1874/L1888 — anim only
+            299, 300, 301, 302 -> {             // L1885 — windup → S303
+                if (p.animFinished()) p.setAnim(303)
+            }
+            303 -> {                          // L1876 — cart dismount
+                if (pad.u(62430)) p.setAnim(0)
+                else if (p.animFinished()) {
+                    p.P = p.P or 64
+                    p.interactGauge(world)
+                    // v(65568) -> ar() interact action — unported
+                }
+            }
+            311, 312 -> {                     // L1889
+                p.collideSides(world, true)
+                if (p.animFinished()) {
+                    val mount = Entity.at
+                    if (mount == null || mount.Z[0] != 4 || p.cE > 0) {
+                        p.lungeTick(world)
+                    } else p.mountOrbitTick(world, pad)
+                }
             }
             199 -> case199(p, pad)
             5 -> landArm(p, pad)              // L464
