@@ -167,6 +167,10 @@ class Level0World(
     /** `k.H`/`k.I` — the last touch point in view px (-1 = none). */
     var lastTouchX = -1
     var lastTouchY = -1
+    /** `k.J`/`k.K` — the last pointer-MOVE point in view px (-1 = none);
+     *  distinct from `H`/`I` in the original (pointer-motion vs press). */
+    var lastMoveX = -1
+    var lastMoveY = -1
     override fun clipFor(idx: Int): Clip? = clips[idx]
     /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): touch point vs
      *  entity in view space — equivalent to world-space vs (k.H+k.O). */
@@ -507,6 +511,53 @@ class Level0World(
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun clearLatches() { pad.clearLatches() }   // k.v()
+    override fun padRearm() { pad.edge = pad.held }      // k.v = k.w
+    override var kCO = 0                               // k.cO transition count
+    override var kCP = false                           // k.cP direction
+    override var bO = 0                                // k.bO — dialog flag
+    override var bN0 = -1                              // k.bN[0] — dialog idx
+    /** `k.b(idx,str,flag)` (k.java:430, head proven): stores `bO`/`bN[0]`
+     *  then `b(9, 1+aj, str, str)` — the dialog-display call; `inferred`
+     *  accept-return (display pipeline unported). */
+    override fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean {
+        bO = flag
+        bN0 = if (idx > 0) idx else -1
+        dialogLine = strRef
+        return true
+    }
+    var dialogLine = -1                                // last b(9,·) str arg
+    override fun pointerDownIn(x: Int, y: Int, w: Int, h: Int): Boolean =
+        lastTouchX >= x && lastTouchY >= y &&
+            lastTouchX < x + w && lastTouchY < y + h &&
+            (lastTouchX != -1 || lastTouchY != -1)
+    override fun pointerMoveIn(x: Int, y: Int, w: Int, h: Int): Boolean =
+        lastMoveX >= x && lastMoveY >= y &&
+            lastMoveX < x + w && lastMoveY < y + h &&
+            (lastMoveX != -1 || lastMoveY != -1)
+    /** `k.j()` (k.java:579, proven): inside the bottom strip when
+     *  `H∈[36,364] && I∈(204,240)`; otherwise true iff `I∈[0,204]`.
+     *  (`ce/cf/cg` margins inferred at 36 — the `b.d+30` variant unmined.) */
+    override fun pointerStrip(): Boolean {
+        val hx = lastTouchX; val hy = lastTouchY
+        if (hx == -1 && hy == -1) return false
+        return if (hx < 36 || hx > 364 || hy <= 204 || hy >= 240)
+            hy in 0..204
+        else true
+    }
+    /** `i.a(8,59,S,facing,x,y,az)` (i.java:6898, proven) — op111's
+     *  boss-knife spawn: ax8 param entity, clip 59, `P|=512`. */
+    override fun spawnParam(s: Int, facing: Boolean, x: Int, y: Int,
+                            az: Int): Entity? {
+        val e = Entity(8, clips[59])
+        e.aw = -1; e.au = 0
+        e.az = az
+        e.ak = x; e.al = y
+        e.av = facing
+        e.P = e.P or 512
+        e.setAnim(s)
+        queueInsert(e)
+        return e
+    }
     /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. */
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
@@ -514,7 +565,23 @@ class Level0World(
     /** `k.l(int)` — 12 mission-fail, 15 mission-complete. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
+        else if (n == 21) { dialogModal = true; dialogCooldown = 1 }
     }
+    /** `j.c == 21` modal-dialog phase (screen-L target of op105's
+     *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
+     *  the original's dialog screen dismisses on input → `k.C.Z()`
+     *  (i.java:19425 `cd[0]=false`) resumes the script. The visual
+     *  `b(9,1+aj,str,str)` draw is unported (`inferred`); the lifecycle
+     *  contract — arm on 21, dismiss on next press → `resumeScript` —
+     *  is what the claim VM observes. `dialogCooldown` gives the modal
+     *  one full tick before a press can dismiss (the queuing tick's own
+     *  press can't double as the dismiss). */
+    var dialogModal = false
+    var dialogCooldown = 0
+    /** Test-harness flag — when true, a modal dialog resolves the same
+     *  tick (emulates the player instantly tapping the screen-21 dismiss
+     *  edge). Real gameplay leaves it false: a press is required. */
+    var autoDismissDialog = false
     /** `g.g()` (g.java:3939): player dead. */
     override fun gG(): Boolean = player.x1 <= 0
     /** `k.s(int)` (k.java:7149): index of uid in `k.eH[]` or -1. */
@@ -628,6 +695,11 @@ class Level0World(
     private var pointerDown = false
     private var zoneMask = 0
 
+    /** Any DOWN edge in this tick's event list — the screen-21 dialog's
+     *  dismiss input (press anywhere, like the original's `k.v` edge). */
+    private fun sawPressPending(events: List<InputQueue.Event>): Boolean =
+        events.any { it.type == InputQueue.Type.DOWN }
+
     /** Raw InputQueue events are screen px in the 400x240 view. */
     private fun consume(events: List<InputQueue.Event>) {
         for (e in events) {
@@ -635,6 +707,7 @@ class Level0World(
                 InputQueue.Type.DOWN -> {
                     pointerDown = true
                     lastTouchX = e.x; lastTouchY = e.y   // k.H/k.I
+                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
                     zoneMask = zoneFor(e.x, e.y)
                     when (zoneMask) {
                         Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)
@@ -645,7 +718,10 @@ class Level0World(
                         Pad.M_DOWN -> pad.queuePress(Pad.M_CONTEXT)
                     }
                 }
-                InputQueue.Type.MOVE -> if (pointerDown) zoneMask = zoneFor(e.x, e.y)
+                InputQueue.Type.MOVE -> {
+                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
+                    if (pointerDown) zoneMask = zoneFor(e.x, e.y)
+                }
                 InputQueue.Type.UP, InputQueue.Type.CANCEL -> {
                     pointerDown = false; zoneMask = 0
                 }
@@ -676,6 +752,21 @@ class Level0World(
             if (pad.v(Pad.M_CONTEXT)) reload()
             tickIndex++
             return
+        }
+
+        // j.c==21 dialog modal (k.l(21), i.java:20190): screen 21 isn't
+        // the play state — the original suspends the entity sim behind
+        // the dialog, which is what stops `ao()`/`N()` from re-arming the
+        // halted claimer while `cd[0]` holds. A press edge = the screen's
+        // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
+        if (dialogModal) {
+            if (autoDismissDialog) {                 // test harness: instant tap
+                kC?.resumeScript(); dialogModal = false
+            } else if (dialogCooldown > 0) { dialogCooldown--; tickIndex++; return }
+            else if (sawPressPending(events)) {
+                kC?.resumeScript(); dialogModal = false
+                pad.edge = 0        // eat the dismiss edge — not a gameplay tap
+            } else { tickIndex++; return }
         }
 
         player.collideSides(this, true)
