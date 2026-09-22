@@ -1169,6 +1169,76 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `aM()` (i.java:10100, proven): ground-support probe for the
+     * grapple-volume body — `t()` then sample the cells under both
+     * bottom corners of `W`; true when either is `>= 12` (solid/one-way
+     * family) or `== 5` (soft support).
+     */
+    fun supportedByGround(world: LevelCellSource): Boolean {
+        refreshBoxes()
+        val l = world.collisionCell(W[0] / 20, (W[3] + 1) / 20)
+        val r = world.collisionCell(W[2] / 20, (W[3] + 1) / 20)
+        return l >= 12 || r >= 12 || l == 5 || r == 5
+    }
+
+    /**
+     * `e(int)` (i.java:10119, proven): hang the player on this entity's
+     * nearer edge — used by ax15 (`r1 = S ∈ {6,8}`, so `r8` is always
+     * false → `aS.i(108)` hang) and by the `S==10` arm (`r8` → `i(109)`).
+     * First pushes the player horizontally clear of the body, then —
+     * only when `aC > 4 || r8` and the cell above the block is empty —
+     * restarts own anim, kills player velocity, enters the hang anim,
+     * releases the held link, snaps `ak` to the nearer edge, claims
+     * `g.a = this`.
+     */
+    fun hangOnEdge(world: Level0World, r7: Int) {
+        val r8 = r7 == 10
+        val p = world.player
+        p.refreshBoxes()
+        if (p.ak - ak < 0) {
+            p.ak = ak - ((W[2] - W[0]) shr 1) - (p.W[2] - p.ak)
+        } else if (p.ak - ak > 0) {
+            p.ak = ak + ((W[2] - W[0]) shr 1) + (p.ak - p.W[0])
+        }
+        if (aC <= 4 && !r8) return
+        if (world.collisionCell(ak / 20, W[1] / 20 - 1) != 0) return
+        setAnim(r7)
+        p.ag = 0; p.ah = 0
+        p.setAnim(if (r8) 109 else 108)
+        p.ac = null
+        aC = 0
+        p.ak = if (p.ak - ak > 0) W[2] else W[0]
+        p.ga = this
+    }
+
+    /**
+     * `bt()` (i.java:16669, proven): moving-contact sweep — when `ah != 0`
+     * (falling block), every `bb[]` entity of ax ∈ {17,11,23,50} that is
+     * `P()`-sweepable and overlaps `W` gets `as()`-ed. (`bb`/`bc` =
+     * registration pool = `w.npcs`.)
+     */
+    fun sweepHostiles(world: Level0World) {
+        if (ah == 0) return
+        for (n in world.npcs) {
+            if (n.ax != 17 && n.ax != 11 && n.ax != 23 && n.ax != 50) continue
+            if (!n.deadRelease()) continue                       // P() + G()
+            if (!overlapStrict(W, n.W)) continue
+            n.sweepReact()
+        }
+    }
+
+    /** `as()` (i.java:7680, proven): sweep reaction — `aB = 0`, then
+     *  ax11 → `i(0)`, ax17 → `i(69)`, ax23 → `i(79)`. */
+    fun sweepReact() {
+        aB = 0
+        when (ax) {
+            11 -> setAnim(0)
+            17 -> setAnim(69)
+            23 -> setAnim(79)
+        }
+    }
+
+    /**
      * `av()` — g.java `void av()` (proven). Air wall-resolve: probes one cell
      * higher (head region), then pushes ak back ±10 when flying into a solid
      * side cell at the feet row. Rope entity path (i.bq) not ported.
@@ -2428,6 +2498,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun gB(): Boolean = when (S) {
         18, 19, 20, 22, 23, 24, 25, 35, 36, 43, 150, 157, 165, 233,
         242, 243, 263, 264, 265, 266 -> true
+        else -> false
+    }
+
+    /** `g.c(int)` static (g.java:404, proven): locomotion set checked by
+     *  the ax15 L46 arm — {0,1,7,11,12,26,79}. Distinct from `g.b()`. */
+    fun gC(): Boolean = when (S) {
+        0, 1, 7, 11, 12, 26, 79 -> true
         else -> false
     }
 

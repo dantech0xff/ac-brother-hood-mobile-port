@@ -47,6 +47,7 @@ class Level0World(
             27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
             40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
             9 to 47,      // ax9 push/contact entity (bi[9]=47, proven)
+            15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
         )
     }
 
@@ -378,6 +379,7 @@ class Level0World(
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
+            else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -818,6 +820,7 @@ class Level0World(
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
