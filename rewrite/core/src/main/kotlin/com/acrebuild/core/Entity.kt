@@ -2821,6 +2821,31 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 ag = if (av) 1536 else -1536
             }
             34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+            // op11 (i.java:4761 L167, proven): spring-pad bounce intake —
+            // pin to the pad's top edge, launch `ah=src.Z[1]` /
+            // `ag=src.Z[0]` (record r8[9]/r8[8]<<8), anim 24 when the pad
+            // has no throw dir (Z[0]==0) else 22; facing = !src.av for S11
+            // pads else the Z[0] sign.
+            11 -> {
+                if (attacker != null) {
+                    if (attacker.Z[0] != 0) setAnim(22) else setAnim(24)
+                    al = attacker.W[1]; ak = attacker.ak
+                    ah = attacker.Z[1]
+                    if (attacker.S == 11) av = !attacker.av
+                    else if (attacker.Z[0] > 0) av = false
+                    else if (attacker.Z[0] < 0) av = true
+                    ag = attacker.Z[0]
+                }
+            }
+            // op24 (i.java:4520 L49, proven): pin the player at the
+            // source's top-left corner playing anim r11, all velocities
+            // zeroed — the trap-grabbed pose (ax46 uses 330/110).
+            24 -> {
+                if (attacker != null) {
+                    setAnim(arg); aj = 0; ah = 0; ag = 0
+                    ak = attacker.W[0]; al = attacker.W[1]
+                }
+            }
             // L75 (proven structure): marker-engage — `g.b = r13`, `aB=3`,
             // `o()?i(3)`, face + push ±512 toward the marker. The `g.a()`
             // damage-gate chain (h()/g()/d()) is unported — gated open.
