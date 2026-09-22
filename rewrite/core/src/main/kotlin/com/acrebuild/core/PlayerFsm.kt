@@ -114,6 +114,85 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
         }
         interactScan(p)     // az() — g/ci/at interact maintenance+scan
+        mountEntry(p, pad)  // L1947 — mount/assassinate context arm
+    }
+
+    /**
+     * g.java:3474-3562 (proven) — the L1947 block inside `g.e()`: the
+     * `J&4` mount-request consumer. Two arms:
+     *  - L1960-L2003 **mount**: `i.at` bound and no interact target in
+     *    front → in-range check (ax72 Z[0]∈{1,3,4} gates) → a context
+     *    press (v(65568)) zeroes velocity and lunges via `c(i.at)`.
+     *  - L2006-L2027 **assassinate**: an ax11 in front with `Z[19]==1`
+     *    (assassination window set by its FSM) and `!P()` → same lunge
+     *    on `c(g)` — no sfx in this arm (victim anim plays it).
+     * `r98` arms the L2029 tail: `cm=1` (mounted) plus the clip-74 hand
+     * indicator at view center — `T()` gates the release so an existing
+     * non-hand indicator survives. The L1994/L2020 `k.k()`+`V()` checks
+     * are convergent: every exit lands at L2029 with `r98` already set
+     * (proven by tracing the goto chain). L2048's `o()→ao()` tail
+     * (g.java:3566) is a debug/skip arm — flagged, unported.
+     */
+    fun mountEntry(p: Entity, pad: Pad) {
+        if (p.gJ and 4 == 0 || p.S == 50) return
+        var r98 = false
+        val t = Entity.at
+        val bound = p.g
+        if (t != null && (bound == null || !p.inFrontOf(bound))) {
+            // L1960-L1989 — mount in-range (r104 starts true; gates only
+            // clear it — the |ak-at.ak| band check at L1980 is dead code,
+            // both exits leave r104 true for Z[0]==4)
+            if (p.aZ || p.mountableState()) {
+                if (t.wasHitRecently(world)) {
+                    var r104 = true
+                    if (t.ax == 72 && t.Z[0] == 1 &&
+                        p.h(t.ak - p.ak, t.al - p.W[1]) >= t.Z[3]) r104 = false
+                    if (t.ax == 72 && t.Z[0] == 4 && (t.Z[4] < 0 || !p.aZ)) r104 = false
+                    if (t.ax == 72 && t.Z[0] == 3) r104 = false
+                    r98 = r104
+                    // L1997 press path — L1994's k.k()/V() else-checks
+                    // converge on L2029 with r98 already set (proven:
+                    // V()==true loops back through L1974 to the same
+                    // r98=r104; V()==false lands at L2029 directly).
+                    if (r104 && pad.v(Pad.M_CONTEXT)) {
+                        p.ag = 0; p.ah = 0; p.aj = 0
+                        if (t.Z[0] != 4) {                 // L2000-L2002
+                            if (world.mounted) p.releaseAe() else p.dropIndicator(world)
+                        }
+                        p.grabLunge(t, world)              // c(i.at)
+                        p.z = false
+                        world.sfx(30)
+                    }
+                }
+            }
+        } else if (bound != null && bound.ax == 11 && bound.Z[19] == 1 &&
+            !bound.deadRelease()) {
+            // L2006-L2027 — assassinate window on the in-front target
+            if (p.aZ || p.mountableState()) {                  // L2016
+                r98 = true
+                // L2023 press path — L2020's k.k()/V() else-checks are
+                // convergent dead code (same L2029 landing as L1994).
+                if (pad.v(Pad.M_CONTEXT)) {
+                    p.ag = 0; p.ah = 0; p.aj = 0
+                    if (world.mounted) p.releaseAe() else p.dropIndicator(world)
+                    p.grabLunge(bound, world)                  // c(g)
+                    p.z = false
+                }
+            }
+        }
+        // L2029-L2040 tail — r98 → spawn/refresh the hand at view center
+        // and set cm=1 (mounted); k.k() short-circuits the refresh
+        if (r98) {
+            if (!world.mounted) {
+                if (!p.indicatorIsHand(world)) p.releaseAe()
+                p.spawnHand(world, 200 + world.kO, 120 + world.kP)
+                p.moveHand(world, 200 + world.kO, 120 + world.kP)
+            }
+            world.setMounted()
+        }
+        // L2051-L2057 aA fixups; L2048 o()→ao() debug arm unported
+        if (p.aA == 0) p.aA = 1
+        if (p.aA and 4 != 0) p.aA = p.aA and -5
     }
 
     // -- grounded family tail (L682) ----------------------------------------

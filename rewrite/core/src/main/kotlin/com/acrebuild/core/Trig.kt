@@ -29,4 +29,18 @@ object Trig {
             else -> T[X - r]
         }
     }
+
+    /**
+     * `j.b(r7,r8)` (j.java:385, proven via the quadrant table): the
+     * original's atan2 measured **clockwise-from-+y (screen-down)** in
+     * angle-256 units — `r8 = h·sin(θ)`, `r7 = h·cos(θ)` — which is
+     * standard `atan2(y=r8, x=r7)`. So the port's signature is
+     * `atan2(y, x)` and the call for `j.b(a, b)` is `atan2(b, a)`.
+     */
+    fun atan2(y: Int, x: Int): Int {
+        val a = StrictMath.round(
+            StrictMath.atan2(y.toDouble(), x.toDouble()) * (X / (2.0 * StrictMath.PI))
+        ).toInt()
+        return ((a % X) + X) % X
+    }
 }
