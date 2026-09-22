@@ -6974,3 +6974,377 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.Z[0] == 3 && e.S == 171) return
     e.pushContact(w)
 }
+
+// ============================================================================
+// Slice 64 — ax47 `aK()` ledge sentinel + ax50 `aL()` pouncer + the shared
+// stealth-kill driver `i.k()` (i.java:2057-2255) both FSM tails funnel into.
+//
+//  aK() i.java:9910-10007 — S120 perch (ceiling-grab on the player drop-kill
+//      set → S119; else l() seen → 3x3 quadrant pounce pick 121-128);
+//      S121-128 pounce (T==1 sfx16, T==3 op4 on player, r()→S120);
+//      S119/S129/default → k();j();  S130 r()→k.c(this) despawn.
+//  aL() i.java:10008-10099 — S80/93 perch (93 = ceiling-grab variant +
+//      registerClaim), S81 countdown→S82→S80, S83 air-walk via M() → S84 →
+//      S0, S94 P|=512 + claim-release → despawn, default → k();j().
+//  k()  i.java:2057-2255  — backstab window L81 (player faces me, I don't
+//      face player, <80px, S38 split): prompt k.c(ak,al-85,aw) + 65568 edge
+//      → op6 victim anim (49 mid / 283 near); ax11 ceiling-kill arm (S24+
+//      j==6+p.S89); ax47 arm (S80+p.S89 → i94); ax50 arm (S119+p.S89 →
+//      i130). ax47/50 get r11=21 set but their L172 tail is `else→true`
+//      — the sentinel plays no anim on the L81 backstab (verbatim quirk).
+//  j()  i.java:1803-1955  — shared intake; ax47/50 take the L24 path →
+//      L50 X-overlap → aB -= J[au] (finishers) else H[au] (50) → C().
+//  C()  i.java:1956-2053  — ax47/50 arms: survive → return true with no
+//      react anim; dead → ax50 i(129), ax47 nothing (verbatim).
+//  init i.java:3082 L134 (ax47 `az=r8[17]`) / :3017 L114 (ax50 `az=r8[13]`)
+//      — minimal inits; records arrive via retype ax11+S∈{80,93}→47 and
+//      ax17+S==120→50 (i.java:2644/2651) applied in Level0World.initNpcs.
+//  l()  i.java:2255 — ax47 → L83 default arm (r11/r12/r13 stay 0 →
+//      degenerate [ak,al,ak,al] sight rect = point-pierce only); ax50 →
+//      L77 `bn→false; b(W,k.ac)` W⊆cam rect; shared L88-L101 tail
+//      (LOS clear + player ∉ {284,285}).
+//  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
+// ============================================================================
+
+private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
+private val DROP_KILL = intArrayOf(24, 22, 43, 150, 35, 157)
+private val KILL_EXIT = intArrayOf(268, 267, 271, 270, 291)
+private val KILL_SKIP = intArrayOf(203, 204, 310, 311)
+private val KILL_ANIM = intArrayOf(49, 283, 357, 360)
+private val KILL_HOLD = intArrayOf(203, 89, 271, 297)
+
+/** `case 47 → L134` (i.java:3082, proven): `az=r8[17]; aB=bu[au];
+ *  Z[0]=r8[4]; i(r8[5])` + shared `t()` tail. Records reach ax47 only via
+ *  the `ax11 && r8[5]∈{80,93} → ax=47` retype (i.java:2644) applied in
+ *  Level0World.initNpcs before dispatch. Minimal-Z semantics identical to
+ *  initAx73 (inferred — fixed IntArray(22) zero-reads). */
+fun NpcFsm.initAx47(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(17)
+    e.aB = BU73.getOrElse(e.au) { BU73[0] }
+    e.Z.fill(0)
+    e.Z[0] = rf(4)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `case 50 → L114` (i.java:3017, proven): `az=r8[13]; aB=bu[au];
+ *  Z[0]=r8[4]; i(r8[5])` — same minimal shape, different az index.
+ *  Records reach ax50 via `ax17 && r8[5]==120 → ax=50` (i.java:2651). */
+fun NpcFsm.initAx50(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(13)
+    e.aB = BU73.getOrElse(e.au) { BU73[0] }
+    e.Z.fill(0)
+    e.Z[0] = rf(4)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `i.l()` ax47 arm (i.java:2255-2340, proven): `ai()` fast-path → true;
+ *  `aA&8` → false. L83 default arm: r11/r12/r13 stay the head-initialized
+ *  zeros (only ax11's arm populates them) → sight rect degenerates to
+ *  `[ak,al,ak,al]` — a point-pierce check on the player mid-point. Then
+ *  the shared tail: LOS clear (e(aS)==false) + player ∉ {284,285}. */
+private fun seen47(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
+    if ((p.aA and 8) != 0) return false                   // L10 → r0=false
+    val r0 = Entity.pointInBox(
+        p.ak, (p.W[1] + p.W[3]) shr 1,
+        intArrayOf(e.ak, e.al, e.ak, e.al))
+    if (!r0) return false                                 // L88
+    if (e.losBlocked(p, w)) return false                  // L90
+    if (p.S == 284) return false                          // L92
+    return p.S != 285                                     // L94-L101
+}
+
+/** `i.l()` ax50 arm (i.java:2395 L77, proven): `bn→false` (iBn kill-
+ *  disable); else `b(W,k.ac)` — my W strictly inside the camera rect
+ *  (i.java:666: `r4[0]>=r5[0] && r4[1]>=r5[1] && r4[2]<=r5[2] &&
+ *  r4[3]<=r5[3]` — proper containment, W ⊆ ac). Then the shared tail. */
+private fun seen50(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
+    if ((p.aA and 8) != 0) return false
+    if (w.iBn) return false                               // L77 bn gate
+    val ac = w.kAc
+    val r0 = ac != null &&
+        e.W[0] >= ac[0] && e.W[1] >= ac[1] &&
+        e.W[2] <= ac[2] && e.W[3] <= ac[3]
+    if (!r0) return false
+    if (e.losBlocked(p, w)) return false
+    if (p.S == 284) return false
+    return p.S != 285
+}
+
+/** `i.M()` + `i.h(x,y)` (i.java:7198/7207, proven): cell facing-adjacent
+ *  (`ak/20 ± 1` by `av`, row `al/20`) ≥5 = "floor ahead" — S83's landing
+ *  probe. `av==false → +1` (right), `av==true → -1` (left). */
+private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
+    e.e(w, e.ak / 20 + if (e.av) -1 else 1, e.al / 20) >= 5
+
+/** `i.S()` (i.java:9253, proven): `repeat(3){ m(-1); k.o(5); k.s() }` —
+ *  wisp burst + stat + shake, shared by every k() kill arm. */
+private fun wispBurst(e: Entity, w: LevelCellSource) {
+    repeat(3) { w.spawnWisp(e); w.apStats[5]++; w.shake() }
+}
+
+/** `i.k()` (i.java:2057-2255, proven): the shared stealth-kill driver.
+ *  Head exits: `g.g()` / `aH()` (S∈{0,20,21,106,107,117,139,168,169,176})
+ *  / player S297 / own S175 → false. The player-anim exit set {268,267,
+ *  271,270,291} + `bn` → `G()+k.k(aw)` (release ae + prompt) then false.
+ *  ax11 Z[8]==999 → false (chase-director entities are not killable).
+ *
+ *  Distance gate L63: `|p.ak-ak|>=80 || |dy|>=r9 (5, or 20 for p.S==38)`
+ *  or p.S∈{203,204,310,311} → L120 (G() unless S∈{203,89,271,297}) → L129.
+ *  L81 backstab window: `p.faces(me) && !me.faces(p)` → prompt + edge:
+ *  kill → `r11=21`, S38 face-sync, `S()` burst, op6 victim anim
+ *  (49 when `40<|dx|<80` or p.S==38; 283 when |dx|<40; |dx|==40 skips).
+ *  L129 per-ax grab-kill arms + L172 tail (`ag=0; ax11→i(r11)`;
+ *  `ax17→i(68)+sfx13`; else `true`). */
+private fun contextK(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (w.gG()) return false                              // L7
+    if (e.S in intArrayOf(0, 20, 21, 106, 107, 117, 139, 168, 169, 176))
+        return false                                      // aH()
+    if (p.S == 297) return false                          // L13
+    if (e.S == 175) return false                          // L17
+    if (p.S in KILL_EXIT || w.iBn) {                      // L19-L28
+        e.releaseAe(); w.clearPrompt(e.aw); return false
+    }
+    if (e.ax == 11 && e.Z[8] == 999) return false         // L33
+    val r0 = p.ak - e.ak
+    var r8 = p.W[3] - e.al
+    var r9 = 5
+    if (p.S == 38) { r8 = p.W[1] - e.al; r9 = 20 }        // L40
+    val r10 = Math.abs(r0)
+    val r82 = Math.abs(r8)
+    var r11 = -1
+    if ((p.aA and 8) != 0 && w.iBn) return false          // L47-L54
+    if (p.S == 284) return false                          // L54
+    // L58-L61: player not facing me → release my marker link.
+    if (!p.faces(e)) e.releaseAe()
+    // L63-L120: out-of-range / busy-state arm → marker clear then L129.
+    val outOfRange = r10 >= 80 || r82 >= r9 || p.S in KILL_SKIP
+    val facingBlocked = !p.faces(e) || e.faces(p)
+    if (outOfRange || (facingBlocked && p.S == 38)) {     // L79/L120
+        if (p.S !in KILL_HOLD) e.releaseAe()
+    } else if (!facingBlocked) {
+        // L81 backstab window — player behind, within reach.
+        if (e.j == 0 && p.S !in KILL_ANIM) {
+            w.showPrompt(e.ak, e.al - 85, e.aw)           // k.c(x,y,aw)
+            if (w.padHeld(65568)) {                       // k.v edge
+                w.clearPrompt(e.aw); e.releaseAe(); e.ab = null
+                r11 = 21
+                if (p.S == 38) {                          // L95 face-sync
+                    if (p.ak - e.ak > 0) p.av = true
+                    else if (p.ak - e.ak < 0) p.av = false
+                    e.av = p.av
+                }
+                wispBurst(e, w)                           // S()
+                // L101: 40<|dx|<80 (or mounted) → op6 anim 49; |dx|<40 →
+                // 283; |dx|==40 with S!=38 → L129 (skips — verbatim).
+                val anim = when {
+                    p.S == 38 -> 49                       // L106→L107
+                    r10 in 41 until 80 -> 49
+                    r10 < 40 -> 283
+                    else -> -1
+                }
+                if (anim != -1) {
+                    val snapX = e.ak + if (r0 >= 0) -20 else 20
+                    p.applyHit6(anim, snapX, e, w)        // a(6,anim,x,this)
+                }
+            }
+        }
+    }
+    // L129 chain — per-ax grab-kill offers (each: prompt + 65568 edge).
+    if (e.ax == 11 && e.j == 6 && p.S == 89 && e.S == 24) {
+        w.showPrompt(e.ak, e.al - 85, e.aw)
+        if (w.padHeld(65568)) {
+            e.aA = 2; e.aB = 0
+            w.kN?.setAnim(55); w.kN?.let { it.P = it.P and -65 }
+            p.consumeH()
+            r11 = 20
+            wispBurst(e, w)
+            p.applyHit6(90, e.ak, e, w)
+            when (e.Z[14]) { 6 -> w.gP = 1; 7 -> w.gP = 2 }
+        }
+    }
+    // L151 ax47: player grabbed from below (S89) while I perch (S80).
+    if (e.ax == 47 && p.S == 89 && e.S == 80) {
+        w.showPrompt(e.ak, e.al - 85, e.aw)
+        if (w.padHeld(65568)) {
+            e.aA = 2; e.aB = 0
+            e.setAnim(94)
+            w.kN?.setAnim(55); w.kN?.let { it.P = it.P and -65 }
+            p.consumeH()
+            p.applyHit6(90, e.ak, e, w)
+            w.gP = e.Z[0]
+        }
+    }
+    // L160 ax50: same offer while I perch at S119.
+    if (e.ax == 50 && p.S == 89 && e.S == 119) {
+        w.showPrompt(e.ak, e.al - 85, e.aw)
+        if (w.padHeld(65568)) {
+            e.aA = 2; e.aB = 0
+            e.setAnim(130)
+            w.kN?.setAnim(55); w.kN?.let { it.P = it.P and -65 }
+            p.consumeH()
+            p.applyHit6(90, e.ak, e, w)
+            w.gP = e.Z[0]
+        }
+    }
+    // L169-L182 tail.
+    if (r11 == -1) return false
+    e.ag = 0
+    return when (e.ax) {
+        11 -> { e.setAnim(r11); true }
+        17 -> { e.setAnim(68); w.sfx(13); true }
+        else -> true                                      // 47/50/23
+    }
+}
+
+/** `i.j()` for ax47/50 (i.java:1803-1955, proven): `P()` head (aB<=0 →
+ *  releaseAe + false); `g.b()` gate; L24-L38 proximity (|dx|<=160 &&
+ *  |dy|<=20) + the `aN/bf` engage latch on p.S==67; L50 X-overlap → Q()
+ *  (face player) then damage — `aS.S∈{183,184,216,217}` → J=100 else
+ *  L102-L120 → `aB -= H[au]` (50; S67 re-runs Q()). `C()` arm:
+ *  survived → `true` with no react; dead → ax50 `i(129)`, ax47 none. */
+private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+    if (e.aB <= 0) { e.releaseAe(); return false }        // P()
+    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return false   // g.b()
+    val r02 = Math.abs(e.ak - p.ak) <= 160 && Math.abs(e.al - p.al) <= 20
+    if (!r02) return false
+    if (!w.iBf) {                                         // L38-L48 latch
+        val aN = w.lockTarget
+        if (aN == null || aN === e) {
+            if (p.S == 67) { if (aN == null) w.lockTarget = e; w.iBf = true }
+        }
+    }
+    if (p.X[0] == p.X[2]) return false
+    if (!Entity.overlapStrict(e.W, p.X)) return false
+    e.av = p.ak < e.ak                                    // Q()
+    if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217)
+        e.aB -= JD.getOrElse(e.au) { JD[0] }              // L61 finisher
+    else {
+        if (p.S == 67) e.av = p.ak < e.ak                 // L102 re-Q()
+        e.aB -= HDM47.getOrElse(e.au) { HDM47[0] }        // L120 counter line
+    }
+    // L135 → C(): ax47/50 arms (i.java:2024-2052).
+    if (e.aB > 0) return true                             // L25→L51: survive
+    if (e.ax == 50) e.setAnim(129)                        // L70 death anim
+    return true                                           // ax47 → L86
+}
+
+/** `i.aK()` (i.java:9910-10007, proven): ledge-sentinel FSM — transcribed
+ *  arm for arm. `r7 = l()` runs first every tick. */
+fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
+    var r7 = seen47(e, w, p)                              // l()
+    when (e.S) {
+        120 -> {
+            // L6: ceiling-grab on the player drop-kill set.
+            if (p.S in DROP_KILL) {
+                // L18
+                if (Entity.overlapStrict(p.W, e.W) && p.W[3] < e.W[3]) {
+                    p.setAnim(89)
+                    e.ah = 0; e.ag = 0
+                    p.ah = 0; p.ag = 0
+                    p.al = e.W[1]
+                    p.ak = e.ak
+                    p.O = p.al shl 8; p.N = p.ak shl 8
+                    e.setAnim(119)
+                    e.aC = 30
+                    r7 = false
+                }
+            }
+            // L23: still seen → 3x3 quadrant pounce pick.
+            if (r7) {
+                val r1 = when {
+                    p.W[0] > e.W[2] ->                    // player right
+                        when {
+                            p.W[1] <= e.W[3] ->
+                                if (p.W[3] >= e.W[1]) 124 else 125
+                            else -> 126
+                        }
+                    p.W[2] < e.W[0] ->                    // player left
+                        when {
+                            p.W[1] <= e.W[3] ->
+                                if (p.W[3] >= e.W[1]) 121 else 122
+                            else -> 123
+                        }
+                    else ->                               // overlapping column
+                        if (p.W[3] >= e.W[1]) 128 else 127
+                }
+                e.setAnim(r1)
+            }
+        }
+        in 121..128 -> {
+            // L48 pounce
+            if (!r7) e.setAnim(120)
+            else {
+                if (e.T == 1) w.sfx(16)                   // k.A(16)
+                if (e.T == 3) p.applyHit(4, 0, e, w)
+                if (e.animFinished()) e.setAnim(120)
+            }
+        }
+        130 -> if (e.animFinished()) w.removeEntity(e)    // L60 k.c(this)
+    }
+    // L62 — every arm (120's pick, the pounce, 130's despawn) falls
+    // through to the shared `k(); j()` tail.
+    contextK(e, w, p)
+    damageIntakeSentinel(e, w, p)
+}
+
+/** `i.aL()` (i.java:10008-10099, proven): pouncer FSM — transcribed arm
+ *  for arm. */
+fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
+    when (e.S) {
+        94 -> {
+            // L43: claim-hold then release-and-despawn.
+            e.P = e.P or 512
+            if (e.animFinished()) {
+                if (w.kL != null && w.kL === e && w.kL?.aw == e.aw) {
+                    w.claimReset()                        // k.m()
+                }
+                w.removeEntity(e)                         // k.c(this)
+            }
+        }
+        0 -> return                                       // L52 idle terminal
+        81 -> {
+            // L6 countdown perch: r()→P|=64; post-decrement aC<0 → i(82)
+            // +P&=-65 (original reads the OLD value — fires one tick after
+            // the counter crosses below zero).
+            if (e.animFinished()) e.P = e.P or 64
+            if (e.aC-- < 0) { e.setAnim(82); e.P = e.P and -65 }
+            contextK(e, w, p); damageIntakeSentinel(e, w, p)
+        }
+        82 -> {
+            if (e.animFinished()) e.setAnim(80)           // L12 re-perch
+            contextK(e, w, p); damageIntakeSentinel(e, w, p)
+        }
+        83 -> {
+            // L15 air-walk: floor ahead → i(84)+vel0; else ah=1536 (fall).
+            if (floorAheadM(e, w)) { e.setAnim(84); e.ah = 0; e.aj = 0 }
+            else e.ah = 1536
+            if (e.animFinished()) e.P = e.P or 64         // L19
+            contextK(e, w, p); damageIntakeSentinel(e, w, p)
+        }
+        84 -> if (e.animFinished()) { e.setAnim(0); return }  // L22 → S0
+        93 -> {
+            // L26 ceiling-grab variant — same snap as aK()'s L18 but into
+            // S80 with `registerClaim(this,0,W)` (k.a) arming the kill.
+            if (p.S in DROP_KILL &&
+                Entity.overlapStrict(p.W, e.W) && p.W[3] < e.W[3]) {
+                p.setAnim(89)
+                e.ah = 0; e.ag = 0
+                p.ah = 0; p.ag = 0
+                p.al = e.W[1]
+                p.ak = e.ak
+                p.O = p.al shl 8; p.N = p.ak shl 8
+                e.setAnim(80)
+                e.aC = 30
+                w.registerClaim(e, 0, e.W)                // k.a(this,0,W)
+            }
+            return                                        // L26 tail: return
+        }
+        else -> { contextK(e, w, p); damageIntakeSentinel(e, w, p) } // L53
+    }
+}

@@ -2926,6 +2926,45 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
     }
 
+    /** `i.a(6, anim, snapX, attacker)` victim arm (i.java:4586 L142,
+     *  proven): play `anim` then per-anim handling —
+     *  49 (mid-range backstab): vel0 + `ag=((snapX-ak)/10)<<8` slide +
+     *     `k.e(0,aw)` + `k.o(3)` + `k.A(20)`;
+     *  283 (near backstab): `ak=attacker.ak ∓10` (`av==true→+10` —
+     *     i.java:4599-4609) + vel0 + same stats/sfx;
+     *  other (90 = ceiling kill): `ak=snapX`; `k.bK` → `a(8,59,…)` marker;
+     *     anim==90 → `al=attacker.al` + vel0; `attacker.ax==47` adds
+     *     `k.e(0,aw)`, `k.o(3)` runs for every 90. */
+    fun applyHit6(anim: Int, snapX: Int, attacker: Entity?, world: LevelCellSource) {
+        setAnim(anim)
+        when (anim) {
+            49 -> {
+                aj = 0; ah = 0; ag = 0
+                ag = ((snapX - ak) / 10) shl 8
+                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+            }
+            283 -> {
+                val ax2 = attacker?.ak ?: ak
+                ak = ax2 + if (av) 10 else -10
+                aj = 0; ah = 0; ag = 0
+                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+            }
+            else -> {
+                ak = snapX
+                if (world.kBK && attacker != null)
+                    spawnFx8(world, 59, 1, av, attacker.ak, al, 300)
+                if (anim == 90) {
+                    // ax47 attacker → k.e(0,aw) stat; every attacker → k.o(3).
+                    if (attacker?.ax == 47) world.kStatE(aw)
+                    world.apStats[3]++
+                } else {
+                    al = attacker?.al ?: al
+                }
+                aj = 0; ah = 0; ag = 0
+            }
+        }
+    }
+
     /** `i.o()` (i.java:6597, proven): `S∈{2,20..29} → false`, else true. */
     fun oState(): Boolean = !(S == 2 || S in 20..29)
 
@@ -4139,6 +4178,23 @@ interface LevelCellSource {
     fun kS(i: Int): Int = -1
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
     var kSBound: Int get() = 0; set(_) {}
+    // -- slice 64: k.N/cq prompt-marker + g.p kill-bonus (k.java:58/870/888,
+    //    g.java:21) — the stealth-kill driver `k()` (i.java:2057) uses them.
+    /** `k.N` — the shared prompt-marker entity (ax14/clip9/S54/az302)
+     *  spawned by `k.c(x,y,aw)` and released by `k.k(aw)`. */
+    var kN: Entity? get() = null; set(_) {}
+    /** `k.cq` — uid bound to `k.N`; `k.k(aw)` releases iff `cq==aw` or
+     *  `aw==-1`. -1 when idle. */
+    var kCq: Int get() = -1; set(_) {}
+    /** `k.c(int,int,int)` (k.java:870, proven): create `k.N` once then
+     *  reposition it to (x,y) every call; bind `cq=aw`. */
+    fun showPrompt(x: Int, y: Int, aw: Int) {}
+    /** `k.k(int)` (k.java:888, proven): `cq==aw || aw==-1` → `N.p()` +
+     *  `N=null` + `cq=-1`. */
+    fun clearPrompt(aw: Int) {}
+    /** `g.p` (g.java:21) — kill-bonus flag the `k()` arms write
+     *  (`Z[14]`→1/2 for ax11; own `Z[0]` for ax47/50). */
+    var gP: Int get() = 0; set(_) {}
 }
 
 /* `g.c(int)` (g.java:404, proven): interact-eligible player states —
