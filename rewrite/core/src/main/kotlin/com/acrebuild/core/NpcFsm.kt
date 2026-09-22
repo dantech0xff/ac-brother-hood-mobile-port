@@ -5979,3 +5979,207 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
         else -> return                                    // L81
     }
 }
+
+// =========================================================================
+// ax69 = bC() — air-assassination target zone (dispatch i.java:5096;
+// bC():17721-18000; init arm :3191 (L194) + shared tail :3680 (L392);
+// all proven). bi[69]=38 → clip38.
+//
+// The perch/kill flow: S0 idle binds the player when a `g.b(S)`-grabbable
+// anim overlaps W → `aS.i(250)` hang, `af=k.q(Z[1])` (link uid), `i(7|1)`.
+// S7 armed: the preamble (S∈{6,7} && aS.af==this && af==null) scans k.bd
+// for an ax11 soldier NOT facing the player (`!g(aS)`), Y-overlapped with
+// the zone, within 40px of the zone's right edge → `af` = victim +
+// `c/d(ak+52, al-85)` clip-74 hand marker. The L39-L50 keep-alive drops
+// `af` (`G()`) when it drifts out of reach.
+// S7 kill arm: `Z[0]==0` requires prompt eligibility (victim inside the
+// 40px reach OR `af.g(aS)` — victim facing away) → marker at
+// (W[2]+35, W[1]-35); `Z[0]!=0` auto-eligible. `v(65568)||V()` (tap or
+// marker-touch) → `aS.i(244)` leap, `P|=64`, snap to the zone's
+// right-center, `aS.h(1)` (bind claim slot 1), `af.i(117)` death-anim,
+// `af.az=-1`, `i(2)` windup, `G()`.
+// S6 carry-drift (`a(true)` side-probe first): d-pad `u(8256|4112)`
+// drifts zone+player ±1536 together; `w(12368)` (released pad edge)
+// → `i(7)`; `y()` wall edge → ag=0 both.
+// Tail anims pick by `k.bK` = the HAS-BLOOD build flag (GloftASBR:36 —
+// JAR manifest lacks the property → false → censored S10/11/12 set):
+//  S2 →r()→ bK?3:10 (re-center player X); S3/S10 →r()→ bK?4:11 +
+//  `af=null; G()`; S4/S11: `aA==1` →r()→ `bw=-1,bx=57,l(13)` (mission
+//  advance, unported); `aA!=1`: Z[0]==0 →r()→ `aS.S==244` → bK?5:12 →
+//  `aS.i(0), P&=-65, E(), af=null`, else park on overlap or
+//  `aS.az=100; G(); P|=32|64`; Z[0]==1 →r()→ `i(7)`.
+//  S5/S12: Z[0]==0 && r() → bK?4:11, then same park/release tail.
+// =========================================================================
+
+/**
+ * `i.bC()` (proven transcription). `Z[0]` = zone flavor from r8[4]:
+ * 0 = armed-scan (records: all three spawns), 1 = auto-eligible,
+ * 2 = perch variant; `Z[1]` = the `af` link uid (r8[7]).
+ */
+fun NpcFsm.tickAx69(e: Entity, w: Level0World, p: Entity) {
+    // ---- preamble: bind / keep-alive the ax11 victim (L2-L50) ----
+    if (e.Z[0] != 0 && e.Z[0] != 2 && e.aA != 1 && (e.S == 6 || e.S == 7) &&
+        p.af === e) {
+        if (e.af == null) {
+            for (n in w.npcs) {                             // L19 k.bd[] scan
+                if (n.ax != 11) continue                    // L22
+                if (n.faces(p)) continue                    // !g(aS) L24
+                if (n.W[3] <= p.af!!.W[1]) continue         // L27 Y-overlap
+                if (n.W[1] >= p.af!!.W[3]) continue
+                // L33 right-reach then L36 bind, else L37 left-reach
+                if ((n.ak - e.W[2]) < 40 && n.W[0] > e.W[2]) {
+                    e.af = n
+                    e.spawnMarker(w, 0, e.ak + 52, e.al - 85)   // c()
+                    e.markerPoint(e.ak + 52, e.al - 85)          // o() inside c()
+                    e.moveMarker(w, e.ak + 52, e.al - 85)        // d()
+                    break
+                }
+                if ((e.W[0] - n.ak) < 40 && n.W[2] < e.W[0]) {
+                    e.af = n
+                    e.spawnMarker(w, 0, e.ak + 52, e.al - 85)
+                    e.markerPoint(e.ak + 52, e.al - 85)
+                    e.moveMarker(w, e.ak + 52, e.al - 85)
+                    break
+                }
+            }
+        }
+        if (e.af != null) {                                 // L39 keep-alive
+            val v = e.af!!
+            if ((v.ak - e.W[2]) > 40 && v.W[0] > e.W[2]) { e.af = null; e.releaseAe() }
+            else if ((e.W[0] - v.ak) > 40 && v.W[2] < e.W[0]) { e.af = null; e.releaseAe() }
+            else if (Entity.overlapStrict(e.W, v.W)) { e.af = null; e.releaseAe() }  // L49 overlap → drop
+        }
+    }
+
+    when (e.S) {
+        0 -> when (e.Z[0]) {                              // L54 idle bind-scan
+            0 -> {                                        // L56
+                if (!p.gB()) return                       // g.b(aS.S) gate
+                if (!Entity.overlapStrict(p.W, e.W)) return // L58/L187
+                p.setAnim(250); p.av = false; p.az = -1
+                e.setAnim(7)
+                e.af = w.findByAw(e.Z[1])                 // k.q(Z[1])
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                p.al = (e.W[1] + e.W[3]) shr 1
+                p.ak = (e.W[0] + e.W[2]) shr 1
+                p.af = e
+            }
+            1, 2 -> {                                     // L61
+                if (!p.gB()) return
+                if (!Entity.overlapStrict(p.W, e.W)) return
+                if (p.W[3] < ((e.W[1] + e.W[3]) shr 1)) return // L65/L190
+                p.setAnim(250); p.av = false; p.az = -1
+                e.setAnim(1)
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                p.al = (e.W[1] + e.W[3]) shr 1
+                p.ak = (e.W[0] + e.W[2]) shr 1
+                p.af = e
+            }
+            else -> return                                // L185
+        }
+        1 -> if (e.animFinished()) e.setAnim(7)           // L69
+        2 -> {                                            // L117
+            if (e.animFinished()) {
+                e.setAnim(if (w.kBK) 3 else 10)      // L119/L121
+                p.ak = (e.W[0] + e.W[2]) shr 1            // L122
+            }
+        }
+        3, 10 -> {                                        // L125
+            if (e.animFinished()) {
+                e.setAnim(if (w.kBK) 4 else 11)      // L127/L129
+                e.af = null; e.releaseAe()                // L130
+            }
+        }
+        4, 11 -> {                                        // L133
+            if (e.aA == 1) {
+                if (e.animFinished()) {                   // L135
+                    w.kBw = -1; w.kBx = 57                // L137-L138
+                    w.screenL(13)
+                }
+                return
+            }
+            when (e.Z[0]) {                               // L139
+                0 -> {
+                    if (!e.animFinished()) return         // L143 gate
+                    if (p.S == 244) {                     // L145 kill landing
+                        e.setAnim(if (w.kBK) 5 else 12) // L147
+                        p.setAnim(0); p.P = p.P and -65   // L148
+                        p.settleToGround(w)               // aS.E()
+                        p.af = null
+                    } else if (!Entity.overlapStrict(p.W, e.W)) { // L151→L153
+                        if (p.az == -1) {                 // L153/L201
+                            p.az = 100; e.releaseAe()
+                            e.P = e.P or 32; e.P = e.P or 64
+                        }
+                    }
+                }
+                1 -> if (e.animFinished()) e.setAnim(7)   // L157/L159
+                else -> return                            // Z[0]==2 → L203
+            }
+        }
+        5, 12 -> {                                        // L163
+            if (e.Z[0] == 0 && e.animFinished()) {
+                e.setAnim(if (w.kBK) 4 else 11)      // L167/L169
+            }
+            if (!Entity.overlapStrict(p.W, e.W)) {        // L171/L173
+                if (p.az == -1) {
+                    p.az = 100; e.releaseAe()
+                    e.P = e.P or 32; e.P = e.P or 64
+                }
+            }
+        }
+        6 -> {                                            // L103 carry-drift
+            e.collideSides(w, true)                       // a(true)
+            if (w.padDown(8256)) { e.ag = 1536; p.ag = 1536 }  // L105
+            else if (w.padDown(4112)) { e.ag = -1536; p.ag = -1536 } // L107
+            else if (w.padRelease(12368)) {               // L110 w()
+                e.ag = 0; p.ag = 0; e.setAnim(7)
+            }
+            if (e.edgeFlag()) { e.ag = 0; p.ag = 0 }      // L113/L195
+        }
+        7 -> {                                            // L71 armed
+            if (e.aA == 1) return                         // L75
+            var r8 = false
+            if (e.af != null) {
+                if (e.Z[0] != 0) r8 = true                // L79 auto-eligible
+                else {                                    // L79-L84 prompt test
+                    val v = e.af!!
+                    if ((v.ak - e.W[2]) < 40 && !v.faces(p)) r8 = true
+                    if (r8) {                             // L84 marker
+                        e.spawnMarker(w, 0, e.W[2] + 35, e.W[1] - 35)
+                        e.markerPoint(e.W[2] + 35, e.W[1] - 35)
+                        e.moveMarker(w, e.W[2] + 35, e.W[1] - 35)
+                    } else e.releaseAe()                  // L86 G()
+                }
+            }
+            if (e.af != null && r8 &&
+                (w.padHeld(65568) || e.markerTouched(w))) {     // L89/L93 kill
+                p.setAnim(244)
+                p.P = p.P or 64
+                p.al = (e.W[1] + e.W[3]) shr 1
+                p.ak = e.W[2]
+                p.bindScript(1, w)                        // aS.h(1)
+                e.af!!.setAnim(117)                       // af.i(117)
+                e.af!!.az = -1
+                e.setAnim(2)
+                e.releaseAe()                             // G()
+            }
+            if (e.Z[0] == 1 || e.Z[0] == 2) {             // L96/L100 arm→S6
+                if (w.padDown(12368)) e.setAnim(6)
+            }
+        }
+        else -> return                                    // L191 (S8/S9)
+    }
+}
+
+/** ax69 init arm (i.java:3191, L194 + L392 shared tail, proven). */
+fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 0
+    e.Z.fill(0)
+    e.Z[0] = rf(4)                                        // zone flavor
+    e.Z[1] = rf(7)                                        // af link uid
+    e.aA = 0
+    e.setAnim(rf(5))                                      // L395 i(r8[5])
+    e.refreshBoxes()                                      // L427 t()
+}

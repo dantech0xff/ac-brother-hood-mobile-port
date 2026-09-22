@@ -20,6 +20,7 @@ class Pad {
     var held = 0         // bits currently down
     var edge = 0         // bits that went down this tick
     var tap = 0          // bits qualifying as double-tap this tick
+    var released = 0     // bits that went up this tick (k.w / eM)
     var aA = 0           // double-tap window (k.aA)
 
     private var pendingPress = 0
@@ -31,6 +32,7 @@ class Pad {
     fun commit(nextHeld: Int) {
         val down = nextHeld and held.inv()
         edge = down or pendingPress
+        released = held and nextHeld.inv()       // eM = eN (release latch)
         tap = if (aA > 0) edge else 0
         aA = if (held != 0 && nextHeld == 0) 8 else if (edge == 0 && aA > 0) aA - 1 else aA
         pendingPress = 0
@@ -40,11 +42,12 @@ class Pad {
     fun u(mask: Int): Boolean = held and mask != 0
     fun v(mask: Int): Boolean = edge and mask != 0
     fun x(mask: Int): Boolean = tap and mask != 0
+    fun w(mask: Int): Boolean = released and mask != 0
 
     /** `k.v()` (k.java:7260, proven): clear the held/edge words and the
      *  accumulated press latches (`bC/bB` + `eK/eL/eM/eN`). */
     fun clearLatches() {
-        held = 0; edge = 0; tap = 0; aA = 0; pendingPress = 0
+        held = 0; edge = 0; tap = 0; released = 0; aA = 0; pendingPress = 0
     }
 
     companion object {

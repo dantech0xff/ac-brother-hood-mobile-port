@@ -65,6 +65,7 @@ class Level0World(
             58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
             60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
             43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
+            69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
         )
     }
 
@@ -229,10 +230,12 @@ class Level0World(
     /** `k.aS.W` — player hitbox. */
     override fun playerRect(): IntArray = player.W
 
-    /** `k.q(o)` (k.java:5887, proven): resolve a linked entity by `aw` —
-     *  `aS.aw==o → aS` else the `bb[]` scan (our npcs list). */
-    override fun findByAw(aw: Int): Entity? =
-        if (player.aw == aw) player else npcs.firstOrNull { it.aw == aw }
+    /** `k.q(aw)` (k.java:5887, proven): `aw==-1 → null` head guard, then
+     *  `aS.aw==aw → aS` else the `bb[]` scan by uid. */
+    override fun findByAw(aw: Int): Entity? {
+        if (aw == -1) return null
+        return if (player.aw == aw) player else npcs.firstOrNull { it.aw == aw }
+    }
 
     /**
      * `i.a(int,int,int)` (i.java:9810) → `a(ax,clip,anim,az)` spawner
@@ -444,6 +447,7 @@ class Level0World(
             else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
+            else if (type == 69) npcFsm.initAx69(e, f.toList(), this)
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
@@ -548,7 +552,11 @@ class Level0World(
     override var kAv = false                     // k.av
     override var kAT = false                     // k.aT
     override var kAL = 0                         // k.aL
-    override var kBK = false                     // k.bK — never set true in JAR
+    override var kBK = false                     // k.bK — HAS-BLOOD JAD
+                                                 // flag (GloftASBR:36):
+                                                 // manifest lacks it →
+                                                 // NPE catch → false
+                                                 // (censored anim set)
     override var kBx = 0                         // k.bx — l(12) sentinel
     override var kBw = 0                         // k.bw — l(13) sentinel
     override var kAJ = 0                         // k.aJ — ax42 fuse phase
@@ -607,6 +615,7 @@ class Level0World(
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
+    override fun padRelease(mask: Int): Boolean = pad.w(mask)       // k.w
     override fun clearLatches() { pad.clearLatches() }   // k.v()
     override fun padRearm() { pad.edge = pad.held }      // k.v = k.w
     override var kCO = 0                               // k.cO transition count
@@ -921,6 +930,7 @@ class Level0World(
             else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
             else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
+            else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
