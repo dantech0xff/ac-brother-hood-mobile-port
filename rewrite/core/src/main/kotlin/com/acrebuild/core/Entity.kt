@@ -3837,6 +3837,11 @@ interface LevelCellSource {
     var kAL: Int get() = 0; set(_) {}
     /** `k.bK` — gate for the sub-op-15 marker spawn. */
     var kBK: Boolean get() = false; set(_) {}
+    /** `k.aJ`/`k.aK`/`k.aM` — the ax42 fuse phase machine + countdown
+     *  init + accumulator (`bz()` i.java:17428). */
+    var kAJ: Int get() = 0; set(_) {}
+    var kAK: Int get() = 0; set(_) {}
+    var kAM: Int get() = 0; set(_) {}
     /** `k.bx`/`k.bw` — script fail-channel ints (sub-ops 2/5 write -1). */
     var kBx: Int get() = 0; set(_) {}
     var kBw: Int get() = 0; set(_) {}
