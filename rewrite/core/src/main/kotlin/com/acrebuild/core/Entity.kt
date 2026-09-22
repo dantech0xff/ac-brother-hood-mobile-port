@@ -166,6 +166,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
     var K = 0                     // g.K — interact-gauge anim frame (aB())
     var z = false                 // g.z — cleared on grab (c() callers)
+    /** `i.cU[5]` — the afterimage-trail ring (`a(true,0)`/`bP()`); each
+     *  element is an (a,b) pos pair flattened to 10 ints. */
+    var cU: IntArray? = null
+    var cV = false                // i.cV — trail-fadeout flag
+    var cW = 0                    // i.cW — trail clip workspace index
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
@@ -783,6 +788,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `q()` — jump to the last frame. */
     fun jumpToLastFrame() {
         clip?.let { T = it.frameCount(S) - 1 }
+    }
+
+    /** `i.y()` (i.java:1211, proven): wall flag in the motion
+     *  direction — `ag<0→bb; ag>0→bc; else facing (av→bb else bc)`. */
+    fun forwardWall(): Boolean = when {
+        ag < 0 -> bb
+        ag > 0 -> bc
+        av -> bb
+        else -> bc
     }
 
     /**
@@ -1917,6 +1931,134 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return r0
     }
 
+    /** `i.a(ax,clip,anim,face,x,y,az)` (i.java:6898, proven): the ax8
+     *  counter-spark factory — `aw=-1, au=0, P|=512`, inserted via `k.b`. */
+    fun spawnFx8(w: LevelCellSource, clip: Int, anim: Int, face: Boolean,
+                 x: Int, y: Int, az2: Int): Entity {
+        val r0 = Entity(8, w.clipFor(clip))
+        r0.aw = -1; r0.au = 0
+        r0.az = az2
+        r0.ak = x; r0.al = y
+        r0.av = face
+        r0.P = r0.P or 512
+        r0.setAnim(anim)
+        w.queueInsert(r0)
+        return r0
+    }
+
+    /** `i.d(int,x,y,az)` (i.java:11076, proven): ax61/clip71 child —
+     *  `a(61,71,anim,99)`, then `ak/al/az` overwritten, `k.b` insert. */
+    fun spawnBossFx(w: LevelCellSource, anim: Int, x: Int, y: Int, az2: Int) {
+        val aK = spawnChildFx(w, 61, 71, anim, 99)
+        aK.ak = x; aK.al = y; aK.az = az2
+        w.queueInsert(aK)
+    }
+
+    /** `i.a(x0,y0,x1,y1,ax,clip,anim,az)` (i.java:21212, proven): the
+     *  param-curve projectile spawn — for ax61 `Z[0..3]` = screen-space
+     *  endpoints, `Z[8..9]` = world dest, `Z[4]` = ctrl mid-x, `Z[5]` =
+     *  src-y-100, `Z[6..7]` = progress/period 16, `P=528`, pos at (x0,y0),
+     *  plus `aK.a(true,0)` trail-arm. `k.O`/`k.P` = camera origin. */
+    fun spawnPathFx(w: LevelCellSource, x0: Int, y0: Int, x1: Int, y1: Int,
+                    ax2: Int, clip: Int, anim: Int, az2: Int): Entity {
+        val aK = spawnChildFx(w, ax2, clip, anim, az2)
+        if (ax2 == 61) {
+            aK.Z.fill(0, 0, 10)
+            aK.Z[0] = x0 - w.kO; aK.Z[1] = y0 - w.kP
+            aK.Z[2] = x1 - w.kO; aK.Z[3] = y1 - w.kP
+            aK.Z[8] = x1; aK.Z[9] = y1
+            aK.Z[4] = (aK.Z[0] + aK.Z[2]) shr 1
+            aK.Z[5] = aK.Z[1] - 100
+            aK.Z[6] = 0; aK.Z[7] = 16
+            aK.P = 528
+            aK.ak = x0; aK.al = y0
+            aK.startTrail()
+        }
+        w.queueInsert(aK)
+        return aK
+    }
+
+    /** `i.a(true,0)` (i.java:21488, proven): arm the 5-dot afterimage
+     *  trail — `cU[0]` = self pos, `cU[1..4]` parked at (-200,-120),
+     *  `cV=true` fadeout-on, `cW=0`. `cU` occupied → no-op. */
+    fun startTrail() {
+        if (cU != null || clip == null) return
+        val t = IntArray(10)
+        t[0] = ak; t[1] = al
+        for (i in 1..4) { t[i * 2] = -200; t[i * 2 + 1] = -120 }
+        cU = t; cV = true; cW = 0
+    }
+
+    /** `i.af()` (i.java:21513, proven): ring-shift the trail dots —
+     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. */
+    fun pushTrail() {
+        val t = cU ?: return
+        for (i in 3 downTo 0) { t[(i + 1) * 2] = t[i * 2]; t[(i + 1) * 2 + 1] = t[i * 2 + 1] }
+        t[0] = ak; t[1] = al
+    }
+
+    /** `i.ag()` (i.java:21529, proven): trail armed. */
+    fun hasTrail(): Boolean = cU != null
+
+    /** `i.bP()` (i.java:21535, proven): release the trail — the `cV`
+     *  fade `d.g(cW,255)` / `d.h(cW,1)` pair is render-side (`inferred`,
+     *  the port drops the draw calls and clears the buffer). */
+    fun endTrail() {
+        if (cU != null) cU = null
+    }
+
+    /** `i.N()` (i.java:7284, head proven): claim the `k.C` HUD slot —
+     *  `k.C=this`, `P|=16`. The old-claimer arm needs the unported
+     *  sequencing fields (`ab()`/`bI()`/`k.c`) — `inferred` reduction:
+     *  port keeps only the claim. The `h(k.s(aG))`/`k(k.s(aG))`
+     *  display-row pair is render-side (skipped). */
+    fun claimKC(w: LevelCellSource) {
+        w.kC = this
+        P = P or 16
+    }
+
+    /** `i.e(int,x,y,az)` (i.java:11084, proven): the ck-aura manager —
+     *  first call spawns `a(61,71,anim,99)` into `i.ck` (`P&=-129&-33`,
+     *  `k.b`), later calls re-arm `ck.i(anim)` + repos; tail always
+     *  `ck.az=az2, ck.av=av`. */
+    fun bossAura(w: LevelCellSource, anim: Int, x: Int, y: Int, az2: Int) {
+        val ck = w.iCk
+        if (ck == null) {
+            val aK = spawnChildFx(w, 61, 71, anim, 99)
+            aK.ak = x; aK.al = y
+            w.iCk = aK
+            aK.P = aK.P and -129
+            aK.P = aK.P and -33
+            w.queueInsert(aK)
+        } else {
+            ck.setAnim(anim)
+            ck.ak = x; ck.al = y
+            ck.P = ck.P and -129
+            ck.P = ck.P and -33
+        }
+        w.iCk?.let { it.az = az2; it.av = av }
+    }
+
+    /** `i.b(int)` (i.java:7607, proven head): slow-mo driver arm —
+     *  `aH=true, aI=r3, k.aw=0`; the `k.bh[k.aj]==3` block copies
+     *  `aJ=k.X`/`k.W` and divides `k.X` — table unmined (`inferred`,
+     *  port keeps the flag writes only). */
+    fun timewarp(w: LevelCellSource, r3: Int) {
+        w.iAH = true; w.iAI = r3; w.kAw = 0
+    }
+
+    /** `i.O()` (i.java:7623, proven head): slow-mo driver release —
+     *  `aH=false, k.aw=0` (`k.bh[k.aj]` gate unmined, `inferred`). */
+    fun timewarpOff(w: LevelCellSource) {
+        w.iAH = false; w.kAw = 0
+    }
+
+    /** `k.o()` (k.java:3429, proven): input-lock arm `am=true,dd=false`. */
+    fun lockInput(w: LevelCellSource) { w.kAm = true; w.kDd = false }
+    /** `k.p()` (k.java:3434, proven head): release `am=false,dd=false`
+     *  plus `j.b(0,false)`/`j.i(0)` UI resets (render-side, `inferred`). */
+    fun unlockInput(w: LevelCellSource) { w.kAm = false; w.kDd = false }
+
     /** `i.p(int,int)` (i.java:18031, proven): damage-number popup —
      *  `a(24,40,31,az+10)` (ax24 `S==19` → 40), `ao/ap` offset, `P|=16,
      *  af=this`. */
@@ -2433,4 +2575,56 @@ interface LevelCellSource {
     /** `k.l(15)` — mission-complete screen-state (level flow `inferred`:
      *  ported as a flag; the screen transition itself is unmined). */
     fun missionComplete() {}
+
+    // -- ax29 boss FSM (i.aP) statics ---------------------------------
+    /** `k.aU` — the active boss entity (aP() re-pins it every tick). */
+    var kAU: Entity? get() = null; set(_) {}
+    /** `k.E` — held/struggle-UI entity ref; `P|=128` arms at
+     *  counter/stagger moments (producer unmined, `inferred`). */
+    var kE: Entity? get() = null; set(_) {}
+    /** `k.C` — HUD-claimed entity (`i.N()`). */
+    var kC: Entity? get() = null; set(_) {}
+    /** `i.by` — boss phase tier static (0/1/3; 2 = dormant tick). */
+    var iBy: Int get() = 0; set(_) {}
+    /** `i.ci[5]` — boss cooldown counters (null-init arm inside aP). */
+    var iCi: IntArray? get() = null; set(_) {}
+    /** `i.cj` — grab-QTE counter-armed flag. */
+    var iCj: Boolean get() = false; set(_) {}
+    /** `i.ck` — boss aura entity (`e(int)`-managed). */
+    var iCk: Entity? get() = null; set(_) {}
+    /** `i.cl` — ax61 idle-add entity. */
+    var iCl: Entity? get() = null; set(_) {}
+    /** `i.cm` — by1 finisher-marker-spawned flag. */
+    var iCm: Boolean get() = false; set(_) {}
+    /** `i.cn` — counter-chance ramp (S20@T0 +100 cap 800; S21 clears). */
+    var iCn: Int get() = 0; set(_) {}
+    /** `i.co` — saved-state resume int (stagger stores S). */
+    var iCo: Int get() = 0; set(_) {}
+    /** `i.cp` — by3 exhaust counter. */
+    var iCp: Int get() = 0; set(_) {}
+    /** `i.aH`/`i.aI`/`i.aJ` — the slow-mo driver flags (`i.b(int)` /
+     *  `i.O()`); `k.bh[k.aj]` gate is unmined (`inferred`). */
+    var iAH: Boolean get() = false; set(_) {}
+    var iAI: Int get() = 0; set(_) {}
+    var iAJ: Int get() = 0; set(_) {}
+    /** `k.X`/`k.W`/`k.aw` — time-scale statics touched by b(int)/O(). */
+    var kX: Int get() = 0; set(_) {}
+    var kW: Int get() = 0; set(_) {}
+    var kAw: Int get() = 0; set(_) {}
+    /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
+    var kAm: Boolean get() = false; set(_) {}
+    var kDd: Boolean get() = false; set(_) {}
+    /** `g.r` — grab-QTE lock flag on the player (g.java:23). */
+    var gR: Boolean get() = false; set(_) {}
+    /** `k.J`/`k.K` — held touch point (screen px) for `V()`/ax61 QTE. */
+    var kJ: Int get() = 0; set(_) {}
+    var kK: Int get() = 0; set(_) {}
+    /** `k.ac[4]` — camera/arena rect ints (aP S5 arena clamp). */
+    val kAc: IntArray? get() = null
+    /** `k.v(mask)` (k.java:7210, proven): held-input `(bB & mask) != 0`. */
+    fun padHeld(mask: Int): Boolean = false
+    /** `k.s(i)` (k.java:7149, proven): `eH[]` display-row lookup (-1 miss). */
+    fun kS(i: Int): Int = -1
+    /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
+    var kSBound: Int get() = 0; set(_) {}
 }
