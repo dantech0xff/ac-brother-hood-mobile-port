@@ -196,6 +196,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var runnerD = 0                // i.D — waypoint dwell countdown (bt.d)
     var wpBt: Waypoint? = null     // i.bt — current chain waypoint (c.a)
     var wpF: Waypoint? = null      // i.F — bound companion waypoint (c.a(Z[5]))
+    var runnerG = false            // i.G — ax56 pattern-done flag (ay())
     var cIDone = false             // i.cI — attack-script done (bool)
     var cJDone = false             // i.cJ — transition ack (bool)
     var cHGrid: Array<IntArray>? = null   // i.cH — int[7][2] knife targets

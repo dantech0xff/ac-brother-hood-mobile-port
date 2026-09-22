@@ -61,6 +61,7 @@ class Level0World(
             54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
             30 to 36,     // ax30 runner variant (bi[30]=36, proven)
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
+            56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
         )
     }
 
@@ -431,6 +432,7 @@ class Level0World(
             else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
             else if (type == 80) npcFsm.initAx80(e, f.toList(), this)
             else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
+            else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -892,6 +894,7 @@ class Level0World(
 
             else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
             else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
+            else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

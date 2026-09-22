@@ -5042,3 +5042,148 @@ fun NpcFsm.initAx24(e: Entity, f: List<Int>, w: Level0World) {
     }
     e.aB = rf(7)
 }
+
+// ============================================================ ax56 = ay()
+// Flyer variant (i.java:8385, proven): same clip/burst family as ax54 but
+// waypoint-free — lerps to (aq,ar) at Z[12] speed, S13-15 travel anims,
+// universal Z[8] attack cooldown, Z[10] move modes {0 hold,1 x,2 y},
+// Z[11] target offset applied at init. All proven.
+
+/** `i.i(short[])` L235 arm (i.java:3336, proven) — ax56 init. */
+fun NpcFsm.initAx56(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 100
+    e.aB = 300
+    e.Z.fill(0)
+    e.Z[0] = rf(4)
+    for (i in 1..12) e.Z[i] = rf(i + 7)               // Z[1..12] = r8[8..19]
+    if (e.Z[4] == 0) {                                // L245 path
+        e.Z[5] = 1
+    } else if (e.Z[4] == 1) {                         // L239
+        if (e.Z[3] == 0) e.Z[3] = 3                   // L243
+        e.Z[5] = 1; e.Z[6] = 1; e.Z[7] = 0
+        if (e.Z[3] == 1 && e.Z[4] == 1) e.Z[4] = 0    // L247 (dead — Z3!=0 now)
+    }
+    e.aC = e.Z[2]; e.aD = e.Z[6]; e.aF = e.Z[7]
+    e.nl = e.Z[9]
+    e.aq = e.ak; e.ar = e.al
+    if (e.Z[10] == 1) e.aq += e.Z[11]                 // L253 x-shift
+    else if (e.Z[10] == 2) e.ar += e.Z[11]            // y-shift
+}
+
+/** `i.az()` (i.java:8600+, proven): still traveling — pos != (aq,ar)
+ *  && Z[10]!=0 && !G. */
+private fun NpcFsm.runnerTraveling(e: Entity): Boolean {
+    if (e.aq == e.ak && e.ar == e.al) return false    // at target → false
+    if (e.Z[10] == 0) return false                    // mode 0 → false
+    if (e.runnerG) return false                       // pattern done → false
+    return true
+}
+
+/** `i.l(int,int)` (i.java:8109, proven): travel anim — 15/14 when the
+ *  target is above/below, then 13 while x-mismatch. */
+private fun NpcFsm.runnerTravelAnim(e: Entity, x: Int, y: Int) {
+    if (y < e.al) e.setAnim(15) else e.setAnim(14)
+    if (x != e.ak) e.setAnim(13)
+}
+
+/** `i.ay()` (i.java:8385, proven transcription). Differences vs ax():
+ *  latch is `al > k.P` (no offset); L18 decrements Z[8] every armed tick
+ *  (attack cooldown, not lifetime); removal only when offscreen AND below
+ *  k.P+240; no waypoint chain — (aq,ar) destination + az() travel check;
+ *  burst fires on frame `T==3 && U==0` with timers Z[7]/Z[6]. */
+fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
+    if (!e.runnerBz) e.runnerBz = e.al > w.kP                 // L7 latch
+    if (!e.runnerBz) return                                 // L10 unarmed
+    if (!e.inPlayV(w) && e.al > w.kP + 240) {               // L14 offscreen
+        w.removeEntity(e); return
+    }
+    e.Z[8] = e.Z[8] - 1                                     // L18 cooldown
+    if (e.wpF == null) {                                    // companion bind
+        e.wpF = w.waypointPool.find(e.Z[5])
+        e.wpF?.let { it.h = it.a - e.ak; it.i = it.b - e.al }
+    }
+    when (e.S) {
+        10 -> {                                             // L152 exit
+            e.ah = 0; e.ag = 0; e.az = -1
+            if (e.animFinished()) e.P = e.P or 64
+            if (e.al > w.kP + 240) { w.removeEntity(e); return }
+        }
+        in 0..4 -> {                                        // L26 walk
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S == 4) e.av = false                      // L37
+            else if (e.S == 0 && f != null)                 // L36→L29
+                e.av = f.a < e.ak
+            if (e.Z[0] == 2) return                         // L160 mode-2 hold
+            val r12 = e.aC; e.aC = r12 - 1
+            if (r12 >= 0 || e.Z[8] >= 0) {                  // L55/L59 windup
+                if (runnerTraveling(e)) runnerTravelAnim(e, e.aq, e.ar)
+            } else {                                        // Z[8]<0 → attack
+                if (f != null) {
+                    if (e.inPlayV(w)) runnerArriveAnim(e, f.a, f.b)
+                } else if (runnerNearPlayer(e, w)) {
+                    runnerArriveAnim(e, p.ak, p.al)         // L51
+                }
+            }
+        }
+        in 5..9 -> {                                        // L117 attack
+            val f = e.wpF
+            if (f == null) runnerFacePlayer(e, p)
+            if (e.S == 5) e.av = false                      // L128
+            else if (e.S == 9 && f != null)                 // L127→L120
+                e.av = f.a < e.ak
+            if (e.T == 3 && e.U == 0) {                     // L130 frame-3
+                e.P = e.P or 64
+                val r17 = e.aF - 1; e.aF = r17
+                if (r17 <= 0) {
+                    e.aF = e.Z[7]
+                    runnerBurst(e, e.Z[5], e.aD < e.Z[6], w)
+                    e.aD--
+                    if (e.aD <= 0) e.P = e.P and -65
+                }
+            }
+            if ((e.P and 64) == 0 && e.animFinished()) {    // L143-L145
+                e.aC = e.Z[2]; e.aF = e.Z[7]; e.aD = e.Z[6]
+                if (f != null) runnerWalkAnim(e, f.a, f.b)
+                else runnerWalkAnim(e, p.ak, p.al)
+            }
+        }
+        in 13..15 -> {                                      // L63 travel
+            e.av = e.aq < e.ak                              // L65
+            if (!runnerTraveling(e) || e.runnerG) {         // L70 arrived
+                e.ah = 0; e.ag = 0
+                if (e.wpF != null) runnerWalkAnim(e, e.wpF!!.a, e.wpF!!.b)
+                else runnerWalkAnim(e, p.ak, p.al)          // L74
+            } else {
+                if (e.Z[10] == 1) {                         // L79 x-move
+                    e.ag = if (e.aq > e.ak) e.Z[12] shl 8
+                           else -(e.Z[12] shl 8)
+                    if (kotlin.math.abs(e.aq - e.ak) < e.Z[12])
+                        e.ag = (e.aq - e.ak) shl 8
+                } else {                                    // L88 y-move
+                    e.ah = if (e.ar > e.al) e.Z[12] shl 8
+                           else -(e.Z[12] shl 8)
+                    if (kotlin.math.abs(e.ar - e.al) < e.Z[12])
+                        e.ah = (e.ar - e.al) shl 8
+                }
+                // L94: cooldown → attack-transition
+                val r15 = e.aC; e.aC = r15 - 1
+                if (r15 < 0 && e.Z[8] < 0) {
+                    val f = e.wpF
+                    if (f != null) {
+                        e.av = f.a < e.ak                     // L102
+                        if (e.inPlayV(w)) runnerArriveAnim(e, f.a, f.b)
+                    } else {
+                        runnerFacePlayer(e, p)                // L99 Q()
+                        if (runnerNearPlayer(e, w)) runnerArriveAnim(e, p.ak, p.al)
+                    }
+                    e.ah = 0; e.ag = 0                        // L114
+                }
+            }
+        }
+        else -> {}                                          // L159 default
+    }
+    e.integrate()
+    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)   // bF() tail
+}
