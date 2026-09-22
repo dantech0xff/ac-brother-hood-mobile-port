@@ -448,6 +448,7 @@ class Level0World(
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
             else if (type == 69) npcFsm.initAx69(e, f.toList(), this)
+            else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
@@ -559,6 +560,7 @@ class Level0World(
                                                  // (censored anim set)
     override var kBx = 0                         // k.bx — l(12) sentinel
     override var kBw = 0                         // k.bw — l(13) sentinel
+    override var iBn = false                     // i.bn — bA[79] alert flag
     override var kAJ = 0                         // k.aJ — ax42 fuse phase
     override var kAK = 0                         // k.aK — countdown init
     override var kAM = 0                         // k.aM — fuse accumulator
@@ -931,6 +933,7 @@ class Level0World(
             else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
             else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
+            else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)

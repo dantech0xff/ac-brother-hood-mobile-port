@@ -4018,6 +4018,10 @@ interface LevelCellSource {
     var kBw: Int get() = 0; set(_) {}
     /** `k.F` — claim-locked entity reference (sub-ops 10/11 gate). */
     var kF: Entity? get() = null; set(_) {}
+    /** `i.bn` — level alert flag loaded from checkpoint slot bA[79]
+     *  (k.java:6696-6702): gates the ax17/50 `l()` notice arms — while set,
+     *  civilians/pouncers never panic (i.java:2385/2396). */
+    var iBn: Boolean get() = false; set(_) {}
     /** `i.ce`/`i.bD`/`i.bQ`/`i.cO`/`i.cg`/`i.ch`/`i.z` — `i` statics the
      *  arg-ops write (i.java:153-204). */
     var iCe: Boolean get() = false; set(_) {}

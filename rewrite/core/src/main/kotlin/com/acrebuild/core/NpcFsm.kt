@@ -65,13 +65,6 @@ class NpcFsm(val world: LevelCellSource) {
         // J = {100,100,100} assassin/heavy dmg, H = {50,50,50} counter line
         private val BU = intArrayOf(300, 400, 500)
         private val BW = intArrayOf(80, 80, 80)
-        private val JD = intArrayOf(100, 100, 100)
-        /** `H[0]` — counter/weakened line (proven value, index au=0). */
-        private const val H0 = 50
-        /** `g.b()` player-attack anim set (proven, L9/L10). */
-        private val ATTACK_ANIMS = intArrayOf(
-            67, 68, 69, 81, 112, 113, 114, 115,
-            183, 184, 216, 217, 286, 287)
         /** `k.bk` — ax67 prop kind→clip table (k.java:8444, proven). */
         private val BK = intArrayOf(
             24, 27, 27, 27, 34, 35, 37, 41, 64, 64, 65, 67, 49, 69, 70)
@@ -5978,6 +5971,136 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
         }
         else -> return                                    // L81
     }
+}
+
+// -- file-scope tables (companion-private members can't be seen by
+//    top-level extensions; these live here for the ax17 arms) ----------
+/** `i.bv` — civilian max-HP table {100,140,200} (i.java:22317, proven;
+ *  `aB = bv[k.au]` at :3011, difficulty au unmined → index 0). */
+private val BV = intArrayOf(100, 140, 200)
+/** `i.J` — finisher/heavy damage {100,100,100} (i.java static{}, proven). */
+private val JD = intArrayOf(100, 100, 100)
+/** `i.H[0]` — counter/weakened line (proven value, index au=0). */
+private const val H0 = 50
+/** `g.b()` player-attack anim set (proven, j() L9/L10). */
+private val ATTACK_ANIMS = intArrayOf(
+    67, 68, 69, 81, 112, 113, 114, 115,
+    183, 184, 216, 217, 286, 287)
+
+// ============================================================ ax17 = aA()
+// The civilian (16 records across packs 8/9/11; shares clip-7 with the
+// soldier family — bi[17]=7). All arms below transcribed verbatim from
+// i.java:8708-8847 (`aA()`), :3004 L113 (init), :2385 L70 (l() ax17 arm),
+// :1803 (j() ax17 damage arm). Civilians are immune to the damage-op
+// dispatcher (`a(int,int,int,i)` case 17 → L141 return, :4584) — only the
+// player's sword reaches them through j(). The `k.bK` HAS-BLOOD gate
+// (GloftASBR.java:36 → false in this JAR) covers both corpse-fx spawns.
+/** ax17 init arm (i.java:3004 L113 + L392 shared tail, proven):
+ *  `Z=int[22]; Z[1]=0; Z[2]=-1; aG=r8[4]; az=r8[13]; Z[21]=r8[14];
+ *   aB=bv[k.au]; aF=r8[2]; aD=r8[7]; m=r8[8]; o=r8[9]` → `i(r8[5])` + `t()`.
+ *  The second-ctor dispatch at :2902 (keyed on `r8[5]` not ax) has a
+ *  `case 17 → L111` arm but never fires for real records — they carry
+ *  `r8[5] ∈ {57,64,120}` (level-records.json, proven). */
+fun NpcFsm.initAx17(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z.fill(0)
+    e.Z[1] = 0; e.Z[2] = -1
+    e.aG = rf(4); e.az = rf(13); e.Z[21] = rf(14)
+    e.aB = BV[0]                                            // bv[k.au], au=0
+    e.aF = rf(2); e.aD = rf(7); e.m = rf(8); e.oId = rf(9)
+    e.setAnim(rf(5))                                        // L395 i(r8[5])
+    e.refreshBoxes()                                        // L427 t()
+}
+/** `i.b(int[],int[])` (i.java:666, proven): strict containment —
+ *  r4 inside r5 on all four edges. The `l()` ax17 notice uses it as
+ *  `b(this.W, k.ac)` = "fully inside the camera view". */
+private fun insideOf(a: IntArray, b: IntArray): Boolean =
+    a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3]
+/** `i.aA()` (i.java:8708-8847, proven) — the civilian tick.
+ *  S57 idle→panic (l() = `!bn && b(W, camRect)`; player S9/S50 suppress),
+ *  anims 60-68 = directional panic flail (picked by player-vs-W quadrant,
+ *  strikes the player with op4 at T==3, `r()` → back to S57),
+ *  S69 collapse (HAS-BLOOD-gated fx, lock releases), S129 dead-on-spot,
+ *  S170 knockdown (`al+=10; a(true)` wall probe → aZ → S129).
+ *  L87 tail: j() intake → S==69 → return; S!=129 → a() physics.
+ *  Dispatch then falls into `au()` (:7738) = the shared corpse-drop — the
+ *  port's `corpseDrop` already covers ax17 verbatim. */
+fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
+    if (e.aB <= 0 && e.S != 69 && e.S != 129) e.setAnim(69)  // L7 dead-check
+    when (e.S) {
+        57 -> {                                              // L12 idle
+            e.ah = 0; e.ag = 0
+            // l() ax17 arm (i.java:2385 L70): !bn && b(W, k.ac) — fully
+            // on-screen; bn is the bA[79] checkpoint alert flag.
+            val notice = !w.iBn && insideOf(e.W, w.camRect)
+            if (notice && p.S != 9 && p.S != 50) {           // L14/L16 gates
+                w.sfx(16)                                    // k.A(16) → z()
+                e.av = p.ak < e.ak                           // L21 face player
+                // L23-L41 directional panic pick: anims 61-63/66/67 by
+                // the player's quadrant vs W (X-separated or not, above/
+                // below/overlapping). 60/64/65/68 aren't reachable through
+                // the pick but live in the same L45 arm.
+                val pw = p.W; val rw = e.W
+                val xSeparated = pw[0] >= rw[2] || pw[2] <= rw[0]
+                val r1 = when {
+                    pw[1] > rw[3] -> if (xSeparated) 67 else 63  // below
+                    pw[3] < rw[1] -> if (xSeparated) 66 else 62  // above
+                    else -> 61                                   // overlap
+                }
+                e.setAnim(r1)
+            }
+        }
+        in 60..67 -> {                                       // L45 panic-flail
+            if (e.T == 3) p.applyHit(4, 0, e, w)             // aS.a(4,0,0,this)
+            if (e.animFinished()) e.setAnim(57)              // r() → i(57)
+        }
+        68 -> {                                              // L51
+            if (e.animFinished()) e.setAnim(57)
+        }
+        69 -> {                                              // L61 collapse
+            e.P = e.P or 512
+            e.ab = null
+            e.ag = 0; e.ah = 0
+            val s = e.s                                      // L67 ride-crate
+            if (s != null && s.ax == 51 && s.ag != 0) e.ag = s.ag
+            e.aA = 2
+            if (e.animFinished()) {                          // L71/L76
+                if (w.kBK) e.spawnFx8(w, 59, 2, e.av, e.ak, e.al, e.az - 1)
+                e.P = e.P and -17; e.P = e.P or 32 or 64
+                if (w.lockTarget === e) w.lockTarget = null      // aN release
+                if (w.playerLinkB === e) w.playerLinkB = null    // g.b release
+            }
+        }
+        129 -> {                                             // L57 dead-on-spot
+            if (e.animFinished()) {
+                e.aB = 0
+                e.P = e.P and -17; e.P = e.P or 32 or 64
+                if (w.kBK) e.spawnFx8(w, 59, 2, e.av, e.ak, e.al, e.az - 1)
+            }
+        }
+        170 -> {                                             // L53 knockdown
+            e.al += 10
+            e.wallProbe(w)                                   // a(true)
+            if (e.aZ) e.setAnim(129)
+        }
+    }
+    // L87 tail (proven): j() → return; S==69 → return; S!=129 → a();
+    // the I() dispatcher then falls through to au() (:7738) = corpseDrop.
+    // j() P() arm (:7699): aB<=0 → G()+true — corpses skip the rest.
+    if (e.aB <= 0) { corpseDrop(e); return }
+    // j() intake, ax17 arm (:1803, proven): player attackbox ∩ W + g.b()
+    // anim → Q() face + aB -= J=100 for {183,184,216,217}, H=50 otherwise.
+    // No S85 react, no weaken/lock arms (ax11/73-only) — always false.
+    if (p.X[0] != p.X[2] && p.S in ATTACK_ANIMS &&
+        Entity.overlapStrict(e.W, p.X)) {
+        e.av = p.ak < e.ak                                   // Q() face
+        e.aB -= if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217)
+            JD[0] else H0
+    }
+    if (e.S == 69) { corpseDrop(e); return }
+    // a() (i.java:914) — the solid-body player push, already ported.
+    if (e.S != 129) e.pushContact(w)
+    corpseDrop(e)                                            // au() L849
 }
 
 // =========================================================================
