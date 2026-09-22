@@ -53,6 +53,7 @@ class Level0Game : ApplicationAdapter() {
         clips[60] = Clip.load(Gdx.files.internal("clips/clip60/clip.acpk").readBytes())
         clips[51] = Clip.load(Gdx.files.internal("clips/clip51/clip.acpk").readBytes())
         clips[63] = Clip.load(Gdx.files.internal("clips/clip63/clip.acpk").readBytes())
+        clips[20] = Clip.load(Gdx.files.internal("clips/clip20/clip.acpk").readBytes())
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space. Negated keys: entity
         // clips share this map via k.bi[] whose values 10/11 collide with
