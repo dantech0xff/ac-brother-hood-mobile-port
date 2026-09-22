@@ -4004,6 +4004,71 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
 }
 
 // ---------------------------------------------------------------------------
+// ax6 `an()` (i.java:7220-7248) — overlap-trigger marker (one-shot flags).
+// ax19 `aO()` (i.java:10261-10299) — meter-restore pickup + fx burst.
+// ---------------------------------------------------------------------------
+
+/** Shared generic record init (L111 map + `i(r8[5])` + `t()`). */
+fun NpcFsm.initAx6(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
+    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `an()`: S3/S5 armed — player W-overlap fires `i(7)`/`i(6)`;
+ *  S6/S7 wind down `r()` → `k.c(this)` removal. */
+fun NpcFsm.tickAx6(e: Entity, w: LevelCellSource, p: Entity) {
+    when (e.S) {
+        3 -> if (Entity.overlapStrict(p.W, e.W)) e.setAnim(7)    // L13
+        5 -> if (Entity.overlapStrict(p.W, e.W)) e.setAnim(6)    // L5
+        6, 7 -> if (e.animFinished()) w.removeEntity(e)            // L9
+        else -> {}
+    }
+}
+
+fun NpcFsm.initAx19(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
+    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** `aO()`: `b=true` each tick. S17/19 idle — when the player is
+ *  interact-eligible (`g.c(aS.S)` or `bh[aj]==3`) and overlaps:
+ *  `i(18)`, `k.A(17)` sfx, 5x clip-54 burst sparks to screen (5,5).
+ *  S18/20 consume — `r()` → `x[1]=k.ax` meter restore (only while the
+ *  player is alive) then `k.c(this)`. */
+fun NpcFsm.tickAx19(e: Entity, w: LevelCellSource, p: Entity) {
+    e.b = true
+    when (e.S) {
+        17, 19 -> {                                                 // L5
+            if (INTERACTABLE_STATES.contains(p.S) || w.missionBh() == 3) {
+                if (Entity.overlapStrict(p.W, e.W)) {
+                    e.setAnim(18)
+                    w.sfx(17)                                       // k.A(17)
+                    repeat(5) {
+                        e.spawnFlyBurst(w, e.ak, e.al,
+                                        5 + w.kO, 5 + w.kP,
+                                        74, 54, 5, 300)
+                    }
+                }
+            }
+        }
+        18, 20 -> {                                                 // L16
+            if (e.animFinished()) {
+                if (!w.playerDead()) p.x1 = w.kAx                   // g.e(k.ax)
+                w.removeEntity(e)
+            }
+        }
+        else -> {}
+    }
+}
+
+
+// ---------------------------------------------------------------------------
 // ax13 `aW()` (i.java:13182-13367) — swinging rope/vine entity.
 // `bO`/`bP` = pendulum velocity/angle (8.8); `bN` segments of `Z[1]` max;
 // `bM` = bound entity; aG variants {1 boost×4, 2 ab-marker, 4 door-spawner}.

@@ -84,6 +84,8 @@ CLIPS = {
     "clip35": ("pack-3", "entry-035-marker-003"),  # ax67 kind-5 interactives (bk[5]=35)
     "clip47": ("pack-3", "entry-047-marker-003"),  # ax9 bM() push/contact (bi[9]=47)
     "clip31": ("pack-3", "entry-031-marker-003"),  # ax9 ad-child spawn (bM :21198)
+    "clip4": ("pack-3", "entry-004-marker-003"),   # ax6 trigger marker (bi[6]=4)
+    "clip11": ("pack-3", "entry-011-marker-003"),  # ax19 pickup (bi[19]=11)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index

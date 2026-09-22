@@ -47,6 +47,9 @@ class Level0World(
             27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
             40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
             9 to 47,      // ax9 push/contact entity (bi[9]=47, proven)
+            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
+            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
+            74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
         )
     }
 
@@ -55,6 +58,9 @@ class Level0World(
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
+    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
+     *  default is the x1 init value (inferred — dB restore path unmined). */
+    override var kAx = 90
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -377,6 +383,8 @@ class Level0World(
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type == 40) npcFsm.initAx40(e, f.toList())
             else if (type == 9) npcFsm.initAx9(e, f.toList(), this)
+            else if (type == 6) npcFsm.initAx6(e, f.toList())
+            else if (type == 19) npcFsm.initAx19(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
             else if (type == 13) npcFsm.initAx13(e, f.toList())
             else if (type != 37)
@@ -819,6 +827,8 @@ class Level0World(
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
             else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
             else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
             else npcFsm.tick(n, player)
