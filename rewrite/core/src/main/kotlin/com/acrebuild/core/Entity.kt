@@ -2606,7 +2606,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
 
-
         /** `i.a(int[],int[])` (i.java:632, proven): `overlapI` plus the
          *  point-box rejects — a fully-degenerate rect on either side
          *  (x0==x2 && y0==y3) never overlaps. */

@@ -4057,7 +4057,6 @@ fun NpcFsm.tickAx42(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // ax13 `aW()` (i.java:13182-13367) — swinging rope/vine entity.
 // `bO`/`bP` = pendulum velocity/angle (8.8); `bN` segments of `Z[1]` max;
