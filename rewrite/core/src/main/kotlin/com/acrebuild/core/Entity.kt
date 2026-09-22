@@ -2158,6 +2158,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+
+        /** `i.a(int[],int[])` (i.java:632, proven): `overlapI` plus the
+         *  point-box rejects — a fully-degenerate rect on either side
+         *  (x0==x2 && y0==y3) never overlaps. */
+        fun overlapStrict(a: IntArray, b: IntArray): Boolean =
+            overlapI(a, b) &&
+                (a[0] != a[2] || a[1] != a[3]) &&
+                (b[0] != b[2] || b[1] != b[3])
     }
 
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
@@ -2497,6 +2505,29 @@ open class Entity(val ax: Int, var clip: Clip?) {
         r0.ak = ak; r0.al = al; r0.av = av
         r0.settleToGround(world)
         return r0
+    }
+
+    /** `i.a(x,y,tx,ty,ax,clip,S,az)` (i.java:21212, proven): 4-arg spawn
+     *  + ax74 burst-particle customization — `ag/ah = j.a(-6,6)<<8`,
+     *  `Z[8]` arc table `{x-kO, y-kP, tx-kO, ty-kP, midX+rand±80, y-kP,
+     *  0, rand(10,16)}`, `P=528`, then `k.b` insert. */
+    fun spawnFlyBurst(w: LevelCellSource, x: Int, y: Int, tx: Int, ty: Int,
+                      ax: Int, clip: Int, anim: Int, az: Int): Entity {
+        val aK = spawnChildFx(w, ax, clip, anim, az)
+        if (ax == 74) {
+            aK.ag = w.jRand(-6, 6) shl 8
+            aK.ah = w.jRand(-6, 6) shl 8
+            val z0 = x - w.kO; val z1 = y - w.kP
+            val z2 = tx - w.kO; val z3 = ty - w.kP
+            aK.Z.fill(0)                                          // Z = new int[8]
+            aK.Z[0] = z0; aK.Z[1] = z1; aK.Z[2] = z2; aK.Z[3] = z3
+            aK.Z[4] = ((z0 + z2) shr 1) + w.jRand(-80, 80)
+            aK.Z[5] = z1
+            aK.Z[6] = 0; aK.Z[7] = w.jRand(10, 16)
+            aK.P = 528
+        }
+        w.queueInsert(aK)
+        return aK
     }
 
     /** `i.a(ax,clip,anim,face,x,y,az)` (i.java:6898, proven): the ax8
@@ -3095,6 +3126,9 @@ interface LevelCellSource {
     fun playerInvulnerable(): Boolean = godMode || player.gt != 0
     /** `g.g()` (g.java:3939, proven): player dead — `x[1] <= 0`. */
     fun playerDead(): Boolean = player.x1 <= 0
+    /** `k.ax` (k.java:159, proven): restore byte for the meter —
+     *  `g.e(k.ax)` writes `x[1]=ax` (ax19 pickups, i.java:2740). */
+    var kAx: Int get() = 90; set(_) {}
 
     // -- mission-director statics (bD/d/bG, i.java:72-184 + k fields) --------
     /** `i.bV` — kill-bitmap routing value (level script writes; 0 = pure
@@ -3338,3 +3372,7 @@ interface LevelCellSource {
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
     var kSBound: Int get() = 0; set(_) {}
 }
+
+/* `g.c(int)` (g.java:404, proven): interact-eligible player states —
+ * the grounded/normal set ax19 pickups gate on (or `bh[aj]==3` levels). */
+val INTERACTABLE_STATES = intArrayOf(0, 1, 7, 11, 12, 26, 79)

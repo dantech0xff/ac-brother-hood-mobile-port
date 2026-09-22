@@ -46,6 +46,9 @@ class Level0World(
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
             27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
             40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
+            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
+            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
+            74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
         )
     }
 
@@ -54,6 +57,9 @@ class Level0World(
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
+    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
+     *  default is the x1 init value (inferred — dB restore path unmined). */
+    override var kAx = 90
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -367,6 +373,8 @@ class Level0World(
             else if (type == 5) npcFsm.initMissionLogic(e, f.toList(), this)
             else if (type == 27) npcFsm.initAx27(e, f.toList(), this)
             else if (type == 40) npcFsm.initAx40(e, f.toList())
+            else if (type == 6) npcFsm.initAx6(e, f.toList())
+            else if (type == 19) npcFsm.initAx19(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -701,6 +709,8 @@ class Level0World(
             else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
             else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
             else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
+            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
