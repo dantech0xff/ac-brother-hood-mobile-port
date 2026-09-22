@@ -36,6 +36,7 @@ class Level0World(
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             10 to 6,      // clip6 not converted yet — triggers spawn clipless
             14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
+            16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
         )
     }
@@ -143,6 +144,20 @@ class Level0World(
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
     /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
     override val inPlay: Boolean get() = !failed
+    /** `k.cm` — mounted flag (k.k() at k.java:638; `cm=true` writes 1 at
+     *  g.java:3564). */
+    var cm = 0
+    override val mounted: Boolean get() = cm == 1
+    override fun setMounted() { cm = 1 }
+    /** `k.H`/`k.I` — the last touch point in view px (-1 = none). */
+    var lastTouchX = -1
+    var lastTouchY = -1
+    override fun clipFor(idx: Int): Clip? = clips[idx]
+    /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): touch point vs
+     *  entity in view space — equivalent to world-space vs (k.H+k.O). */
+    override fun touchNearView(e: Entity, r: Int): Boolean =
+        lastTouchX >= 0 &&
+            e.h(Math.abs(lastTouchX + camX - e.ak), Math.abs(lastTouchY + camY - e.al)) <= r
     /** `k.aS.W` — player hitbox. */
     override fun playerRect(): IntArray = player.W
 
@@ -379,6 +394,7 @@ class Level0World(
             when (e.type) {
                 InputQueue.Type.DOWN -> {
                     pointerDown = true
+                    lastTouchX = e.x; lastTouchY = e.y   // k.H/k.I
                     zoneMask = zoneFor(e.x, e.y)
                     when (zoneMask) {
                         Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)
@@ -409,6 +425,10 @@ class Level0World(
     fun tick(events: List<InputQueue.Event>) {
         consume(events)
         pad.commit(if (pointerDown) zoneMask else 0)
+        // k.F(aj) (k.java:4644): input events reset g.J to f0do[key]=5
+        // (all 9 keys). ef[] is held-state per frame → set while held.
+        // `inferred` on cadence; value 5 proven (k.java:8384).
+        if (pointerDown) player.gJ = 5
         playerFsm.tickCount = tickIndex
 
         // mission-fail screen: world frozen; context edge = retry (reload)
@@ -430,6 +450,7 @@ class Level0World(
             else if (n.ax == 74) npcFsm.tickWisp(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
+            else if (n.ax == 16) npcFsm.tickRequestMarker(n, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

@@ -75,6 +75,7 @@ CLIPS = {
     "clip54": ("pack-3", "entry-054-marker-003"),  # ax74 wisp (m(-1) bursts)
     "clip64": ("pack-3", "entry-064-marker-003"),  # ax67 kind-9 decor props (bk[9]=64)
     "clip26": ("pack-3", "entry-026-marker-003"),  # generic a(ax) small-item clip
+    "clip10": ("pack-3", "entry-010-marker-003"),  # ax16 request markers (bi[16]=10)
     "clip27": ("pack-3", "entry-027-marker-003"),  # ax67 springboard (bk{1,2,3}=27)
     "clip35": ("pack-3", "entry-035-marker-003"),  # ax67 kind-5 interactives (bk[5]=35)
 }

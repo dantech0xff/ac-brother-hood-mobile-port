@@ -40,10 +40,13 @@ class Level0Game : ApplicationAdapter() {
         clips[54] = Clip.load(Gdx.files.internal("clips/clip54/clip.acpk").readBytes())
         clips[64] = Clip.load(Gdx.files.internal("clips/clip64/clip.acpk").readBytes())
         clips[26] = Clip.load(Gdx.files.internal("clips/clip26/clip.acpk").readBytes())
+        clips[10] = Clip.load(Gdx.files.internal("clips/clip10/clip.acpk").readBytes())
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
-        // each tileset clip's composite-object space.
+        // each tileset clip's composite-object space. Negated keys: entity
+        // clips share this map via k.bi[] whose values 10/11 collide with
+        // the tileset ids.
         for (ts in intArrayOf(10, 11, 12)) {
-            clips[ts] = Clip.load(
+            clips[-ts] = Clip.load(
                 Gdx.files.internal("level0/tileset-$ts/clip.acpk").readBytes())
         }
         world = Level0World(level, clips, DeterministicRandom(SEED))

@@ -139,9 +139,10 @@ class Level0WorldTest {
             26 to Clip.load(asset("clips/clip26/clip.acpk")),
             27 to Clip.load(asset("clips/clip27/clip.acpk")),
             35 to Clip.load(asset("clips/clip35/clip.acpk")),
-            10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
-            11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
-            12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
+            10 to Clip.load(asset("clips/clip10/clip.acpk")),
+            -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
+            -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
+            -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
         )
         return Level0World(level, clips, DeterministicRandom(1L))
     }
@@ -1113,5 +1114,227 @@ class Level0WorldTest {
             }
         }
         assertTrue(found, "no suitable wall cell found in level0")
+    }
+
+    // ---- slice 24 helpers --------------------------------------------
+
+    private fun requestMarkerAt(w: Level0World, s: Int, x: Int, y: Int): Entity {
+        val e = Entity(16, w.clips[10])
+        e.S = s
+        e.aB = 10
+        e.setPositionPx(x, y)
+        e.W[0] = x - 10; e.W[1] = y - 10; e.W[2] = x + 10; e.W[3] = y + 10
+        w.npcs.add(0, e)
+        return e
+    }
+
+    // ---- slice 25 ----------------------------------------------------
+
+    @Test fun `held input maps J to f0do mask 5`() {
+        val w = world()
+        w.npcs.clear()
+        val q = InputQueue()
+        q.post(InputQueue.Type.DOWN, 1200, 700)
+        w.tick(q.drainTo(q.headSequence()))
+        assertEquals(5, w.player.gJ, "k.F(aj): J=f0do[*]=5 while held")
+    }
+
+    @Test fun `ax16 S39 mount request ORs bit4 and consumes itself`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 39, 305, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 4 != 0, "bb(): S39 overlap -> g.g(4)")
+        assertTrue(e in w.pendingRemove, "marker consumes itself via k.c")
+    }
+
+    @Test fun `ax16 S30 hurt marker requests bit2 and hurt anims`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 30, 305, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 2 != 0, "bb(): S30 -> g.g(2)")
+        assertEquals(91, p.S, "k.aS.i(91) hurt anim")
+        assertTrue(15 in w.sfxLog, "k.A(15) sfx")
+        assertTrue(e in w.pendingRemove)
+    }
+
+    @Test fun `ax16 marker without overlap stays inert`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 39, 900, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 4 == 0)
+        assertTrue(e !in w.pendingRemove)
+    }
+
+    @Test fun `requestH gates on pending J bit then consumes ax16 link`() {
+        val p = Entity(0, null)
+        val mount = Entity(72, null)
+        val req = Entity(16, null)
+        req.W[0] = 5; req.W[1] = 6; req.W[2] = 15; req.W[3] = 16
+        mount.ab = req
+        Entity.at = mount
+        assertFalse(p.requestH(2), "J&2 not pending -> false")
+        p.gJ = 2
+        assertTrue(p.requestH(2), "pending bit -> consume path true (S!=38)")
+        assertEquals(2, p.gI)
+        // i.H(): ab.p() released the ax16 request entity, link dropped
+        assertNull(mount.ab, "i.at.H() cleared the ab link")
+        assertTrue(req.W.contentEquals(Entity.ZERO_RECT), "p() nulled W")
+        Entity.at = null
+    }
+
+    @Test fun `settleToGround sinks until standable cell`() {
+        val w = world()
+        val p = w.player
+        // place in open air: sink until below-feet cell is solid
+        p.setPositionPx(300, 100); p.refreshBoxes()
+        p.settleToGround(w)
+        val below = w.collisionCell(p.ak / 20, (p.W[3] + 1) / 20)
+        assertTrue(below >= 12 || below == 5 || below == 3,
+            "settled on standable cell, got $below")
+    }
+
+    @Test fun `mount request end-to-end - ax16 feeds az ax72 arm`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        w.tick(emptyList())
+        // ax16 S39 marker overlapping player -> J|=4
+        requestMarkerAt(w, 39, 305, 150).also { w.npcFsm.tickRequestMarker(it, p) }
+        assertTrue(p.gJ and 4 != 0)
+        // ax72 mountable candidate in mount band
+        val m = Entity(72, null)
+        m.aB = 10; m.setPositionPx(350, 150)
+        m.W[0] = p.W[0] + 20; m.W[1] = p.W[1] - 10
+        m.W[2] = p.W[0] + 35; m.W[3] = p.W[1] - 5
+        m.Y[0] = m.W[0]; m.Y[1] = m.W[1]; m.Y[2] = m.W[2]; m.Y[3] = m.W[3]
+        w.npcs.add(0, m)
+        p.S = 0
+        w.playerFsm.interactScan(p)
+        assertSame(m, Entity.at, "az() ax72 arm consumed the J&4 request")
+        Entity.at = null
+    }
+
+    // ---- slice 26 — g.java:3474-3562 L1947 mount/assassinate arm ------
+
+    private fun ax72MountAt(w: Level0World, x: Int, y: Int, z0: Int): Entity {
+        val m = Entity(72, null)
+        m.aB = 10; m.setPositionPx(x, y)
+        m.W[0] = x - 10; m.W[1] = y - 10; m.W[2] = x + 10; m.W[3] = y + 10
+        // v() L85 -> a(k.ac, Y): real context-bounds quad against camRect
+        m.Y[0] = m.W[0]; m.Y[1] = m.W[1]; m.Y[2] = m.W[2]; m.Y[3] = m.W[3]
+        m.Z[0] = z0; m.Z[3] = 300; m.Z[4] = 1
+        w.npcs.add(0, m)
+        return m
+    }
+
+    @Test fun `context press lunges onto an in-range ax72 mount`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0; p.z = true
+        val m = ax72MountAt(w, 340, 150, 1)          // Z[0]==1, dist < Z[3]
+        Entity.at = m
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertSame(m, p.F, "c(i.at) bound the lunge target")
+        assertFalse(p.z, "z cleared on grab")
+        assertEquals(0, p.ag); assertEquals(0, p.ah); assertEquals(0, p.aj)
+        assertTrue(p.S in 272..292, "lunge arc anim (272-275 or 292)")
+        assertTrue(w.cm == 1, "L2040 cm=1 — mounted")
+        assertTrue(30 in w.sfxLog)
+        Entity.at = null
+    }
+
+    @Test fun `mount arm out-of-range Z3 keeps r98 out and never mounts`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 3)          // Z[0]==3 -> r104=false
+        Entity.at = m
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertNull(p.F, "no lunge when r104 cleared")
+        assertTrue(w.cm == 0, "cm stays 0 without r98")
+        Entity.at = null
+    }
+
+    @Test fun `mount arm spawns the clip74 hand at view center when armed`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 1)
+        Entity.at = m
+        p.gJ = 4                                    // armed but NO press
+        w.playerFsm.mountEntry(p, Pad())
+        val ae = p.ae
+        assertNotNull(ae, "L2035 c() spawned the hand indicator")
+        assertEquals(14, ae!!.ax)
+        assertEquals(200 + w.camX, ae.ak, "hand pinned at view center x")
+        assertEquals(120 + w.camY, ae.al, "hand pinned at view center y")
+        assertTrue(w.cm == 1)
+        Entity.at = null
+    }
+
+    @Test fun `assassinate arm lunges onto the in-front ax11 window`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val s = soldierAt(w, 320, 150)
+        s.Z[19] = 1                                 // assassination window
+        s.aB = 100                                  // alive (P() false)
+        p.av = false                                // facing right -> s in front
+        p.g = s                                     // az() bound target
+        Entity.at = null                            // no mount -> L2006
+        p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertSame(s, p.F, "c(g) lunged onto the victim")
+        assertTrue(w.cm == 1)
+    }
+
+    @Test fun `no J bit4 means the whole arm stays inert`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        val m = ax72MountAt(w, 340, 150, 1)
+        Entity.at = m
+        p.gJ = 1                                  // bit0 only — no mount request
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertNull(p.F); assertTrue(w.cm == 0)
+        Entity.at = null
+    }
+
+    @Test fun `grabLunge keeps anim on S298 and overrides cF to 7680`() {
+        val w = world()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        p.S = 298
+        val victim = soldierAt(w, 330, 150)
+        p.grabLunge(victim, w)
+        assertEquals(298, p.S, "S==298 keeps the current anim")
+        assertEquals(7680, p.cF, "ax11 L66 override cF=7680")
+        assertEquals(0, p.cx, "L66 clears cx")
+        assertSame(victim, p.F)
     }
 }
