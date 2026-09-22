@@ -62,6 +62,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         p.z = false
         // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
         if (p.gt > 0) p.gt--
+        if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
         if (p.bh > 0) p.bh--
         dispatch(p, pad)
         postTail(p, pad)
