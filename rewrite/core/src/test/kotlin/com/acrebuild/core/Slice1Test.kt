@@ -2908,4 +2908,157 @@ class Level0WorldTest {
         w.npcFsm.tickPlatform(e, w, w.player)
         assertTrue(e.b, "S15 keeps b")
     }
+
+    // -- slice 38: ax51 bs() pushable crate ------------------------------
+
+    private fun pushableAt(w: Level0World, x: Int, y: Int, s: Int): Entity {
+        val e = Entity(51, w.clips[7])
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.S = s
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `ax51 S284 guard is a no-op`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 284); p.ga = e
+        w.npcFsm.tickPushable(e, w, p)
+        assertSame(e, p.ga, "S284 early-return keeps ga")
+        assertEquals(0, e.S)
+    }
+
+    @Test fun `ax51 walked-off release drops ga and ae`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 0); p.ga = e
+        p.ak = e.W[2] + 500; p.refreshBoxes()   // no overlap, S not exempt
+        w.npcFsm.tickPushable(e, w, p)
+        assertNull(p.ga, "walked off -> release")
+    }
+
+    @Test fun `ax51 mount arm S16 snap-mounts and clears iBq`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 16)
+        p.al = e.W[3] - 2; p.refreshBoxes()
+        p.ah = 999; w.iBq = 777
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(0, p.S, "S16 -> aS.i(0)")
+        assertSame(e, p.ga)
+        assertEquals(0, p.ah); assertEquals(0, p.ag)
+        assertEquals(0, w.iBq, "i.bq latch cleared")
+    }
+
+    @Test fun `ax51 mount arm fell many cells drains op21`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 5)
+        p.al = e.W[3] - 2; p.refreshBoxes()
+        p.Q = 0; p.ah = 999
+        p.gy = p.al - 30 * 20                  // fell 30 cells
+        p.x1 = 90
+        w.npcFsm.tickPushable(e, w, p)
+        assertSame(e, p.ga, "ga bound on mount")
+        assertTrue(p.x1 < 90, "op21 drain applied")
+        assertEquals(0, p.ah)
+    }
+
+    @Test fun `ax51 mount arm needs the j-latch clear and overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 5)
+        p.al = e.W[3] - 2; p.refreshBoxes()
+        w.gj = true                             // j-latch kills the arm
+        w.npcFsm.tickPushable(e, w, p)
+        assertNull(p.ga, "g.j blocks mount arm")
+    }
+
+    @Test fun `ax51 board arm S236 claims the crate`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 236)
+        p.ac = e
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(237, p.S, "S236 -> i(237)")
+        assertSame(e, p.ga)
+        assertEquals(0, p.ah); assertEquals(0, p.ag)
+    }
+
+    @Test fun `ax51 edge-grab enters S235`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 8)    // holding state
+        ridePlayer(w, e, 0)
+        // claim must be a DIFFERENT grabbable — br() releases ac===this
+        val other = pushableAt(w, p.ak + 60, p.al, 8)
+        p.ac = other; p.av = false              // ac right of p, facing right
+        w.pad.commit(16388)                     // edge, not held
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(235, p.S, "k.v edge grab -> i(235)")
+    }
+
+    @Test fun `ax51 edge-grab blocked without claim`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak + 50, p.al, 8)
+        ridePlayer(w, e, 0); p.ac = null
+        w.pad.commit(16388)
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(0, p.S, "ac==null -> L157 skip")
+    }
+
+    @Test fun `ax51 carry shifts player and side-pins`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak + 60, p.al, 0)
+        ridePlayer(w, e, 0)
+        p.ga = e; p.av = true
+        p.ak = e.W[0] - 10; p.refreshBoxes()    // p left of crate edge
+        e.ag = 5120                              // >>8 = 20px/tick shift
+        val ak0 = p.ak
+        w.npcFsm.tickPushable(e, w, p)
+        assertTrue(p.ak >= e.W[0], "pinned to crate left edge")
+        assertTrue(p.ak != ak0, "carry moved the player")
+    }
+
+    @Test fun `ax51 S2 off-overlap releases and flags`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak + 500, p.al, 2)
+        e.P = e.P or 16
+        e.T = e.clip!!.frameCount(2) - 1
+        e.U = e.clip!!.frameDuration(2, e.T) - 1   // last-frame last-tick
+        p.ga = e
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(0, e.P and 16, "P&=-17")
+        assertNull(p.ga)
+        assertTrue(e.P and 64 != 0 && e.P and 32 != 0, "r() -> P|=64|32")
+    }
+
+    @Test fun `ax51 S0 claims gc when player presses with j-latch`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 0); p.ga = null
+        w.gj = true                              // bo() requires j-latch
+        w.npcFsm.tickPushable(e, w, p)
+        assertSame(e, w.gc, "bo() -> g.c = this")
+    }
+
+    @Test fun `ax51 S0 top-carry snaps player to crate top`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = pushableAt(w, p.ak, p.al, 0)
+        ridePlayer(w, e, 0); p.ga = e
+        e.ag = 0
+        w.npcFsm.tickPushable(e, w, p)
+        assertEquals(e.W[1] + 4, p.al, "al = W[1]+4 top carry")
+    }
 }

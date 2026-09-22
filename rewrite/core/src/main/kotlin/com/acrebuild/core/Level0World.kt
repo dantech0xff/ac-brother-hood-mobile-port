@@ -441,6 +441,11 @@ class Level0World(
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
+    override var gc: Entity? = null                // g.c crate-top link
+    override var iBq = 0                           // i.bq floor-Y latch
+    var gs = false                                 // g.s transition bool
+    var gT = 0                                     // g.t transition int
+    override fun gH(): Boolean = gs || gT != 0     // g.h() latch
 
     /** `k.m()` (k.java:863, proven): reset the interact-claim channel. */
     override fun claimReset() {
@@ -606,6 +611,7 @@ class Level0World(
             else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
             else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
             else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
+            else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

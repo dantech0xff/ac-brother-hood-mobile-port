@@ -1280,6 +1280,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.aa()` (i.java:19429) — the claim-counter script interpreter:
+     *  steps `cK` through the `k.by[ca]` opcode table driving the `cd[]`
+     *  flags. `inferred` STUB — the interpreter and its opcode table are
+     *  unmined; `bs()`/`bm()` only reach it when `ab()`/`claimActive()`
+     *  is true (a counter bound via `ca >= 0`), which level-0 crates
+     *  never do.
+     */
+    fun runClaimScript(w: LevelCellSource) { /* unported: k.by table */ }
+
+    /**
      * `i.P()` (i.java:7699, proven): dead check — `aB<=0 → G()` releases
      * the `ae`/`ab` slots and returns true. Alive (`aB>0`) → false.
      */
@@ -2685,6 +2695,16 @@ interface LevelCellSource {
     /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
      *  same-entity refresh else `prio<co || prio==1` steals it. */
     fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
+    /** `g.c` (g.java:7) — static crate link: the ax51 the player is
+     *  claimed on top of (bs() L188/L192 claim, L184 release). */
+    var gc: Entity? get() = null; set(_) {}
+    /** `i.bq` STATIC (i.java:114) — floor-Y latch set at g.java:3637
+     *  (`al+20`), consulted by fall checks (g.java:568/1849); `bs()`
+     *  L62 clears it on mount. */
+    var iBq: Int get() = 0; set(_) {}
+    /** `g.h()` (g.java:3946, proven): transition latch —
+     *  `g.s == true || g.t != 0`. */
+    fun gH(): Boolean = false
     /** `k.s(i)` (k.java:7149, proven): `eH[]` display-row lookup (-1 miss). */
     fun kS(i: Int): Int = -1
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
