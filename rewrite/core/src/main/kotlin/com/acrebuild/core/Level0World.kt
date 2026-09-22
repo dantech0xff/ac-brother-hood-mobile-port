@@ -62,6 +62,7 @@ class Level0World(
             30 to 36,     // ax30 runner variant (bi[30]=36, proven)
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
             56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
+            58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
         )
     }
 
@@ -909,6 +910,7 @@ class Level0World(
             else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
             else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
             else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
+            else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
