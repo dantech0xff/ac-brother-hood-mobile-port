@@ -437,6 +437,7 @@ class Level0World(
     override val kAc: IntArray? = null         // k.ac[] — unmined
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
+    override fun clearLatches() { pad.clearLatches() }   // k.v()
     override var gj = false                        // g.j context latch
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
@@ -612,6 +613,7 @@ class Level0World(
             else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
             else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
             else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
+            else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
