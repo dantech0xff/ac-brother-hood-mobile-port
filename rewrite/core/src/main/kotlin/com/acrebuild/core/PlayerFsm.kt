@@ -94,6 +94,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             21, 233 -> preJumpArm(p)          // L859
             20, 22, 23, 25, 215 -> airFamily(p, pad)
             43 -> fallArm(p)
+            257 -> ledgeDropArm(p)            // L1770
+            63 -> {                           // climb-up end — inferred arm
+                if (p.animFinished()) p.setAnim(0)
+            }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
             183, 184 -> assassinArm(p)                          // L413/L426
             else -> {
@@ -113,10 +117,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.aO <= 12 || p.aR <= 12) {
             if (p.S == 79) {
                 p.ag = 0; p.ah = 0
-                // S79 + down → ledge drop a(257,8): requires the masked
-                // enterState + below-side probes — omitted this slice.
             }
             if (p.S == 11) p.ag = (p.ag shl 1) / 3
+            // L691-692 (proven): down-held at a ledge → a(257,8) vault-drop;
+            // L2886 (proven): down-edge into a wall → am() climb-up S63
+            if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
+            if (ledgeDrop257(p, pad)) return
             // ap() attack entry (proven subset): v(65568) tap + I==1 sword →
             // ag=ah=aj=0 then i(67), or i(81) from crouch S79.
             if (pad.v(Pad.M_CONTEXT) && p.gI == 1) {
@@ -124,7 +130,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.setAnim(if (p.S == 79) 81 else 67)
                 return
             }
-            // u(33024)||!am() — am() stubbed false (no ledge-hang port)
             if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
             if (!l(p, pad)) {
                 p.cq = false
@@ -133,6 +138,60 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         } else {
             p.setAnim(79)
         }
+    }
+
+    /**
+     * `am()` (g.java:301, proven for the `ag != 0` half): moving into a
+     * type-19 wall cell (aV/aW = cell left/right of feet) with `aR == 0`
+     * snaps `ak` to the grid and enters `a(63, 16385)` (deferred i(63) +
+     * `al = ((W[3]+10)/20)*20 - 1` climb-up snap). ag==0 ledge variant
+     * unmined.
+     */
+    private fun wallClimb(p: Entity): Boolean {
+        when {
+            p.ag > 0 && p.aV == 19 && p.aR == 0 -> {
+                p.av = true; p.ak = (p.ak / 20) * 20
+            }
+            p.ag < 0 && p.aW == 19 && p.aR == 0 -> {
+                p.av = false; p.ak = (p.ak / 20) * 20 + 20
+            }
+            else -> return false
+        }
+        p.aj = 0; p.ah = 0; p.ag = 0
+        p.enterStateMasked(63, 16385, world)
+        return true
+    }
+
+    /**
+     * `a(257,8)` ledge-drop (g.java:2860-2874 L692, proven): DOWN held +
+     * support aQ ∈ {20,5} + aR==0 + the cell two-over in the facing
+     * direction one row below is non-solid → vault down. Probes at
+     * `al+20` like the original (`al+=20; x(); al-=20`).
+     */
+    private fun ledgeDrop257(p: Entity, pad: Pad): Boolean {
+        if (!pad.v(Pad.M_DOWN)) return false
+        p.al += 20; p.probeCells(world); p.al -= 20
+        val aQ = p.aQ; val aR = p.aR
+        val edgeCx = if (p.av) p.W[0] / 20 - 2 else p.W[2] / 20 + 2
+        val belowCy = p.W[3] / 20 + 1
+        p.probeCells(world)   // restore unshifted probes
+        if ((aQ == 20 || aQ == 5) && aR == 0 &&
+            p.e(world, edgeCx, belowCy) < 12) {
+            p.enterStateMasked(257, 8, world)
+            return true
+        }
+        return false
+    }
+
+    /** S257 exit arm (g.java:3317 L1770, proven): anim end → drop by the
+     *  frame's offset (+10 y, ±dx by facing) back to a(0). */
+    private fun ledgeDropArm(p: Entity) {
+        if (!p.animFinished()) return
+        val c = p.clip ?: return
+        p.al += c.frameDy[c.frameIndex(p.S, p.T)] + 10
+        p.ak += if (p.av) -c.frameDx[c.frameIndex(p.S, p.T)]
+                else c.frameDx[c.frameIndex(p.S, p.T)]
+        p.setAnim(0)
     }
 
     // -- l() grounded input helper (proven) ----------------------------------
