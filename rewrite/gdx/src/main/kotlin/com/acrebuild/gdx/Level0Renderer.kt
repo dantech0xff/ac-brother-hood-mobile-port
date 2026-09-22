@@ -69,9 +69,13 @@ class Level0Renderer {
                 10 -> "clips/clip10/modules"
                 48 -> "clips/clip48/modules"
                 45 -> "clips/clip45/modules"
+                47 -> "clips/clip47/modules"
+                31 -> "clips/clip31/modules"
                 else -> "level0/tileset-${-packId}/modules"  // negated keys
             }
             for (i in clip.moduleNames.indices) {
+                // aU==2 non-pixel modules are empty-name slots in the blob.
+                if (clip.moduleNames[i].isEmpty()) continue
                 val t = Texture(Gdx.files.internal("$base/${clip.moduleNames[i]}"))
                 t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
                 regs[i] = TextureRegion(t)
@@ -108,6 +112,8 @@ class Level0Renderer {
                 10 -> "clips/clip10/modules"
                 48 -> "clips/clip48/modules"
                 45 -> "clips/clip45/modules"
+                47 -> "clips/clip47/modules"
+                31 -> "clips/clip31/modules"
                 else -> "level0/tileset-${-pack}/modules"    // negated keys
             }
             val variant = clip.moduleNames[m]

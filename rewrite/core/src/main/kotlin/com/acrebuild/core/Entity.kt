@@ -1100,6 +1100,73 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `a()` — i.java `private void a()` :914-993 (proven). The push/contact
+     * resolution run by ax9 (and S131/146 callers) against `k.aS`:
+     *  - early-outs: S139 corpse; player S6 roll vs ax11; `g.a.ax==43`
+     *    grapple claim; S18 without a crouching player (S12);
+     *  - S131/146 jump straight to the L25 tail;
+     *  - L29: `W` vs `aS.W` overlap gate → `g.a != null` out →
+     *  - L34/L40: ax15 grapple anchor — `g.b(aS.S)` free-anim gate, snap
+     *    `aS` onto the nearer edge (`ak = W[2]|W[0]`, `al = W[1]+1`),
+     *    `aS.i(209)`, release `ac`, `aC=0`, `g.a = this`;
+     *  - `aS.S > 43` (airborne) skips the push arms;
+     *  - L50 left-block: player at-or-left not moving left and no wall →
+     *    snap to the entity's left edge, `ai=0`, `ag=-1`, `a(true)`, `ag=0`;
+     *  - L57 right-block mirrors it with `ag=1`, then falls into L25;
+     *  - L25/L27: while `aS.S==12 && aS.g(this)` re-eval the L29 body.
+     */
+    fun pushContact(world: LevelCellSource) {
+        val p = world.player
+        if (S == 139) return                                   // corpse
+        if (p.S == 6 && ax == 11) return
+        if (p.ga != null && p.ga!!.ax == 43) return            // g.a claim
+        if (S == 18 && p.S != 12) return
+        fun body(): Boolean {                                  // L29-L63
+            if (!overlapStrict(p.W, W)) return false
+            if (p.ga != null) return false                     // L32
+            if (ax == 15 && (S == 6 || S == 8) && p.gB()) {    // L40
+                p.ag = 0; p.ah = 0
+                p.setAnim(209)
+                p.ac = null                                    // aS.a(null)
+                aC = 0
+                p.ak = if (p.ak - ak > 0) W[2] else W[0]       // L44/L45
+                p.al = W[1] + 1
+                p.ga = this                                    // g.a = this
+                return false
+            }
+            if (p.S > 43) return false                         // L48
+            if (p.ak <= ak && p.ag >= 0 && !p.hitWall()) {     // L50
+                p.ak = ak - ((p.W[2] - p.W[0]) / 2) - ((W[2] - W[0]) / 2)
+                p.ai = 0; p.ag = 0; p.ag = -1
+                p.collideSides(world, true); p.ag = 0          // L63
+                return false
+            }
+            if (p.ak > ak && p.ag <= 0 && !p.hitWall()) {      // L57
+                p.ak = ak + ((p.W[2] - p.W[0]) / 2) + ((W[2] - W[0]) / 2)
+                p.ai = 0; p.ag = 0; p.ag = 1
+                return true                                    // → L25
+            }
+            p.collideSides(world, true); p.ag = 0              // L63
+            return false
+        }
+        val reachedL25 = if (S == 131 || S == 146) true else body()
+        while (reachedL25 && p.S == 12 && p.inFrontOf(this)) { // L25/L27
+            if (!body()) return
+        }
+    }
+
+    /**
+     * `l(int)` — i.java `private void l(int)` :21198 (proven): the ax9
+     *  overlay child — spawns `a(43,31,r8,az+1)` into `ad` on first use,
+     *  then mirrors `i(r8)` anim + `ak/al/T` every call. ax43 + clip31.
+     */
+    fun adChildOverlay(world: LevelCellSource, r8: Int) {
+        if (ad == null) ad = spawnChildFx(world, 43, 31, r8, az + 1)
+        ad!!.setAnim(r8)
+        ad!!.ak = ak; ad!!.al = al; ad!!.T = T
+    }
+
+    /**
      * `av()` — g.java `void av()` (proven). Air wall-resolve: probes one cell
      * higher (head region), then pushes ak back ±10 when flying into a solid
      * side cell at the feet row. Rope entity path (i.bq) not ported.
@@ -2472,6 +2539,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+
+        /** `i.a(int[],int[])` (i.java:632, proven): corner-overlap where a
+         *  fully-degenerate (point) rect counts as no-overlap. */
+        fun overlapStrict(a: IntArray?, b: IntArray?): Boolean =
+            a != null && b != null &&
+            a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1] &&
+            !(a[0] == a[2] && a[1] == a[3]) &&
+            !(b[0] == b[2] && b[1] == b[3])
     }
 
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
