@@ -128,6 +128,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ci: Entity? = null         // g.ci carried prop (f() holding check)
     var g: Entity? = null          // g.g interact target (az() scan)
     var gJ = 0                      // g.J action-request bits (g.g(mask));
+    var ab: Entity? = null        // i.ab link — mount gate in g.h consume
+    var consumedH = false         // i.H() consume marker (internals unmined)
+    fun consumeH() { consumedH = true }
                                    // bit4 = mount request, producers unported
 
     /**
@@ -603,6 +606,44 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * the `ae`/`ab` slots and returns true. Alive (`aB>0`) → false.
      */
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
+
+    /** `g.g(int)` (g.java:5266, proven): `J |= mask` — ORs an action-request
+     *  bit. The original also calls `k.q()` (queue refresh — unmined). */
+    fun requestAction(mask: Int) { gJ = gJ or mask }
+
+    /** `g.h(int)` (g.java:5270, proven): request/consume — when `r4!=0`
+     *  requires `J&r4` pending; sets `I=r4`, forces `k.at=1`, and when the
+     *  mount link's `ab` is an ax16 request entity runs its `H()` consume
+     *  (internals unmined — recorded via `consumedH`). `r4==1` → true;
+     *  `S!=38` → true; `S==38` repeats the consume and returns false. */
+    fun requestH(r4: Int): Boolean {
+        if (r4 != 0 && (gJ and r4) == 0) return false
+        gI = r4
+        at?.let { t -> if (t.ab?.ax == 16) t.consumeH() }
+        if (r4 == 1) return true
+        if (S != 38) return true
+        gI = 1
+        val t = at ?: return false
+        val link = t.ab ?: return false
+        if (link.ax != 16) return false
+        t.consumeH()
+        return false
+    }
+
+    /** `i.E()` (i.java:3760, proven shape): settle loop — sink `al` in
+     *  10px steps until the below-feet cell is standable
+     *  (`aR >= 12 || aR == 5 || aR == 3`). Guarded against missing floor. */
+    fun settleToGround(world: LevelCellSource) {
+        refreshBoxes()
+        var below = e(world, ak / 20, (W[3] + 1) / 20)
+        var guard = 0
+        while (below < 12 && below != 5 && below != 3 && guard++ < 400) {
+            al += 10
+            refreshBoxes()
+            below = e(world, ak / 20, (W[3] + 1) / 20)
+        }
+        aR = below
+    }
 
     /**
      * `k.h(dx,dy)` (k.java:6839, proven): octagonal distance in px —

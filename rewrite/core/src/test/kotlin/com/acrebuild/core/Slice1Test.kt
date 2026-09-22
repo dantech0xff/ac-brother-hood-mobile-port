@@ -139,9 +139,10 @@ class Level0WorldTest {
             26 to Clip.load(asset("clips/clip26/clip.acpk")),
             27 to Clip.load(asset("clips/clip27/clip.acpk")),
             35 to Clip.load(asset("clips/clip35/clip.acpk")),
-            10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
-            11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
-            12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
+            10 to Clip.load(asset("clips/clip10/clip.acpk")),
+            -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
+            -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
+            -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
         )
         return Level0World(level, clips, DeterministicRandom(1L))
     }
@@ -1113,5 +1114,110 @@ class Level0WorldTest {
             }
         }
         assertTrue(found, "no suitable wall cell found in level0")
+    }
+
+    // ---- slice 24 helpers --------------------------------------------
+
+    private fun requestMarkerAt(w: Level0World, s: Int, x: Int, y: Int): Entity {
+        val e = Entity(16, w.clips[10])
+        e.S = s
+        e.aB = 10
+        e.setPositionPx(x, y)
+        e.W[0] = x - 10; e.W[1] = y - 10; e.W[2] = x + 10; e.W[3] = y + 10
+        w.npcs.add(0, e)
+        return e
+    }
+
+    // ---- slice 25 ----------------------------------------------------
+
+    @Test fun `held input maps J to f0do mask 5`() {
+        val w = world()
+        w.npcs.clear()
+        val q = InputQueue()
+        q.post(InputQueue.Type.DOWN, 1200, 700)
+        w.tick(q.drainTo(q.headSequence()))
+        assertEquals(5, w.player.gJ, "k.F(aj): J=f0do[*]=5 while held")
+    }
+
+    @Test fun `ax16 S39 mount request ORs bit4 and consumes itself`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 39, 305, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 4 != 0, "bb(): S39 overlap -> g.g(4)")
+        assertTrue(e in w.pendingRemove, "marker consumes itself via k.c")
+    }
+
+    @Test fun `ax16 S30 hurt marker requests bit2 and hurt anims`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 30, 305, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 2 != 0, "bb(): S30 -> g.g(2)")
+        assertEquals(91, p.S, "k.aS.i(91) hurt anim")
+        assertTrue(15 in w.sfxLog, "k.A(15) sfx")
+        assertTrue(e in w.pendingRemove)
+    }
+
+    @Test fun `ax16 marker without overlap stays inert`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val e = requestMarkerAt(w, 39, 900, 150)
+        w.npcFsm.tickRequestMarker(e, p)
+        assertTrue(p.gJ and 4 == 0)
+        assertTrue(e !in w.pendingRemove)
+    }
+
+    @Test fun `requestH gates on pending J bit then consumes ax16 link`() {
+        val p = Entity(0, null)
+        val mount = Entity(72, null)
+        val req = Entity(16, null)
+        mount.ab = req
+        Entity.at = mount
+        assertFalse(p.requestH(2), "J&2 not pending -> false")
+        p.gJ = 2
+        assertTrue(p.requestH(2), "pending bit -> consume path true (S!=38)")
+        assertEquals(2, p.gI)
+        assertTrue(mount.consumedH, "i.at.H() ran — ab.ax==16")
+        Entity.at = null
+    }
+
+    @Test fun `settleToGround sinks until standable cell`() {
+        val w = world()
+        val p = w.player
+        // place in open air: sink until below-feet cell is solid
+        p.setPositionPx(300, 100); p.refreshBoxes()
+        p.settleToGround(w)
+        val below = w.collisionCell(p.ak / 20, (p.W[3] + 1) / 20)
+        assertTrue(below >= 12 || below == 5 || below == 3,
+            "settled on standable cell, got $below")
+    }
+
+    @Test fun `mount request end-to-end - ax16 feeds az ax72 arm`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
+        w.tick(emptyList())
+        // ax16 S39 marker overlapping player -> J|=4
+        requestMarkerAt(w, 39, 305, 150).also { w.npcFsm.tickRequestMarker(it, p) }
+        assertTrue(p.gJ and 4 != 0)
+        // ax72 mountable candidate in mount band
+        val m = Entity(72, null)
+        m.aB = 10; m.setPositionPx(350, 150)
+        m.W[0] = p.W[0] + 20; m.W[1] = p.W[1] - 10
+        m.W[2] = p.W[0] + 35; m.W[3] = p.W[1] - 5
+        m.Y[0] = m.W[0]; m.Y[1] = m.W[1]; m.Y[2] = m.W[2]; m.Y[3] = m.W[3]
+        w.npcs.add(0, m)
+        p.S = 0
+        w.playerFsm.interactScan(p)
+        assertSame(m, Entity.at, "az() ax72 arm consumed the J&4 request")
+        Entity.at = null
     }
 }

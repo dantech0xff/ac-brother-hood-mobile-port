@@ -65,7 +65,8 @@ class Level0Renderer {
                 54 -> "clips/clip54/modules"
                 64 -> "clips/clip64/modules"
                 26 -> "clips/clip26/modules"
-                else -> "level0/tileset-$packId/modules"
+                10 -> "clips/clip10/modules"
+                else -> "level0/tileset-${-packId}/modules"  // negated keys
             }
             for (i in clip.moduleNames.indices) {
                 val t = Texture(Gdx.files.internal("$base/${clip.moduleNames[i]}"))
@@ -90,7 +91,7 @@ class Level0Renderer {
         if (palette <= 0) return base
         val pal = clipPalettes.getOrPut(pack) { HashMap() }
         return pal.getOrPut(m or (palette shl 16)) {
-            val clip = clips[pack] ?: return base
+            val clip = clips[-pack] ?: return base   // tilesets use neg keys
             val dir = when (pack) {
                 0 -> "clips/clip0/modules"
                 3 -> "clips/clip3/modules"
@@ -100,7 +101,8 @@ class Level0Renderer {
                 54 -> "clips/clip54/modules"
                 64 -> "clips/clip64/modules"
                 26 -> "clips/clip26/modules"
-                else -> "level0/tileset-$pack/modules"
+                10 -> "clips/clip10/modules"
+                else -> "level0/tileset-${-pack}/modules"    // negated keys
             }
             val variant = clip.moduleNames[m]
                 .replace("-palette-00-", "-palette-%02d-".format(palette))
@@ -147,7 +149,7 @@ class Level0Renderer {
      * caller's flip word (2-bit on tiles, `P & 7` on entities).
      */
     private fun drawObject(pack: Int, obj: Int, x: Int, y: Int, flags: Int, depth: Int = 0, palette: Int = 0) {
-        val clip = clips[pack] ?: return
+        val clip = clips[-pack] ?: return        // tilesets use neg keys
         if (obj < 0 || obj >= clip.objPlaceStart.size || depth > 4) return
         val count = clip.objPlaceCount[obj]
         if (count == 0) {
@@ -175,7 +177,7 @@ class Level0Renderer {
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
-        val clip = clips[pack] ?: return
+        val clip = clips[-pack] ?: return        // tilesets use neg keys
         if (cell >= clip.objPlaceStart.size) return
         // tile cells sit on a 20px grid: +20 anchor compensation on the
         // mirrored axes (k.java:4476-4490)

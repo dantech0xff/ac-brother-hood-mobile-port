@@ -886,4 +886,37 @@ class NpcFsm(private val world: LevelCellSource) {
         if (e.aA == 1) { e.P = e.P or 128; return }          // hide, keep
         world.removeEntity(e)                                // collected
     }
+
+    /**
+     * ax16 `bb()` head arms (i.java:14088-14110, proven): the request-
+     * marker entity — on `a(k.aS.W, W)` overlap it ORs an action bit into
+     * `g.J` via `g.g()`, then consumes itself:
+     * - `S==30` → `g.g(2)` + `k.aS.h(2)` + `k.aS.i(91)` + `k.A(15)` +
+     *   `k.aS.E()` + `k.c(this)` (hurt-mark request)
+     * - `S==38` → same with bit 8
+     * - `S==39` → `g.g(4)` + `k.c(this)` (mount request — feeds the az()
+     *   ax72 arm's `J&4` gate)
+     * The `L21` tail (S15-24 switch) is unported — flagged `unknown`.
+     */
+    fun tickRequestMarker(e: Entity, player: Entity) {
+        e.advanceAnim()
+        when (e.S) {
+            30, 38 -> {
+                if (!Entity.overlapI(player.W, e.W)) return
+                val bit = if (e.S == 30) 2 else 8
+                player.requestAction(bit)
+                player.requestH(bit)
+                player.setAnim(91)
+                world.sfx(15)
+                player.settleToGround(world)
+                world.removeEntity(e)
+            }
+            39 -> {
+                if (!Entity.overlapI(player.W, e.W)) return
+                player.requestAction(4)
+                world.removeEntity(e)
+            }
+            else -> return                                   // L21 tail unported
+        }
+    }
 }
