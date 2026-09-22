@@ -4293,3 +4293,51 @@ private fun ax46Pusher(e: Entity, p: Entity) {
     p.av = !e.av                                                // L98/L99
     p.setAnim(242)
 }
+
+// =====================================================================
+// ax7 — ejection slot (i.java tick-dispatch case 7 → L88/L90/L94,
+// :5110-5149, proven): the swallow-and-eject warp volume. Records carry
+// no Z — init is just `az = r8[7]` + shared `i(r8[5])+t()`.
+// =====================================================================
+
+/** init arm — `case 7` (i.java:2661) → L112 (:3001): `az = r8[7]` then
+ *  the shared `i(r8[5])` + `t()` tail. */
+fun NpcFsm.initAx7(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax7 tick (proven):
+ *  - S0 (L90): `W∩playerW && !aS.f()` → `i(1)` + `aS.i(313)` swallow:
+ *    `P|=64` slot-hold, center-snap, `av=e.av`, all velocities zeroed.
+ *  - S1 (L94): keep `P|=64` + `t()` + re-snap each tick + `aS.T=this.T`
+ *    frame-sync; on `r()` → `i(0)` + `aS.a(0)` (resume) + throw
+ *    `ag=∓2048` by the slot's facing. */
+fun NpcFsm.tickAx7(e: Entity, w: Level0World, p: Entity) {
+    when (e.S) {
+        0 -> {
+            if (!Entity.overlapStrict(p.W, e.W)) return
+            if (p.isHolding()) return
+            e.setAnim(1)
+            p.setAnim(313)
+            p.P = p.P or 64
+            p.ak = (e.W[0] + e.W[2]) shr 1
+            p.al = (e.W[1] + e.W[3]) shr 1
+            p.av = e.av
+            p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+        }
+        1 -> {
+            p.P = p.P or 64
+            e.refreshBoxes()
+            p.ak = (e.W[0] + e.W[2]) shr 1
+            p.al = (e.W[1] + e.W[3]) shr 1
+            p.T = e.T
+            if (!e.animFinished()) return
+            e.setAnim(0)
+            p.flingAirborne(0, w)
+            p.ag = if (e.av) -2048 else 2048
+        }
+    }
+}
