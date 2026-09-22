@@ -148,6 +148,8 @@ private fun world(): Level0World {
             25 to Clip.load(asset("clips/clip25/clip.acpk")),
             29 to Clip.load(asset("clips/clip29/clip.acpk")),
             60 to Clip.load(asset("clips/clip60/clip.acpk")),
+            51 to Clip.load(asset("clips/clip51/clip.acpk")),
+            63 to Clip.load(asset("clips/clip63/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),

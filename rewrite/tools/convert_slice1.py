@@ -87,6 +87,8 @@ CLIPS = {
     "clip25": ("pack-3", "entry-025-marker-003"),  # ax15 grapple volume (bi[15]=25)
     "clip29": ("pack-3", "entry-029-marker-003"),  # ax46 spring/trap (bi[46]=29)
     "clip60": ("pack-3", "entry-060-marker-003"),  # ax7 ejection slot (bi[7]=60)
+    "clip51": ("pack-3", "entry-051-marker-003"),  # ax72 counterweight platform (bi[72]=51)
+    "clip63": ("pack-3", "entry-063-marker-003"),  # ax78 counterweight (bi[78]=63)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index

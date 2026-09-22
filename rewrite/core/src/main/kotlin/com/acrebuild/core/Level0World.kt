@@ -50,6 +50,9 @@ class Level0World(
             15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
             46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
             7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
+            72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
+            78 to 63,     // ax78 counterweight (bi[78]=63, proven)
+            79 to 0,      // ax79 palette prop (bi[79]=0, proven)
         )
     }
 
@@ -386,6 +389,10 @@ class Level0World(
             else if (type == 7) npcFsm.initAx7(e, f.toList(), this)
 
             else if (type == 13) npcFsm.initAx13(e, f.toList())
+
+            else if (type == 72) npcFsm.initAx72(e, f.toList(), this)
+            else if (type == 78) npcFsm.initAx78(e, f.toList(), this)
+            else if (type == 79) npcFsm.initAx79(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -832,6 +839,8 @@ class Level0World(
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
 
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
+
+            else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {
