@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 private fun asset(path: String): ByteArray =
@@ -534,5 +536,77 @@ class Level0WorldTest {
         assertEquals(50, w.player.S)
         w.tick(emptyList())
         assertTrue(w.failed, "x1=0 after S50 → k.l(12) mission fail")
+    }
+
+    @Test fun `ax10 triggers spawn with record W and S-bank i11800`() {
+        val w = world()
+        val ts = w.npcs.filter { it.ax == 10 }
+        assertEquals(15, ts.size)
+        // level-0 state bank: 36×1, 34×4, 33×2, 43×2, 16×4, 53×2
+        val hist = ts.groupingBy { it.S }.eachCount()
+        assertEquals(mapOf(36 to 1, 34 to 4, 33 to 2, 43 to 2, 16 to 4, 53 to 2), hist)
+        // every trigger's W comes from the record (non-degenerate)
+        assertTrue(ts.all { it.W[2] > it.W[0] && it.W[3] > it.W[1] })
+    }
+
+    @Test fun `ax10 S36 context zone publishes and clears g_d i12887`() {
+        val w = world()
+        val t = w.npcs.first { it.ax == 10 && it.S == 36 }
+        w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
+        w.player.refreshBoxes()
+        w.npcFsm.tickTrigger(t, w.player)
+        assertSame(t, w.player.gd)
+        assertEquals(t.W[0] + (t.W[2] - t.W[0]) / 2, w.player.gn)
+        assertEquals(t.W[3], w.player.go)
+        w.player.setPositionPx(0, 0)
+        w.player.refreshBoxes()
+        w.npcFsm.tickTrigger(t, w.player)
+        assertNull(w.player.gd)
+        assertEquals(0, w.player.gn)
+        assertEquals(-1, w.player.gk)
+    }
+
+    @Test fun `ax10 S33 effect zone publishes g_A g_l i12887`() {
+        val w = world()
+        val t = w.npcs.first { it.ax == 10 && it.S == 33 && it.aG != 0 }
+        w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
+        w.player.refreshBoxes()
+        w.npcFsm.tickTrigger(t, w.player)
+        assertTrue(w.player.gA)
+        assertEquals(((t.aG - w.player.ak) shl 8) / 11, w.player.gL)
+        assertEquals(t.av, w.player.gB)
+        w.player.setPositionPx(0, 0)
+        w.player.refreshBoxes()
+        w.npcFsm.tickTrigger(t, w.player)
+        assertFalse(w.player.gA)
+    }
+
+    @Test fun `ax10 S43 climbs to S203 inside zone i12942`() {
+        val w = world()
+        val t = w.npcs.first { it.ax == 10 && it.S == 43 }
+        w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
+        w.player.refreshBoxes()
+        w.player.setAnim(60)              // wall-climb state per i.java:12946
+        w.npcFsm.tickTrigger(t, w.player)
+        assertEquals(203, w.player.S)
+    }
+
+    @Test fun `ax10 S53 gated on gD then fires i360 and removes i13154`() {
+        val w = world()
+        val t = w.npcs.first { it.ax == 10 && it.S == 53 }
+        w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
+        w.player.refreshBoxes()
+        // gD false (producer arm unported): stays inert
+        w.player.setAnim(0)
+        w.npcFsm.tickTrigger(t, w.player)
+        assertTrue(w.npcs.contains(t))
+        // gD true + player S ∈ {0,1,5} → i(360), zero vel, k.c(this)
+        w.player.gD = true
+        w.player.setAnim(0)
+        w.npcFsm.tickTrigger(t, w.player)
+        assertEquals(360, w.player.S)
+        assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
+        w.tick(emptyList())               // npc loop drains pendingRemove
+        assertFalse(w.npcs.contains(t), "k.c(this) removes the trigger")
     }
 }

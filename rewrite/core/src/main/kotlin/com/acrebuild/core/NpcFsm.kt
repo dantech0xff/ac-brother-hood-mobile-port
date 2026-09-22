@@ -443,6 +443,92 @@ class NpcFsm(private val world: LevelCellSource) {
         }
     }
 
+    // ==================================================================
+    // ax10 — `i.aV()` TriggerController (i.java:11800-13181; semantics
+    // reconstructed in docs/i-av-reconstruction.md). Level-0 carries 15
+    // records using S ∈ {16,33,34,36,43,53}; this slice ports init L96
+    // (i.java:2882) + the zone arms {33,34,36,43,53}. S16 (rope-attach,
+    // L625) needs the unported g.a/k.an/k.ao/k.bI machinery — stubbed.
+
+    /** Init arm L96 (i.java:2882): `aB=0; P|=512; az=0` then S-switch. */
+    fun initTrigger(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.aB = 0
+        e.P = e.P or 512
+        e.az = 0
+        // generic tail L395→L400→L414→L419 (i.java:3728-3705): S = i(r8[5])
+        // and W = [ak+r8[7], al+r8[8], +r8[9], +r8[10]] (no X bound for ax10).
+        e.setAnim(rf(5))
+        e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
+        e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
+        when (e.S) {
+            // L102 (i.java:2961): Z = {r8[11], r8[13]}; P |= 16
+            34 -> {
+                e.Z[0] = rf(11); e.Z[1] = rf(13)
+                e.P = e.P or 16
+            }
+            // L104 (i.java:2975): Z = {0} — our Z is already zeroed
+            43 -> e.Z[0] = 0
+            // L110 (i.java:2986): Z = {r8[20]} → falls through to L111
+            16 -> { e.Z[0] = rf(20); l111(e, f) }
+            // switch default → L111 (covers S33/S36/S53 and every unlisted S)
+            else -> l111(e, f)
+        }
+    }
+
+    /** L111 (i.java:2989): the common record-field map. */
+    private fun l111(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
+        e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    }
+
+    /**
+     * `aV()` zone arms used by level-0 records (i.java:12887+):
+     * - S33 (L706): player ∩ W && player.S ∉ {148,149,150} → publish
+     *   `g.B=av`, `g.l=(aG!=0 ? (aG-player.ak)<<8)/11 : 0)`, `g.A=true`;
+     *   else `g.A=false`.
+     * - S34: direct return (no-op state).
+     * - S36 (L722): overlap publishes context zone `g.n/g.o/g.k/g.d` and
+     *   sets `P|=16`; leaving clears only when this trigger still owns.
+     * - S43 (L744): overlap && player.S ∈ {60,61} → `i(203)`.
+     * - S53 (L886): `g.D && overlap && player.S ∈ {0,1,5}` → `i(360)`,
+     *   `ag=ah=0`, `k.c(this)` remove. (g.D producer arm unported.)
+     */
+    fun tickTrigger(e: Entity, player: Entity) {
+        when (e.S) {
+            33 -> if (rectsOverlap(player.W, e.W)) {
+                if (player.S != 148 && player.S != 149 && player.S != 150) {
+                    player.gB = e.av
+                    player.gL = if (e.aG != 0)
+                        ((e.aG - player.ak) shl 8) / 11 else 0
+                    player.gA = true
+                }
+            } else player.gA = false
+            36 -> if (rectsOverlap(player.W, e.W)) {
+                player.gn = e.W[0] + ((e.W[2] - e.W[0]) shr 1)
+                player.go = e.W[3]
+                if (e.aE >= 0) player.gk = e.aE
+                player.gd = e
+                e.P = e.P or 16
+            } else if (player.gd == e) {
+                player.gd = null
+                player.gn = 0; player.go = 0; player.gk = -1
+                e.P = e.P and -17
+            }
+            43 -> if (rectsOverlap(player.W, e.W) &&
+                      (player.S == 60 || player.S == 61))
+                player.setAnim(203)
+            53 -> if (player.gD && rectsOverlap(player.W, e.W) &&
+                      (player.S == 0 || player.S == 1 || player.S == 5)) {
+                player.setAnim(360)
+                player.ag = 0; player.ah = 0
+                world.removeEntity(e)
+            }
+            // S16 (L625 rope-attach) and every other aV() state: unported.
+        }
+    }
+
     private fun overlap(a: IntArray, b: IntArray): Boolean =
         a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 }

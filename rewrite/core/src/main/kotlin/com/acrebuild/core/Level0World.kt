@@ -31,6 +31,7 @@ class Level0World(
         val ENTITY_CLIP = mapOf(
             11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
             44 to 32,
+            10 to 6,      // clip6 not converted yet — triggers spawn clipless
         )
     }
 
@@ -66,6 +67,12 @@ class Level0World(
 
     val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
+    private val pendingRemove = HashSet<Entity>()
+    override fun removeEntity(e: Entity) {
+        pendingRemove += e
+        if (player.gd === e) player.gd = null
+        if (lockTarget === e) lockTarget = null
+    }
     var camX = 0
         private set
     var camY = 0
@@ -117,10 +124,14 @@ class Level0World(
         player.setAnim(0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
         player.gt = 0; player.bh = 0
+        // ax10-published player statics (i.java:2492-2512 level-init clears)
+        player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
+        player.gB = false; player.gL = 0; player.gA = false
     }
 
     private fun spawnEntities() {
         npcs.clear()
+        pendingRemove.clear()
         lockTarget = null
         for (f in level.entities) {
             if (f.size < 7) continue
@@ -135,6 +146,7 @@ class Level0World(
             }
             if (type == 11) npcFsm.initSoldier(e, f.toList())
             else if (type == 44) npcFsm.initDoor(e, f.toList())
+            else if (type == 10) npcFsm.initTrigger(e, f.toList())
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
@@ -282,7 +294,13 @@ class Level0World(
         player.advanceAnim()
 
         for (n in npcs) {
-            if (n.ax == 44) npcFsm.tickDoor(n, player) else npcFsm.tick(n, player)
+            if (n.ax == 44) npcFsm.tickDoor(n, player)
+            else if (n.ax == 10) npcFsm.tickTrigger(n, player)
+            else npcFsm.tick(n, player)
+        }
+        if (pendingRemove.isNotEmpty()) {
+            npcs.removeAll(pendingRemove)
+            pendingRemove.clear()
         }
         fireCheckpoints()
         fireScrollTriggers()
