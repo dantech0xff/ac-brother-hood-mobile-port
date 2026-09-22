@@ -3332,6 +3332,392 @@ private fun NpcFsm.bossPushPast(e: Entity) {
 }
 
 // ---------------------------------------------------------------------------
+// ax35 — `i.bQ()` (i.java:21594-22296): the scripted multi-tool entity —
+// dove/crow messenger, pickup grabber, bird-wave director, flying-aim proxy.
+// Init arm (i.java:3614) uses a sparse Z map; records carrying ONLY [az]
+// (skip Z1-17) still run bQ on the default Zs, which hands them the generic
+// aC=10→"fire+expire" arms 27/31.
+// ---------------------------------------------------------------------------
+
+/** `k.bd[]` sweep hit types (i.java:21744-21749 filter). */
+private val AX35_SWEEP_AX = intArrayOf(17, 11, 23, 47, 50, 73)
+/** `i.cX` (i.java:22362, proven) — per-wave-count gap delays {0,1,2,3,4}. */
+private val AX35_WAVE_GAP = intArrayOf(0, 1, 2, 3, 4)
+
+/**
+ * `initAx35` — ax35 init arm (i.java:3614, proven). Sparse record map:
+ * `az=r8[7]; Z[0..6]=r8[8..14]; Z[10]=r8[15]; Z[11]=r8[16]; Z[13]=r8[17]`,
+ * then `Z[7]=0; Z[12]=1` — NOT the generic `Z[i]=f[7+i]` layout.
+ */
+fun NpcFsm.initAx35(e: Entity, f: List<Int>, w: LevelCellSource) {
+    e.az = if (f.size > 7) f[7] else 0
+    for (i in 0..6) e.Z[i] = if (f.size > 8 + i) f[8 + i] else 0
+    e.Z[10] = if (f.size > 15) f[15] else 0
+    e.Z[11] = if (f.size > 16) f[16] else 0
+    e.Z[13] = if (f.size > 17) f[17] else 0
+    e.Z[7] = 0
+    e.Z[12] = 1
+    e.setAnim(if (f.size > 5) f[5] else 0)                    // L395 i(r8[5])
+    e.refreshBoxes()                                          // t()
+}
+
+/** The ax35 `a(x,y,w,h,bool)` debug vol-paint (i.java:22224, proven
+ *  signature): rasterizes the `ak+Z[0], al+Z[1], Z[2]xZ[3]` rect plus
+ *  overlapping ax{11,73,35,79} entities into the `k.aQ` debug Image.
+ *  The r14 flag is dead (never read) — the port records the painted
+ *  rect (`inferred`: `k.aQ`'s only reader is a HUD blit). */
+private fun ax35VolPaint(e: Entity, w: LevelCellSource) {
+    w.volPaintRect = intArrayOf(e.ak + e.Z[0], e.al + e.Z[1],
+        e.Z[2], e.Z[3])
+}
+
+/** `i.bR()` (i.java:22194, proven): quadrant pick — the sequential
+ *  first-match ladder `aG∈[18,36]∪[144,162]→1; [36,54]∪[126,144]→2;
+ *  [54,72]∪[108,126]→3; else 0`. Boundaries follow the source order
+ *  (36→1, 54→2, 72→3, 126→2, 144→1). */
+private fun ax35Quadrant(aG: Int): Int = when {
+    aG in 18..36 || aG in 144..162 -> 1
+    aG in 36..54 || aG in 126..144 -> 2
+    aG in 54..72 || aG in 108..126 -> 3
+    else -> 0
+}
+
+/** `i.f(int,int,int,int)` (i.java:22174, proven): wave-child spawn —
+ *  `e(r7/20,r8/20)==20` aborts; `aG=r10` on THIS entity; child is
+ *  `a(35,62,6+bR(),300)` with `ak=r7, al=r8, P|=16, av=(r7>r9), aG=r10`,
+ *  inserted via `k.b(aK)`. */
+private fun ax35WaveChild(e: Entity, w: LevelCellSource, r7: Int, r8: Int,
+                          r9: Int, r10: Int) {
+    if (w.collisionCell(r7 / 20, r8 / 20) == 20) return
+    e.aG = r10
+    val c = e.spawnChildFx(w, 35, 62, 6 + ax35Quadrant(e.aG), 300)
+    c.ak = r7; c.al = r8; c.P = c.P or 16; c.av = r7 > r9; c.aG = r10
+    w.queueInsert(c)
+}
+
+/** The bare `a(35,62,S,300)` + `k.b` spawn shared by the wave/director
+ *  arms — position written after the copy-position helper. */
+private fun ax35SpawnMarker(e: Entity, w: LevelCellSource, S: Int,
+                            x: Int, y: Int) {
+    val c = e.spawnChildFx(w, 35, 62, S, 300)
+    c.ak = x; c.al = y
+    w.queueInsert(c)
+}
+
+/** The `af==null → (Z[13]>0 → af=q(Z[13]))` resolve shared by the
+ *  af-gated arms (i.java:21842/21876/21963/22033/22047/22074). */
+private fun ax35AfResolve(e: Entity, w: LevelCellSource) {
+    if (e.af == null && e.Z[13] > 0) e.af = w.findByAw(e.Z[13])
+}
+
+/** The L240/L242-linked `af.P &= -129; af.P |= 16` pair — runs only
+ *  when the af link was just resolved non-null (i.java:22051/22078). */
+private fun ax35AfArmFlags(e: Entity) {
+    e.af?.let { it.P = (it.P and -129) or 16 }
+}
+
+/** The L97 wave-director arm shared by arms 2/27/31 (i.java:21650-
+ *  21728, proven): vol-paint → `r()` → `P|=64; aC--` → `aC>0` tail; else
+ *  `aC=2; Z[7]++` → `Z[7]>Z[12]` tail; `r8 = Z[12]>2?3:2`;
+ *  `r04=(Z[7]-r8)*Z[6]`; fire-x `r9 = S∈{27,31} ? Z[8] : r04+Z[8]`;
+ *  march `r11=r9; r122=Z[9]; do {r11-=r05; r122-=r06} while r122>=k.P`
+ *  (`r05/r06 = 20·sin/cos(Z[5]·M/360)>>8`); S∈{2,31}→L124 spawn the
+ *  S18 marker at `(r9+36·sin, Z[9]+36·cos)` + `f()` child (+S31 clears
+ *  P64 & `i(29)`); else (S27) `f()` + `aC=10; P&=-65; i(25)`; all paths
+ *  end at the L129 tail. */
+private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
+    ax35VolPaint(e, w)
+    if (!e.animFinished()) return                               // L368
+    e.P = e.P or 64; e.aC--
+    if (e.aC > 0) { ax35WaveTail(e, w); return }
+    e.aC = 2; e.Z[7]++
+    if (e.Z[7] > e.Z[12]) { ax35WaveTail(e, w); return }
+    val r8 = if (e.Z[12] > 2) 3 else 2                          // L110
+    val r04 = (e.Z[7] - r8) * e.Z[6]
+    val r9 = if (e.S == 27 || e.S == 31) e.Z[8] else r04 + e.Z[8]
+    val th = e.Z[5] * Trig.M / 360
+    val r05 = (20 * Trig.sin(th)) shr 8
+    val r06 = (20 * Trig.sin(Trig.N - th)) shr 8   // j.b(j.n-θ) = cos
+    var r11 = r9
+    var r122 = e.Z[9]
+    do {                                                        // L118
+        r11 -= r05; r122 -= r06
+    } while (r122 >= w.kP)
+    if (e.S == 2 || e.S == 31) {                                // L124
+        ax35SpawnMarker(e, w, 18,
+            r9 + ((36 * Trig.sin(th)) shr 8),
+            e.Z[9] + ((36 * Trig.sin(Trig.N - th)) shr 8))
+        ax35WaveChild(e, w, r11, r122, r9, e.Z[5])
+        if (e.S == 31) { e.P = e.P and -65; e.setAnim(29) }
+    } else {                                                    // L123 (S27)
+        ax35WaveChild(e, w, r11, r122, r9, e.Z[5])
+        e.aC = 10; e.P = e.P and -65; e.setAnim(25)
+    }
+    ax35WaveTail(e, w)                                          // →L129
+}
+
+/** L129 (i.java:21709-21728, proven): wave tail — `Z[7]<=Z[12]` returns;
+ *  else `aC=10; P&=-65; aF++`; `Z[12]>=5 → Z[12]=5` (saturate) else
+ *  `aF < cX[Z[12]]` gap → same anim pick; else `aF=0; Z[12]++` → pick.
+ *  L137 anim: `S==31 → i(29)` else `i(0)`. */
+private fun ax35WaveTail(e: Entity, w: LevelCellSource) {
+    if (e.Z[7] <= e.Z[12]) return
+    e.aC = 10
+    e.P = e.P and -65
+    e.aF++
+    if (e.Z[12] >= 5) {
+        e.Z[12] = 5                                             // L137
+    } else if (e.aF >= AX35_WAVE_GAP[e.Z[12]]) {                // L134
+        e.aF = 0
+        e.Z[12]++
+    }
+    if (e.S == 31) e.setAnim(29) else e.setAnim(0)              // L137/L140
+}
+
+/** The `ae!=null` cleanup shared by arms 22/23 (i.java:22104-22109 +
+ *  22156-22161): `g.a==this → G()` else `ae.P &= -129`. */
+private fun ax35AeCleanup(e: Entity, p: Entity) {
+    val ae = e.ae ?: return
+    if (p.ga === e) e.releaseAe() else ae.P = ae.P and -129
+}
+
+/**
+ * `i.bQ()` (i.java:21594-22296, proven) — ax35 multi-tool:
+ * S0 L5 (af resolve; af dead/absent → `k.aQ=null; P=32`; else `af.P|=16`
+ *   + paint + `aC--` → `i(1); af.i(191)` at expiry);
+ * S29 L26 (same resolve/dead check; alive → `k.aQ=null` hold);
+ * S1·30 L39 (af absent/dead → `S30?i(29):i(0)`; else paint + `r()` →
+ *   capture `Z[8]=aS.ak; Z[9]=aS.W-midY; Z[7]=0; aC=0`; S30→`Z[12]=1;
+ *   i(31)` else `i(2)`; `k.A(27)`);
+ * S25 L61 (resolve → paint + `aC--` → `i(26)` + spawn `a(35,62,28,300)`
+ *   aim-child at `k.ae`(ax10) or `k.O+200,k.P+120`, `aK.af=this; c=aK`);
+ * S2·31 L88 (af absent/dead → `S31?i(29):i(0)`; else L97 wave director);
+ * S27→L97; S6-9 L142 (W-box player-hit: `p.S∈{0,1,7}→aS.i(9)` then
+ *   `p.S==12` shared L267 deflect arm else `g.d(GU[au]);g.t=5`; `k.bd`
+ *   sweep → `as()` on overlap; `aG`-march `20·sin/cos` commit-if-free
+ *   → `i(10+bR());aC=20` on cell20; edge despawn `±20` past `k.O`);
+ * S10-13 L196 (`r()→i(14+bR())`); S14-17 L200 (`!b(Y,k.ac)→k.c`);
+ * S18/19 L204 (`r()→k.c`); S20 L275 (vol-edge overlap → `aC=Z[11]`
+ *   + `a(7,ak-60,al+20)` marker + `ae.P|=128` + `q(Z[10])→{i(4);P=16}`
+ *   + `a(35,62,19,300)` + `am=ak-420; an/ao/ap=al/ak/al; ak=am; i(21)`);
+ * S21 L283 (P&128 → `q(Z[10])` gate {S==3→P=16; null→aC--→P=16} else
+ *   `ak+=50`; `ak>=ao→ak=ao;i(22)`); S22 L301 (ae cleanup + `r()→i(23)`);
+ * S23 L311 (ae cleanup + `t()` + `g.a!=this→L323` grab-scan
+ *   `g.b(S)&&a(W,W)→(S==264?i(262):i(260))+vel0+aS.al=al;g.a=this`;
+ *   `g.a==this && !a(W,W)&&S∉{261,259}→g.a=null`; `r()→i(24);G()`);
+ * S24 L347 (`g.a==this→{g.a=null; aS.a(2560)}`; `r()→P=128;i(20)`);
+ * S26 L79 (paint + `r()→aC=0;Z[7]=0;Z[12]=1;i(27);k.A(27)`);
+ * S3 L240 (af resolve → `af.P&=-129|16` when newly resolved + paint);
+ * S4 L253 (same + `r()→i(5);k.A(27)`); S5 L267 (paint + `r()→i(3)`);
+ * S28 L208 (`!k.aT→k.c`; else-if `k.u` D-pad ±10 clamps to the view
+ *   band; L232 `af!=null→af.Z[8]=ak;af.Z[9]=al` else `r()→k.c`).
+ */
+fun NpcFsm.tickAx35(e: Entity, w: LevelCellSource, p: Entity) {
+    when (e.S) {
+        0 -> {                                                  // L5
+            ax35AfResolve(e, w)
+            val af = e.af
+            if (af == null || af.deadRelease()) {               // L13
+                w.volPaintRect = null; e.P = 32; return
+            }
+            af.P = af.P or 16                                   // L12
+            ax35VolPaint(e, w)
+            e.aC--
+            if (e.aC < 0) { e.setAnim(1); af.setAnim(191) }
+        }
+        29 -> {                                                 // L26
+            ax35AfResolve(e, w)
+            val af = e.af
+            if (af == null || af.deadRelease()) {               // L34
+                w.volPaintRect = null; e.P = 32
+            } else {
+                w.volPaintRect = null                           // L33
+            }
+        }
+        1, 30 -> {                                              // L39
+            val af = e.af
+            if (af == null || af.deadRelease()) {               // L43/L46
+                if (e.S == 30) e.setAnim(29) else e.setAnim(0)
+                return
+            }
+            ax35VolPaint(e, w)
+            if (e.animFinished()) {
+                e.aC = 0
+                e.Z[8] = p.ak
+                e.Z[9] = (p.W[1] + p.W[3]) shr 1
+                e.Z[7] = 0
+                if (e.S == 30) { e.Z[12] = 1; e.setAnim(31) }   // L57
+                else e.setAnim(2)
+                w.sfx(27)                                       // L58 k.A(27)
+            }
+        }
+        25 -> {                                                 // L61
+            ax35AfResolve(e, w)                                 // L63→L65
+            ax35VolPaint(e, w)
+            e.aC--
+            if (e.aC < 0) {
+                e.setAnim(26)
+                if (e.c == null) {                              // L366
+                    val c = e.spawnChildFx(w, 35, 62, 28, 300)
+                    val m = w.kAe
+                    if (m != null && m.ax == 10) { c.ak = m.ak; c.al = m.al }
+                    else { c.ak = w.kO + 200; c.al = w.kP + 120 }
+                    c.av = e.av; c.af = e; e.c = c
+                    w.queueInsert(c)
+                }
+            }
+        }
+        2, 31 -> {                                              // L88
+            val af = e.af
+            if (af == null || af.deadRelease()) {               // L92
+                if (e.S == 31) e.setAnim(29) else e.setAnim(0)
+                return
+            }
+            ax35WaveStep(e, w)                                  // L97
+        }
+        27 -> ax35WaveStep(e, w)                                // L97
+        in 6..9 -> {                                            // L142
+            e.refreshBoxes()
+            if (p.gt <= 0 &&
+                    Entity.overlapStrict(e.W, p.W) && !w.kAn) {  // L145
+                if (p.S == 0 || p.S == 1 || p.S == 7) {
+                    p.setAnim(9)                                 // L156→L157
+                }
+                if (p.S == 12) {                                 // L267 arm
+                    ax35VolPaint(e, w)
+                    if (e.animFinished()) e.setAnim(3)
+                } else {
+                    p.gDrain(w.GU[w.weaponSlot], w); p.gt = 5    // L157
+                }
+            }
+            for (o in w.npcs) {                                  // L160 sweep
+                if (o.ax !in AX35_SWEEP_AX) continue
+                if (o.deadRelease()) continue
+                if (Entity.overlapStrict(e.W, o.W)) o.instantKill()
+            }
+            val th = e.aG * Trig.M / 360                         // L181 march
+            val nx = e.ak + ((20 * Trig.sin(th)) shr 8)
+            val ny = e.al + ((20 * Trig.sin(Trig.N - th)) shr 8)
+            if (w.collisionCell(nx / 20, ny / 20) == 20) {
+                e.setAnim(10 + ax35Quadrant(e.aG)); e.aC = 20
+            } else {
+                e.ak = nx; e.al = ny                             // L184
+            }
+            if (e.av) {                                          // L186
+                if (e.ak < w.kO - 20) { w.removeEntity(e); e.aC = 0 }
+            } else if (e.ak > w.kO + 420) {
+                w.removeEntity(e); e.aC = 0
+            }
+        }
+        in 10..13 -> {                                          // L196
+            if (e.animFinished()) e.setAnim(14 + ax35Quadrant(e.aG))
+        }
+        in 14..17 -> {                                          // L200
+            val cam = w.kAc
+            if (cam == null || !Entity.containRect(e.Y, cam)) w.removeEntity(e)
+        }
+        18, 19 -> if (e.animFinished()) w.removeEntity(e)       // L204
+        20 -> {                                                 // L275
+            e.refreshBoxes()
+            val x0 = e.ak + e.Z[0]; val y0 = e.al + e.Z[1]
+            if (Entity.edgeRectOverlap(x0, y0,
+                    x0 + e.Z[2], y0 + e.Z[3], p.W)) {
+                e.aC = e.Z[11]
+                e.spawnAeMarker(w, 7, e.ak - 60, e.al + 20)     // a(7,…)
+                e.ae?.let { it.P = it.P or 128 }
+                w.findByAw(e.Z[10])?.let { it.setAnim(4); it.P = 16 }
+                ax35SpawnMarker(e, w, 19, e.ak, e.al)
+                e.am = (e.ak - 400) - 20
+                e.an = e.al
+                e.ao = e.ak; e.ap = e.al
+                e.ak = e.am
+                e.setAnim(21)
+            }
+        }
+        21 -> {                                                 // L283
+            if (e.P and 128 != 0) {
+                val l = w.findByAw(e.Z[10])
+                if (l == null) {                                // L290
+                    e.aC--
+                    if (e.aC <= 0) e.P = 16
+                } else if (l.S == 3) e.P = 16                   // L297 via
+            } else {
+                e.ak += 50                                      // L295
+            }
+            if (e.ak >= e.ao) { e.ak = e.ao; e.setAnim(22) }    // L297
+        }
+        22 -> {                                                 // L301
+            ax35AeCleanup(e, p)
+            if (e.animFinished()) e.setAnim(23)
+        }
+        23 -> {                                                 // L311
+            ax35AeCleanup(e, p)                                  // L313/L315
+            e.refreshBoxes()                                     // L316 t()
+            if (p.ga === e) {                                    // L332
+                if (!Entity.overlapStrict(p.W, e.W) &&
+                        p.S != 261 && p.S != 259) p.ga = null
+            } else if (p.S in Entity.GRABBABLE_STATES &&         // L323
+                    Entity.overlapStrict(p.W, e.W)) {
+                if (p.S == 264) p.setAnim(262) else p.setAnim(260)  // L329
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                p.al = e.al
+                p.ga = e
+            }
+            if (e.animFinished()) { e.setAnim(24); e.releaseAe() }  // L343
+        }
+        24 -> {                                                 // L347
+            if (p.ga === e) { p.ga = null; p.flingAirborne(2560, w) }
+            if (e.animFinished()) { e.P = 128; e.setAnim(20) }
+        }
+        26 -> {                                                 // L79
+            ax35VolPaint(e, w)
+            if (e.animFinished()) {
+                e.aC = 0; e.Z[7] = 0; e.Z[12] = 1
+                e.setAnim(27); w.sfx(27)
+            }
+        }
+        3 -> {                                                  // L240
+            if (e.af == null) {                                  // L242
+                if (e.Z[13] > 0) {
+                    e.af = w.findByAw(e.Z[13])
+                    ax35AfArmFlags(e)
+                }
+            }
+            ax35VolPaint(e, w)                                   // L246
+        }
+        4 -> {                                                  // L253
+            if (e.af == null) {                                  // L255
+                if (e.Z[13] > 0) {
+                    e.af = w.findByAw(e.Z[13])
+                    ax35AfArmFlags(e)
+                }
+            }
+            ax35VolPaint(e, w)                                   // L259
+            if (e.animFinished()) { e.setAnim(5); w.sfx(27) }
+        }
+        5 -> {                                                  // L267
+            ax35VolPaint(e, w)
+            if (e.animFinished()) e.setAnim(3)
+        }
+        28 -> {                                                 // L208
+            if (!w.kAT) { w.removeEntity(e); return }
+            if (w.padDown(16388)) {                              // k.u held
+                e.al -= 10; if (e.al < w.kP) e.al = w.kP
+            } else if (w.padDown(33024)) {
+                e.al += 10; if (e.al > w.kP + 240) e.al = w.kP + 240
+            } else if (w.padDown(4112)) {
+                e.ak -= 10; if (e.ak < w.kO) e.ak = w.kO
+            } else if (w.padDown(8256)) {
+                e.ak += 10; if (e.ak > w.kO + 400) e.ak = w.kO + 400
+            }
+            val af = e.af                                        // L232
+            if (af != null) { af.Z[8] = e.ak; af.Z[9] = e.al }
+            else if (e.animFinished()) w.removeEntity(e)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ax61 — Cesare multi-tool (i.aR, i.java:11276-11529): aura follower,
 // param-curve projectile (S8), knife-volley impact shell (S10), the
 // grab-struggle QTE overlay (S11/12/13), and the boss-aura pair (S18/19).

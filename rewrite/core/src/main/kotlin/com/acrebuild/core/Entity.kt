@@ -171,6 +171,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     // -- mission-director + barrage fields (i.java:18003+, bD/bG/d/p/g) ------
     var ao = 0                     // i.ao — floatie aim target x
     var ap = 0                     // i.ap — floatie aim target y
+    var am = 0                     // i.am — ax35 carry-scrub start x
+    var an = 0                     // i.an — ax35 carry-scrub start y
     var bY = 0                     // i.bY — waypoint prev-x px (bZ reused)
     var bs = 0                     // i.bs — respawn slot index (Z[bs+1])
     var iE = false                 // i.E — director engaged flag
@@ -1284,6 +1286,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ae = null
     }
 
+    /** `i.as()` (i.java:7680, proven): instant kill — `aB=0` plus the
+     *  death-anim map {11→i(0), 17→i(69), 23→i(79)}. Other ax types get
+     *  aB=0 with no anim change. */
+    fun instantKill() {
+        aB = 0
+        when (ax) {
+            11 -> setAnim(0)
+            17 -> setAnim(69)
+            23 -> setAnim(79)
+        }
+    }
+
     /**
      * `i.g(i)` (i.java:7758, proven): true when `r4` is on the side this
      * entity faces — `(r4.ak < ak) == av`.
@@ -2158,6 +2172,32 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+
+        /** `i.a(int[],int[])` (i.java:632, proven): `overlapI` plus the
+         *  point-box rejects — a fully-degenerate rect on either side
+         *  (x0==x2 && y0==y3) never overlaps. */
+        fun overlapStrict(a: IntArray, b: IntArray): Boolean =
+            overlapI(a, b) &&
+                (a[0] != a[2] || a[1] != a[3]) &&
+                (b[0] != b[2] || b[1] != b[3])
+
+        /** `i.a(x0,y0,x1,y1,rect)` (i.java:601, proven): the edges-box
+         *  vs rect overlap — same overlap + both-side point rejects. */
+        fun edgeRectOverlap(x0: Int, y0: Int, x1: Int, y1: Int, r: IntArray): Boolean =
+            x0 <= r[2] && x1 >= r[0] && y0 <= r[3] && y1 >= r[1] &&
+                (x0 != x1 || y0 != y1) && (r[0] != r[2] || r[1] != r[3])
+
+        /** `i.b(int[],int[])` (i.java:666, proven): `a` fully CONTAINED
+         *  in `b` (all four edges inside). */
+        fun containRect(a: IntArray, b: IntArray): Boolean =
+            a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3]
+
+        /** `g.b(int)` (g.java:374, proven): player states the ax35
+         *  grabber may latch onto (idle/walk/jump/land/fall/climb/pickup
+         *  family — 20 states, no 21). */
+        val GRABBABLE_STATES = intArrayOf(
+            18, 19, 20, 22, 23, 24, 25, 35, 36, 43,
+            150, 157, 165, 233, 242, 243, 263, 264, 265, 266)
     }
 
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
@@ -3289,8 +3329,16 @@ interface LevelCellSource {
     /** `k.J`/`k.K` — held touch point (screen px) for `V()`/ax61 QTE. */
     var kJ: Int get() = 0; set(_) {}
     var kK: Int get() = 0; set(_) {}
-    /** `k.ac[4]` — camera/arena rect ints (aP S5 arena clamp). */
+    /** `k.ac[4]` — camera/arena rect ints (aP S5 arena clamp; also the
+     *  `k.ac` containment rect the ax35 off-screen kill uses). */
     val kAc: IntArray? get() = null
+    /** `k.an` (k.java, proven): fade-out flag set by `k.B()` — the ax35
+     *  sweep skips the player-hit arm while a fade runs. */
+    var kAn: Boolean get() = false; set(_) {}
+    /** `k.aQ` — the debug vol-paint surface the ax35 `a(x,y,w,h,bool)`
+     *  rasterizer fills (i.java:22224). Debug-only: its sole reader is
+     *  the HUD blit at (198-w,5); ported as a rect recorder (`inferred`). */
+    var volPaintRect: IntArray? get() = null; set(_) {}
     /** `k.v(mask)` (k.java:7210, proven): edge-input `(bB & mask) != 0`. */
     fun padHeld(mask: Int): Boolean = false
     /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
