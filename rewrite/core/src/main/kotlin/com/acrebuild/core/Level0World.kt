@@ -62,6 +62,7 @@ class Level0World(
             30 to 36,     // ax30 runner variant (bi[30]=36, proven)
             24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
             56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
+            58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
         )
     }
 
@@ -111,6 +112,12 @@ class Level0World(
     // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
     // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
     var projectilePool: Array<Entity?>? = null
+
+    /** `k.ap[]` progress counters (k.java:4314/L() proven): `k.e(r5,uid)`
+     *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
+     *  verbatim — always slot 0). */
+    val kAp = IntArray(6)
+    fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
     /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
      *  arming clears bit128 (`P &= -129`) marking the slot live again. */
     fun projectileAlloc(): Int {
@@ -487,6 +494,7 @@ class Level0World(
      *  aP arena clamp — aliased to `boundMinX` (proven same field). */
     override var kR: Int get() = boundMinX; set(v) { boundMinX = v }
     override var kAE = 0                       // k.aE
+    override var kAF = 0                         // k.aF — meter fill
     override var kAH = 0                       // k.aH
     override var kAR = 0                       // k.aR — chase row
     override val kBu: Int get() = level.worldH // k.bu — level height px
@@ -544,6 +552,12 @@ class Level0World(
     override var kF: Entity? = null              // k.F
     override var iCe = false                     // i.ce static
     override var iBD = false                     // i.bD static
+    override var iBB = false                     // i.bB static (revive arm)
+    override var iBC = false                     // i.bC static
+    override var iBE = 0                         // i.bE static
+    override var iBF = 0                         // i.bF static
+    override var iBG = -1                        // i.bG static
+    override var iCF = false                     // i.cF static
     override var iBQ = 0                         // i.bQ static
     override var iCO: Entity? = null             // i.cO mount-align link
     override var iCg: Entity? = null             // i.cg
@@ -895,6 +909,8 @@ class Level0World(
             else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
             else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
             else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
+            else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
+            else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
             else npcFsm.tick(n, player)
         }
         if (pendingRemove.isNotEmpty()) {

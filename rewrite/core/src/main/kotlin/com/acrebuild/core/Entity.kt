@@ -197,6 +197,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var wpBt: Waypoint? = null     // i.bt — current chain waypoint (c.a)
     var wpF: Waypoint? = null      // i.F — bound companion waypoint (c.a(Z[5]))
     var runnerG = false            // i.G — ax56 pattern-done flag (ay())
+    var projB = false              // i.b — explode-on-contact flag (ba())
+    var projK = false              // i.k — lobbed-arc phase flag (ba())
+    var cHWaypoints: Array<IntArray>? = null  // i.cH — homing waypoint
+                                              // table on the owner (af)
+    var iP = 0                     // i.p — ax32 sub-type (bc() anim pick)
     var cIDone = false             // i.cI — attack-script done (bool)
     var cJDone = false             // i.cJ — transition ack (bool)
     var cHGrid: Array<IntArray>? = null   // i.cH — int[7][2] knife targets
@@ -3829,6 +3834,7 @@ interface LevelCellSource {
     var kR: Int
     /** `k.aE`/`k.aH` — director timers (aE>0 → `aH=80` at arming). */
     var kAE: Int
+    var kAF: Int get() = 0; set(_) {}
     var kAH: Int
     /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
     var kAR: Int
@@ -3961,6 +3967,12 @@ interface LevelCellSource {
      *  arg-ops write (i.java:153-204). */
     var iCe: Boolean get() = false; set(_) {}
     var iBD: Boolean get() = false; set(_) {}
+    var iBB: Boolean get() = false; set(_) {}
+    var iBC: Boolean get() = false; set(_) {}
+    var iBE: Int get() = 0; set(_) {}
+    var iBF: Int get() = 0; set(_) {}
+    var iBG: Int get() = -1; set(_) {}
+    var iCF: Boolean get() = false; set(_) {}   // i.cF — hit-confirm latch
     var iBQ: Int get() = 0; set(_) {}
     var iCO: Entity? get() = null; set(_) {}
     var iCg: Entity? get() = null; set(_) {}

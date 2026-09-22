@@ -94,6 +94,7 @@ CLIPS = {
     "clip19": ("pack-3", "entry-019-marker-003"),  # ax54 waypoint runner (bi[54]=19)
     "clip36": ("pack-3", "entry-036-marker-003"),  # ax30 runner (bi[30]=36)
     "clip40": ("pack-3", "entry-040-marker-003"),  # ax24 projectile (bi[24]=40)
+    "clip20": ("pack-3", "entry-020-marker-003"),  # ax58 lever/counterweight (bi[58]=20)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
