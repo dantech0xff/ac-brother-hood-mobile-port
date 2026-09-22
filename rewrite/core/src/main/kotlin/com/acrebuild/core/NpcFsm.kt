@@ -2194,7 +2194,7 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 if (e.S == 22 &&
                     e.e(world, e.W[2] / 20, e.W[3] / 20) == 20 &&
-                    e.W[3] <= player.W[1]) {
+                    e.W[3] > player.W[1]) {
                     e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 }
                 if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)

@@ -2028,6 +2028,30 @@ class Level0WorldTest {
         assertTrue(e in w.pendingRemove, "W==null -> k.c(this)")
     }
 
+    @Test fun `S22 rests to S25 only when marker bottom hangs below player head`() {
+        // bb() L138: i(25) iff cell(W2/20,W3/20)==20 && W[3] > aS.W[1].
+        // OOB x<0 reads as cell 20, so a negative-x marker hits the ceiling
+        // case with W[3] the only variable.
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes()
+        val below = requestMarkerAt(w, 22, -40, 200)
+        below.W[0] = -50; below.W[1] = 190; below.W[2] = -30; below.W[3] = 210
+        w.npcFsm.tickRequestMarker(below, p, Pad())
+        assertEquals(25, below.S, "W[3]=210 > W[1]=${p.W[1]} -> i(25)")
+        assertEquals(0, below.ag); assertEquals(0, below.ah)
+
+        val w2 = world()
+        w2.npcs.clear()
+        val p2 = w2.player
+        p2.setPositionPx(300, 150); p2.refreshBoxes()
+        val above = requestMarkerAt(w2, 22, -40, 80)
+        above.W[0] = -50; above.W[1] = 60; above.W[2] = -30; above.W[3] = 80
+        w2.npcFsm.tickRequestMarker(above, p2, Pad())
+        assertEquals(22, above.S, "W[3]=80 <= W[1]=${p2.W[1]} -> stays")
+    }
+
     @Test fun `S15 anim end runs the rest sweep into S9`() {
         val w = world()
         w.npcs.clear()
