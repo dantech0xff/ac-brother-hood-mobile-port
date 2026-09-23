@@ -1931,6 +1931,7 @@ class Level0World(
         23, 28 -> if (kEc == 121) Pair("", d0(17))
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         else -> Pair(null, null)
     }
@@ -2125,6 +2126,38 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
+     *  `bA` save array; `kBA` stores one byte per slot so this is
+     *  `kBA[i] | kBA[i+1]<<8`. */
+    fun scoreAt(i: Int): Int =
+        ((kBA[i] and 255) or ((kBA[i + 1] and 255) shl 8)).toShort().toInt()
+
+    /** `F()` (k.java:2338-2408, proven) — the jc4 high-scores screen:
+     *  `a(30,d(0,5))` title bar (renderer), `cU` difficulty page with
+     *  left/right + chevron-tap cycling, `bw` scroll (verbatim quirk —
+     *  the down arm tests `bw<0`, dead), footer + `v(131072)` back. */
+    private fun menuF() {
+        kCb = true
+        footerQ()                                     // `a("",d(0,17))` (:2371)
+        if (pad.v(Pad.M_UP)) {                        // `v(16388)` (:2373)
+            if (kBw > 0) { kBw--; z(23) }
+            return
+        }
+        if (pad.v(Pad.M_DOWN)) {                      // `v(33024)` (:2381)
+            if (kBw < 0) { kBw++; z(23) }             // verbatim dead arm
+            return
+        }
+        if (pad.v(Pad.M_RIGHT) || pointerDownIn(240, 15, 50, 80)) {
+            kCU = (kCU + 1) % 3; z(23); return        // (:2388)
+        }
+        if (pad.v(Pad.M_LEFT) || pointerDownIn(110, 15, 50, 80)) {
+            if (--kCU < 0) kCU = 2; z(23); return     // (:2395)
+        }
+        if (pad.v(Pad.M_CYCLE)) {                     // `v(131072)` (:2404)
+            stateL(3); bannerK(4); z(30)
+        }
+    }
+
     /** `ae()` (k.java:6204-6228, proven) — the jc23/28 screen: the
      *  `eC==121` wipe-confirm arm (own title at y=120 + back-only
      *  dispatch), else `d(93,120,214)` + bW title at y=80 + footer +
@@ -2200,6 +2233,7 @@ class Level0World(
                 menuL(kEy)
                 menuQ(pressY)
             }
+            4 -> menuF()                           // F() (:2338, proven)
             23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
             30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }

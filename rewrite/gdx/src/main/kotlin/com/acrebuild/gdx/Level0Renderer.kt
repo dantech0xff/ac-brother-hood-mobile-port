@@ -451,6 +451,31 @@ class Level0Renderer {
         drawObject(pack, cell, anchorX, anchorY, dX)
     }
 
+    /** `F()` draw surface (:2338-2371) — `a(30,d(0,5))` title bar,
+     *  subtitle, chevrons, 8 score rows + TOTAL. */
+    private fun scoreScreen(world: Level0World) {
+        drawFrame(95, 1, 0, 200, 30, 0)               // `a(30,str)` A[3] pieces
+        drawFrame(95, 2, 0, 120, 30, 0)
+        fillAr(87, 39, 228, 183, -14274509)           // `j.b(87,i+9,228,183)`
+        fontW.l(0)
+        world.d0(5)?.let { drawText(it, 200, 30, 3, pack = 91) }
+        world.d0(35 + world.kCU)?.let { drawText(it, 200, 55, 3, pack = 91) }
+        val lf = if (world.pointerDownIn(110, 15, 50, 80)) 40 else 36
+        val rf = if (world.pointerDownIn(240, 15, 50, 80)) 39 else 35
+        drawFrame(93, lf, 0, 160, 55, 0)
+        drawFrame(93, rf, 0, 240, 55, 0)
+        for (i in 0 until 8) {
+            val y = 75 + i * 14
+            drawText("${world.d0(10)} ${world.kBw + i + 1}", 107, y, 20, pack = 91)
+            val s = world.scoreAt(81 + (world.kCU shl 4) + ((world.kBw + i) shl 1))
+            drawText(if (s > 0) s.toString() else "-", 293, y, 24, pack = 91)
+        }
+        var tot = 0
+        for (i2 in 0 until 8) tot += world.scoreAt(81 + (world.kCU shl 4) + (i2 shl 1))
+        world.d0(23)?.let { drawText(it, 107, 197, 20, pack = 91) }
+        drawText(if (tot > 0) tot.toString() else "-", 293, 197, 24, pack = 91)
+    }
+
     fun render(world: Level0World) {
         fbo.begin()
         ScreenUtils.clear(0.07f, 0.07f, 0.09f, 1f)
@@ -510,6 +535,7 @@ class Level0Renderer {
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
         // :5903-6150, proven): `b(x,y,w,z2,z3)` panel + `bW` prompt/title +
         // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
+        if (world.jC == 4) scoreScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],
