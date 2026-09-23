@@ -1062,26 +1062,26 @@ class Level0Renderer {
         world.buildDrawList()
         for (i32 in 0 until world.drawCount) {
             val e = world.drawList[i32]!!
-            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(e.ad!!, camX, camY)
+            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(world, e.ad!!, camX, camY)
             if (e.ax == 21 && e.S == 1 && e.ad != null) {
                 if (world.kC == null || world.dlgU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
                 e.ad!!.advanceAnim()
             }
-            drawEntity(e, camX, camY)
+            drawEntity(world, e, camX, camY)
             if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
-                drawEntity(e.ad!!, camX, camY); e.ad!!.advanceAnim()
+                drawEntity(world, e.ad!!, camX, camY); e.ad!!.advanceAnim()
             }
             // ag()→ah() ghost-trail draw — `a` card producer unported
             // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
-                drawEntity(kE, camX, camY); kE.advanceAnim()
+                drawEntity(world, kE, camX, camY); kE.advanceAnim()
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
-                drawEntity(ab, camX, camY)
+                drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
 
@@ -1625,15 +1625,104 @@ class Level0Renderer {
     }
 
     /** `b.java:907` 8-arg path: draw the frame's module at anchor - offset. */
-    private fun drawEntity(e: Entity, camX: Int, camY: Int) {
+    /** `k.bo[bL]` (k.java:274, proven) — per-area clip-0
+     *  (palette, remapTable) pairs for ax0 entities. */
+    private val boArt = arrayOf(
+        intArrayOf(0, -1), intArrayOf(3, 1), intArrayOf(5, 2), intArrayOf(6, 3))
+
+    private fun drawEntity(world: Level0World, e: Entity, camX: Int, camY: Int) {
         val clip = e.clip ?: return
         if (e.S < 0 || e.S >= clip.animCount()) return
         val pack = clipPackOf(clip) ?: return
+
+        // i.a(Graphics) art-select preamble (i.java:3040-3180, proven):
+        // `aa.l(i)` palette select + `aa.a(i)` az-remap select + `aa.g`
+        // palette alpha, chosen per ax before the (P&128)==0 blit.
+        var palette = e.palette
+        var alpha = 255
+        val last = e.T >= clip.frameCount(e.S) - 1
+        when {
+            e.ax == 45 -> palette = e.Z.getOrElse(0) { 0 }
+            e.ax == 30 || e.ax == 32 -> {
+                palette = 0
+                if (e.cGCount > 0) {
+                    e.cGCount--
+                    if (e.cGCount % 2 != 0) palette = 1
+                }
+            }
+            e.ax == 11 -> palette =
+                if (e.Z.getOrElse(0) { 0 } == 1 || e.Z.getOrElse(0) { 0 } == 2) 1 else 0
+            e.ax == 47 || e.ax == 17 || e.ax == 73 -> palette = 0
+            e.ax == 68 -> palette = if (e.af != null && e.af!!.ax == 30) 1 else 0
+            (e.ax == 0 || e.ax == 9 || e.ax == 4 ||
+             (e.ax == 67 && e.Z.getOrElse(0) { 0 } == 11)) && !world.bh3 -> {
+                if (world.iCe) palette = 1
+                else if (e.ax == 9) {
+                    if (e.S == 21 || e.S == 22) e.ad = null
+                    palette = when (world.kAj) {
+                        2 -> 5; 3 -> 6; 5 -> 7; 6 -> 4; else -> 0
+                    }
+                } else palette = 0
+                if (e.ax == 9 && e.Z.getOrElse(2) { 0 } == 47) {
+                    // candle entity (i.java:3079-3115): S4/S5 need k.bK
+                    if (e.S == 4 || e.S == 5) {
+                        if (!world.kBK) return
+                        palette = 5
+                    }
+                    if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
+                    if (world.iCe && e.S == 2 && last) e.P = e.P or 64
+                    if (e.S == 5) {
+                        e.ak = camX; e.al = camY
+                        if (last) e.P = e.P or 64
+                        if (e.aC > 0 && (e.P and 64) != 0) {
+                            alpha = (e.aC * 255) / 10
+                            e.aC--
+                            if (e.aC <= 0) { world.removeEntity(e); return }
+                        }
+                    }
+                } else if (e.ax == 0 && world.kBL in boArt.indices) {
+                    palette = boArt[world.kBL][0]
+                    e.remapTable = boArt[world.kBL][1]
+                }
+            }
+            e.ax == 43 -> {
+                // vision-split (i.java:3132-3143): draw only OUTSIDE cv's
+                // x-span — left of W[0] when ak <= mid, right of W[2] else.
+                val cv = world.cv
+                if (cv != null) {
+                    if (e.ak <= (cv.W[0] + cv.W[2]) shr 1) {
+                        clipScissor(0, 0, cv.W[0] - camX, 240)
+                    } else {
+                        clipScissor(cv.W[2] - camX, 0, 400 - (cv.W[2] - camX), 240)
+                    }
+                }
+            }
+            e.ax == 79 -> { e.remapTable = e.Z.getOrElse(1) { 0 }
+                            palette = e.Z.getOrElse(0) { 0 } }
+            e.ax == 46 -> e.remapTable =
+                if (e.Z.getOrElse(6) { 0 } == 0) e.Z.getOrElse(7) { 0 } else -1
+            e.ax == 29 -> {
+                if (world.iBy == 2 || world.iBy == 3) {
+                    e.remapTable = 0
+                    // `aa.j[0] = j[1 or 4]` palette-row blink every 3rd
+                    // j.g → our -palette-NN slots (inferred mapping).
+                    if (e.S != 28 && e.S != 20 && e.S != 4 && e.S != 24 &&
+                        e.S != 25 && e.S != 26 && e.S != 22) {
+                        palette = if (world.jG % 3L == 0L) 1 else 4
+                    }
+                } else e.remapTable = -1
+            }
+            e.ax == 61 -> palette = 0
+            e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7
+        }
+
         val fd = clip.frameDraw(e.S, e.T, e.drawFlags())
-        // screenX = ak - camX - dx ; screenY = al - camY - dy (b.java:907
-        // i3-i10 / i4-i11); the object resolves through the composite path.
-        drawObject(pack, fd.module, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
-                   palette = e.palette)
+        val obj = clip.remap(e.remapTable, fd.module)      // az[aA][i11]
+        if (alpha != 255) batch.setColor(1f, 1f, 1f, alpha / 255f)
+        drawObject(pack, obj, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
+                   palette = palette)
+        if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
+        if (e.ax == 43 && world.cv != null) clipReset()
     }
 
     private fun clipPackOf(clip: Clip): Int? =

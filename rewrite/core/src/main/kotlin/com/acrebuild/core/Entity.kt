@@ -29,6 +29,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var homeX: Int = 0               // record home (re-materialize target)
     var homeY: Int = 0
     var palette = 0                  // aH — clip palette slot (b.l(int))
+    var remapTable = -1              // aA — az[] module-remap slot (b.a(int))
+    var paletteAlpha = 255           // g(aH,alpha) — palette alpha (b.g)
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
