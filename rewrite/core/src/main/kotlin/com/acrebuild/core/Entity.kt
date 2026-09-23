@@ -344,6 +344,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
     }
 
+    /** `i.K()` (i.java:5716, proven): the companion release — while the
+     *  player's anim counter `aS.T <= 2`, map player S {67→0, 68→1, 69→2,
+     *  106→3} onto this held entity and clear its hide flag (`P&=-129`).
+     *  Called by the attack entry (g.java:4370) and the combo chain
+     *  (g.java:2495); counterpart to `i()`'s `E.P|=128` hide. */
+    fun heldRelease(p: Entity) {
+        if (p.T > 2) return
+        when (p.S) {
+            67 -> { setAnim(0); P = P and -129 }
+            68 -> { setAnim(1); P = P and -129 }
+            69 -> { setAnim(2); P = P and -129 }
+            106 -> { setAnim(3); P = P and -129 }
+        }
+    }
+
     /** `i.a(anim,x,y)` (i.java:9810, proven): spawn the clip-9 ax14 marker
      *  `anim` into `ae` (occupied `ae` → no-op); az=302, av=false. */
     fun spawnMarker(w: LevelCellSource, anim: Int, x: Int, y: Int) {
@@ -354,9 +369,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /**
      * `i.C()` (i.java:1955, proven): the victim hit-react dispatcher,
      *  keyed on the attacker's anim `aS.S`. Dead arm first (`aB<=0`), then
-     *  the weaken line `aB <= bu[au]`, then per-type reacts. `k.E` (the
-     *  held-entity static at i.java:2767) is unported — ax73's `E.P|=128`
-     *  write is dropped (flagged inferred). */
+     *  the weaken line `aB <= bu[au]`, then per-type reacts. */
     fun hitReact(w: LevelCellSource): Boolean {
         val p = w.player
         if (aB <= 0) {
@@ -379,7 +392,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             Z[0] = 3; facePlayer(w); setAnim(155)
             aq = ak + if (av) -60 else 60
             p.setAnim(8)
-            // k.E.P |= 128 — k.E held-entity link unported
+            w.kE?.let { it.P = it.P or 128 }         // k.E.P |= 128
             return true
         }
         if (ax == 17) {
@@ -2542,7 +2555,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 val v = standingOn
                 if (S == 79 && v != null && v.ax == 51 && v.aD != 0) return
                 setAnim(if (S == 79) 81 else 67)
-                // k.E?.K() — held-entity release unported
+                w.kE?.heldRelease(this)              // k.E?.K() (g.java:4370)
             }
             8 -> {
                 if (S != 79) {
@@ -3140,7 +3153,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
             when (r0.ax) {
                 54 -> {
                     if (afAx == 54 || afAx == 30) continue
-                    r0.ad?.let { if (overlapI(it.W, X)) it.setAnim(2) /* d(8) */ }
+                    r0.ad?.let { a ->
+                        if (overlapI(a.W, X)) {
+                            a.setAnim(2)
+                            spawnDebris24(w, 8, a.ak, a.al)   // d(8, ak, al)
+                        }
+                    }
                     r0.setAnim(10); w.statTally(r0.aw); setAnim(9); r6 = true
                     break@scan
                 }
@@ -3150,7 +3168,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     if (r0.aB <= 0) {
                         r0.cGCount = 0; r0.setAnim(10)
                         w.statTally(r0.aw); setAnim(9)
-                        r0.ad?.setAnim(2)           // + d(8) floatie unported
+                        r0.ad?.let { a ->
+                            a.setAnim(2)
+                            spawnDebris24(w, 8, a.ak, a.al) // d(8, ak, al)
+                        }
                     }
                     r6 = true; break@scan
                 }
@@ -3315,6 +3336,20 @@ open class Entity(val ax: Int, var clip: Clip?) {
         r0.setAnim(anim)
         w.queueInsert(r0)
         return r0
+    }
+
+    /** `i.d(int,int,int)` (i.java:16745, proven): spawn an ax24
+     *  clip-40 debris spark — `a(24,40,anim,201)`, `av=false`, position
+     *  `(x,y)` with N/O matching, zeroed velocity, queued via `k.b`. */
+    fun spawnDebris24(w: LevelCellSource, anim: Int, x: Int, y: Int) {
+        val e = Entity(24, w.clipFor(40))
+        e.av = false
+        e.N = x shl 8; e.O = y shl 8
+        e.ak = x; e.al = y
+        e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+        e.setAnim(anim); e.az = 201
+        e.refreshBoxes()
+        w.queueInsert(e)
     }
 
     /** `i.d(int,x,y,az)` (i.java:11076, proven): ax61/clip71 child —

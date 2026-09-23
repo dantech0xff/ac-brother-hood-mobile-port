@@ -2891,6 +2891,7 @@ class Level0World(
             if (kAj < kEfArr.size && kEfArr[kAj]) trailAb()  // ef[aj]
             stateL(8); z(23)
             missionF(kAj)                            // F(aj)
+            if (kBg >= 0) missionInit()              // bG>=0 → B()
         }
     }
 
@@ -3096,6 +3097,18 @@ class Level0World(
      *  else `ee[aj]` when != -1. */
     private fun missionInit() {
         if (kAJ == 1) z(9) else if (kEE[kAj] != -1) z(kEE[kAj])
+    }
+    /** `k`'s suspend/resume music arm (k.java:5817-5830, proven):
+     *  pause → `bG = !e.a()||fj>=10 ? -1 : bH` (our queue is always
+     *  available → `bG = kFi`, the pending-track slot); resume →
+     *  `bG >= 0` replays `z(bG)`, or stashes `fi = bG` while `j.c==14`.
+     *  (Verbatim quirk kept: the resume gate `bG==1 || bG!=-1` collapses
+     *  to `bG != -1`.) */
+    fun suspendAudio() { kBg = kFi }
+    fun resumeAudio() {
+        if (kBg < 0) return
+        if (jC != 14) z(kBg) else kFi = kBg
+        kBg = -1
     }
     private fun inputReset() { pad.edge = 0 }        // v() — input reset (inferred)
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's

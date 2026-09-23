@@ -604,6 +604,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.R == -1) p.R = if ((rng?.nextInt() ?: 0) % 2 != 0) 184 else 183
         } else if (pad.v(Pad.M_CONTEXT)) {
             comboMatch(p, CJ, true, pad); comboMatch(p, CK, false, pad)
+            // g.java:2495: aj() then k.E?.K() — companion release on the
+            // combo chain (same pose map as the attack entry).
+            world.kE?.heldRelease(p)
         }
         if (p.R != -1 && (p.cl || p.animFinished())) {
             p.setAnim(p.R); p.R = -1; p.cl = false

@@ -11502,7 +11502,11 @@ class Slice111Test {
         assertEquals(30, w.kAx); assertEquals(44, w.kAy); assertEquals(7, w.kAN,
             "ax=dB; ay=dC; aN=dF (:1075-1077)")
         assertEquals(120, w.kDz); assertEquals(0, w.kAw)
-        assertEquals(23, w.audioTrack, "z(23) on the l(8) transition")
+        // l(8) fires z(23), then the play-entry tail `bG>=0 → B()`
+        // (k.java:5229) starts mission music ee[aj]=5 — audioTrack is
+        // the LAST z() issued.
+        assertEquals(w.kEE[w.kAj], w.audioTrack,
+            "bG>=0 → B() starts ee[aj] on play entry")
     }
 
     @Test fun `jc9 play-strip tap also enters play`() {
