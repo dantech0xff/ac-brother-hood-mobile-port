@@ -758,6 +758,16 @@ class Level0World(
     var kEe = 0                        // k.eE — stats width
     var kEf = 0                        // k.eF
     var kFo = 0                        // k.fO
+    var kFC = 0                        // k.fC — af() title fade (20→255)
+    var kFQ = 1                        // k.fQ — af() unlocked row count
+    var kBL = 0                        // k.bL — af() browse cursor
+    var kFR = -1                       // k.fR — af() pending-nav timer
+    /** `k.fP` (k.java:344) — the 4 medal-count thresholds. */
+    val kFP = intArrayOf(0, 2, 5, 7)
+    /** renderer's `fK` row-anim rearm flag — af() nav `fK.a(21,1)`:
+     *  set to a state index, renderer arms+resets to -1 (`inferred`
+     *  plumbing — the orig draws+animates in one proc). */
+    var menuFkArm = -1
     var kEy = 0                        // k.ey — eA[bv].length
     var kEd = 0                        // k.eD — banner ticker
     var kBv = 0                        // k.bv — banner index (K() arg)
@@ -1824,6 +1834,7 @@ class Level0World(
         19 -> intArrayOf(14, 47, 180)
         23, 28 -> intArrayOf(93, 120, 214)
         29 -> intArrayOf(93, 86, 214)
+        30 -> intArrayOf(93, 46, 214)   // af() `d(93,46,214)` (:6254)
         else -> intArrayOf(93, 67, 214)
     }
     /** z3 = the 40px title strip: verbatim true for jc12/13 (`b(…,true,
@@ -1918,6 +1929,7 @@ class Level0World(
         23 -> Pair(d0(79), "")
         28 -> Pair(d0(79), if (kBv == 0) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         else -> Pair(null, null)
     }
     /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
@@ -2111,6 +2123,50 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
+     *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
+     *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
+    private fun menuAf() {
+        if (kFo == 0) {                              // init arm (:6233)
+            kFC = 20; kFE = 0; kFQ = 0
+            kDa = if (kDt || kBA[69] != 0) 8 else kBA[14] + 1
+            for (i in 0 until 4) if (kDa > kFP[i]) kFQ++
+            kEy = kFQ; kBL = 0; kFR = -1; kFo = 1
+        }
+        // `d(93,46,214)` draw + `fC` fade (:6254-6261) — renderer reads
+        if (kFC > 0 && kFC != 255) { kFC += 20; if (kFC >= 255) kFC = 255 }
+        if (kFR != -1) {
+            if (kFE > 20) kFE -= 20 else kFR = -1
+        }
+        // `a(d(0,79),d(0,17))` — footerQ already ran in menuQ? No — af()
+        // calls its own a() → arm the footer rects here instead.
+        footerQ()
+        if (pad.v(Pad.M_CONTEXT)) {                  // `v(327712)` (:6269)
+            if (kFF == 20) stateL(20) else stateL(9)
+            kFF = 0; z(23); return
+        }
+        if (pad.v(Pad.M_CYCLE)) {                    // `v(131072)` (:6279)
+            if (kFF == 19) { kFo = 3; stateL(19) } else stateL(2)
+            kFF = 0; z(30); return
+        }
+        if (kFQ > 1) {                               // browse nav (:6292)
+            if (pad.v(Pad.M_UP)) {
+                kFR = kBL
+                if (--kBL < 0) kBL = 0
+                else { kFC = 20; kFE = 255; kBw = kBL
+                       kFH = 0; kFI = 1; menuFkArm = 21 }
+                if (audioTrack == -1) z(23)
+                return
+            }
+            if (pad.v(Pad.M_DOWN)) {
+                kFC = 20; kFE = 255; kFR = kBL
+                if (++kBL >= kFQ) kBL = kFQ - 1
+                else { kBw = kBL; kFH = 0; kFI = 1; menuFkArm = 21 }
+                if (audioTrack == -1) z(23)
+            }
+        }
+    }
+
     private fun menuFrame(pressY: Int): Boolean {
         when (jC) {
             12, 13 -> {
@@ -2123,6 +2179,7 @@ class Level0World(
                 menuL(kEy)
                 menuQ(pressY)
             }
+            30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)

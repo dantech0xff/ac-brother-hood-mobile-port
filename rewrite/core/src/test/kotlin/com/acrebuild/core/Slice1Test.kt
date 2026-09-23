@@ -9989,3 +9989,106 @@ class Slice88Test {
         assertEquals(2, w.jC)
     }
 }
+
+/** Slice 89 — `af()` jc30 medal/level browse screen (k.java:6230-6320,
+ *  proven). */
+class Slice89Test {
+
+    @Test fun `af init counts unlocked rows and resets the cursor`() {
+        val w = world()
+        w.kBA[14] = 3                              // 3+1 = 4 unlocked → da=4
+        w.kDt = false; w.kBA[69] = 0
+        w.stateL(30)                               // bannerK(5); kFo=0
+        w.tick(emptyList())                        // af() fO==0 arm runs
+        assertEquals(4, w.kDa)
+        // fQ = #i in 0..3 with da > fP[i]={0,2,5,7} → da=4 > 0,2 → fQ=2
+        assertEquals(2, w.kFQ)
+        assertEquals(2, w.kEy)
+        assertEquals(0, w.kBL)
+        assertEquals(-1, w.kFR)
+        assertEquals(1, w.kFo)
+        assertEquals(listOf(93, 46, 214), w.menuPanelRect().toList())
+    }
+
+    @Test fun `af da is 8 when difficulty-locked or data wiped`() {
+        val w = world()
+        w.kDt = true
+        w.stateL(30)
+        w.tick(emptyList())
+        assertEquals(8, w.kDa)
+        assertEquals(4, w.kFQ)                     // 8 > all thresholds
+    }
+
+    @Test fun `af title fade climbs 20 to 255`() {
+        val w = world()
+        w.stateL(30)
+        w.tick(emptyList())                        // init sets fC=20 then
+        assertEquals(40, w.kFC)                    // the same frame fades +20
+        w.tick(emptyList())
+        assertEquals(60, w.kFC)
+        repeat(20) { w.tick(emptyList()) }
+        assertEquals(255, w.kFC)                   // clamps at 255
+    }
+
+    @Test fun `af browse nav clamps and rearms`() {
+        val w = world()
+        w.kBA[14] = 7; w.kDt = false; w.kBA[69] = 0   // da=8 → fQ=4
+        w.stateL(30)
+        w.audioStop()
+        w.tick(emptyList())                        // init: fQ=4
+        // UP at bL=0 clamps without the rearm chain
+        w.pad.queuePress(Pad.M_UP)
+        w.tick(emptyList())
+        assertEquals(0, w.kBL)
+        assertEquals(0, w.kFR)
+        // DOWN ×2 walks the cursor with the fade+shimmer rearm
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(1, w.kBL)
+        assertEquals(1, w.kBw)                     // `bw=bL` on a real move
+        assertEquals(255, w.kFE)
+        assertEquals(20, w.kFC)
+        assertEquals(21, w.menuFkArm)
+        w.menuFkArm = -1                           // renderer consumed it
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(2, w.kBL)
+        // DOWN past the end clamps at fQ-1 with no rearm
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(3, w.kBL)
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(3, w.kBL)
+    }
+
+    @Test fun `af confirm routes on fF`() {
+        val w = world()
+        w.kFF = 20
+        w.stateL(30)
+        w.tick(emptyList())
+        w.pad.queuePress(Pad.M_CONTEXT)
+        w.tick(emptyList())
+        assertEquals(20, w.jC)                     // fF==20 → l(20)
+        assertEquals(0, w.kFF)
+    }
+
+    @Test fun `af back routes on fF`() {
+        val w = world()
+        w.kFF = 19
+        w.stateL(30)
+        w.tick(emptyList())
+        w.pad.queuePress(Pad.M_CYCLE)
+        w.tick(emptyList())
+        assertEquals(19, w.jC)                     // fF==19 → fO=3 + l(19)
+        assertEquals(3, w.kFo)
+        assertEquals(0, w.kFF)
+    }
+
+    @Test fun `af footer arms right pill to back`() {
+        val w = world()
+        w.stateL(30)
+        w.tick(emptyList())
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+    }
+}
