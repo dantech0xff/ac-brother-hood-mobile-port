@@ -15337,3 +15337,48 @@ class Slice161Test {
         assertNotEquals(1536, w.player.aj)     // no fling arc
     }
 }
+
+class Slice162Test {
+
+    private fun tr(cond: Int, uid: Int) = Level0World.ScrollTrigger(
+        intArrayOf(4900, 4900, 5100, 5100), intArrayOf(0, 0, 0, 0),
+        mask = 15, mode = 0, linkCond = cond, linkUid = uid)
+
+    @Test fun `ax37 linkCond3 removes trigger when link dead`() {
+        val w = world()
+        val base = w.scrollTriggers.size
+        w.scrollTriggers += tr(3, 4242)
+        w.npcs += Entity(11, null).apply { aw = 4242; aB = 0 }   // dead link
+        w.fireScrollTriggers()
+        assertEquals(base, w.scrollTriggers.size)              // k.n() + k.c(this)
+    }
+
+    @Test fun `ax37 linkCond3 keeps trigger while link alive`() {
+        val w = world()
+        val base = w.scrollTriggers.size
+        w.scrollTriggers += tr(3, 4244)
+        w.npcs += Entity(11, null).apply { aw = 4244; aB = 1 }
+        w.fireScrollTriggers()
+        assertEquals(base + 1, w.scrollTriggers.size)
+    }
+
+    @Test fun `ax37 linkCond1 flagged link skips claim`() {
+        val w = world()
+        w.player.setPositionPx(5000, 5000)
+        w.player.refreshBoxes()
+        w.scrollTriggers += tr(1, 4245)
+        w.npcs += Entity(80, null).apply { aw = 4245; P = P or 32 }
+        w.fireScrollTriggers()
+        assertNull(w.kAh)                              // gate skipped claim
+    }
+
+    @Test fun `ax37 linkCond1 unflagged link allows claim`() {
+        val w = world()
+        w.player.setPositionPx(5000, 5000)
+        w.player.refreshBoxes()
+        w.scrollTriggers += tr(1, 4246)
+        w.npcs += Entity(80, null).apply { aw = 4246 }
+        w.fireScrollTriggers()
+        assertNotNull(w.kAh)
+    }
+}
