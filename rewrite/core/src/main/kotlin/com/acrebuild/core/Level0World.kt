@@ -258,11 +258,8 @@ class Level0World(
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
     override var aq = 0              // k.aq — global tally (ax4 S5 += m)
-    override var shake = 0           // k.az side of k.s() (k.java:5338;
-                                     // the dE threshold ladder is unported)
     override val sfxLog = mutableListOf<Int>()  // k.A(int) — audio unported
     override fun sfx(id: Int) { sfxLog += id }
-    override fun shake() { shake++ } // k.s()
 
     /** `k.O` — camera left edge (the pickup pin anchor, i.java:9837;
      *  writable — op11/12 camera arms lerp it). */
