@@ -78,6 +78,11 @@ class Level0World(
             64 to 22,     // ax64 harrier — bi[64]=22; pack-3 has no
                           // entry-022 → clipless (J(22)=null in the original)
             13 to 61,     // ax13 rope/vine (bi[13]=61, proven)
+            35 to 62,     // ax35 scripted multi-tool (bi[35]=62, proven — the
+                          // level-0 record spawns S=6 at ak=5816 and self-culls
+                          // on its first tick via the L186 off-camera march arm
+                          // `ak > kO+420 -> k.c` — same as the original; only
+                          // the spawn entry was missing, bQ()/initAx35 ported)
             32 to 36,     // ax32 (bi[32]=36 — same clip as ax30, proven)
             68 to 26,     // ax68 (bi[68]=26 — generic small-item clip, proven)
             22 to 14,     // ax22 capture zone (bi[22]=14, proven)
