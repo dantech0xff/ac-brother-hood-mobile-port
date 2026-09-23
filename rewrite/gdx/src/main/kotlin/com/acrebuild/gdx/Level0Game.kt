@@ -143,11 +143,13 @@ class Level0Game : ApplicationAdapter() {
 
     override fun pause() {
         Gdx.app.log(TAG, "pause at tick=${world.tickIndex}")
+        world.suspendAudio()                     // bG = kFi (k.java:5817)
         super.pause()
     }
 
     override fun resume() {
         accumulatorMs = 0
+        world.resumeAudio()                      // bG>=0 → z(bG)/fi (k.java:5795)
         super.resume()
     }
 
