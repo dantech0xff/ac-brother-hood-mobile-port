@@ -13523,7 +13523,7 @@ class Slice138Test {
  *  i.ct[] card frames; aB progress vs Z[2]; aA script uid Z[4]→Z[3];
  *  consumed reset P|=8192 → self-remove; claim bind h/k(k.s(aA)). */
 class Slice139Test {
-    class S55World(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
+    open class S55World(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
         val removed = mutableListOf<Entity>()
         val sfxCalls = mutableListOf<Int>()
         override fun removeEntity(e: Entity) { removed += e }
@@ -13697,5 +13697,170 @@ class Slice139Test {
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertEquals(0, z.aB, "no scan — n!=0 returned")
         assertTrue(Entity.gE, "overlap still latches gE")
+    }
+}
+
+// ============================================================ slice 140
+// ax10 S0 camera-focus zone (L5ac-L5e0) + S2 flag-apply trigger
+// (L13a1-L14a2) + initTrigger's per-S record arms (L59/L95).
+
+class Slice140Test {
+    class S140World(cell: Int = 0) : Slice139Test.S55World(cell) {
+        override var camAf = 0
+        override var camAg = 0
+        private val cam = intArrayOf(0, 0, 400, 240)
+        override val camRect: IntArray get() = cam
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+    }
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 6; p.W[1] = al - 16; p.W[2] = ak + 6; p.W[3] = al
+        return p
+    }
+
+    private fun zone(s: Int, cfg: (Entity) -> Unit = {}): Entity {
+        val z = Entity(10, null); z.S = s
+        z.ak = 200; z.al = 120
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        cfg(z); return z
+    }
+
+    @Test fun `S0 overlap publishes focus offsets L5c7`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(10, w.camAf); assertEquals(20, w.camAg)
+    }
+
+    @Test fun `S0 leave clears both offsets L5e0`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        val p = mk(200, 120)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        p.ak = 2000; p.W[0] = 1994; p.W[2] = 2006
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, w.camAf); assertEquals(0, w.camAg)
+    }
+
+    @Test fun `S0 zero params keep prior offsets L5d1`() {
+        val w = S140World(); w.camAf = 55; w.camAg = 99
+        val z = zone(0) { it.pv = 0; it.aG = 0 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(55, w.camAf, "p==0 → af write skipped")
+        assertEquals(99, w.camAg, "aG==0 → L1ec7 bare return")
+    }
+
+    @Test fun `S0 offscreen zone clears despite overlap`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        z.W[0] = 900; z.W[2] = 940                          // outside camRect
+        w.camAf = 7; w.camAg = 8
+        // player.W still overlaps the moved zone
+        val p = mk(920, 120)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, w.camAf); assertEquals(0, w.camAg)
+    }
+
+    @Test fun `S2 Z0==1 no overlap holds fire L13b5`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 1; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(900, 500), Pad())
+        assertEquals(0, t.P and 512, "no overlap → no mask")
+        assertTrue(w.removed.isEmpty(), "zone survives")
+    }
+
+    @Test fun `S2 Z0==1 overlap applies mask and removes L13f5`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 1; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 513
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(513, t.P and 513)
+        assertTrue(t.av, "bit0 → av=true")
+        assertSame(z, w.removed.last(), "one-shot k.c(this)")
+    }
+
+    @Test fun `S2 Z0==2 onscreen guard holds the gate L13c5`() {
+        val w = S140World()
+        val guard = Entity(11, null); guard.aw = 9
+        guard.ak = 210; guard.al = 120
+        guard.Y[0] = 200; guard.Y[1] = 100; guard.Y[2] = 220; guard.Y[3] = 140
+        val t = Entity(11, null); t.aw = 7
+        w.npcs += guard; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 2; it.Z[1] = 7; it.Z[2] = 9; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(0, t.P and 512, "guard visible → blocked")
+        assertTrue(w.removed.isEmpty())
+    }
+
+    @Test fun `S2 Z0==2 absent guard lets it fire`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 2; it.Z[1] = 7; it.Z[2] = 9; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(512, t.P and 512)
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S2 target player propagates bit9 to ga L1418`() {
+        val w = S140World()
+        w.player.aw = 3
+        val held = Entity(0, null); w.player.ga = held
+        val z = zone(2) {
+            it.Z[0] = 0; it.Z[1] = 3; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(512, w.player.P and 512)
+        assertEquals(512, held.P and 512, "g.a gets the 512 mask")
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S2 squad sweep arms soldiers by link L1451`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val armed = Entity(11, null)
+        val link = Entity(0, null); link.P = link.P or 512
+        armed.s = link
+        val plain = Entity(11, null)                      // no s link
+        w.npcs += armed; w.npcs += plain
+        val z = zone(2) {
+            it.Z[0] = 0; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 4
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(512, armed.P and 512, "s.P&512 → soldier armed")
+        assertEquals(0, plain.P and 512, "no link → skipped")
+    }
+
+    @Test fun `initTrigger S2 record fills the gate Z quad L59`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 77, 88, 513)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(2, e.S)
+        assertEquals(2, e.Z[0]); assertEquals(77, e.Z[1])
+        assertEquals(88, e.Z[2]); assertEquals(513, e.Z[3])
+        assertEquals(0, e.aE, "L59 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S10 record fills the five-slot Z L95`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 10, 10, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(10, e.S)
+        assertEquals(listOf(1, 2, 3, 4, 5), e.Z.take(5))
+        assertEquals(0, e.pv, "L95 arm does not run L111")
     }
 }
