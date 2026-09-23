@@ -1926,8 +1926,10 @@ class Level0World(
     fun menuFooter(): Pair<String?, String?> = when (jC) {
         14 -> Pair(d0(if (kBv == 2) 16 else 79), d0(17))
         19 -> Pair(d0(79), d0(17))
-        23 -> Pair(d0(79), "")
-        28 -> Pair(d0(79), if (kBv == 0) "" else d0(17))
+        // ae() `a(d(0,79),(bv==0||j.c==23||j.c==13)?"":d(0,17))` (:6225)
+        // + the eC==121 arm's `a("",d(0,17))` (:6214)
+        23, 28 -> if (kEc == 121) Pair("", d0(17))
+                 else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         else -> Pair(null, null)
@@ -2123,6 +2125,25 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `ae()` (k.java:6204-6228, proven) — the jc23/28 screen: the
+     *  `eC==121` wipe-confirm arm (own title at y=120 + back-only
+     *  dispatch), else `d(93,120,214)` + bW title at y=80 + footer +
+     *  `L(ey); Q()`. */
+    private fun menuAe(pressY: Int) {
+        if (kEc == 121) {                                // wipe-confirm arm
+            if (pad.v(Pad.M_CYCLE)) {                    // `v(131072)` (:6209)
+                kFE = 255; kFo = 3; bannerK(4); kBw = -1
+                stateL(3); z(30); return
+            }
+            footerQ(); return
+        }
+        // `eB>0 && j.c!=23 → d(0,eB)` (:6215) — the subline lookup; its
+        // result feeds an unported draw slot (inferred — decompiled
+        // statement discards it).
+        footerQ()
+        menuL(kEy); menuQ(pressY)
+    }
+
     /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
      *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
      *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
@@ -2179,6 +2200,7 @@ class Level0World(
                 menuL(kEy)
                 menuQ(pressY)
             }
+            23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
             30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {

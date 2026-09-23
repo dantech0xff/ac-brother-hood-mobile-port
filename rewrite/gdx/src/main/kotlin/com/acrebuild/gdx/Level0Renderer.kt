@@ -514,6 +514,15 @@ class Level0Renderer {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],
                       world.menuPanelZ2(), world.menuPanelZ3())
+            if (world.jC == 23 || world.jC == 28) {
+                // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,...)` (:6221)
+                // — centered bW title; the eC==121 arm draws at y=120.
+                world.d0(world.kEc)?.let { t ->
+                    fontW.l(1)
+                    val cx = 200 - fontW.measure(t).first() / 2
+                    drawText(t, cx, if (world.kEc == 121) 120 else 80, 3)
+                }
+            }
             if (world.menuVisible) {
                 world.menuPrompt()?.let { t ->
                     drawText(t, 200, pr[1] + 26, 3, palette = 1, pack = 91)
