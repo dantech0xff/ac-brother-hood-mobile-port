@@ -222,6 +222,9 @@ class Level0Renderer {
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
     private var nDl: UiAnimObject? = null             // k.dl — N() icon
+    private var pauseFl: UiAnimObject? = null         // k.fL — pause icon
+    private var edgeCQ = -1                           // k.cQ — corner width
+    private var edgeCR = -1                           // k.cR — tile width
     private var nTipDj = 0                            // k.dj — tip type pos
     private var nTipDk = 0                            // k.dk — tip hold
 
@@ -874,6 +877,40 @@ class Level0Renderer {
         drawObject(pack, cell, anchorX, anchorY, dX)
     }
 
+    /** `b.e(b.d(anim,0))` (k.java:2254-2257, proven): the pixel width
+     *  of anim's frame-0 composite object — `d(i,j)` = the frame's
+     *  `r8[5]`-style object ref (module | flags<<2), `e()` = bounds w.
+     *  Cached into `edgeCQ`/`edgeCR` exactly like `cQ`/`cR` (-1 = unset). */
+    private fun animObjWidth(pack: Int, anim: Int): Int {
+        val clip = clips[pack] ?: return 0
+        if (anim < 0 || anim >= clip.animCount() ||
+            clip.frameCount(anim) == 0) return 0
+        val fi = clip.animFrameStart[anim]
+        val obj = clip.frameModule[fi] or ((clip.frameFlags[fi] and 0xC0) shl 2)
+        val q = obj * 4
+        return if (q + 3 < clip.bounds.size) clip.bounds[q + 2] else 0
+    }
+
+    /** `a(int,int,int,boolean)` (k.java:2242-2268, proven) — the
+     *  repeating edge-strip: left corner `i4` at x, `i5` tiles forward
+     *  while the next tile fits inside `x+w`, a last `i5` right-aligned
+     *  at `x+w-cQ-cR`, then `i4` again at `x+w` mirrored (flags=1).
+     *  `z2` selects the pair {41,42} pressed / {43,44} idle on `A[2]`. */
+    private fun edgeStrip(x: Int, y: Int, w: Int, pressed: Boolean) {
+        val i4 = if (pressed) 41 else 43
+        val i5 = if (pressed) 42 else 44
+        if (edgeCQ == -1) edgeCQ = animObjWidth(93, i4)
+        if (edgeCR == -1) edgeCR = animObjWidth(93, i5)
+        drawFrame(93, i4, 0, x, y, 0)
+        var i7 = x + edgeCQ
+        do {
+            drawFrame(93, i5, 0, i7, y, 0)
+            i7 += edgeCR
+        } while (i7 + edgeCR < x + w)
+        drawFrame(93, i5, 0, x + w - edgeCQ - edgeCR, y, 0)
+        drawFrame(93, i4, 0, x + w, y, 1)
+    }
+
     /** `G()` draw surface (:2412-2460) — help/instructions scroller:
      *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
      *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
@@ -1227,6 +1264,24 @@ class Level0Renderer {
         if (pg.g != null && (pg.S == 303 || pg.S == 295)) {
             drawFrame(10, if (pg.S == 295) 29 else 41, pg.K,
                       pg.gQL - world.camX, pg.gQM - world.camY, 0)
+        }
+
+        // pause button (k.java:1040-1056, proven — the jc8/21 tail):
+        // `J()` = !(jc==12||jc==13) — inside the case-8/21 arm so the
+        // button draws under both play and dialog-overlay states.
+        // `fL = new a(A[2],377,19)`; `d(354,0,46,37)` hold → pressed
+        // edge + `fL.a(30,1)` else idle edge + `fL.a(25,-1)`; then
+        // `fL.b(j.f)` tick + `fL.c()` draw. The `c(354,0,46,37)` →
+        // `E(262144)` → `v(262144)` → `l(14)` press chain is already
+        // wired in `consume`.
+        if (world.jC != 12 && world.jC != 13) {
+            val fl = pauseFl ?: UiAnimObject(clips[93], 377, 19)
+                             .also { pauseFl = it }
+            val held = world.pointerMoveIn(354, 0, 46, 37)
+            edgeStrip(359, 32, 36, held)
+            fl.arm(if (held) 30 else 25, if (held) 1 else -1)
+            fl.tick(62)                                       // fL.b(j.f)
+            drawFrame(93, fl.e, fl.currentFrame, fl.a, fl.b, fl.c)
         }
 
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
