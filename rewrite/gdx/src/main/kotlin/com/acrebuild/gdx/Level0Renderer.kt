@@ -2,6 +2,8 @@ package com.acrebuild.gdx
 
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
+import com.acrebuild.core.FontClip
+import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.badlogic.gdx.Gdx
@@ -37,6 +39,11 @@ class Level0Renderer {
     private lateinit var batch: SpriteBatch
     private lateinit var white: Texture
     private lateinit var font: BitmapFont
+    /** `bW`/`y` = pack-1 entries 1/3 (k.java:3966-3967) — the game's two
+     *  bitmap fonts. Glyph ids index each clip's OBJECT space (shared
+     *  charmap `j.f(2)` = pack-1 entry-2). `l()` → palette variant. */
+    private lateinit var fontW: com.acrebuild.core.FontClip
+    private lateinit var fontY: com.acrebuild.core.FontClip
 
     // (module index, palette slot) -> TextureRegion, per pack id.
     // palette-00 is canonical (clip.moduleNames); palette-NN siblings are
@@ -56,6 +63,10 @@ class Level0Renderer {
             white = Texture(this); dispose()
         }
         clips = world.clips
+        val charmap = com.acrebuild.core.FontClip.loadCharmap(
+            Gdx.files.internal("fonts/charmap.bin").readBytes())
+        fontW = com.acrebuild.core.FontClip(clips[91]!!, charmap, 4)
+        fontY = com.acrebuild.core.FontClip(clips[92]!!, charmap, 4)
         for ((packId, clip) in clips) {
             val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
@@ -76,6 +87,18 @@ class Level0Renderer {
         }
     }
 
+    /** `y.a(cd, str, x, y, align)` / `bW.a(...)` — real glyph text:
+     *  glyph ids index the font clip's OBJECT space (composite draw
+     *  via the placement pool). `pack` 91 = bW (title), 92 = y (body). */
+    private fun drawText(str: String, x: Int, y: Int, align: Int,
+                         palette: Int = -1, pack: Int = 92) {
+        val f = if (pack == 91) fontW else fontY
+        if (palette >= 0) f.l(palette)
+        f.draw(str, x, y, align) { g, gx, gy, pal ->
+            drawObject(pack, g, gx, gy, 0, 0, pal)
+        }
+    }
+
     /**
      * Draw module `m` of clip `pack` with J2ME `Sprite.TRANS_*` `transform`
      * (`b` uses `aQ[i & 7]`). J2ME draws the *transformed* image's top-left
@@ -85,14 +108,16 @@ class Level0Renderer {
      * FBO space is y-up vs J2ME y-down: screen-CW rotations are CCW here.
      */
     private fun moduleRegion(pack: Int, m: Int, palette: Int): TextureRegion? {
-        val base = clipModules[pack]?.getOrNull(m) ?: return null
+        val base = (clipModules[pack] ?: clipModules[-pack])
+            ?.getOrNull(m) ?: return null
         if (palette <= 0) return base
         val pal = clipPalettes.getOrPut(pack) { HashMap() }
         return pal.getOrPut(m or (palette shl 16)) {
-            val clip = clips[-pack] ?: return base   // tilesets use neg keys
-            val dir = when (pack) {
-                else -> "level0/tileset-${-pack}/modules"    // negated keys
-            }
+            // clips map mixes positive entity keys + negative tileset
+            // keys — accept both conventions at the lookup.
+            val clip = clips[pack] ?: clips[-pack] ?: return base
+            val dir = if (pack >= 0) "clips/clip$pack/modules"
+                      else "level0/tileset-${-pack}/modules"
             val variant = clip.moduleNames[m]
                 .replace("-palette-00-", "-palette-%02d-".format(palette))
             val fh = Gdx.files.internal("$dir/$variant")
@@ -105,7 +130,7 @@ class Level0Renderer {
 
     private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
         val src = moduleRegion(pack, m, palette) ?: return
-        val (w, h) = clipDims[pack]!![m]
+        val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
         val t = transform and 7
         val region = TextureRegion(src)
         var rot = 0f
@@ -138,7 +163,7 @@ class Level0Renderer {
      * caller's flip word (2-bit on tiles, `P & 7` on entities).
      */
     private fun drawObject(pack: Int, obj: Int, x: Int, y: Int, flags: Int, depth: Int = 0, palette: Int = 0) {
-        val clip = clips[-pack] ?: return        // tilesets use neg keys
+        val clip = clips[pack] ?: clips[-pack] ?: return
         if (obj < 0 || obj >= clip.objPlaceStart.size || depth > 4) return
         val count = clip.objPlaceCount[obj]
         if (count == 0) {
@@ -163,10 +188,201 @@ class Level0Renderer {
         }
     }
 
+    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` — single frame draw
+     *  (the `a`-object/`A[2]` path, b.java:915). */
+    private fun drawFrame(pack: Int, anim: Int, frame: Int, x: Int, y: Int,
+                          flags: Int, palette: Int = 0) {
+        val clip = clips[pack] ?: clips[-pack] ?: return
+        if (anim < 0 || anim >= clip.animCount() ||
+            frame < 0 || frame >= clip.frameCount(anim)) return
+        val fd = clip.frameDraw(anim, frame, flags)
+        drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
+                   fd.transform, palette)
+    }
+
+    // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
+    private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
+    private var menuFk: UiAnimObject? = null          // k.fK
+    private var menuEz = 0                            // k.ez fit-scroll
+
+    /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
+    private fun fillAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        batch.setColor(((argb ushr 16) and 255) / 255f,
+                       ((argb ushr 8) and 255) / 255f,
+                       (argb and 255) / 255f,
+                       ((argb ushr 24) and 255) / 255f)
+        batch.draw(white, x.toFloat(),
+                   (Level0World.VIEW_H - y - h).toFloat(),
+                   w.toFloat(), h.toFloat())
+        batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
+    private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
+        batch.flush()
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+        Gdx.gl.glScissor(x, Level0World.VIEW_H - y - h, w, h)
+    }
+    private fun clipReset() {
+        batch.flush()
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+    }
+
+    /** `a(i,i2,i3,z2,z3)` (k.java:5872, proven) — ornamental band:
+     *  cap frame at x, fill repeated to x+w, cap mirrored (flags=1).
+     *  Frame pick: z3? (z2?16,17:14,15) : (z2?12,13:10,11). */
+    private fun panelEdge(x: Int, y: Int, w: Int, z2: Boolean, z3: Boolean) {
+        val clip = clips[93] ?: return
+        val (cap, fill) = if (z3) {
+            if (z2) 16 to 17 else 14 to 15
+        } else if (z2) 12 to 13 else 10 to 11
+        val fM = clip.moduleWidth(
+            clip.frameDraw(cap, 0, 0).module and 0x3FFF)
+        val fN = clip.moduleWidth(
+            clip.frameDraw(fill, 0, 0).module and 0x3FFF)
+        if (fM <= 0 || fN <= 0) return
+        drawFrame(93, cap, 0, x, y, 0)
+        var i7 = x + fM
+        do {
+            drawFrame(93, fill, 0, i7, y, 0)
+            i7 += fN
+        } while (i7 + fN < x + w)
+        drawFrame(93, cap, 0, x + w, y, 1)     // flags=1 — mirrored end cap
+    }
+
+    /** `a(str, z2, i)` (k.java:6335, proven) — unpressed rows truncate
+     *  with "..."; pressed rows scroll `ez` (-w .. textW); else `ez=0`. */
+    private fun fitText(str0: String, zD: Boolean, w: Int): String {
+        var str = str0
+        var i2 = fontW.measure(str).first()
+        if (!zD) {
+            var length = str.length - 3
+            while (length > 0 && i2 > w) {
+                length--
+                str = str.substring(0, length) + "..."
+                i2 = fontW.measure(str).first()
+            }
+        } else if (i2 > w) {
+            menuEz += 2
+            if (menuEz > i2) menuEz = -w
+        } else {
+            menuEz = 0
+        }
+        return str
+    }
+
+    /** `b(i,i2,i3,z2,z3)` (k.java:5903-6150, proven) — the menu panel +
+     *  row renderer. The `c()→bw` tap hook is the world's `menuRowAt`;
+     *  the j.c==2 side soft-buttons are unported (jC==2 unreachable). */
+    private fun menuPanel(world: Level0World, x: Int, y: Int, w: Int,
+                          z2: Boolean, z3: Boolean) {
+        val clipA2 = clips[93]
+        if (menuFj == null && clipA2 != null) {
+            menuFj = UiAnimObject(clipA2); menuFj!!.arm(18, -1)
+        }
+        if (menuFk == null && clipA2 != null) {
+            menuFk = UiAnimObject(clipA2); menuFk!!.arm(21, 1)
+        }
+        val frameMs = (Gdx.graphics.deltaTime * 1000f).toInt()
+        var i9 = y + 10
+        val i10 = world.menuRowCount()
+        val i11 = if (z3) 40 else 0
+        if (z2) {
+            fillAr(x, y, w, i10 * 33 + 20 + i11, -856756498)
+            fillAr(x - 2, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
+            fillAr(x + w, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
+            fillAr(x, y - 2, 95, 2, -2013265920)
+            fillAr(x, y + i10 * 33 + 20 + i11, 95, 2, -2013265920)
+            fillAr(x + 108, y - 2, w - 108, 2, -2013265920)
+            fillAr(x + 108, y + i10 * 33 + 20 + i11, w - 108, 2, -2013265920)
+        }
+        fillAr(x, y, w, 10, 805306368)
+        if (z2) fillAr(x + 95, y - 2, 13, 2, -2013265920)
+        if (z3) { fillAr(x, i9, w, 40, 805306368); i9 += 40 }
+        val i12 = i9
+        var i = x
+        for (i13 in 0 until i10) {
+            val i4 = world.menuI4(i13)
+            val i5 = world.menuI5()
+            if (i13 == 1 && world.jC == 2) i9 += 13
+            val zD = world.pointerMoveIn(i, i9, w, i4)
+            if (zD) {
+                fillAr(i, i9, w, i4, 1879048192)
+                panelEdge(i + ((w - i5) shr 1), i9 + (i4 shr 1), i5,
+                          false, i13 == 0 && world.jC == 2)
+                val icon = if (world.jC == 30) i13 + 5
+                           else if (i13 == 0 && world.jC == 2) 9 else 5
+                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
+                fontW.l(0)
+            } else {
+                val fj = menuFj
+                if (fj != null) {
+                    if (i13 == 0 && world.jC == 2) {
+                        if (fj.e != 19) fj.arm(19, -1)
+                    } else if (fj.e != 18) fj.arm(18, -1)
+                    fj.a = (i + w) - ((w - i5) shr 1); fj.b = i9
+                    fj.tick(frameMs)
+                }
+                if (world.kFI > 0) {
+                    fillAr(i, i9, w, i4, 1879048192)
+                    clipScissor(0, i9 + ((i4 - world.kFI) shr 1),
+                                400, world.kFI)
+                    world.kFI += world.kFH; world.kFH += 8
+                    if (world.kFI >= i4) world.kFI = 0
+                }
+                fj?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
+                clipReset()
+                fillAr(i, i9, (w + i5) shr 1, i4, -16777216)
+                panelEdge(i + ((w - i5) shr 1) - 2, i9 + (i4 shr 1),
+                          i5 + 4, true, i13 == 0 && world.jC == 2)
+                val icon = if (world.jC == 30) i13
+                           else if (i13 == 0 && world.jC == 2) 4 else 0
+                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
+                val fk = menuFk
+                if (fk != null) {
+                    fk.tick(frameMs)
+                    if (fk.stopped()) fk.arm(20, -1)
+                    fk.a = i; fk.b = i9 + (i4 shr 1)
+                    drawFrame(93, fk.e, fk.currentFrame, fk.a, fk.b, fk.c)
+                    fontW.l(1)
+                }
+            }
+            val (strD, pal) = world.menuRowText(i13)
+            val strA = fitText(strD, zD, i5 - 50)
+            val i15 = if (world.jC == 19) -3 else 0
+            val i14 = world.menuI14(i, w)
+            if (zD) {
+                drawText(strA, i14, i9 + (i4 shr 1) + i15,
+                         3, palette = pal, pack = 91)
+            } else {
+                world.menuRowSub(i13)?.let {
+                    fontY.l(1)
+                    drawText(it, i14 - menuEz,
+                             i9 + (i4 shr 1) + 10 + i15, 3)
+                }
+                clipScissor(i14 - (i5 shr 1) + 25, i9, i5 - 50, 240)
+                drawText(strA, i14 - menuEz, i9 + (i4 shr 1) + i15,
+                         3, palette = pal, pack = 91)
+                clipReset()
+            }
+            if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
+                var i16 = i10 / 2
+                if (i10 % 2 == 0) i16--
+                if (i13 == i16 && i13 < i10 - 1) {
+                    fillAr(i, i9 + i4, w, 10, 805306368)
+                    i = 206
+                    i9 = i12 - (i4 + 3)
+                    fillAr(206, i9 + i4 + 3 - 10, w, 10, 805306368)
+                }
+            }
+            i9 += i4 + 3
+        }
+    }
+
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
-        val clip = clips[-pack] ?: return        // tilesets use neg keys
+        val clip = clips[pack] ?: clips[-pack] ?: return
         if (cell >= clip.objPlaceStart.size) return
         // tile cells sit on a 20px grid: +20 anchor compensation on the
         // mirrored axes (k.java:4476-4490)
@@ -231,59 +447,32 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
-        // menu screens — k.L462 (k.java:1775, proven): frozen world +
-        // `b(93,67,214,true,true)` panel, `eB` title, `eC` prompt, eA[bv]
-        // rows with `bw` cursor. Glyph stand-in: BitmapFont (inferred —
-        // the original's `bW`/`y` bitmap-font clips are unported). Layout
-        // `inferred` (rows ~36px from y≈130 in world y-down space).
+        // menu screens — k.L462/Q() (k.java:1108-1138 + :5960+, proven):
+        // `b(93,67,214,true,true)` panel, `bW.l(1)` prompt centered on
+        // (200,93) align 3, eA[bv] rows `bW.a(cd,strA,i14-ez,i9+(i4>>1),3)`
+        // (row-center x, align 3; i4=30px rows). `b()` panel and the A[2]
+        // row-icon/selection-pill procs unported — procedural panel +
+        // inferred sel strip; `a(strD,zD,w)` fit-scroll not yet mined.
         if (world.menuVisible) {
-            batch.setColor(0f, 0f, 0f, 0.85f)
-            batch.draw(white, 93f, 40f, 214f, 150f)
-            batch.setColor(0.8f, 0.15f, 0.15f, 1f)
-            batch.draw(white, 95f, 42f, 210f, 2f)
-            batch.draw(white, 95f, 186f, 210f, 2f)
-            batch.setColor(1f, 1f, 1f, 1f)
-            font.setColor(1f, 1f, 1f, 1f)
-            world.menuTitle()?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 76f)
-            }
+            // `b(93,67,214,true,true)` + `bW.l(1)` prompt at the
+            // clip-centered variant's anchor (~200,93) + `L(ey);Q()`.
+            val py = world.menuPanelY()
+            menuPanel(world, 93, py, 214, true, world.menuPanelZ3())
             world.menuPrompt()?.let { t ->
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 98f)
-                font.setColor(1f, 1f, 1f, 1f)
-            }
-            for ((i, row) in world.menuRows().withIndex()) {
-                val (text, sel) = row
-                if (sel) {
-                    batch.setColor(0.85f, 0.8f, 0.5f, 0.35f)
-                    batch.draw(white, 100f,
-                               (Level0World.VIEW_H - 130 - i * 36 - 14).toFloat(),
-                               200f, 20f)
-                    batch.setColor(1f, 1f, 1f, 1f)
-                }
-                font.draw(batch, text, 200f - text.length * 3.5f,
-                          Level0World.VIEW_H - 130 - i * 36f)
+                drawText(t, 200, py + 26, 3, palette = 1, pack = 91)
             }
         }
 
         // stats screen — k.L466 (k.java:1788, proven): `d(0,bx)` text +
-        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173).
+        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173) on `y`.
         if (world.statsVisible) {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 93f, 40f, 214f, 150f)
             batch.setColor(1f, 1f, 1f, 1f)
-            font.setColor(0.9f, 0.85f, 0.5f, 1f)
-            world.statsText()?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 90f)
-            }
-            font.setColor(1f, 1f, 1f, 1f)
+            world.statsText()?.let { t -> drawText(t, 200, 90, 3) }
             if (world.jG % 6L < 3L) {
                 val t = world.d0(9) ?: "TOUCH THE SCREEN"
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 173f)
+                drawText(t, 200, 173, 3)
             }
         }
 
@@ -303,38 +492,24 @@ class Level0Renderer {
             batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
             batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
             batch.setColor(1f, 1f, 1f, 1f)
-            world.d0(60)?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          (H - ty).toFloat())
-            }
-            // row labels + right-aligned values
-            font.setColor(1f, 1f, 1f, 1f)
+            world.d0(60)?.let { t -> drawText(t, 200, ty, 1) }
+            // row labels (x=95, align 20) + values right-aligned x=305 (24)
             for (i3 in 0..4) {
                 val v = world.statsRowText[i3]
                 if (v.isEmpty()) continue
-                world.d0(38 + i3)?.let { t ->
-                    font.draw(batch, t, 95f, (H - 55 - i3 * 20).toFloat())
-                }
-                font.draw(batch, v, 305f - v.length * 7f,
-                          (H - 55 - i3 * 20).toFloat())
+                world.d0(38 + i3)?.let { t -> drawText(t, 95, 55 + i3 * 20, 20) }
+                drawText(v, 305, 55 + i3 * 20, 24)
             }
             // total row (y=175, one-shot after jG>10)
             if (world.statsScoreVisible) {
-                world.d0(43)?.let { t ->
-                    font.draw(batch, t, 95f, (H - 175).toFloat())
-                }
-                val t = world.fmtJ(world.statsScore)
-                font.draw(batch, t, 305f - t.length * 7f,
-                          (H - 175).toFloat())
+                world.d0(43)?.let { t -> drawText(t, 95, 175, 20) }
+                drawText(world.fmtJ(world.statsScore), 305, 175, 24)
             }
             // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
             if (world.statsTypeNext >= 0) {
                 val t = (world.d0(16) ?: "NEXT") + " " +
                         world.typewriterText
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, t, 390f - t.length * 7f,
-                          (H - 222).toFloat())
-                font.setColor(1f, 1f, 1f, 1f)
+                drawText(t, 200, 222, 3)
             }
         }
 
@@ -353,15 +528,10 @@ class Level0Renderer {
             batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.posterBrief.isNotEmpty()) {
-                font.draw(batch, world.posterBrief, 20f, (H - 150).toFloat())
+                drawText(world.posterBrief, 200, 150, 3)
             }
             if (world.hintBlink) {
-                world.d0(9)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 200f - t.length * 3.5f,
-                              (H - 220).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }
         }
 
@@ -374,11 +544,7 @@ class Level0Renderer {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 0f, 0f, 400f, 240f)
             if (world.medalTitle.isNotEmpty()) {
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, world.medalTitle,
-                          210f - world.medalTitle.length * 3.5f,
-                          (H - 43).toFloat())
-                font.setColor(1f, 1f, 1f, 1f)
+                drawText(world.medalTitle, 210, 43, 17, palette = 1, pack = 91)
             }
             batch.setColor(0.08f, 0.07f, 0.1f, 0.95f)
             batch.draw(white, 114f, (H - 59 - 155).toFloat(), 172f, 155f)
@@ -396,11 +562,7 @@ class Level0Renderer {
                     batch.draw(white, 122f, ry + 12f, 16f, 16f)
                 }
                 val t = world.medalRowText[i]
-                if (t.isNotEmpty()) {
-                    batch.setColor(1f, 1f, 1f, 1f)
-                    font.setColor(1f, 1f, 1f, 1f)
-                    font.draw(batch, t, 146f, ry + 26f)
-                }
+                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6)
             }
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.screenFadeAlpha > 0) {
@@ -410,20 +572,10 @@ class Level0Renderer {
                 batch.setColor(1f, 1f, 1f, 1f)
             }
             if (world.hintBlink && !world.hintBack) {
-                world.d0(9)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 200f - t.length * 3.5f,
-                              (H - 220).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }
             if (world.hintBack) {
-                world.d0(17)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 390f - t.length * 7f,
-                              (H - 222).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(17)?.let { t -> drawText(t, 390, 222, 24) }
             }
         }
 

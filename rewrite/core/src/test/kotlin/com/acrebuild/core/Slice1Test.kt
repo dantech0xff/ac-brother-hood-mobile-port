@@ -9002,10 +9002,11 @@ class Slice78Test {
         val w = world()
         w.stateL(12)
         val npcCount = w.npcs.size
-        // row 1 (NO) sits at world-y 166 in the inferred layout
+        // verbatim b() layout: 2-row dialogs split columns — NO sits in
+        // the right-column rect (206,117,214,30) (k.java:5962-6000, proven)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 166),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 166)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
         assertEquals(2, w.jC)                // W() teardown + l(2)
         assertEquals(-1, w.kBx)
         assertTrue(w.npcs.size < npcCount)   // teardown cleared entities
@@ -9014,9 +9015,10 @@ class Slice78Test {
     @Test fun `YES row tap dispatches restart directly`() {
         val w = world()
         w.stateL(12)
+        // YES is the left-column rect (93,117,214,30)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 110),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 110)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
         assertEquals(8, w.jC)                // reload ran
         assertFalse(w.kAl)
     }
@@ -9681,5 +9683,178 @@ class Slice83Test {
         assertTrue(w.hintBack)
         w.pad.queuePress(131072); w.tick(emptyList())
         assertEquals(3, w.jC)
+    }
+}
+
+
+/**
+ * Slice 84 — `y`/`bW` bitmap font (`b` text path): `s()` charmap,
+ * `a(str,cArr)` measure, `a(Graphics,str,...)` draw cursor with
+ * escapes/underline/bold/align — against the real font clip and the
+ * decoded pack-1 entry-2 charmap.
+ */
+class Slice84Test {
+
+    private val clip92 by lazy { Clip.load(asset("clips/clip92/clip.acpk")) }
+    private val fontY by lazy {
+        FontClip(clip92, FontClip.loadCharmap(asset("fonts/charmap.bin")), 4)
+    }
+
+    @Test fun `s charmap maps and falls back`() {
+        assertEquals(39, fontY.s(65))          // 'A'
+        assertEquals(40, fontY.s(66))          // 'B'
+        assertEquals(2, fontY.s(48))           // '0'
+        assertEquals(91, fontY.s(95))          // '_' (underline glyph)
+        assertEquals(97, fontY.s(260))         // overflow chain
+        assertEquals(1, fontY.s(0x2600))       // unmapped -> fallback 1
+    }
+
+    @Test fun `metrics come from the placement pool`() {
+        assertTrue(fontY.baseN >= 0)
+        assertTrue(fontY.baseJ > 0)
+        assertTrue(fontY.spaceL > 0)
+    }
+
+    @Test fun `measure sums advances and stacks lines`() {
+        val (d1, e1) = fontY.measure("A")
+        val (d2, e2) = fontY.measure("AA")
+        assertEquals(d1 * 2, d2)
+        assertEquals(e1, e2)
+        val (d3, e3) = fontY.measure("A\nA")
+        assertEquals(d1, d3)
+        assertEquals(e1 + fontY.baseK + fontY.baseJ, e3)
+    }
+
+    @Test fun `draw emits one glyph per char with cursor`() {
+        val calls = mutableListOf<Triple<Int, Int, Int>>()
+        fontY.draw("AB", 100, 50, 0) { g, x, y, _ -> calls += Triple(g, x, y) }
+        assertEquals(2, calls.size)
+        assertEquals(Triple(39, 100, 50 + fontY.baseN), calls[0])
+        assertEquals(40, calls[1].first)
+        assertTrue(calls[1].second > calls[0].second)   // cursor advanced
+        assertEquals(calls[0].third, calls[1].third)
+    }
+
+    @Test fun `draw newline resets x and steps y by K+J`() {
+        val calls = mutableListOf<Triple<Int, Int, Int>>()
+        fontY.draw("A\nB", 0, 0, 0) { g, x, y, _ -> calls += Triple(g, x, y) }
+        assertEquals(2, calls.size)
+        assertEquals(0, calls[1].second)
+        assertEquals(calls[0].third + fontY.baseK + fontY.baseJ,
+                     calls[1].third)
+    }
+
+    @Test fun `draw escapes switch palette and styles`() {
+        // `\\<digit>` -> l(d)
+        val pals = mutableListOf<Int>()
+        fontY.draw("A\\3B", 0, 0, 0) { _, _, _, p -> pals += p }
+        assertEquals(listOf(0, 3), pals)
+        // out-of-range digits are ignored (l() clamps, b.java:1964)
+        val palsOob = mutableListOf<Int>()
+        fontY.draw("A\\9B", 0, 0, 0) { _, _, _, p -> palsOob += p }
+        assertEquals(listOf(0, 0), palsOob)
+        // char-1 sets palette from the embedded char code
+        val pals2 = mutableListOf<Int>()
+        fontY.draw("A\u0001\u0003B", 0, 0, 0) { _, _, _, p -> pals2 += p }
+        assertEquals(listOf(0, 3), pals2)
+        // bold draws each glyph twice at +1
+        val xs = mutableListOf<Int>()
+        fontY.draw("\\^AB", 0, 0, 0) { _, x, _, _ -> xs += x }
+        assertEquals(4, xs.size)
+        assertEquals(xs[0] + 1, xs[1])
+    }
+
+    @Test fun `draw align right shifts by -d`() {
+        val calls = mutableListOf<Int>()
+        fontY.draw("A", 100, 0, 8) { _, x, _, _ -> calls += x }
+        val (d, _) = fontY.measure("A")
+        assertEquals(100 - d, calls[0])
+    }
+}
+
+/** Slice 86 — b(x,y,w,z2,z3) menu panel: row rects, two-column split,
+ *  strD text, a(str,z2,i) fit proc, and the `a` UiAnimObject semantics
+ *  (k.java:5868-6150 + a.java, proven). */
+class Slice86Test {
+
+    @Test fun `two rows split columns side by side`() {
+        val w = world()
+        w.stateL(12)
+        val r = w.menuRowRects()
+        assertEquals(2, r.size)
+        // verbatim: YES left column, NO right column, SAME top row
+        assertEquals(listOf(93, 117, 214, 30), r[0].toList())
+        assertEquals(listOf(206, 117, 214, 30), r[1].toList())
+    }
+
+    @Test fun `non-19 rows render LEVEL n`() {
+        val w = world()
+        w.stateL(12)
+        // j.c==12 → strD = d(0,10)+" "+(i13+1) = "LEVEL n" (k.java:6078)
+        assertEquals("LEVEL 1", w.menuRowText(0).first)
+        assertEquals("LEVEL 2", w.menuRowText(1).first)
+    }
+
+    @Test fun `row pitch is 30 except first jc2 row 35`() {
+        val w = world()
+        assertEquals(30, w.menuI4(0))
+        assertEquals(30, w.menuI4(1))
+        // row width: 170 normally, 135 for bv4-non14 / jc19
+        assertEquals(170, w.menuI5())
+    }
+
+    @Test fun `menuRowAt hits the verbatim rects`() {
+        val w = world()
+        w.stateL(12)
+        // release inside right column → row 1
+        w.lastTouchX = 350; w.lastTouchY = 120
+        assertEquals(1, w.menuRowAt(120))
+        // inside left column → row 0; overlap zone (x 206..307) → row 0 wins
+        w.lastTouchX = 150; w.lastTouchY = 120
+        assertEquals(0, w.menuRowAt(120))
+        w.lastTouchX = 250; w.lastTouchY = 120
+        assertEquals(0, w.menuRowAt(120))
+        // above the panel → miss
+        w.lastTouchX = 150; w.lastTouchY = 100
+        assertEquals(-1, w.menuRowAt(100))
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `UiAnimObject arm-seek-tick matches a() semantics`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        val a = UiAnimObject()
+        a.attach(clip)
+        // e=-1 → stopped; arm(i,1) starts state i
+        assertTrue(a.stopped())
+        a.arm(21, 1)
+        assertEquals(21, a.e)
+        // seek wraps: seek(i) maps t into [0,len)
+        a.arm(21, 1)
+        val len = a.len()
+        if (len > 0) {
+            a.seek(len + 2)
+            assertTrue(a.currentFrame in 0 until clip.frameCount(21))
+        }
+        // finite loop counts down to latched stop
+        a.arm(18, 1)
+        var guard = 0
+        while (!a.stopped() && guard++ < 2000) a.tick(62)
+        assertTrue(a.stopped(), "finite anim should latch stopped")
+        assertEquals(18, a.e)
+        // infinite (h=-1) never reports stopped while ticking
+        a.arm(20, -1)
+        repeat(50) { a.tick(62) }
+        assertFalse(a.stopped())
+    }
+
+    @Test fun `clip93 has the A2 edge frames 10 to 17`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        // edge-band frames used by a(i,i2,i3,z2,z3) (:5872): 10..17 exist
+        assertTrue(clip.animCount() >= 18)
+        assertTrue(clip.frameCount(10) >= 1)
+        assertTrue(clip.frameCount(17) >= 1)
+        assertTrue(clip.moduleWidth(clip.frameModuleIndex(10, 0)) > 0)
     }
 }

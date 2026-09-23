@@ -1789,13 +1789,100 @@ class Level0World(
     /** Row hit-test for the touch-confirm (`inferred` layout — the
      *  orig's rects live in the unported draw proc at :6020-6120; rows
      *  stack at ~36px inside the `b(93,67,214)` panel). */
-    private fun menuRowAt(y: Int): Int {
+    fun menuRowAt(y: Int): Int {
         if (kEy <= 0) return -1
-        val pitch = when (kBv) {                    // K()'s eE row heights
-            1 -> 28; 3 -> 36; else -> 30
+        // `c(i,i9,i3,i4)` per drawn row (k.java:6117 — the b() loop's own
+        // hit-test, proven); x comes from the same release point.
+        val rects = menuRowRects()
+        for (i in rects.indices) {
+            if (pointerDownIn(rects[i][0], rects[i][1], rects[i][2], rects[i][3]))
+                return i
         }
-        val row = (y - 110) / pitch
-        return if (row in 0 until kEy) row else -1
+        return -1
+    }
+
+    // -- b(x,y,w,z2,z3) menu panel geometry (k.java:5903-6150, proven) ---
+    /** Panel Y: jc12/13 → `b(93,67,214,true,true)` (:1108); jc14 →
+     *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
+     *  the same 67 (`inferred` — call sites unmined). */
+    fun menuPanelY(): Int = when {
+        jC == 14 -> if (kBv == 3 || kBv == 4) 86 else 30
+        else -> 67
+    }
+    /** z3 = the 40px title strip: verbatim true for jc12/13 (`b(…,true,
+     *  true)`); jc14 goes through the 4-arg `b()` → z3=false (:1124);
+     *  other screens `inferred` true. */
+    fun menuPanelZ3(): Boolean = jC != 14
+    /** `i10 = min(8, ey)` — only the first 8 rows ever draw (:5924). */
+    fun menuRowCount(): Int = minOf(8, kEy.coerceAtLeast(0))
+    /** row height — `i4 = 35` when `i13==0 && j.c==2` else 30 (:5936). */
+    fun menuI4(i13: Int): Int = if (i13 == 0 && jC == 2) 35 else 30
+    /** text column width — `i5 = 135` when `(bv==4&&j.c!=14)||j.c==19`
+     *  else 170 (:5942-5947). */
+    fun menuI5(): Int =
+        if ((kBv == 4 && jC != 14) || jC == 19) 135 else 170
+    /** row-center x — `i14 = i + (i3>>1)`; jc19 re-centers
+     *  `i + ((((i3-i5)>>1)+25+145)>>1)` (:6036-6040). */
+    fun menuI14(i: Int, i3: Int): Int =
+        if (jC == 19) i + (((i3 - menuI5() shr 1) + 25 + 145) shr 1)
+        else i + (i3 shr 1)
+    /** Row rect list mirroring b()'s `i9` walk: `i9 = y+10` (+40 under
+     *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
+     *  center split `(bv!=4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
+     *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
+    fun menuRowRects(): List<IntArray> {
+        val out = ArrayList<IntArray>()
+        val i3 = 214
+        var i9 = menuPanelY() + 10
+        if (menuPanelZ3()) i9 += 40
+        val i12 = i9
+        var i = 93
+        val i10 = menuRowCount()
+        for (i13 in 0 until i10) {
+            val i4 = menuI4(i13)
+            if (i13 == 1 && jC == 2) i9 += 13
+            out.add(intArrayOf(i, i9, i3, i4))
+            if ((kBv != 4 && jC != 14) || jC == 19) {
+                var i16 = i10 / 2
+                if (i10 % 2 == 0) i16--
+                if (i13 == i16 && i13 < i10 - 1) {
+                    i = 206
+                    i9 = i12 - (i4 + 3)
+                }
+            }
+            i9 += i4 + 3
+        }
+        return out
+    }
+    /** `strD` verbatim (:6043-6080): jc19 → `d(0,eA[bv][iM])` + the eA
+     *  decoration switch (32-34 → `bW.l(3)` + z[12] blink — palette flag
+     *  returned in second; 83/84 → `": "+ON/OFF` (`ff=fg={21,20}` :306-307);
+     *  97 → `": "+d(0,35+au)`; 103 → `l(3)`; 123 → `": "+d(0,124+k()?0:1)`);
+     *  non-19 → `d(0,10)+" "+(i13+1)` = "LEVEL n". */
+    fun menuRowText(i13: Int): Pair<String, Int> {
+        if (jC == 19) {
+            val iM = menuM(kBv, i13)
+            var strD = d0(kEA[kBv][iM]) ?: "?"
+            var pal = 0
+            when (kEA[kBv][iM]) {
+                32, 33, 34 -> pal = 3
+                83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
+                84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
+                97 -> strD += ": " + (d0(35 + kAu) ?: "")
+                103 -> pal = 3
+                123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
+            }
+            return strD to pal
+        }
+        return "${d0(10) ?: "LEVEL"} ${i13 + 1}" to 0
+    }
+    /** jc19 sub-label `d(0, eX[eW[i13]])` drawn on `y` (:6092).
+     *  `eW={2,2,1,1,2,0,3,2,2}` `eX={51,52,53,54}` (:299-300). */
+    fun menuRowSub(i13: Int): String? {
+        if (jC != 19) return null
+        val kEw = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
+        val kEx2 = intArrayOf(51, 52, 53, 54)
+        return if (i13 in kEw.indices) d0(kEx2[kEw[i13]]) else null
     }
 
     /** `Q()`'s item switch (structured :3649-3940, proven arms; callees
