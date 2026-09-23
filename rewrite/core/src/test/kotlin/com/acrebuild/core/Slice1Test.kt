@@ -789,13 +789,29 @@ class Level0WorldTest {
         assertTrue(wisp.aD in 0 until 360); assertTrue(wisp.aE in 70 until 90)
         // radius grows 15/tick to aE, aC drains 2, then i(2) anchors
         val ticks = (wisp.aE / 15) + 4
-        repeat(ticks) { w.npcFsm.tickWisp(wisp, w.player) }
+        repeat(ticks) { w.npcFsm.tickAx74(wisp, w, w.player) }
         assertEquals(2, wisp.S)
         assertEquals(w.player.ak, wisp.ak)
         assertEquals(w.player.al - 30, wisp.al)
         // anim finish → removed (drive a few more ticks through full sim)
         repeat(30) { w.tick(emptyList()) }
         assertFalse(w.npcs.contains(wisp))
+    }
+
+    // Slice 75 regression: the tick dispatch had a stale ax74→tickWisp
+    // arm shadowing the full bN() port — the S0 collect scan was dead.
+    @Test fun `ax74 dispatches to bN collect arm through w tick`() {
+        val w = world()
+        val wisp = Entity(74, null)
+        wisp.setPositionPx(w.player.ak + 5, w.player.al)  // dist<20, W∩Y
+        wisp.setAnim(0)                                   // S0 collect scan
+        wisp.refreshBoxes()
+        w.npcs += wisp
+        val before = w.kAp[5]
+        w.tick(emptyList())
+        // S0 collect: overlap → kCount(5) + sfx15 + i(2) attach anim
+        assertEquals(2, wisp.S, "S0 collect arm must run via dispatch")
+        assertTrue(w.kAp[5] > before)
     }
 
     // ------------------------------------------------------------- ax67
