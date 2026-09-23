@@ -223,6 +223,29 @@ class Level0Renderer {
     private val BAR_DEAD_S = intArrayOf(24, 21, 0, 139, 133, 134, 145, 135, 106, 107)
     private var menuEz = 0                            // k.ez fit-scroll
 
+    /** `i(int,int)` (k.java:414-429, proven): A[4] anim-12 top strip
+     *  + `j.h(MIN_VALUE); j.d` 400×68 half-dark fill + u∈{8,9,10}
+     *  `y.a(d(0,9),200,220,3)` blink hint (`j.g%10<5`). */
+    private fun dialogPanel(world: Level0World, i: Int, bP: Int) {
+        drawFrame(4, 12, 0, 0, bP, 0)                 // A[4].a(cd,12,0,0,i2)
+        fillAr(0, bP, 400, 68, Int.MIN_VALUE)         // j.h(MIN_VALUE);j.d
+        if (world.dlgU in 8..10 && world.jG % 10L < 5L) {
+            drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
+        }
+    }
+
+    /** `a(bVar,i,str,x,y,w,align,limit)` (k.java:4114-4128, proven):
+     *  wrap `str` at `w`, draw ≤8 lines from `8*(cY-1)`, `bT` char cap.
+     *  The `bL`-EZIO rename arm (:4121-4124) — bL==0 on level 0. */
+    private fun dialogText(world: Level0World, str: String, x: Int, y: Int,
+                           w: Int, align: Int, limit: Int) {
+        if (str.isEmpty()) return
+        val u = fontY.wrap(str, w)
+        fontY.l(0)
+        fontY.drawWrapped(str, u, x, y, 8 * (world.kCY - 1), 8, align, limit)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+    }
+
     /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
     private fun fillAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
         batch.setColor(((argb ushr 16) and 255) / 255f,
@@ -979,19 +1002,40 @@ class Level0Renderer {
                    else -16512)                                  // 0xFFBF00
         }
 
-        // k.l(21) modal dialog — the original suspends the sim behind a
-        // drawn dialog box (i.java:20190-20240, j.d text panel); port draws
-        // a bottom dialog box so the freeze is visible (panel `inferred`,
-        // text glyphs unported). dismiss = press edge.
+        // k.l(21) modal dialog — case-21 u==9 arm (k.java:899-1017,
+        // proven): `bN[v]` picks icon/portrait + panel side, `bO`
+        // overrides the side, `i(0,bP)` panel, then `a(y,0,bM[v],…,bT)`
+        // typewriter text. The world suspends behind it (i.java:20190);
+        // the press tail lives in the tick.
         if (world.dialogModal) {
-            batch.setColor(0f, 0f, 0f, 0.8f)
-            batch.draw(white, 10f, 6f, 380f, 60f)
-            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
-            batch.draw(white, 12f, 8f, 376f, 2f)
-            batch.draw(white, 12f, 62f, 376f, 2f)
-            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
-            batch.draw(white, 190f, 20f, 20f, 20f)      // ▼ hint marker
-            batch.setColor(1f, 1f, 1f, 1f)
+            val v = world.dlgV
+            val page = world.dlgBM.getOrNull(v) ?: ""
+            var i3 = -1
+            var bP: Int
+            if (world.dlgBN[v] == 1) {                          // (:908-909)
+                bP = 137; i3 = 1
+            } else if (world.dlgBN[v] in 2..10) {               // (:910-912)
+                bP = 50; i3 = world.dlgBN[v]
+            } else if (world.player.al - world.kP < 120) {      // (:921)
+                bP = 137
+            } else {
+                bP = 50
+            }
+            if (world.bO == 0) bP = 50                          // u==9 (:922-924)
+            else if (world.bO == 1) bP = 137
+            dialogPanel(world, 0, bP)                           // i(0,bP) (:414-429)
+            val bT = if (world.dlgSuppressed()) world.dlgBT     // gate (:946)
+                     else world.dlgTypeTick(page.length)        // typewriter (:947-955)
+            if (i3 == -1) {
+                dialogText(world, page, 200, bP + 34, 380, 3, bT)  // centered (:935)
+            } else {
+                if (i3 == 1) {
+                    drawFrame(4, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
+                } else {                                        // z[39] icon (:940)
+                    drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+                }
+                dialogText(world, page, 10, bP + 4, 300, 20, bT)   // left (:942)
+            }
         }
 
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
