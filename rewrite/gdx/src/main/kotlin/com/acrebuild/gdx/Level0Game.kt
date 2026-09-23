@@ -39,6 +39,7 @@ class Level0Game : ApplicationAdapter() {
         clips[92] = Clip.load(Gdx.files.internal("clips/clip92/clip.acpk").readBytes())
         clips[93] = Clip.load(Gdx.files.internal("clips/clip93/clip.acpk").readBytes())
         clips[94] = Clip.load(Gdx.files.internal("clips/clip94/clip.acpk").readBytes())
+        clips[12] = clips[94]!!   // z[12] = entry-012 — alias under its z[] index
         clips[95] = Clip.load(Gdx.files.internal("clips/clip95/clip.acpk").readBytes())   // A[3]
         clips[1] = Clip.load(Gdx.files.internal("clips/clip1/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
