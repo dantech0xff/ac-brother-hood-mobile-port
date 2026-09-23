@@ -294,6 +294,10 @@ class Level0World(
     private var kCh = -1                     // k.ch — release x
     private var kCi = -1                     // k.ci — release y
     private var kCl = false                  // k.cl — release latch
+    /** `j.t` (j.java:105, proven) — pad-bits-0-4 held latch: `j.a(i)` ∨=
+     *  `1<<i` on press, `j.b(i)` clears on release; `j.i()`=`t!=0` lets
+     *  the fail/win screens force-flush held input (`j.t=0`, :1119). */
+    var kJT = 0
     /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
      *  = autoscroll/flying on missions 1 and 4. */
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
@@ -2110,6 +2114,10 @@ class Level0World(
     private fun menuFrame(pressY: Int): Boolean {
         when (jC) {
             12, 13 -> {
+                if (kJT != 0) {                      // `j.i()` (:1109) —
+                    kJT = 0                          // held pad bits flush
+                    return true                      // → `j.t=0`, skip frame
+                }
                 scrollBounds()                       // b(true)
                 kEg = 0
                 menuL(kEy)
@@ -2473,7 +2481,8 @@ class Level0World(
                         padE(Pad.M_PAUSE)
                     else {
                         val iJ = resolvePadZone(e.x, e.y)
-                        if (iJ != -1) padE(2 shl iJ)          // E(2<<iJ)
+                        if (iJ != -1) { padE(2 shl iJ)         // E(2<<iJ)
+                            if (iJ < 5) kJT = kJT or (1 shl iJ) }
                     }
                     pointerDown = true
                     kCj = e.x; kCk = e.y
@@ -2481,6 +2490,7 @@ class Level0World(
                 InputQueue.Type.MOVE -> {                     // pointerDragged
                     val iJ = resolvePadZone(e.x, e.y)
                     if (iJ != -1 && pad.bB and (2 shl iJ) == 0) padE(2 shl iJ)
+                    if (iJ in 0..4) kJT = kJT or (1 shl iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                 }
@@ -2488,6 +2498,9 @@ class Level0World(
                     kCh = e.x; kCi = e.y
                     kCl = true
                     pad.releaseFlush()                        // eN=eL; eL=0
+                    kJT = 0                                    // b(i) — all
+                                                                 // held bits
+                                                                 // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
                 }

@@ -9943,3 +9943,49 @@ class Slice87Test {
         assertTrue(clip.frameCount(29) >= 1)
     }
 }
+
+/** Slice 88 — `j.t` pad-held latch + `j.i()` fail/win input flush
+ *  (j.java:105-345, k.java:1109, proven). */
+class Slice88Test {
+
+    @Test fun `pad press latches jT release clears it`() {
+        val w = world()
+        val (x, y) = w.cellPoint(0)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
+        assertTrue(w.kJT != 0, "DOWN in a pad zone latches j.t")
+        w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, x, y)))
+        assertEquals(0, w.kJT)
+    }
+
+    @Test fun `fail screen flushes a held pad bit for one frame`() {
+        val w = world()
+        val (x, y) = w.cellPoint(0)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
+        assertTrue(w.kJT != 0)
+        // the fatal press stays latched when the screen flips to 12 —
+        // `j.i()` true → `j.t=0` and the frame's menu is skipped
+        w.stateL(12)
+        w.tick(emptyList())
+        assertEquals(0, w.kJT)
+        assertEquals(12, w.jC)
+        // next frames dispatch normally (NO row → menu)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+        assertEquals(2, w.jC)
+    }
+
+    @Test fun `a manually latched bit flushes on the next frame`() {
+        val w = world()
+        w.stateL(12)
+        w.kJT = 1 shl 2                       // simulate a held pad bit
+        w.tick(emptyList())
+        // `j.i()` true → `j.t=0`, frame skipped; next tap dispatches
+        assertEquals(0, w.kJT)
+        assertEquals(12, w.jC)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+        assertEquals(2, w.jC)
+    }
+}
