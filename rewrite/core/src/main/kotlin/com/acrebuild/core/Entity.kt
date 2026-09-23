@@ -2447,6 +2447,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
 
+    /** `i.ab()` (i.java:18914, proven): claim-script parked at an active
+     *  marker — bound (`ca>=0`), not flag-0 suspended, `cK` snapshot
+     *  armed. The draw pass reads this (and `cd[2]`/`cd[9]`) for the
+     *  bar-quiet gate and the `cg`/`cf` hint arms. */
+    fun claimAb(): Boolean = ca >= 0 && !cd[0] && cK >= 0
+
     /** `g.g(int)` (g.java:5266, proven): `J |= mask` — ORs an action-request
      *  bit, then `k.q()` rebuilds the `ar[]` equip list. */
     fun requestAction(mask: Int, w: LevelCellSource) {
@@ -2754,9 +2760,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  (written by `o()`, read by `b(x,y)` :9829). */
         var markerLx = -1
         var markerLy = -1
-        /** `i.bu[]` (i.java:22315, proven) — per-weapon damage table,
-         *  indexed by `k.au` (weapon slot). */
+        /** `i.bu[]` (i.java:166, proven) — dual use: per-weapon damage
+         *  by weapon slot `I` in `j()`, and soldier max-HP by difficulty
+         *  `k.au` for the draw-pass HP bar (`i.bu[au]`, k.java:2945). */
         val WEAPON_DMG = intArrayOf(300, 400, 500)
+        /** `i.bv[]` (i.java:167, proven) — civilian max-HP by
+         *  difficulty `k.au` (spawn init i.java:2340/2399 + the
+         *  ax17 HP-bar scale k.java:2947). */
+        val NPC_HP_BV = intArrayOf(100, 140, 200)
         /** `i.H[]` (i.java:22318, proven) — carried-entity damage (bc()/bd()). */
         val WEAPON_H = intArrayOf(50, 50, 50)
         /** `i.K[]` (i.java:22322, proven) — ax32 wall-break damage (bc()). */

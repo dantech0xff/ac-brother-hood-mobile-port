@@ -43,4 +43,14 @@ object Trig {
         ).toInt()
         return ((a % X) + X) % X
     }
+
+    /** `k.h(i,i2)` (k.java:5301-5313, proven): integer hypot —
+     *  `(|a|+|b|) − min/2 − min/4 + min/8`. */
+    fun khypot(a0: Int, b0: Int): Int {
+        if (a0 == 0 && b0 == 0) return 0
+        val a = if (a0 < 0) -a0 else a0
+        val b = if (b0 < 0) -b0 else b0
+        val m = if (a > b) b else a
+        return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
+    }
 }

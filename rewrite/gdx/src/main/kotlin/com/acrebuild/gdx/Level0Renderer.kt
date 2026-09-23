@@ -4,6 +4,7 @@ import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
+import com.acrebuild.core.Trig
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.badlogic.gdx.Gdx
@@ -203,6 +204,8 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
+    private val ROPE_COL = -3584205                    // k.b rope-line (k.java:2961)
+    private val BAR_DEAD_S = intArrayOf(24, 21, 0, 139, 133, 134, 145, 135, 106, 107)
     private var menuEz = 0                            // k.ez fit-scroll
 
     /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
@@ -215,6 +218,118 @@ class Level0Renderer {
                    (Level0World.VIEW_H - y - h).toFloat(),
                    w.toFloat(), h.toFloat())
         batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `j.c(g,x,y,w,h)` (j.java, proven) — 1px hollow rect outline. */
+    private fun outlineAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        fillAr(x, y, w, 1, argb); fillAr(x, y + h - 1, w, 1, argb)
+        fillAr(x, y + 1, 1, h - 2, argb); fillAr(x + w - 1, y + 1, 1, h - 2, argb)
+    }
+
+    /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
+     *  rotated `white` quad (screen-space y-down → rotate by −dy). */
+    private fun drawLine(x0: Int, y0: Int, x1: Int, y1: Int, argb: Int) {
+        val dx = x1 - x0; val dy = y1 - y0
+        if (dx == 0 && dy == 0) { fillAr(x0, y0, 1, 1, argb); return }
+        val len = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+        val rot = Math.toDegrees(Math.atan2(-dy.toDouble(), dx.toDouble())).toFloat()
+        batch.setColor(((argb ushr 16) and 255) / 255f,
+                       ((argb ushr 8) and 255) / 255f,
+                       (argb and 255) / 255f,
+                       ((argb ushr 24) and 255) / 255f)
+        batch.draw(white, x0.toFloat(), (Level0World.VIEW_H - y0).toFloat(),
+                   0f, 0.5f, len, 1f, 1f, 1f, rot,
+                   0, 0, white.width, white.height, false, false)
+        batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `g.a(i2,i3,i4,i5,i6)` (g.java:4723-4733, proven): the dotted
+     *  rope — `k.h(len)/6` clip61 dots stepped 6px along `+angle` from
+     *  `(i4,i5)`. (`i.bg` in the call is the Graphics, so anim0/frame0
+     *  and no palette.) Caller passes screen coords. */
+    private fun ropeDots(x2: Int, y2: Int, x4: Int, y4: Int, ang: Int) {
+        if (clips[61] == null) return
+        var seg = Trig.khypot(x4 - x2, y4 - y2) / 6
+        var d = 0
+        while (seg > 0) {
+            seg--
+            d += 6
+            drawFrame(61, 0, 0,
+                      x4 + ((d * Trig.sin(ang)) shr 8),
+                      y4 - ((d * Trig.sin(Trig.N - ang)) shr 8), 0)
+        }
+    }
+
+    /**
+     * `k.b(z2)` per-entity overlay tail (k.java:2931-2990, proven):
+     * gated by `C==null || !C.ab() || !C.cd[2] || P&512 || ax==0` (a
+     *  claim-script in its marker-quiet state suppresses all bars), then
+     *  `(P&32)==0 && (P&128)==0`:
+     *  - `bl>0` && ax!={73,11} → mash/charge bar (white 42×5 @ ak,al-70,
+     *    red fill `bl*40/10`);
+     *  - ax11 alive-anim + `h()`, or ax73 `h()`, or ax17 `h()` && S!=69
+     *    → HP bar (41×5 @ ak-20,al-80; green >half else red/white blink;
+     *    fill `aB*40/i33`, halved to `*20` when Z0∈{1,2} or ax73;
+     *    `i33 = i.bu[k.au]` soldiers / `i.bv[k.au]` civilians);
+     *  - ax10 S==32 → rope-volume lines (W mid-height; two toward the
+     *    claimed player when `aS.ac==self`, else the W span);
+     *  - ax0 → claim `cd[9]` hints (`a(cg,ch)` link rope or `cf` dotted
+     *    line) else `S∈272-277|293|298` → `aS.i()` own grapple rope.
+     */
+    private fun drawOverlayTail(w: Level0World, e: Entity, camX: Int, camY: Int) {
+        val c = w.kC
+        if (!(c == null || !c.claimAb() || !c.cd[2] ||
+              (e.P and 512) != 0 || e.ax == 0)) return
+        if ((e.P and 32) != 0 || (e.P and 128) != 0) return
+        if (e.bl > 0) {
+            if (e.ax != 73 && e.ax != 11) {
+                outlineAr(e.ak - camX, e.al - camY - 70, 42, 5, -1)
+                fillAr(e.ak - camX + 1, e.al - camY - 70,
+                       (e.bl * 40) / 10, 4, -65536)
+            }
+        } else if ((e.ax == 11 && e.S !in BAR_DEAD_S && w.showsHpBar(e)) ||
+                   (e.ax == 73 && w.showsHpBar(e)) ||
+                   (e.ax == 17 && w.showsHpBar(e) && e.S != 69)) {
+            val ex = e.ak - 20 - camX
+            val ey = e.al - camY - 80
+            outlineAr(ex, ey, 41, 5, -1)
+            val i33 = if (e.ax == 17) Entity.NPC_HP_BV[w.kAu]
+                      else Entity.WEAPON_DMG[w.kAu]
+            val col = if (e.aB > (i33 shr 1)) 65280
+                      else if ((w.jG and 1L) == 0L) -65536 else -1
+            val fw = if (e.Z[0] == 2 || e.Z[0] == 1 || e.ax == 73)
+                     (e.aB * 20) / i33 else (e.aB * 40) / i33
+            fillAr(ex + 1, ey, fw, 4, col)
+        } else if (e.ax == 10 && e.S == 32) {
+            val my = (e.W[1] + e.W[3]) shr 1
+            val p = w.player
+            if (p.ac == e) {
+                drawLine(e.W[0] - camX, my - camY, p.ak - camX, p.al - camY, ROPE_COL)
+                drawLine(e.W[2] - camX, my - camY, p.ak - camX, p.al - camY, ROPE_COL)
+                drawLine(e.W[0] - camX, my + 1 - camY, p.ak - camX, p.al + 1 - camY, ROPE_COL)
+                drawLine(e.W[2] - camX, my + 1 - camY, p.ak - camX, p.al + 1 - camY, ROPE_COL)
+            } else {
+                drawLine(e.W[0] - camX, my - camY, e.W[2] - camX, my - camY, ROPE_COL)
+                drawLine(e.W[0] - camX, my + 1 - camY, e.W[2] - camX, my + 1 - camY, ROPE_COL)
+            }
+        } else if (e.ax == 0) {
+            if (c != null && c.claimAb() && c.cd[9]) {
+                if (c.cg != null && c.ch != null) {
+                    val g0 = c.cg!!; val g1 = c.ch!!
+                    val dx = g1.X[0] - g0.X[0]; val dy = g1.X[1] - g0.X[1]
+                    ropeDots(g0.X[0] - camX, g0.X[1] - camY,
+                             g1.X[0] - camX, g1.X[1] - camY,
+                             Trig.atan2(dy, -dx))
+                } else if (c.cf != null) {
+                    val cf = c.cf!!
+                    ropeDots(cf[0] - camX, cf[1] - camY,
+                             cf[2] - camX, cf[3] - camY, cf[4])
+                }
+            } else if (e.S in 272..277 || e.S == 293 || e.S == 298) {
+                ropeDots(e.cJ - camX, e.cK - camY,
+                         e.cH - camX, e.cI - camY, e.cy)
+            }
+        }
     }
 
     /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
@@ -550,6 +665,7 @@ class Level0Renderer {
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(ab, camX, camY)
+            drawOverlayTail(world, e, camX, camY)
         }
 
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)

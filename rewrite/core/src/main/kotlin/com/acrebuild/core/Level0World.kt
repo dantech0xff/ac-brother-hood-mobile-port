@@ -1275,6 +1275,19 @@ class Level0World(
         npcFsm.tickBubble(e, this)
     }
 
+    /** `i.h(iVar)` (simple/i.java:20791-20822, proven — the structured
+     *  decompile folds the switch): the draw-pass HP-bar predicate —
+     *  `a(W, ac)` strict overlap, then ax11/73 → `!P() && aA>=1` (alive and
+     *  alerted), ax17/50 → true, anything else → false. */
+    fun showsHpBar(e: Entity): Boolean {
+        if (!Entity.overlapStrict(e.W, camRect)) return false
+        return when (e.ax) {
+            11, 73 -> !e.deadRelease() && e.aA >= 1
+            17, 50 -> true
+            else -> false
+        }
+    }
+
     /** `k.d(i)` (k.java:2492-2505, proven): insert `e` into `bd[]`
      *  sorted by `az` ASCENDING (insert before first `bd[i].az >= e.az`;
      *  ties keep `al` ASCENDING via the `iVar.al > bd[i].al` skip). */
