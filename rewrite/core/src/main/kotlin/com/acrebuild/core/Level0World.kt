@@ -772,8 +772,10 @@ class Level0World(
     var kCb = false                    // k.cb
     var kCu = 0                        // k.cu — boot R() sub-phase (entity cu is i's)
     var kDu = 0L                       // k.du — jG snapshot at a cu transition
-    var kFd = 0                        // k.fd
-    var kFe = 0                        // k.fe
+    var kFd = 0                        // k.fd — scroll-panel text offset
+    var kFe = 0                        // k.fe — scroll velocity
+    var kDw = 0                        // k.dw — jc24/25 counters
+    var kDy: String? = null            // k.dy — jc24 credits buffer
     // k.aD → `kAD` (existing field, HUD fuse entity — same original field)
     var kEc = 0                        // k.eC — screen timer
     var kEb = 0                        // k.eB — banner variant
@@ -859,13 +861,26 @@ class Level0World(
         22 to "SOUND", 23 to "TOTAL", 24 to "LOADING",
         25 to "DO YOU WANT TO RESTART?",
         27 to "IN AN ATTACK ON THE AUDITORE FAMILY VILLA, RODRIGO'S SON, CESARE, HAS KILLED EZIO'S BELOVED UNCLE, MARIO, AND STOLEN THE DANGEROUS AND POWERFUL APPLE OF EDEN. VOWING TO AVENGE HIS UNCLE AND RECOVER THE APPLE, EZIO SEEKS THE AID OF HIS FRIEND, NICCOLÒ MACCHIAVELLI, WHO INFORMS HIM THAT HE WON'T BE ABLE TO GET TO CESARE WITHOUT HELP FROM LOCALS...",
+        28 to "THE END",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
         47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
         48 to "FIND THE HEALTH POTION TO RECOVER LIFE.",
         49 to "THE GAME CAN ALSO BE PLAYED ENTIRELY WITH THE VIRTUAL PAD.\n\nCORRESPONDING CONTROLS\n\nTOUCH THE ASSASSIN = ATTACK ICON\nTOUCH THE AREA TO THE ASSASSIN'S LEFT = VIRTUAL PAD LEFT\nTOUCH THE AREA TO THE ASSASSIN'S RIGHT = VIRTUAL PAD RIGHT\nTOUCH THE AREA ABOVE THE ASSASSIN = VIRTUAL PAD UP OR JUMP ICON\nTOUCH THE AREA BELOW THE ASSASSIN = VIRTUAL PAD DOWN",
         50 to "\\^ACHIEVEMENTS\\^  \n\\0INCREDIBLE ASSASSIN:\\1 KILL 7 ENEMIES IN ONE LEVEL. \n\\0HARDCORE:\\1 COMPLETE ONE LEVEL IN HARD MODE. \n\\0BLOOD KILLER:\\1 KILL 28 ENEMIES IN LEVEL 2 IN HARD MODE.",
+        55 to "THANKS TO THE BROTHERS, EZIO HAS FINALLY DEFEATED CESARE, " +
+              "THEREBY KILLING HIS NEMESIS AND ELIMINATING THE DARK " +
+              "SHADOW PLAGUING ROME. HAVING AVENGED HIS MURDERED UNCLE " +
+              "AND BROTHERS, HE ONLY WISHES TO LIVE IN PEACE AND " +
+              "REST.\n\nHOWEVER, AS EZIO THOUGHT, THE APPLE OF EDEN " +
+              "HAS MANY POWERS THAT ARE BOTH MYSTERIOUS AND DANGEROUS. " +
+              "BEFORE HE LEAVES, EZIO HIDES THE APPLE OF EDEN SO THAT " +
+              "NONE MAY FIND IT OR USE ITS POWER. BUT WHAT EZIO " +
+              "DOESN'T KNOW IS THAT SPYING EYES ARE FOLLOWING HIS " +
+              "EVERY MOVEMENT...",
+        66 to "DID YOU LIKE THIS GAME? CHECK OUT OTHER GAMELOFT GAMES!",
         98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
+        99 to "CONGRATULATIONS!\n\nYOU UNLOCKED HARD MODE!",
 
         38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
         41 to "SOULS", 42 to "TIME", 43 to "SCORE",
@@ -1642,7 +1657,7 @@ class Level0World(
     fun stateL(iArg: Int) {
         var i = iArg
         while (true) {                               // L2 — re-entry for i=22 only
-            kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0
+            kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0
             jG = 0                                   // j.g=0 (k.java:2047)
             if (i == 27) audioStop()                 // e.b() — audio stop (unported)
             when {
@@ -1715,12 +1730,6 @@ class Level0World(
                     // `fb = y.a(d(0,27),390)` (:1825, proven) — story
                     // text re-broken into <=390px lines joined by '\n'.
                     kFb = wrapJoin(d0(27) ?: "")
-                    // `eZ` — `b.e`-height arm (:1291-1293): text taller
-                    // than 120px slides its draw origin up (inferred
-                    // height = linesHeight(lineCount)).
-                    val h = footerFont?.linesHeight(
-                        kFb.split('\n').size) ?: 0
-                    kEz = if (h > 120) 85 - (h - 120) else 85
                 }
             }
             break
@@ -2206,6 +2215,7 @@ class Level0World(
         5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         20 -> Pair(d0(16), d0(18))      // case20 `a(d(0,16),d(0,18))` (:1299)
+        24 -> Pair(null, d0(18))        // case24 `a(null,d(0,18))` (:1363)
         else -> Pair(null, null)
     }
     /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
@@ -2397,7 +2407,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 20, 23, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 24, 25, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2601,13 +2611,132 @@ class Level0World(
                 kCT += 10
                 if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
                     kCu = 5; kFd = kEz
+                    scrollPanel(kFb, 85, 120, 390, false)   // :1273
                     if (pad.v(Pad.M_PAUSE)) z(23)
                 }
             }
-            5 -> { /* full text + spinner — render side only */ }
+            5 -> {
+                // `a(y,0,str,5,85,390,120,0,0,false)` every frame
+                // (:1282) — the scrollable panel ticks fe/fd; the draw
+                // is renderer-side.
+                scrollPanel(kFb, 85, 120, 390, false)
+            }
         }
         if (pad.v(Pad.M_CYCLE) || (pad.v(Pad.M_PAUSE) && kCu == 5)) {
             stateL(9); z(23)                        // (:1300-1305)
+        }
+    }
+
+    /** `a(bVar, i, str, x2, y3, w4, h5, flags, align, wrap)`
+     *  (k.java:5627-5693, proven) — the scrollable text panel's sim
+     *  side. `fe` = scroll velocity (edge presses, not held):
+     *  `v(33024)` → fe-- clamped -5; `v(16388)` → fe++ clamped +2
+     *  (dx/jc24 → -1); fe==0 → -1; unwrapped (`wrap=false`) forces
+     *  fe<0. `fd` = text draw-y; `fd < y3 - iK` → off the top →
+     *  `fd = 240` wrap-restart (dx → the l(25)/l(1) ending hook);
+     *  `fe>0 && fd >= h5` → bounce fe=-1. jc24 stops scrolling at
+     *  `fd < -iK + 160` and arms dw=30 instead. iK = text block height
+     *  (`y.a(str,null)` → b.e; ours = linesHeight — inferred).
+     *  Returns fd for the renderer's draw-y. */
+    private fun scrollPanel(str: String, y3: Int, h5: Int, w4: Int, wrap: Boolean): Int {
+        if (pad.v(Pad.M_DOWN)) {
+            if (--kFe < -5) kFe = -5
+        } else if (pad.v(Pad.M_UP)) {
+            if (++kFe == 0) kFe = 1
+            if (kDx || jC == 24) {
+                if (kFe > -1) kFe = -1
+            } else if (kFe > 2) kFe = 2
+        }
+        if (kFe == 0) kFe = -1
+        if (!wrap && kFe >= 0) kFe = -1
+        val f = footerFont
+        val iK = if (f == null) 0 else {
+            if (wrap) f.linesHeight(f.wrap(str, w4)[0])
+            else f.linesHeight(str.split('\n').size)
+        }
+        if (jC == 24) {
+            if (kDw < 30 && kFd < -iK + 160) kDw = 30
+        } else if (kFd < y3 - iK) {
+            if (kDx) {
+                if (kBA[69] != 0) stateL(25)
+                else { kBA[69] = 1; saveFlush(); stateL(1) }
+                kDw = 255
+                return kFd
+            }
+            kFd = 240
+        } else if (kFe > 0 && kFd >= h5) kFe = -1
+        if (jC != 24 || kFd >= -iK + 160) kFd += kFe
+        return kFd
+    }
+
+    /** `k.a()` case 24 (k.java:1326-1386, proven) — the ending
+     *  credits scroller. `dz<120`: letterbox iris (+20/frame) and
+     *  (re)arms `dw=0, fd=110, dy = d(0,28)+11*'\n'+d(0,55)`.
+     *  `dz>=120`: dw 1-10 title slide-in, 11-20 hold, 21-29 the
+     *  wrapped `b()` panel (dw=30 armed INSIDE `a()` when the text
+     *  scrolls past `fd < -iK+160`), 30-415 panel + dw++ (>=160:
+     *  `dw+=20; fe=0; fd++` white-out), >415 → `dy=null; dz=0; l(25)`.
+     *  `v(131072)` skip → `dw=160; z(23)`. Footer `a(null,d(0,18))`. */
+    private fun menuJc24() {
+        if (kDz >= 120) {
+            if (kDw > 0) {
+                if (kDw <= 20) kDw++                    // slide (1-10) + hold (11-20)
+                else if (kDw < 30) {
+                    scrollPanel(kDy ?: "", 33, 205, 380, true)
+                } else if (kDw > 415) {
+                    kDy = null; kDz = 0; stateL(25)
+                } else {
+                    if (kDw >= 160) { kDw += 20; kFe = 0; kFd++ } else kDw++
+                    scrollPanel(kDy ?: "", 33, 205, 380, true)
+                }
+                footerQ()                               // a(null,d(0,18)) SKIP pill
+                if (pad.v(Pad.M_CYCLE)) { if (kDw < 160) kDw = 160; z(23) }
+            } else kDw = 1
+        } else {
+            kDz += 20
+            kDw = 0; kFd = 110
+            kDy = (d0(28) ?: "") + "\n\n\n\n\n\n\n\n\n\n\n" + (d0(55) ?: "")
+        }
+    }
+
+    /** `k.a()` case 25 (k.java:1388-1420, proven) — post-credits outro.
+     *  dx=false entry → `dx=true; l(6); z(0)` (redirects to ABOUT).
+     *  dx=true entry → `!Z() → l(2)`. The epilogue tail — dw fade-out,
+     *  the d(0,66)/d(0,9) `a()` panels, `v(65568)||j() → l(27)` + the
+     *  eJ/bA[10] stamp + `f.a(d(0,24),0)` store intent — runs only
+     *  when Z() (the IGP check) is true: dead on this non-IGP port,
+     *  ported verbatim. */
+    private fun menuJc25() {
+        if (!kDx) { kDx = true; stateL(6); z(0); return }
+        if (!menuShopCheck()) { stateL(2); return }       // !Z() → l(2)
+        // --- epilogue tail (IGP devices only in the original) --------
+        if (kDw > 0) kDw -= 20
+        scrollPanel(d0(66) ?: "", 80, 220, 400, false)
+        scrollPanel(d0(9) ?: "", 160, 260, 400, false)
+        if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
+            stateL(27)                                  // `f.a(d(0,24),0)` intent unported
+            if (!kEJ) { kEJ = true; kBA[10] = 1; saveFlush() }
+            z(23)
+        }
+    }
+
+    /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
+     *  screen's tick. `G(j.g)` is the staged loader (:4741-5090): each
+     *  `j.g` milestone loads one resource — 1 strings+save bytes
+     *  (dD=save32, dB=save44), 2 U()+bh3 dL, 3 I(aj), 4-7 tilesets,
+     *  8 K()+scripts, 9 clip-demand el[]+dv, 10-84 per-clip z[] loads,
+     *  85 palette binds, 87-161 anim masks, 163-164 anim links;
+     *  `i > 164` → done. All clips/scripts load at world-init here, so
+     *  `G(j.g)` collapses to its counter: done at `j.g > 164`.
+     *  Then `w(65568)||j()` → `ax=dB; ay=dC; aN=dF` (restore mission
+     *  state from the save bytes), `dz=120; aw=0`, `l(8)` + `z(23)` +
+     *  `F(aj)` — `missionInit()` covers the `g.e(ax)`/music arm; bG/dl/
+     *  A[]-release are script/render side (unported). */
+    private fun menuJc9() {
+        if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
+            kAx = kDB; kAy = kDC; kAN = kDF
+            kDz = 120; kAw = 0
+            stateL(8); z(23)
         }
     }
 
@@ -2690,6 +2819,9 @@ class Level0World(
             5 -> menuG()                           // G() (:2412, proven)
             0 -> bootR()                             // case 0 = R() (:3949)
             20 -> menuJc20()                         // case 20 (:1208-1306)
+            9 -> menuJc9()                           // case 9 (:1067-1088)
+            24 -> menuJc24()                         // case 24 (:1326-1386)
+            25 -> menuJc25()                         // case 25 (:1388-1420)
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then

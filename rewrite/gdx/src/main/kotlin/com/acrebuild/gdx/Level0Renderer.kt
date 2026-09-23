@@ -355,20 +355,65 @@ class Level0Renderer {
         return if (n <= 0) 0 else ((world.jG - world.kDu) % n).toInt()
     }
 
-    /** jc20 overlay — `z[39]` slide icon + wrapped story text + spinner. */
+    /** jc20 overlay (k.java:1280-1298, proven): `z[39]` anim-1 icon at
+     *  (eY,80) for ALL `cu>=2`; text at eZ inside the (85,120) clip for
+     *  `cu<=4`; cu5 draws the scroll panel's text at `fd` inside the
+     *  same clip; `z[39]` anim-10 spinner at (300,80) for `cu>=4`. */
     private fun storyScreen(world: Level0World) {
         if (world.kCu < 2) return
         val icon = clips[39]
-        if (icon != null && world.kCu <= 4) {
+        if (icon != null) {
             val n = icon.frameCount(1)
             drawFrame(39, 1, if (n <= 0) 0 else (world.jG % n).toInt(),
                       0, world.kEY, 80)
         }
-        drawText(world.storyText(), 5, world.kEz, 0)
+        clipScissor(0, 85, 400, 120)
+        if (world.kCu <= 4) {
+            // :1290-1296 — `y.a(str,null)` measure, tall text slides
+            // eZ up (`eZ = 85-(b.e-120)`), then draws at eZ; the write-
+            // back is verbatim so `fd = eZ` at cu4→5 inherits it.
+            val h = world.footerFont?.linesHeight(
+                world.storyText().count { it == '\n' } + 1) ?: 0
+            if (h > 120) world.kEz = 85 - (h - 120)
+            drawText(world.storyText(), 5, world.kEz, 0)
+        } else {
+            drawText(world.storyText(), 5, world.kFd, 0)
+        }
+        clipScissor(0, 0, 400, 240)
         if (icon != null && world.kCu >= 4) {
             val n = icon.frameCount(10)
             drawFrame(39, 10, if (n <= 0) 0 else (world.jG % n).toInt(),
                       300, 80, 0)
+        }
+    }
+
+    /** jc24 credits (k.java:1326-1386, proven): dz<120 letterbox iris;
+     *  black field + `d(0,28)` title slide (dw 1-10 → y 220→120, 11-20
+     *  hold); dw>=21 the wrapped credits at fd clipped (0,33,400,205);
+     *  dw>=160 gray ramp `i11=dw-160` (alpha+rgb channels) white-out. */
+    private fun creditsScreen(world: Level0World) {
+        if (world.kDz < 120) {
+            fillAr(0, 0, 400, world.kDz, -0x1000000)
+            fillAr(0, 240 - world.kDz, 400, world.kDz, -0x1000000)
+            return
+        }
+        val fade = if (world.kDw >= 160) {
+            (world.kDw - 160).coerceAtMost(255)
+        } else 0
+        fillAr(0, 0, 400, 240,
+               if (world.kDw >= 160)
+                   (fade shl 24) or (fade shl 16) or (fade shl 8) or fade
+               else -0x1000000)
+        val title = world.d0(28) ?: ""
+        if (world.kDw in 1..10) {
+            drawText(title, 200, 120 + (100 * (10 - world.kDw)) / 10, 3, pack = 91)
+        } else if (world.kDw in 11..20) {
+            drawText(title, 200, 120, 3, pack = 91)
+        }
+        if (world.kDw >= 21) {
+            clipScissor(0, 33, 400, 205)
+            drawText(world.kDy ?: "", 200, world.kFd, 3, pack = 91)
+            clipScissor(0, 0, 400, 240)
         }
     }
 
@@ -1262,6 +1307,9 @@ class Level0Renderer {
         // cu 4/5 also `z[39].a(cd,10,0,300,80)` spinner. footerQ() arms
         // the NEXT/SKIP footer in world.menuFooter().
         if (world.jC == 20) storyScreen(world)
+
+        // jc24 ending credits (k.java:1326-1386, proven)
+        if (world.jC == 24) creditsScreen(world)
 
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95

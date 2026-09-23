@@ -11391,7 +11391,7 @@ class Slice110Test {
     }
 
     @Test fun `jc20 types the text then NEXT exits to l-9`() {
-        val w = world()
+        val w = world(charmap = asset("fonts/charmap.bin"))
         w.stateL(20)
         w.tick(emptyList())                          // cu0 → cu1 (cT=10)
         assertEquals(1, w.kCu)
@@ -11404,8 +11404,8 @@ class Slice110Test {
         assertEquals(3, w.kCu, "fc >= len-1 → cu3")
         repeat(26) { w.tick(emptyList()) }           // eY -=4 → 100 → cu4
         assertEquals(4, w.kCu); assertEquals(100, w.kEY)
-        repeat(25) { w.tick(emptyList()) }           // cT→255 → cu5 (fd=eZ)
-        assertEquals(5, w.kCu); assertEquals(w.kEz, w.kFd)
+        while (w.kCu < 5) w.tick(emptyList())        // cT→255 → cu5 (fd=eZ-1)
+        assertEquals(5, w.kCu); assertEquals(w.kEz - 1, w.kFd)
         w.pad.queuePress(Pad.M_CYCLE)                // NEXT v(131072) → l(9)
         w.tick(emptyList())
         assertEquals(9, w.jC)
@@ -11434,5 +11434,148 @@ class Slice110Test {
         w.pad.queuePress(Pad.M_CYCLE)                // v(131072) — NEXT
         w.tick(emptyList())
         assertEquals(9, w.jC)
+    }
+}
+
+class Slice111Test {
+
+    @Test fun `jc9 holds until load counter passes 164`() {
+        val w = world()
+        w.stateL(9)
+        assertEquals(9, w.jC)
+        // release the 65568 bit too early — j.g<=164 keeps loading
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); w.pad.releaseFlush()
+        w.tick(emptyList())
+        assertEquals(9, w.jC, "j.g=2 — still loading, release ignored")
+        repeat(163) { w.tick(emptyList()) }          // j.g → 165
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); w.pad.releaseFlush()
+        w.tick(emptyList())                          // eM=65568 → w() → l(8)
+        assertEquals(8, w.jC, "load done + context release → play")
+    }
+
+    @Test fun `jc9 restores mission state from save bytes on entry to play`() {
+        val w = world()
+        w.kDB = 30; w.kDC = 44; w.kDF = 7            // dB/dC/dF save bytes
+        w.stateL(9)
+        repeat(165) { w.tick(emptyList()) }          // j.g → 165
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); w.pad.releaseFlush()
+        w.tick(emptyList())
+        assertEquals(8, w.jC)
+        assertEquals(30, w.kAx); assertEquals(44, w.kAy); assertEquals(7, w.kAN,
+            "ax=dB; ay=dC; aN=dF (:1075-1077)")
+        assertEquals(120, w.kDz); assertEquals(0, w.kAw)
+        assertEquals(23, w.audioTrack, "z(23) on the l(8) transition")
+    }
+
+    @Test fun `jc9 play-strip tap also enters play`() {
+        val w = world()
+        w.stateL(9)
+        repeat(165) { w.tick(emptyList()) }
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.UP, 200, 100)))
+        assertEquals(8, w.jC, "j() tap → l(8)")
+    }
+}
+
+class Slice112Test {
+
+    private fun driveToCu5(w: Level0World) {
+        w.stateL(20)
+        while (w.kCu < 5) w.tick(emptyList())        // each cu arm to the cu4→5 edge
+    }
+
+    @Test fun `cu5 ticks the scroll panel — fd drifts at fe=-1`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        driveToCu5(w)
+        assertEquals(5, w.kCu)
+        assertEquals(w.kEz - 1, w.kFd, "transition a() ticks once: fe→-1 (:1273)")
+        w.tick(emptyList())
+        assertEquals(w.kEz - 2, w.kFd)
+        w.tick(emptyList())
+        assertEquals(w.kEz - 3, w.kFd, "fd += fe every frame (:5685)")
+    }
+
+    @Test fun `DOWN press accelerates the scroll and floors at -5`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        driveToCu5(w)
+        val before = w.kFd
+        w.pad.e(Pad.M_DOWN); w.tick(emptyList())
+        assertEquals(-2, w.kFe); assertEquals(before - 2, w.kFd)
+        repeat(4) { w.pad.e(Pad.M_DOWN); w.tick(emptyList()) }
+        assertEquals(-5, w.kFe, "fe floors at -5 (:5632)")
+    }
+
+    @Test fun `UP press is a no-op for the unwrapped panel`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        driveToCu5(w)
+        w.pad.e(Pad.M_UP); w.tick(emptyList())
+        assertEquals(-1, w.kFe, "wrap=false forces fe<0 (:5652-5653)")
+    }
+
+    @Test fun `fd below the top edge wraps to 240 then keeps ticking`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        driveToCu5(w)
+        w.kFd = -1000
+        w.tick(emptyList())
+        assertEquals(239, w.kFd, "fd=240 wrap-restart then fd+=fe (:5680-5685)")
+    }
+
+    @Test fun `l-20 resets the scroll state`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        driveToCu5(w)
+        w.stateL(20)
+        assertEquals(-1, w.kFd); assertEquals(0, w.kFe); assertEquals(0, w.kDw)
+    }
+}
+
+class Slice113Test {
+
+    @Test fun `jc24 iris then credits scroll then NEXT-skip to l-25`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        w.kDz = 0                                    // M()'s l(24) caller arms dz=0 (:3433)
+        w.stateL(24)
+        assertEquals(24, w.jC)
+        repeat(6) { w.tick(emptyList()) }            // iris: dz 0→120 at +20/frame
+        assertEquals(120, w.kDz)
+        assertTrue(w.kDy!!.startsWith("THE END"), "dy = d(0,28)+\\n*11+d(0,55)")
+        assertTrue(w.kDy!!.endsWith("EVERY MOVEMENT..."))
+        assertEquals(110, w.kFd, "fd armed 110 during iris")
+        w.tick(emptyList()); assertEquals(1, w.kDw)  // dw=0 → dw=1
+        w.tick(emptyList()); assertEquals(2, w.kDw)
+        repeat(20) { w.tick(emptyList()) }
+        assertTrue(w.kDw >= 21, "title slide (1-10) + hold (11-20) done")
+        val fd0 = w.kFd
+        w.tick(emptyList())
+        assertTrue(w.kFd < fd0, "credits scroll: fd drifts up at fe=-1")
+        w.pad.e(Pad.M_CYCLE); w.tick(emptyList())
+        assertEquals(160, w.kDw, "v(131072) skip → dw=160")
+        assertEquals(23, w.audioTrack, "z(23) on skip")
+        repeat(14) { w.tick(emptyList()) }           // dw += 20 → >415
+        assertEquals(25, w.jC, "dw>415 → dy=null; dz=0; l(25)")
+    }
+
+    @Test fun `jc25 first entry latches dx and redirects to l-6`() {
+        val w = world()
+        w.kDx = false
+        w.stateL(25)
+        w.tick(emptyList())
+        assertTrue(w.kDx, "dx=true latched")
+        assertEquals(6, w.jC, "l(6) redirect (:1392)")
+        assertEquals(0, w.audioTrack, "z(0) on redirect")
+    }
+
+    @Test fun `jc25 re-entry with dx returns to main menu`() {
+        val w = world()
+        w.kDx = true
+        w.stateL(25)
+        w.tick(emptyList())
+        assertEquals(2, w.jC, "!Z() → l(2) — Z() is the IGP check, false here")
+    }
+
+    @Test fun `jc24 footer arms the SKIP pill only`() {
+        val w = world()
+        w.kDz = 0; w.stateL(24)
+        repeat(7) { w.tick(emptyList()) }            // iris done + dw=1
+        val f = w.menuFooter()
+        assertNull(f.first); assertEquals("SKIP", f.second, "a(null,d(0,18))")
     }
 }
