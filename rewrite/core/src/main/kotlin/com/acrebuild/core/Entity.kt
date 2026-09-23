@@ -2776,6 +2776,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  by weapon slot `I` in `j()`, and soldier max-HP by difficulty
          *  `k.au` for the draw-pass HP bar (`i.bu[au]`, k.java:2945). */
         val WEAPON_DMG = intArrayOf(300, 400, 500)
+        /** `i.bS` (i.java:119, proven) — class-level entity flag: `j(1)`
+         *  ORs bit 0, `k.F()` clears it, and nothing in this build ever
+         *  reads it — a dead write-only flag kept verbatim. */
+        var entBSLatch = 0
         /** `i.bv[]` (i.java:167, proven) — civilian max-HP by
          *  difficulty `k.au` (spawn init i.java:2340/2399 + the
          *  ax17 HP-bar scale k.java:2947). */
