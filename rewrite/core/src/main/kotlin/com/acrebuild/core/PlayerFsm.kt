@@ -159,11 +159,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     }
                 }
             }
-            // g.java:1938-2015 (proven) — wall-rebound jump: `cp=true`,
-            // `aj=512`; `A()` → ledge snap i(74); direction-toward-av
-            // press → x() probe, `aR|aS∈{5,20}` → a(43,32) else
-            // a(34,36)+aA() wall-kick; `ah<0` fall → ct=true, r() → the
-            // i4/i5 wall-column pocket scan → ak() lip grab.
+            // g.java:1938-2015 + L1ab3-L1c33 (proven) — wall-rebound:
+            // `cp=true`, `aj=512`; `A()` → ledge snap i(74);
+            // direction-toward-av HELD && `ah<0` (still rising) → ct=true +
+            // the r()-gated i4/i5 wall-column pocket scan → ak() lip grab;
+            // ANY other case (no dir-hold, or holding while falling) →
+            // x() probe, `aR|aS∈{5,20}` → a(43,32) fall else
+            // a(34,36)+aA() wall-kick.
             33 -> {
                 p.cp = true; p.aj = 512
                 if (p.ladderCell(world)) {                     // A()
@@ -174,20 +176,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 } else {
                     val dirKey = if (!p.av) pad.u(Pad.M_RIGHT)
                                  else pad.u(Pad.M_LEFT)
-                    if (dirKey) {
-                        p.probeCells(world)                            // x()
-                        if (p.aR == 5 || p.aR == 20 ||
-                            p.aS == 5 || p.aS == 20) {
-                            p.ah = 0; p.ag = 0
-                            p.enterStateMasked(43, 32, world)
-                        } else {
-                            p.ct = false; p.ag = 0; p.ah = 1536
-                            p.enterStateMasked(34, 36, world)
-                            wallJumpKick(p, world, pad)                       // aA()
-                        }
-                    } else if (p.ah < 0) {
+                    // (proven, g.java L1b0a-L1b8f — branch order matters:
+                    //  holding toward the wall WHILE RISING arms the lip
+                    //  scan; any other case probes for the kick/fall.)
+                    if (dirKey && p.ah < 0) {
                         p.ct = true
-                        if (p.animFinished()) {
+                        if (p.animFinished()) {                          // r()
                             var z4 = false
                             var i10 = (p.W[1] + 10) / 20
                             val i4: Int; val i5: Int
@@ -205,6 +199,17 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                             if (z4 && p.ledgeLipGrab(world)) {
                                 p.aj = 0; p.ah = 0; p.ag = 0
                             }
+                        }
+                    } else {
+                        p.probeCells(world)                            // x()
+                        if (p.aR == 5 || p.aR == 20 ||
+                            p.aS == 5 || p.aS == 20) {
+                            p.ah = 0; p.ag = 0
+                            p.enterStateMasked(43, 32, world)
+                        } else {
+                            p.ct = false; p.ag = 0; p.ah = 1536
+                            p.enterStateMasked(34, 36, world)
+                            wallJumpKick(p, world, pad)                       // aA()
                         }
                     }
                 }
