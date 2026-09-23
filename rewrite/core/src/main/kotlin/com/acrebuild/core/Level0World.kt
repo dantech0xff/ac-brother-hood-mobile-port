@@ -1720,7 +1720,15 @@ class Level0World(
                 }
                 (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — unported
                 i == 8 && kCy == 17 -> i = 17
-                i == 29 -> bannerK(2)
+                i == 29 -> {
+                    bannerK(2)
+                    // `L(i13)` row cap (k.java:1440, proven): case 29
+                    // runs `L(i13)` with `i13 = bA[69]!=0 ? 3 : 2` — the
+                    // HARD row is neither drawn nor selectable until
+                    // the unlock byte is set. bA[69] can't change
+                    // mid-screen → transition-time cap ≡ per-frame.
+                    kEy = if (kBA[69] != 0) 3 else 2
+                }
                 i == 30 -> { bannerK(5); kFo = 0 }
                 i == 4 -> kCU = kAu
                 i == 28 -> bannerK(3)
@@ -2436,7 +2444,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 1, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 24, 25, 28, 29, 30)
+    private val menuStates = intArrayOf(-1, 0, 1, 2, 3, 4, 5, 6, 9, 11, 14, 18, 19, 20, 23, 24, 25, 26, 27, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2788,11 +2796,49 @@ class Level0World(
         scrollPanel(d0(66) ?: "", 80, 220, 400, false)
         scrollPanel(d0(9) ?: "", 160, 260, 400, false)
         if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
-            stateL(27)                                  // `f.a(d(0,24),0)` intent unported
+            enterIgp()                                  // `f.a(d(0,24),0)` (:1410)
+            stateL(27)
             if (!kEJ) { kEJ = true; kBA[10] = 1; saveFlush() }
             z(23)
         }
     }
+
+    /** `k.cv` (k.java:1423-1432) — the IGP offscreen Image handle:
+     *  null-check → allocate once, `cv=cw=null` releases. Boolean
+     *  marker — the J2ME Graphics handles aren't modeled. */
+    private var kCvOn = false
+    /** `k.a()` case 27 (k.java:1422-1435, proven) — the IGP offscreen
+     *  canvas screen: `cv==null → Image.createImage(400,240) + cw`,
+     *  `cd = cw`, then `f.a(0)` pump — true → `l(2)` + `cv=cw=null`,
+     *  then `f.a(cd)` unconditionally (even on the exit tick).
+     *  `f.a(int)` (f.java:1185) returns true whenever IGP is absent
+     *  (`!aE`), so on this non-IGP target the screen exits on its
+     *  first tick — the same path the save-slot picks (menuItem
+     *  32/33/34, :3868) and the epilogue store prompt take. cv/cw/cd
+     *  are J2ME Graphics handles — modeled by the `kCvOn` marker. */
+    private fun menuJc27() {
+        if (!kCvOn) kCvOn = true              // cv = createImage(400,240); cw = cv.g
+        // `cd = cw` (:1428) — cd re-points at the offscreen graphics
+        // every tick, including the exiting one (verbatim order).
+        if (igpTick0()) { stateL(2); kCvOn = false }    // f.a(0) → l(2); cv=cw=null
+        igpBlit()                                       // f.a(cd)
+    }
+
+    /** `Z()` (k.java:5456, proven) — the IGP-capability check: switches
+     *  on `f.a()` (f.java:755 `aE&&g()>0 ? 0 : -1`); each reachable
+     *  case also stamps the promo label `eA[0][3] = 32/33/34` before
+     *  returning true. This port targets non-IGP devices — `f.a()`
+     *  is always -1 → const false → Z()-gated screens self-exit. */
+    private fun igpZ(): Boolean = false
+    /** `f.a(int)` (f.java:1185, proven) — the IGP frame pump;
+     *  `!aE` (IGP absent) returns true → the caller's exit arm. */
+    private fun igpTick0(): Boolean = true
+    /** `f.a(Graphics)` (f.java:1438, proven) — the IGP blit, gated
+     *  `(aE||bZ)&&!bZ` → no-op on this target. */
+    private fun igpBlit() { }
+    /** `f.a(String,int)` (f.java:759, proven) — `enterIGP(msg,lang)`,
+     *  the vendor store intent; no IGP layer on this target → no-op. */
+    private fun enterIgp() { }
 
     /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
      *  screen's tick. `G(j.g)` is the staged loader (:4741-5090): each
@@ -2968,6 +3014,12 @@ class Level0World(
             9 -> menuJc9()                           // case 9 (:1067-1088)
             24 -> menuJc24()                         // case 24 (:1326-1386)
             25 -> menuJc25()                         // case 25 (:1388-1420)
+            // `a()` has no `case 26` (:1388 → :1422, proven) — j.c==26
+            // is a dead screen that consumes ticks verbatim.
+            26 -> { }
+            27 -> menuJc27()                         // case 27 (:1422-1435)
+            11 -> jC = -1                            // case 11 (:1104, proven)
+            -1 -> { /* j.c==-1 — suspended/dead state; consumes ticks */ }
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
