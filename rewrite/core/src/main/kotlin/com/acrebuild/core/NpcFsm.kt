@@ -767,6 +767,48 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gq = false; player.gd = null
                 }
             }
+            // `aV()` S24 arm (i.java:9361-9467 L21e-L313, proven;
+            // dispatch `case 24: goto L21e` i.java:9193) — rope/grab
+            // trigger zone. Eligible = overlap + player not already
+            // bound to this zone + player.S ∉ {291,270,271,90,89,43}
+            // + `!ae()` (no live ax 17/11/23/50/73 humanoid near the
+            // player — `enemiesAlert`). Eligible + `v(16388)` press →
+            // bind `aS.af=e`, `i(0)`, settle `i.E()`, zero velocities,
+            // `i(267)` grab pose, `G()`, clear latches. Eligible without
+            // press + record `aA==1` → keep marker-7 pinned at
+            // (ak, al-15). Ineligible → `G()` drops the marker link.
+            // Same mechanics as ax27's S0 arm (`tickAx27`) but owned by
+            // an ax10 zone with marker offset al-15 (vs al-85).
+            24 -> {
+                val eligible = player.af !== e &&
+                    player.S != 291 && player.S != 270 && player.S != 271 &&
+                    player.S != 90 && player.S != 89 && player.S != 43 &&
+                    rectsOverlap(player.W, e.W) && !enemiesAlert(w, player)
+                if (!eligible) {                               // L313
+                    e.releaseAe()                              // G()
+                    return
+                }
+                if (pad.v(16388)) {                            // L288 press
+                    player.af = e                              // aS.af = e
+                    player.setAnim(0)                          // i(0)
+                    player.eSettle(w)                          // E()
+                    player.ag = 0                              // zero vel
+                    player.ah = 0
+                    player.setAnim(267)                        // i(267)
+                    e.releaseAe()                              // G()
+                    w.clearLatches()                           // k.v()
+                    return
+                }
+                if (e.aA == 1) {                               // L2c9 marker
+                    if (e.ae == null || e.ae!!.S != 7) {
+                        e.releaseAe()                          // G()
+                        e.spawnMarker(w, 7, e.ak, e.al - 15)   // a(7,…)
+                    }
+                    e.ae!!.ak = e.ak                           // pin
+                    e.ae!!.al = e.al - 15
+                }
+                return
+            }
             // `aV()` S31 arm (i.java:9804-10466 L5ea-La66, proven;
             // dispatch `case 31: goto L5ea` i.java:9200) — the
             // claim-QTE zone: 4 pad lanes from Z[1] nibbles (types index
