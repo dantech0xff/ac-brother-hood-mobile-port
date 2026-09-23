@@ -770,7 +770,8 @@ class Level0World(
     var kCY = 1                        // k.cY — G() current 8-line screen
     var kCW = 0                        // k.cW — G() page-1 pad
     var kCb = false                    // k.cb
-    var kCu = 0                        // k.cu — k-side flag (entity cu is i's)
+    var kCu = 0                        // k.cu — boot R() sub-phase (entity cu is i's)
+    var kDu = 0L                       // k.du — jG snapshot at a cu transition
     var kFd = 0                        // k.fd
     var kFe = 0                        // k.fe
     // k.aD → `kAD` (existing field, HUD fuse entity — same original field)
@@ -813,7 +814,12 @@ class Level0World(
     override var kAo = false           // k.ao — fade-side flag
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
-    var kFb: Any? = null               // k.fb — font measurer (unported)
+    var kFb = ""                       // k.fb — wrapped story text (l(20))
+    var kEY = 200                      // k.eY — jc20 text/icon slide y
+    var kEz = 85                       // k.eZ — jc20 text draw y
+    var kFc = 0                        // k.fc — jc20 typewriter counter
+    var kFa = ""                       // k.fa — jc20 accumulated text
+    /** `k.fd` exists (:774) — jc20 snapshots `fd=eZ` at cu4→5. */
 
     // -- menu machine (K()/L()/m()/Q() — k.java:6956/:7084/:5472/:3576) ----
     /** `dp[]/dq[]/dr[]/ds` — the O()/P() state stack (structured
@@ -823,6 +829,8 @@ class Level0World(
     var kEx = 0                        // k.ex — Q()'s caller state (menus)
     var kFF = 0                        // k.fF — delayed l() target
     var kFG = false                    // k.fG — wipe-confirm flag
+    var kCS = false                    // k.cS — jc18 confirm latch
+    var kCT = 0                        // k.cT — jc18 fade counter
     var kFH = 0                        // k.fH — row-anim phase
     var kFI = 0                        // k.fI — row-anim dir
     var kFE = 0                        // k.fE — fade alpha
@@ -850,6 +858,7 @@ class Level0World(
         14 to "YES", 15 to "NO", 16 to "NEXT", 17 to "BACK", 18 to "SKIP",
         22 to "SOUND", 23 to "TOTAL", 24 to "LOADING",
         25 to "DO YOU WANT TO RESTART?",
+        27 to "IN AN ATTACK ON THE AUDITORE FAMILY VILLA, RODRIGO'S SON, CESARE, HAS KILLED EZIO'S BELOVED UNCLE, MARIO, AND STOLEN THE DANGEROUS AND POWERFUL APPLE OF EDEN. VOWING TO AVENGE HIS UNCLE AND RECOVER THE APPLE, EZIO SEEKS THE AID OF HIS FRIEND, NICCOLÒ MACCHIAVELLI, WHO INFORMS HIM THAT HE WON'T BE ABLE TO GET TO CESARE WITHOUT HELP FROM LOCALS...",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
         47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
@@ -870,6 +879,17 @@ class Level0World(
         122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
+        63 to "ALSO AVAILABLE ON THE\n PLAYSTATION®3 SYSTEM.\n " +
+              "ASSASSIN'S CREED IS AVAILABLE ON THE\n PSP® " +
+              "(PLAYSTATION®PORTABLE) SYSTEM.\n WWW.ASSASSINSCREED.COM ",
+        65 to "© 2010 UBISOFT ENTERTAINMENT. ALL RIGHTS RESERVED. " +
+              "ASSASSIN'S CREED, UBISOFT AND THE UBISOFT LOGO ARE " +
+              "TRADEMARKS OF UBISOFT ENTERTAINMENT IN THE U.S. AND/OR " +
+              "OTHER COUNTRIES. PUBLISHED AND DEVELOPED BY GAMELOFT " +
+              "UNDER LICENSE FROM UBISOFT ENTERTAINMENT. SOFTWARE © 2010 " +
+              "GAMELOFT. ALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT " +
+              "LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER " +
+              "COUNTRIES.",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
         106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
         109 to "NOBLEMAN", 113 to "ACHIEVEMENTS", 117 to "NEW GAME",
@@ -941,8 +961,8 @@ class Level0World(
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
     override var kAO = 0                       // k.aO — message countdown
     override var kAP: String? = null           // k.aP — HUD message text
-    var kAB: String? = null                    // k.aB — c(z2) center banner (k.java:4327)
-    var kAC = 0                                // k.aC — banner TTL
+    override var kAB: String? = null           // k.aB — c(z2) center banner (k.java:4327)
+    override var kAC = 0                       // k.aC — banner TTL
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
     var alertSlide = 0                         // derived `i3` = 30-aH slide
@@ -1066,16 +1086,101 @@ class Level0World(
     override var kCP = false                           // k.cP direction
     override var bO = 0                                // k.bO — dialog flag
     override var bN0 = -1                              // k.bN[0] — dialog idx
-    /** `k.b(idx,str,flag)` (k.java:430, head proven): stores `bO`/`bN[0]`
-     *  then `b(9, 1+aj, str, str)` — the dialog-display call; `inferred`
-     *  accept-return (display pipeline unported). */
+
+    // ---- jC==21 dialog state (k.java:10-15,135-140, all proven) -------
+    /** `u` — dialog kind (k.java:10); level-0 op105 only emits u==9. */
+    var dlgU = 0
+    /** `bM[15]` — wrapped dialog pages (k.java:135). */
+    val dlgBM = arrayOfNulls<String>(15)
+    /** `bN[15]` — per-page icon ids propagated from `bN[0]` (k.java:136,
+     *  :392-398). For u==9 the digit-write is skipped but the propagation
+     *  still runs — every page carries the speaker icon. */
+    val dlgBN = IntArray(15)
+    /** `v`/`w` — current page / total pages (k.java:11-12,:371). */
+    var dlgV = 0
+    var dlgW = 0
+    /** `bQ` — typewriter arm gate (k.java:140,:370). */
+    var dlgBQ = true
+    /** `bR`/`bS`/`bT` — typewriter counter / speed / char limit
+     *  (k.java:13-15,:441-443); `bT==-1` = page fully revealed (`A()`). */
+    var dlgBR = 0
+    var dlgBS = 30
+    var dlgBT = 0
+
+    /** `k.b(idx,str,flag)` + `b(9,1+aj,str,str)` loader (k.java:405-412 +
+     *  :350-372, all proven): `bO=flag`; `bN[0]=idx` (`-1` when idx≤0); `u=9`; wraps
+     *  `d(1+aj,strRef)` at 300 (the `i!=6` → z2 arm) into `bM[]` 3-line
+     *  pages; `w=iA+1`; `D(0)`; `bQ=true`; `z()`. */
     override fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean {
         bO = flag
-        bN0 = if (idx > 0) idx else -1
+        bN0 = if (idx > 0) idx else -1                    // (:406-410)
+        dlgBN[0] = bN0
+        dlgU = 9
         dialogLine = strRef
+        val iA = dlgLoadPage(levelString(1 + kAj, strRef) ?: "", 0, 300)
+        dlgW = iA + 1                                     // w = iA+1 (:371)
+        dlgD(0)                                           // D(0)   (:368)
+        dlgBQ = true                                      // bQ     (:370)
+        dlgZ()                                            // z()    (:371)
         return true
     }
     var dialogLine = -1                                // last b(9,·) str arg
+
+    /** `a(String,int,boolean,int)` (k.java:374-401, proven) — wraps `str`
+     *  at `width` (caller's resolved `i3`: z2 → 300, else 220) into
+     *  `bM[]` pages of ≤3 wrapped lines starting at slot `i`, copying
+     *  `bN[i]` into every page slot (`z2` arm); returns `i+i4`. The
+     *  `i2==9` digit-write skip + the `bN` propagation are u==9's path. */
+    private fun dlgLoadPage(str: String, i: Int, width: Int): Int {
+        val u = wrapPage(str, width)                      // a(y,str,i3) (:382)
+        var i4 = 0
+        var s = 0
+        var i5 = u[0]
+        while (i5 > 3) {
+            i4++
+            val s2 = u[(i4 shl 1) * 3 - 1]                // sArrA[6·i4-1] (:387)
+            dlgBM[i + i4 - 1] = str.substring(s, s2)
+            dlgBN[i + i4 - 1] = dlgBN[i]                  // z2 arm      (:392)
+            s = s2
+            i5 -= 3
+        }
+        dlgBM[i + i4] = str.substring(s)
+        dlgBN[i + i4] = dlgBN[i]                          // z2 arm      (:398)
+        return i + i4
+    }
+
+    /** `D(int)` (k.java:437-440, proven): `v=min(i,w)`; if `A()` → `z()`. */
+    private fun dlgD(i: Int) {
+        dlgV = minOf(i, dlgW)
+        if (dlgBT == -1) dlgZ()
+    }
+    /** `z()` typewriter reset (k.java:441-443, proven). */
+    private fun dlgZ() { dlgBS = 30; dlgBR = 0; dlgBT = 0 }
+
+    /** `k.bL` (already declared as the af() cursor — one shared static
+     *  in the original): portrait variant — `4+bL`/`8+bL` pick the A[4]
+     *  portrait anims; only the jc30 browser writes it (:6090). */
+    /** The `!v(131072) || C == null || u != 9 || !C.cd[2]` gate
+     *  (k.java:946, proven) — while the claimer sits in its `cd[2]`
+     *  state and the 131072 key edge fires, the whole typewriter/press
+     *  block is suppressed (the claim script consumes the press). */
+    fun dlgSuppressed(): Boolean =
+        pad.v(131072) && dlgU == 9 && kC?.cd?.get(2) == true
+
+    /** Render-side typewriter tick — the `bQ && !A()` arm of case-21
+     *  (k.java:947-955, proven): per frame `bR++`; `bT=(bR*bS)/16`;
+     *  `bT` past the page length → `bT=-1` (revealed). Fire press while
+     *  typing also forces `bT=-1` (:955-957) — world-side in the press
+     *  tail. Runs inside the original's render dispatch, so it lives
+     *  renderer-side here too. Returns `bT` for the text call. */
+    fun dlgTypeTick(pageLen: Int): Int {
+        if (dlgBQ && dlgBT != -1) {
+            dlgBR++
+            dlgBT = (dlgBR * dlgBS) / 16
+            if (dlgBT > pageLen) dlgBT = -1
+        }
+        return dlgBT
+    }
     override fun pointerDownIn(x: Int, y: Int, w: Int, h: Int): Boolean =
         lastTouchX >= x && lastTouchY >= y &&
             lastTouchX <= x + w && lastTouchY <= y + h &&
@@ -1498,8 +1603,8 @@ class Level0World(
      *  1. Goal arm — `k.aV` (the `r8[5]==0` ax9 block `initAx9` bound)
      *     while `Z[0]==1` (script ops L146/L147 arm/disarm) and
      *     `aV.S∉{4,5}`: `w()==1` → the `j.f`-even milestone font blit
-     *     (`z[9].a(cd,38,0,360,120,…)` — draw unported; `goalTicker`
-     *     flag only, inferred); `w()==2` → `bx=56; l(13); bw=0` —
+     *     (`z[9].a(cd,38,0,360,120,…)` → `goalTicker` → renderer
+     *     `drawFrame(9,38)`); `w()==2` → `bx=56; l(13); bw=0` —
      *     the scripted win. The `j.c∈{13,31}` skip maps to `won`;
      *     screen 31 has no analog yet (inferred).
      *  2. Claimer step — `C.cd[2] && C.cd[1] && C.ab()` → `C.aa()`:
@@ -1512,7 +1617,7 @@ class Level0World(
         val aV = kAV
         if (aV != null && aV.Z[0] == 1 && !won && aV.S != 4 && aV.S != 5) {
             when (iW(aV)) {
-                1 -> if (tickIndex and 1L == 0L) goalTicker = true     // L157
+                1 -> goalTicker = (tickIndex and 1L) == 0L             // L157 j.f%2
                 2 -> { kBx = 56; screenL(13); kBw = 0 }                // L159
                 else -> goalTicker = false
             }
@@ -1524,7 +1629,7 @@ class Level0World(
         if (Entity.MISSION_BH[kAj] == 3) { camA = camX; camB = camY }  // L172
     }
 
-    /** L157's `z[9]` milestone blit active this tick (render unported). */
+    /** L157's `z[9]` milestone blit active this tick → `drawFrame(9,38)`. */
     var goalTicker = false
         private set
 
@@ -1606,7 +1711,17 @@ class Level0World(
                     kEe = footerFont?.linesHeight(11) ?: 0
                     kEf = 37 + kEe
                 }
-                i == 20 -> { /* kFb = y.a(d(0,27),390) — unported */ }
+                i == 20 -> {
+                    // `fb = y.a(d(0,27),390)` (:1825, proven) — story
+                    // text re-broken into <=390px lines joined by '\n'.
+                    kFb = wrapJoin(d0(27) ?: "")
+                    // `eZ` — `b.e`-height arm (:1291-1293): text taller
+                    // than 120px slides its draw origin up (inferred
+                    // height = linesHeight(lineCount)).
+                    val h = footerFont?.linesHeight(
+                        kFb.split('\n').size) ?: 0
+                    kEz = if (h > 120) 85 - (h - 120) else 85
+                }
             }
             break
         }
@@ -2090,6 +2205,7 @@ class Level0World(
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
         5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
+        20 -> Pair(d0(16), d0(18))      // case20 `a(d(0,16),d(0,18))` (:1299)
         else -> Pair(null, null)
     }
     /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
@@ -2281,7 +2397,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 20, 23, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2378,6 +2494,142 @@ class Level0World(
         menuL(kEy); menuQ(pressY)
     }
 
+    /** `k.R()` (k.java:3949-4100, proven) — the boot driver, `k.a()`
+     *  case 0: `cu` is its sub-phase counter (`l()` resets `cu=0`, and
+     *  `j.c==0` only at boot — nothing else `l()`s there).
+     *  Splash clips, font/string/audio loads and the `e(false)` save
+     *  read are create()-time here, so cases 0/1/4/5 collapse to their
+     *  `cu++` transitions; what survives is the observable frame:
+     *  `bX` logo anim 0 for 3000ms (pause-key skips → `z(23)`), anim 1
+     *  + `d(0,63)` legal text for 3000ms (also skippable), then the
+     *  `d(0,65)` copyright/loading text for 5000ms (not skippable) →
+     *  `l(23)` sound prompt. Timers map wall-clock `System
+     *  .currentTimeMillis() - du` onto `jG` ticks — `>= 3000ms` ⇔
+     *  `jG - kDu >= 49` (⌈3000/62⌉), `>= 5000ms` ⇔ `>= 81`
+     *  (`inferred` — same semantics, deterministic clock). */
+    private fun bootR() {
+        when (kCu) {
+            0 -> { kCu = 1; kDu = jG }
+            1 -> kCu = 2
+            2 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
+                kCu = 3; kDu = jG
+                if (pad.v(Pad.M_PAUSE)) z(23)
+            }
+            3 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
+                kCu = 4; kDu = jG
+                if (pad.v(Pad.M_PAUSE)) z(23)
+            }
+            4 -> kCu = 5
+            5 -> {
+                kCu = 6                      // S() preload frame — orig
+                bootLoadCheck()              // falls through to case 6
+            }
+            6 -> bootLoadCheck()
+        }
+    }
+
+    /** `R()` case 6 (k.java:4086-4099, proven): copyright text for
+     *  5000ms from the case-3→4 transition, then `f.a(...)` resize
+     *  notify (view-size fixed at create — nop) + `l(23)`. */
+    private fun bootLoadCheck() {
+        if (jG - kDu >= 81) { kCu = 7; stateL(23) }
+    }
+
+    /** `y.a(str,i)` (b.java:1707-1718, proven): wrap `str` (the call
+     *  hardcodes 390; `i` is ignored) then re-join the pieces with '\n'
+     *  — except where the source char at the boundary is already '\n'.
+     *  `wrap` returns the same U[] table the font draw uses. */
+    private fun wrapJoin(str: String): String {
+        val f = footerFont ?: return str
+        val u = f.wrap(str, 390)
+        val sb = StringBuilder()
+        var s2 = 0
+        for (i2 in 0 until u[0]) {
+            if (s2 != 0 && (s2 >= str.length || str[s2] != '\n')) sb.append('\n')
+            val end = u[(i2 shl 1) + 1].coerceAtMost(str.length)
+            sb.append(str.substring(s2, end)); s2 = end
+        }
+        return sb.toString()
+    }
+
+    /** The string jc20 draws this frame (renderer read): cu2 shows the
+     *  grown `fa`, cu>=3 the full `fb`, cu 0/1 nothing (k.java:1211,
+     *  `str = fb` local per frame; cu2 `str = fa` :1251). */
+    fun storyText(): String = when { kCu >= 3 -> kFb; kCu == 2 -> kFa; else -> "" }
+
+    /** `k.a()` case 20 (k.java:1208-1306, proven) — the story-typewriter
+     *  intro: `cu` 0 init (cT=10) → 1 wait cT→255 (z[39] anim1 icon, pause
+     *  skips → `eY=200,eZ=85,fc=0,fa=""`) → 2 typewriter one char/frame
+     *  into `fa` (esc chars {1,2,'\\'} consume the next char too; `fc >=
+     *  len-1` or pause → cu3) → 3 slide eY 200→100 at -4/frame → 4 wait
+     *  cT→255 (z[39] anim10 spinner) → 5 done (`fd=eZ`).
+     *  Tail: `a(d(0,16),d(0,18))` NEXT/SKIP footer; `v(131072)` — NEXT —
+     *  OR `v(262144) && cu==5` — SKIP once typewriter done — → `l(9)`
+     *  (load screen) + z(23). */
+    private fun menuJc20() {
+        kCb = true
+        footerQ()                                   // NEXT/SKIP (:1299-1301)
+        when (kCu) {
+            0 -> { kCT = 10; kCu = 1 }
+            1 -> {
+                kCT += 10
+                if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 2; kEY = 200; kEz = 85; kFc = 0; kFa = ""
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            2 -> {
+                if (kFc < kFb.length) {
+                    val c = kFb[kFc]; kFa += c; kFc++
+                    if (c == '\u0001' || c == '\u0002' || c == '\\') {
+                        if (kFc < kFb.length) { kFa += kFb[kFc]; kFc++ }
+                    }
+                }
+                if (kFc >= kFb.length - 1 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 3; kEY = 200
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            3 -> {
+                kEY -= 4
+                if (kEY <= 100 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 4; kEY = 100; kCT = 10
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            4 -> {
+                kCT += 10
+                if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 5; kFd = kEz
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            5 -> { /* full text + spinner — render side only */ }
+        }
+        if (pad.v(Pad.M_CYCLE) || (pad.v(Pad.M_PAUSE) && kCu == 5)) {
+            stateL(9); z(23)                        // (:1300-1305)
+        }
+    }
+
+    /** `k.a()` case 18 (k.java:1146-1175, proven) — the title screen
+     *  input arm: `v(65568)||k.j()` (press-fire or touch) →
+     *  `cT=100; cS=true; z(23)`. `cS`: `cb=true; cT-=10; !e.a()→z(0)`
+     *  (no track → sfx slot 0); `l(2)` → main menu; `A[0]=null`
+     *  (clip-96 pack release — our clip map is static); `cT=0`.
+     *  The A[] anims + `j.g%10>5` press-fire blink draw in the
+     *  renderer's `titleScreen` — this is only the input/exit arm. */
+    private fun menuJc18() {
+        if (!kCS) {
+            if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
+                kCT = 100; kCS = true; z(23)
+            }
+        } else {
+            kCb = true; kCT -= 10
+            if (audioTrack == -1) z(0)
+            stateL(2); kCT = 0
+        }
+    }
+
     /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
      *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
      *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
@@ -2436,8 +2688,21 @@ class Level0World(
             }
             4 -> menuF()                           // F() (:2338, proven)
             5 -> menuG()                           // G() (:2412, proven)
-            23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
-            30 -> menuAf()                         // af() (:6230, proven)
+            0 -> bootR()                             // case 0 = R() (:3949)
+            20 -> menuJc20()                         // case 20 (:1208-1306)
+            // `k.a()` case 23 (k.java:1310-1324, proven): confirm
+            // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
+            // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
+            // `l(18)` → title. 327712 = pause|context union.
+            23 -> if (!pad.v(327712)) menuAe(pressY)
+                  else {
+                      if (kBw == 0) { kBE = true; kBF = true; z(0) }
+                      else if (kBw == 1) { kBE = false; kBF = false }
+                      stateL(18)
+                  }
+            28 -> menuAe(pressY)                     // ae() (:6204, proven)
+            18 -> menuJc18()                         // case 18 (:1146, proven)
+            30 -> menuAf()                           // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)
@@ -3086,8 +3351,27 @@ class Level0World(
         if (dialogModal) {
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
+            } else if (sawPressPending(events) && dlgSuppressed()) {
+                pad.edge = 0        // C.cd[2] consumes the press (:946)
             } else if (sawPressPending(events)) {
-                kC?.resumeScript(); leaveDialog()
+                // case-21 u==9 press tail (k.java:945-1017, proven):
+                // `v(65568)` while typing → `bT=-1` reveal (:955-957);
+                // while revealed → the `v==w` dispatch — but u==9 has no
+                // `D(v+1)` page-advance arm at all, so v<w always holds
+                // and the press lands in the catch-all dismiss:
+                // `C.Z(); C.cd[1]=true; bh!=3 → m(ad); z(23); l(8); v=w`
+                // (:1003-1016). Verbatim quirk: `bM[1..]` pages are never
+                // shown for u==9 — no page advance exists for it.
+                if (dlgBT != -1) {
+                    dlgBT = -1                                // reveal (:955)
+                } else {
+                    kC?.resumeScript()                        // C.Z()
+                    kC?.cd?.set(1, true)                      // C.cd[1]=true
+                    if (!bh3) kM(kAd)                         // bh!=3 → m(ad)
+                    z(23)
+                    dlgV = dlgW
+                    leaveDialog()                             // l(8)
+                }
                 pad.edge = 0        // eat the dismiss edge — not a gameplay tap
             } else { tickIndex++; jG++; return }
         }

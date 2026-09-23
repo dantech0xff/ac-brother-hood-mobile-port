@@ -3972,6 +3972,10 @@ interface LevelCellSource {
     var kAE: Int
     var kAF: Int get() = 0; set(_) {}
     var kAH: Int
+    /** `k.aB`/`k.aC` — c(z2) center banner text + TTL (k.java:4327);
+     *  ax9-S4 is the live producer (`aC=-1` while touching). */
+    var kAB: String? get() = null; set(_) {}
+    var kAC: Int get() = 0; set(_) {}
     /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
     var kAR: Int
     /** `k.bu` — level pixel height used by the `aR` row formula. */

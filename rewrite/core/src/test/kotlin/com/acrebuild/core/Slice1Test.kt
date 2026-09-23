@@ -4681,10 +4681,13 @@ class Slice43cTest {
         assertTrue(e.cd[0], "cd[0]=true halt")
         assertTrue(w.dialogModal, "k.b accept → k.l(21)")
         assertEquals(1, w.bO); assertEquals(3, w.bN0); assertEquals(42, w.dialogLine)
-        // screen-21 dismiss edge → k.C.Z() (cd[0]=false), modal clears.
-        // The arming tick's press is already consumed — the first fresh
-        // press edge dismisses (no cooldown, k.java:1578-1603 semantics).
+        // case-21 u==9 press semantics (k.java:945-1017): the typewriter
+        // starts un-revealed, so press 1 only forces `bT=-1` (reveal);
+        // press 2 hits the v<w catch-all → C.Z() + l(8).
+        w.autoDismissDialog = false
         w.kC = e
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertTrue(w.dialogModal, "press while typing reveals, not dismisses")
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
         assertFalse(w.dialogModal)
         assertFalse(e.cd[0], "Z() resumed the claim")
@@ -11044,5 +11047,392 @@ class Slice99Test {
         w.pad.commit(16388)
         w.npcFsm.tickTrigger(door, w, p)
         assertNull(p.ae, "o==-1 → L17d0 early return")
+    }
+}
+
+// =========================================================================
+// Slice 103 — jC==21 dialog render state (k.java:350-450, 899-1017):
+// b(9,1+aj,str,str) load → bM[] 3-line pages + bN icon propagation,
+// typewriter bR/bS/bT, u==9 press tail (reveal → dismiss, no page adv).
+// =========================================================================
+class Slice103Test {
+    @Test fun `kDialog loads u-9 state and wraps pages at 300`() {
+        val w = world()
+        assertTrue(w.kDialog(5, 26, 1))
+        assertEquals(9, w.dlgU)
+        assertEquals(1, w.bO); assertEquals(5, w.bN0); assertEquals(5, w.dlgBN[0])
+        assertTrue(w.dlgW >= 1)
+        assertNotNull(w.dlgBM[0]); assertTrue(w.dlgBM[0]!!.isNotEmpty())
+        assertEquals(0, w.dlgV); assertEquals(0, w.dlgBT)
+        assertEquals(0, w.dlgBR); assertEquals(30, w.dlgBS); assertTrue(w.dlgBQ)
+        // bN[i] propagates to every page slot (k.java:392-398, proven)
+        for (i in 1 until w.dlgW) assertEquals(5, w.dlgBN[i])
+    }
+
+    @Test fun `typewriter counts bT up then pins -1`() {
+        val w = world()
+        w.kDialog(1, 27, 0)
+        val len = w.dlgBM[0]!!.length
+        w.dlgTypeTick(len)
+        assertEquals(1, w.dlgBR); assertEquals(30 / 16, w.dlgBT)   // (bR*bS)/16
+        repeat(400) { w.dlgTypeTick(len) }
+        assertEquals(-1, w.dlgBT)                                // A() done
+        val after = w.dlgBR
+        w.dlgTypeTick(len)
+        assertEquals(after, w.dlgBR, "bT==-1 stops the counter")
+    }
+
+    @Test fun `typing press reveals and revealed press dismisses`() {
+        val w = scriptedWorld(
+            scriptBlock(0, 0, scriptGroup(0, op105(3, 42, 1))))
+        val e = claimer(w)
+        e.runClaimScript(w)
+        assertTrue(w.dialogModal)
+        w.autoDismissDialog = false
+        w.kC = e
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertTrue(w.dialogModal, "press while typing reveals only (:955)")
+        assertEquals(-1, w.dlgBT)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertFalse(w.dialogModal, "revealed press → v<w catch-all (:1003)")
+        assertFalse(e.cd[0], "C.Z() resumed the claim")
+        assertTrue(e.cd[1], "C.cd[1]=true catch-all write (:1005)")
+        assertEquals(w.dlgW, w.dlgV, "v=w on the dismiss path (:1016)")
+        assertEquals(0, w.pad.edge)
+    }
+
+    @Test fun `cd2 claimer + 131072 edge suppresses the dialog press`() {
+        val w = world()
+        w.kDialog(1, 18, 0)
+        w.screenL(21)
+        val e = Entity(5, null); e.cd[2] = true; w.kC = e
+        w.pad.edge = 131072                      // v(131072) edge latched
+        assertTrue(w.dlgSuppressed(), "(:946) — claim script eats the press")
+        e.cd[2] = false
+        assertFalse(w.dlgSuppressed())
+    }
+}
+
+class Slice106Test {
+    @Test fun `ax9 record with r8-5==0 binds kAV`() {
+        val w = world()
+        assertNotNull(w.kAV, "uid-108 ax9 (fields[5]==0) must bind kAV")
+        assertEquals(108, w.kAV!!.aw)
+        assertEquals(6177, w.kAV!!.ak)
+    }
+
+    @Test fun `armed Z0 fires screenL-13 while the goal is ahead`() {
+        val w = world()
+        repeat(30) { w.tick(emptyList()) }          // intro settles
+        val g = w.kAV!!
+        assertFalse(w.won)
+        g.Z[0] = 1                                  // arg-op (37,1,4) arm
+        w.tick(emptyList())
+        // goal 6177 sits >200px past the camera right edge → w()==2 →
+        // bx=56; l(13); bw=0 (k.java:3346-3350, proven). l() remaps 13→31
+        // for the milestone variant — both latch `won`.
+        assertTrue(w.jC == 13 || w.jC == 31, "expected the win screen")
+        assertEquals(56, w.kBx)
+        assertEquals(0, w.kBw)
+        assertTrue(w.won)
+    }
+
+    @Test fun `goal in the 200px band pulses goalTicker on even ticks`() {
+        val w = world()
+        repeat(30) { w.tick(emptyList()) }
+        val g = w.kAV!!
+        g.Z[0] = 1
+        // w()==1 → goalTicker = j.f%2 — blink parity (k.java:3328, proven)
+        var seen = mutableSetOf<Boolean>()
+        for (i in 0 until 6) {
+            g.ak = w.camRect[2] + 100               // re-anchor: band vs live camera
+            w.tick(emptyList())
+            seen += w.goalTicker
+            if (w.won) break
+        }
+        assertFalse(w.won, "band case must not win")
+        assertEquals(setOf(true, false), seen,
+            "ticker must alternate with tickIndex parity")
+    }
+}
+
+
+// --------------------------------------------------------------- slice 107
+// ax9 S4 hint-banner + S5 context pad (aV() L15b9/L15e8, i.java:12121-12171).
+// op22 scripts arm anims {0..8} onto ax9 uids — S4/S5 are live script states.
+class Slice107Test {
+
+    private fun ax9At(w: Level0World, x: Int, y: Int, s: Int, aF: Int = 0): Entity {
+        val e = Entity(9, w.clips[47])
+        e.setPositionPx(x, y)
+        val f = mutableListOf(9, 0, x, y, 0, s, 0, -1, 0)
+        for (i in 9..15) f += 0
+        w.npcFsm.initAx9(e, f, w)
+        e.aF = aF
+        w.npcs.add(e)
+        return e
+    }
+
+    private fun boxAroundPlayer(w: Level0World, e: Entity) {
+        val p = w.player; p.refreshBoxes()
+        e.W[0] = p.W[0] - 10; e.W[1] = p.W[1] - 10
+        e.W[2] = p.W[2] + 10; e.W[3] = p.W[3] + 10
+    }
+
+    @Test fun `S4 overlap shows the aF level string and holds aC=-1`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 4, aF = 3)
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(w.levelString(1 + w.kAj, 3), w.kAB, "k.aB = d(1+aj, aF)")
+        assertEquals(-1, w.kAC, "aC = -1 — banner holds while touching")
+    }
+
+    @Test fun `S4 leave clears the banner only when aC is out`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 4, aF = 3)
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        // walk off: empty k.aC → the banner clears (L15dd aC<=0 arm)
+        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertNull(w.kAB, "aC<=0 + no overlap → aB = null")
+        // re-show, then leave while the countdown is still live
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
+        w.kAC = 5                                     // countdown live
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertNotNull(w.kAB, "aC>0 → L1ec7 = return, banner kept")
+    }
+
+    @Test fun `S5 overlap plus up press rises the player to S22`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 5)
+        boxAroundPlayer(w, e)
+        w.pad.commit(16388)                            // u(16388) held
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(22, w.player.S, "u(16388) → aS.i(22)")
+    }
+
+    @Test fun `S5 directional tap matches facing — av uses u2 else u8`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 5)
+        boxAroundPlayer(w, e)
+        w.player.av = true
+        w.pad.commit(2)                                // av → u(2)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(22, w.player.S)
+
+        val w2 = world(); w2.npcs.clear()
+        val e2 = ax9At(w2, 0, 0, 5)
+        boxAroundPlayer(w2, e2)
+        w2.player.av = false
+        w2.pad.commit(8)                               // !av → u(8)
+        w2.npcFsm.tickAx9(e2, w2, w2.player)
+        assertEquals(22, w2.player.S)
+
+        val w3 = world(); w3.npcs.clear()
+        val e3 = ax9At(w3, 0, 0, 5)
+        boxAroundPlayer(w3, e3)
+        w3.pad.commit(0)                               // no press → no rise
+        w3.npcFsm.tickAx9(e3, w3, w3.player)
+        assertNotEquals(22, w3.player.S)
+    }
+}
+
+
+// --------------------------------------------------------------- slice 108
+// jC==18 title tick + jc23 boot sound-prompt confirm (k.a() cases 18/23,
+// k.java:1146-1175,1310-1324). Completes the screen-state coverage for the
+// boot flow — reachable via stateL(23)'s confirm arm or the title itself.
+class Slice108Test {
+
+    @Test fun `jc18 context press latches cS then exits to main menu`() {
+        val w = world()
+        w.stateL(18)
+        assertEquals(18, w.jC)
+        w.pad.queuePress(Pad.M_CONTEXT)      // v(65568) edge (:1156)
+        w.tick(emptyList())
+        assertTrue(w.kCS, "press → cS")
+        assertEquals(100, w.kCT)
+        w.pad.queuePress(0)
+        w.tick(emptyList())                  // cS arm: cT-=10 → l(2)
+        assertEquals(2, w.jC, "cS → l(2) → main menu")
+        assertEquals(0, w.kCT)
+    }
+
+    @Test fun `jc18 play-area tap also confirms via k-j pointerStrip`() {
+        val w = world()
+        w.stateL(18)
+        // j() (k.java:523) reads k.H/k.I — the last pointer RELEASE
+        // point — so drive it via an UP event inside the play strip.
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.UP, 200, 100)))
+        assertTrue(w.kCS, "tap → cS")
+    }
+
+    @Test fun `jc23 sound prompt YES arms audio flags and lands on title`() {
+        val w = world()
+        w.stateL(23)                          // boot sound prompt (l(23) arm)
+        assertEquals(19, w.kEc)
+        w.kBw = 0                             // YES selected (eA[3][0]=14)
+        w.kBE = false; w.kBF = false          // pre-clear to observe the set
+        w.pad.queuePress(327712)              // v(327712) confirm (:1311)
+        w.tick(emptyList())
+        assertTrue(w.kBE && w.kBF, "bw==0 → bE=bF=true")
+        assertEquals(18, w.jC, "confirm → l(18)")
+    }
+
+    @Test fun `jc23 NO clears both audio flags before l-18`() {
+        val w = world()
+        w.stateL(23)
+        w.kBw = 1                             // NO selected (eA[3][1]=15)
+        w.pad.queuePress(327712)
+        w.tick(emptyList())
+        assertFalse(w.kBE); assertFalse(w.kBF)
+        assertEquals(18, w.jC)
+    }
+
+    @Test fun `jc23 without confirm keeps running ae`() {
+        val w = world()
+        w.stateL(23)
+        w.pad.queuePress(0)
+        w.tick(emptyList())
+        assertEquals(23, w.jC, "no confirm → ae() only, stays on jc23")
+    }
+}
+
+
+
+
+// --------------------------------------------------------------- slice 109
+// jC==0 boot R() driver — the `cu` sub-phase FSM (k.R(), k.java:3949-4100).
+// Splash dwells (2×3000ms, pause-skippable), load frames, then the 5000ms
+// loading screen → `l(23)`. Timers map wall-clock onto jG ticks (49/81).
+class Slice109Test {
+
+    @Test fun `boot advances cu through load frames then logo dwell`() {
+        val w = world()
+        w.stateL(0)
+        assertEquals(0, w.jC); assertEquals(0, w.kCu)
+        w.tick(emptyList())                  // cu0 → cu1 (du arm)
+        assertEquals(1, w.kCu)
+        w.tick(emptyList())                  // cu1 → cu2 (asset load)
+        assertEquals(2, w.kCu)
+    }
+
+    @Test fun `logo dwell holds for 49 ticks then advances`() {
+        val w = world()
+        w.stateL(0)
+        w.tick(emptyList()); w.tick(emptyList())      // now cu2, du=jG
+        repeat(47) { w.tick(emptyList()) }            // elapsed 2..48
+        assertEquals(2, w.kCu, "elapsed <49 ticks < 3000ms — dwelling")
+        w.tick(emptyList())                           // elapsed hits 49
+        assertEquals(3, w.kCu, "elapsed >=49 ticks >= 3000ms → cu3")
+    }
+
+    @Test fun `pause edge skips each logo dwell with z-23 sfx`() {
+        val w = world()
+        w.stateL(0)
+        w.tick(emptyList()); w.tick(emptyList())      // cu2
+        w.pad.queuePress(Pad.M_PAUSE)                 // v(262144) skip
+        w.tick(emptyList())
+        assertEquals(3, w.kCu)
+        w.pad.queuePress(Pad.M_PAUSE)
+        w.tick(emptyList())
+        assertEquals(4, w.kCu, "second logo also skipped")
+    }
+
+    @Test fun `loading screen ignores pause then lands on jc23 prompt`() {
+        val w = world()
+        w.stateL(0)
+        w.tick(emptyList()); w.tick(emptyList())      // cu2
+        repeat(49) { w.tick(emptyList()) }            // cu2 → cu3
+        repeat(49) { w.tick(emptyList()) }            // cu3 → cu4
+        w.tick(emptyList()); w.tick(emptyList())      // cu4→5→6 (5 runs 6's check)
+        assertEquals(6, w.kCu)
+        w.pad.queuePress(Pad.M_PAUSE)                 // no skip on cu6
+        w.tick(emptyList())
+        assertEquals(6, w.kCu, "case 6 has no pause skip")
+        repeat(76) { w.tick(emptyList()) }            // elapsed ..80
+        assertEquals(6, w.kCu, "elapsed <81 ticks < 5000ms")
+        w.tick(emptyList())                           // elapsed hits 81
+        assertEquals(23, w.jC, "l(23) — sound prompt")
+        assertEquals(19, w.kEc)
+        assertEquals(0, w.kCu, "l() resets cu — proven k.java:1644")
+    }
+
+    @Test fun `full boot chain reaches title and main menu`() {
+        val w = world()
+        w.stateL(0)
+        repeat(180) { w.tick(emptyList()) }           // boot: 2+48+48+2+80 ticks
+        assertEquals(23, w.jC)
+        w.kBw = 0                                     // YES
+        w.pad.queuePress(327712)
+        w.tick(emptyList())
+        assertEquals(18, w.jC, "confirm → l(18) title")
+        w.pad.queuePress(Pad.M_CONTEXT)
+        w.tick(emptyList())
+        assertTrue(w.kCS)
+        w.tick(emptyList())
+        assertEquals(2, w.jC, "title → main menu")
+    }
+}
+
+class Slice110Test {
+
+    @Test fun `l-20 wraps the story text and resets cu`() {
+        val w = world(charmap = asset("fonts/charmap.bin"))
+        w.stateL(20)
+        assertEquals(20, w.jC); assertEquals(0, w.kCu, "l() resets cu")
+        assertTrue(w.kFb.startsWith("IN AN ATTACK"), "fb = wrapped d(0,27)")
+        assertTrue(w.kFb.contains('\n'), "wrapJoin inserts soft breaks")
+        assertTrue(w.kEz <= 85, "eZ = 85 or shifted up for tall text")
+    }
+
+    @Test fun `jc20 types the text then NEXT exits to l-9`() {
+        val w = world()
+        w.stateL(20)
+        w.tick(emptyList())                          // cu0 → cu1 (cT=10)
+        assertEquals(1, w.kCu)
+        repeat(25) { w.tick(emptyList()) }           // cT +10 → ≥255 → cu2
+        assertEquals(2, w.kCu)
+        assertEquals(200, w.kEY); assertEquals(0, w.kFc)
+        w.tick(emptyList())                          // typewriter 1 char
+        assertTrue(w.kFa.isNotEmpty() && w.kFc > 0, "fc typewriter grows fa")
+        repeat(w.kFb.length + 5) { w.tick(emptyList()) }
+        assertEquals(3, w.kCu, "fc >= len-1 → cu3")
+        repeat(26) { w.tick(emptyList()) }           // eY -=4 → 100 → cu4
+        assertEquals(4, w.kCu); assertEquals(100, w.kEY)
+        repeat(25) { w.tick(emptyList()) }           // cT→255 → cu5 (fd=eZ)
+        assertEquals(5, w.kCu); assertEquals(w.kEz, w.kFd)
+        w.pad.queuePress(Pad.M_CYCLE)                // NEXT v(131072) → l(9)
+        w.tick(emptyList())
+        assertEquals(9, w.jC)
+        assertEquals(23, w.audioTrack, "z(23) on exit")
+    }
+
+    @Test fun `jc20 pause skip fast-forwards each phase`() {
+        val w = world()
+        w.stateL(20)
+        w.tick(emptyList())                          // cu1
+        w.pad.queuePress(Pad.M_PAUSE); w.tick(emptyList())  // cu1 → cu2
+        assertEquals(2, w.kCu)
+        w.pad.queuePress(Pad.M_PAUSE); w.tick(emptyList())  // cu2 → cu3
+        assertEquals(3, w.kCu)
+        w.pad.queuePress(Pad.M_PAUSE); w.tick(emptyList())  // cu3 → cu4
+        assertEquals(4, w.kCu)
+        // cu4 pause → cu5 + tail check (v(262144)&&cu==5) exits same tick
+        w.pad.queuePress(Pad.M_PAUSE); w.tick(emptyList())
+        assertEquals(9, w.jC, "cu4→5 + same-frame tail → l(9)")
+    }
+
+    @Test fun `jc20 NEXT at any phase exits to load screen`() {
+        val w = world()
+        w.stateL(20)
+        w.tick(emptyList())                          // cu1
+        w.pad.queuePress(Pad.M_CYCLE)                // v(131072) — NEXT
+        w.tick(emptyList())
+        assertEquals(9, w.jC)
     }
 }

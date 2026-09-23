@@ -41,12 +41,19 @@ class Level0Game : ApplicationAdapter() {
         clips[94] = Clip.load(Gdx.files.internal("clips/clip94/clip.acpk").readBytes())
         clips[12] = clips[94]!!   // z[12] = entry-012 — alias under its z[] index
         clips[95] = Clip.load(Gdx.files.internal("clips/clip95/clip.acpk").readBytes())   // A[3]
+        // pack-2 A[] bank (j.a("/2"), k.java:4058-4075): A[0] bg, A[1] title
+        // art, A[4] dialog panel/portraits, A[5] N() load icon.
+        clips[96] = Clip.load(Gdx.files.internal("clips/clip96/clip.acpk").readBytes())   // A[0]
+        clips[97] = Clip.load(Gdx.files.internal("clips/clip97/clip.acpk").readBytes())   // A[1]
+        clips[98] = Clip.load(Gdx.files.internal("clips/clip98/clip.acpk").readBytes())   // A[4]
+        clips[99] = Clip.load(Gdx.files.internal("clips/clip99/clip.acpk").readBytes())   // A[5]
         clips[1] = Clip.load(Gdx.files.internal("clips/clip1/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
         clips[32] = Clip.load(Gdx.files.internal("clips/clip32/clip.acpk").readBytes())
         clips[3] = Clip.load(Gdx.files.internal("clips/clip3/clip.acpk").readBytes())
         clips[9] = Clip.load(Gdx.files.internal("clips/clip9/clip.acpk").readBytes())
         clips[54] = Clip.load(Gdx.files.internal("clips/clip54/clip.acpk").readBytes())
+        clips[11] = Clip.load(Gdx.files.internal("clips/clip11/clip.acpk").readBytes())   // z[11] G() art
         clips[64] = Clip.load(Gdx.files.internal("clips/clip64/clip.acpk").readBytes())
         clips[26] = Clip.load(Gdx.files.internal("clips/clip26/clip.acpk").readBytes())
         clips[10] = Clip.load(Gdx.files.internal("clips/clip10/clip.acpk").readBytes())
@@ -67,6 +74,7 @@ class Level0Game : ApplicationAdapter() {
         clips[38] = Clip.load(Gdx.files.internal("clips/clip38/clip.acpk").readBytes())
         clips[42] = Clip.load(Gdx.files.internal("clips/clip42/clip.acpk").readBytes())
         clips[46] = Clip.load(Gdx.files.internal("clips/clip46/clip.acpk").readBytes())
+        clips[39] = Clip.load(Gdx.files.internal("clips/clip39/clip.acpk").readBytes())   // z[39] jc20 icons
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space. Negated keys: entity
         // clips share this map via k.bi[] whose values 10/11 collide with
@@ -89,6 +97,9 @@ class Level0Game : ApplicationAdapter() {
         // e(false) (k.java:4045): load the /ASBR record at boot — nop
         // when no record exists (orig swallows the same path).
         save.read()?.let { world.saveLoad(it) }
+        // j.c==0 + cu==0 (k.a() case 0 = R(), k.java:3949): the real
+        // boot — splash logos → sound prompt → title → menu → play.
+        world.stateL(0)
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)

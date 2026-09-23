@@ -194,16 +194,18 @@ class Level0Renderer {
         }
     }
 
-    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` — single frame draw
-     *  (the `a`-object/`A[2]` path, b.java:915). */
+    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` (b.java:907-913): frame →
+     *  `av` OBJECT index → the 6-arg object draw (:915) — composite
+     *  placements via drawObject (falls back to drawModule when the
+     *  object has no placements, so single-module frames are unchanged). */
     private fun drawFrame(pack: Int, anim: Int, frame: Int, x: Int, y: Int,
                           flags: Int, palette: Int = 0) {
         val clip = clips[pack] ?: clips[-pack] ?: return
         if (anim < 0 || anim >= clip.animCount() ||
             frame < 0 || frame >= clip.frameCount(anim)) return
         val fd = clip.frameDraw(anim, frame, flags)
-        drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
-                   fd.transform, palette)
+        drawObject(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
+                   fd.transform, 0, palette)
     }
 
     /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
@@ -219,9 +221,165 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
+    private var nDl: UiAnimObject? = null             // k.dl — N() icon
+    private var nTipDj = 0                            // k.dj — tip type pos
+    private var nTipDk = 0                            // k.dk — tip hold
+
+    /** `eW[]` (k.java:299, proven) — per-mission tip index for `N()`. */
+    private val tipEW = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
+
+    /** `fP[]` (k.java:344, proven) — mission poster-boundary table for
+     *  `ag()`'s `A[4]` anim pick (`i+4`). */
+    private val posterFP = intArrayOf(0, 2, 5, 7)
     private val ROPE_COL = -3584205                    // k.b rope-line (k.java:2961)
     private val BAR_DEAD_S = intArrayOf(24, 21, 0, 139, 133, 134, 145, 135, 106, 107)
     private var menuEz = 0                            // k.ez fit-scroll
+
+    /** `i(int,int)` (k.java:414-429, proven): A[4] anim-12 top strip
+     *  + `j.h(MIN_VALUE); j.d` 400×68 half-dark fill + u∈{8,9,10}
+     *  `y.a(d(0,9),200,220,3)` blink hint (`j.g%10<5`). */
+    private fun dialogPanel(world: Level0World, i: Int, bP: Int) {
+        drawFrame(98, 12, 0, 0, bP, 0)                // A[4].a(cd,12,0,0,i2)
+        fillAr(0, bP, 400, 68, Int.MIN_VALUE)         // j.h(MIN_VALUE);j.d
+        if (world.dlgU in 8..10 && world.jG % 10L < 5L) {
+            drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
+        }
+    }
+
+    /** `a(bVar,i,str,x,y,w,align,limit)` (k.java:4114-4128, proven):
+     *  wrap `str` at `w`, draw ≤8 lines from `8*(cY-1)`, `bT` char cap.
+     *  The `bL`-EZIO rename arm (:4121-4124) — bL==0 on level 0. */
+    private fun dialogText(world: Level0World, str: String, x: Int, y: Int,
+                           w: Int, align: Int, limit: Int) {
+        if (str.isEmpty()) return
+        val u = fontY.wrap(str, w)
+        fontY.l(0)
+        fontY.drawWrapped(str, u, x, y, 8 * (world.kCY - 1), 8, align, limit)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+    }
+
+    /** `N()` load screen (k.java:3472-3513, proven positions) —
+     *  **unreachable-labeled**: only the menu-flow `l(9)` picks it
+     *  (k.java:1303,3934,6273); our flow boots straight to jC8 and
+     *  fail→retry restores `j.c` without re-showing it.
+     *  Black fill; lazy A[5] → `dl` UiAnimObject(80,-40) arm(0,-1);
+     *  `j.g>=165` → dm=165 + `dl.a(dl.a()-3)` freeze-frame + `d(0,9)`
+     *  blink; else `dm=j.g` + `bW.l(0)` `d(0,24)`; bar `j.a(dm<<?/165
+     *  *300)` at (50,205) color 7644855; `j.g>1` → tip typewriter
+     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. */
+    private fun loadScreen(world: Level0World) {
+        val dl = nDl ?: UiAnimObject(clips[99], 80, -40)
+            .also { it.arm(0, -1); nDl = it }
+        fillAr(0, 0, 400, 240, -16777216)            // setColor(0);j.b
+        val dm: Int
+        if (world.jG >= 165L) {
+            dm = 165
+            dl.tick(62)
+            dl.seek(dl.len() - 3)                  // dl.a(dl.a()-3)
+            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            if (world.jG % 10L < 5L) {
+                drawText(world.d0(9) ?: "", 200, 220, 17, pack = 91)
+            }
+        } else {
+            dl.tick(62)
+            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dm = world.jG.toInt()
+            fontW.l(0)
+            drawText(world.d0(24) ?: "", 395, 230, 40, pack = 91)
+        }
+        // j.b(j.a,50,205, j.a(((dm<<8)/165)*300), 10) — fixed-round w
+        val w = ((((dm shl 8) / 165) * 300) + 128) shr 8
+        fillAr(50, 205, w, 10, 7644855)
+        if (world.jG > 1L) {
+            tipTypewriter(world.d0(51 + tipEW[world.kAj]) ?: "")
+            // y.a(str,null) → b.d measured width; x = max(20,(400-b.d)>>1)
+            val title = world.levelString(1, 0) ?: return
+            val x = ((400 - fontY.measure(title)[0]) shr 1).coerceAtLeast(20)
+            // a(y,2,str,x,135,360,240,0,20) — 9-arg drops i5/i6 → 20,-1
+            dialogText(world, title, x, 135, 360, 20, -1)
+        }
+    }
+
+    /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
+     *  `dj` chars; inserts `\\2`/palette-2 around the newest char;
+     *  after full string `dk=15` frame hold then `dj=0` restart.
+     *  `bVar.f=true` bold — our drawText maps `\\0`.. codes via the
+     *  font's own escape pass. */
+    private fun tipTypewriter(str: String) {
+        if (str.isEmpty()) return
+        if (nTipDk <= 0) {
+            if (nTipDj < str.length) {
+                // verbatim: \2<new char>\0 bracket inside the FULL string
+                // (untyped tail still draws — moving-highlight cursor)
+                val shown = "\\0" + str.substring(0, nTipDj) +
+                            "\\2" + str[nTipDj] + "\\0" +
+                            str.substring(nTipDj + 1)
+                drawText(shown, 200, 40, 17, pack = 91)
+                nTipDj++
+                return
+            }
+            nTipDj = 0
+            nTipDk = 15
+        }
+        nTipDk--
+        drawText("\\0" + str, 200, 40, 17, pack = 91)
+    }
+
+    /** jc18 title-screen arm (k.java:1146-1157, proven) —
+     *  **unreachable-labeled** (boot-flow only): `A[1].a(cd,1,0,0,0)` +
+     *  `A[0].a(cd,0,0,0,0)` + `A[1].a(cd,2,0,0,0)`; `!cS` → `d(0,9)`
+     *  blink at (200,205) `j.g%10>5`. */
+    /** `R()` draw side (k.java:4004-4099, proven): every case fills
+     *  black first (`cd.setColor(0); j.b`), then `bX` (clip 0 = pack-3
+     *  entry-0 logo bank) anim 0 for cu≤2, anim 1 + `d(0,63)` for
+     *  cu==3, `d(0,65)` copyright text for cu≥4. `b.a` ticks the logo
+     *  one frame per call — `(jG-kDu) % frameCount` reproduces it. */
+    private fun bootScreen(world: Level0World) {
+        fillAr(0, 0, 400, 240, -16777216)              // 0xFF000000
+        when (world.kCu) {
+            in 0..2 -> drawFrame(0, 0, bootFrame(world, 0), 200, 120, 0)
+            3 -> {
+                drawFrame(0, 1, bootFrame(world, 1), 200, 120, 0)
+                world.d0(63)?.let {
+                    dialogText(world, it, 10, 140, 380, 3, Int.MAX_VALUE) }
+            }
+            else -> world.d0(65)?.let {
+                dialogText(world, it, 10, 120, 380, 3, Int.MAX_VALUE) }
+        }
+    }
+
+    /** `b.a` per-call anim tick → frame = elapsed ticks mod count. */
+    private fun bootFrame(world: Level0World, anim: Int): Int {
+        val clip = clips[0] ?: return 0
+        val n = clip.frameCount(anim)
+        return if (n <= 0) 0 else ((world.jG - world.kDu) % n).toInt()
+    }
+
+    /** jc20 overlay — `z[39]` slide icon + wrapped story text + spinner. */
+    private fun storyScreen(world: Level0World) {
+        if (world.kCu < 2) return
+        val icon = clips[39]
+        if (icon != null && world.kCu <= 4) {
+            val n = icon.frameCount(1)
+            drawFrame(39, 1, if (n <= 0) 0 else (world.jG % n).toInt(),
+                      0, world.kEY, 80)
+        }
+        drawText(world.storyText(), 5, world.kEz, 0)
+        if (icon != null && world.kCu >= 4) {
+            val n = icon.frameCount(10)
+            drawFrame(39, 10, if (n <= 0) 0 else (world.jG % n).toInt(),
+                      300, 80, 0)
+        }
+    }
+
+    private fun titleScreen(world: Level0World) {
+        drawFrame(97, 1, 0, 0, 0, 0)                 // A[1] anim 1
+        drawFrame(96, 0, 0, 0, 0, 0)                 // A[0] frame 0
+        drawFrame(97, 2, 0, 0, 0, 0)                 // A[1] anim 2
+        if (world.jG % 10L > 5L) {
+            drawText(world.d0(9) ?: "", 200, 205, 3)
+        }
+    }
 
     /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
     private fun fillAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
@@ -584,8 +742,25 @@ class Level0Renderer {
     /** `G()` draw surface (:2412-2460) — help/instructions scroller:
      *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
      *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
-     *  `z[11]`/`z[54]` page arts not converted — skipped (`inferred`). */
+     *  `cy==14` (help opened from the pause menu) → framed variant:
+     *  `b(true)` + `j.h` panel (57,10,285,eF+10) + black title bar
+     *  (57,18,285,18) + `j.h(-2013265920)` 4 borders + `bW` title
+     *  `d(0,6)` at (200,20,17). `bw==1` → page arts: `z[11]` anim17 at
+     *  (200, iK2+20) and `z[54]` anim0 palette-1 at
+     *  (200, iK2+y.k(3)+cW) — the cy==14/else arms are byte-identical
+     *  in the original (verbatim quirk). */
     private fun helpScreen(world: Level0World) {
+        if (world.kCy == 14) {                        // cy==14 framed arm
+            fillAr(57, 10, 285, world.kEf + 10, -856756498)   // j.d panel
+            fillAr(57, 18, 285, 18, -16777216)                // title bar
+            // j.h(-2013265920) — the verbatim 4 border rects
+            fillAr(57, 8, 285, 2, -2013265920)
+            fillAr(57, world.kEf + 20, 285, 2, -2013265920)
+            fillAr(55, 8, 2, world.kEf + 14, -2013265920)
+            fillAr(342, 8, 2, world.kEf + 14, -2013265920)
+            fontW.l(0)
+            world.d0(6)?.let { drawText(it, 200, 20, 17, pack = 91) }
+        }
         val iK = world.menuGIK()
         val lf = if (world.pointerMoveIn(45, iK - 15, 50, 30)) 40 else 36  // d()
         val rf = if (world.pointerMoveIn(305, iK - 15, 50, 30)) 39 else 35 // d()
@@ -596,6 +771,16 @@ class Level0Renderer {
         fontY.l(1)
         fontY.drawWrapped(page, u, 200, iK, 8 * (world.kCY - 1), 8, 3)
         { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        if (world.kBw == 1) {                         // page-1 art pair
+            val iA = u[0]                             // wrapped line count
+            val iK2 = iK - ((world.footerFont?.linesHeight(iA) ?: 0) / 2)
+            drawFrame(11, 17, 0, 200, iK2 + 20, 0)    // z[11].a(cd,17,0,…)
+            // z[54].a(cd,0,0,200, iK2+y.k(3)+cW) — h(0,1) palette-1;
+            // cy==14/else arms byte-identical (verbatim quirk)
+            drawFrame(54, 0, 0, 200,
+                      iK2 + (world.footerFont?.linesHeight(3) ?: 0) +
+                      world.kCW, 0, 1)
+        }
         var i = 0
         for (i2 in 0 until world.kBw) i += world.kCX[i2]
         fontY.l(0)
@@ -736,7 +921,7 @@ class Level0Renderer {
         // at (22,30), then the sync bar, then z[12] anim6 overlay.
         val tierFrame = world.kAx / 15 - 1
         drawFrame(12, 2, tierFrame, 2, 30, 0)
-        drawFrame(4, 8 + world.kBL, 0, 22, 30, 0)
+        drawFrame(98, 8 + world.kBL, 0, 22, 30, 0)
 
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
@@ -865,6 +1050,11 @@ class Level0Renderer {
         // aO/aP timed line (k.java:4337-4343, proven)
         world.kAP?.let { drawText(it, 200, 23, 17) }
 
+        // L157 goal-milestone blit (k.java:3321-3327, proven): while
+        // the ax9 goal sits in the camera band, `z[9]` anim38 blinks
+        // every other j.f at (360,120). world.goalTicker = j.f%2 gate.
+        if (world.goalTicker) drawFrame(9, 38, 0, 360, 120, 0)
+
         // k.aD capture/fuse bar (k.java:3133-3139, proven): under the
         // C-claim gate `(C!=null && (!C.cd[6] || !C.ab())) || C==null`,
         // when the HUD-bar entity sits in S6 with Z[1]>0 → z[12] f18
@@ -979,19 +1169,40 @@ class Level0Renderer {
                    else -16512)                                  // 0xFFBF00
         }
 
-        // k.l(21) modal dialog — the original suspends the sim behind a
-        // drawn dialog box (i.java:20190-20240, j.d text panel); port draws
-        // a bottom dialog box so the freeze is visible (panel `inferred`,
-        // text glyphs unported). dismiss = press edge.
+        // k.l(21) modal dialog — case-21 u==9 arm (k.java:899-1017,
+        // proven): `bN[v]` picks icon/portrait + panel side, `bO`
+        // overrides the side, `i(0,bP)` panel, then `a(y,0,bM[v],…,bT)`
+        // typewriter text. The world suspends behind it (i.java:20190);
+        // the press tail lives in the tick.
         if (world.dialogModal) {
-            batch.setColor(0f, 0f, 0f, 0.8f)
-            batch.draw(white, 10f, 6f, 380f, 60f)
-            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
-            batch.draw(white, 12f, 8f, 376f, 2f)
-            batch.draw(white, 12f, 62f, 376f, 2f)
-            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
-            batch.draw(white, 190f, 20f, 20f, 20f)      // ▼ hint marker
-            batch.setColor(1f, 1f, 1f, 1f)
+            val v = world.dlgV
+            val page = world.dlgBM.getOrNull(v) ?: ""
+            var i3 = -1
+            var bP: Int
+            if (world.dlgBN[v] == 1) {                          // (:908-909)
+                bP = 137; i3 = 1
+            } else if (world.dlgBN[v] in 2..10) {               // (:910-912)
+                bP = 50; i3 = world.dlgBN[v]
+            } else if (world.player.al - world.kP < 120) {      // (:921)
+                bP = 137
+            } else {
+                bP = 50
+            }
+            if (world.bO == 0) bP = 50                          // u==9 (:922-924)
+            else if (world.bO == 1) bP = 137
+            dialogPanel(world, 0, bP)                           // i(0,bP) (:414-429)
+            val bT = if (world.dlgSuppressed()) world.dlgBT     // gate (:946)
+                     else world.dlgTypeTick(page.length)        // typewriter (:947-955)
+            if (i3 == -1) {
+                dialogText(world, page, 200, bP + 34, 380, 3, bT)  // centered (:935)
+            } else {
+                if (i3 == 1) {
+                    drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
+                } else {                                        // z[39] icon (:940)
+                    drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+                }
+                dialogText(world, page, 10, bP + 4, 300, 20, bT)   // left (:942)
+            }
         }
 
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
@@ -1036,23 +1247,39 @@ class Level0Renderer {
             }
         }
 
+        // N() load screen (k.java:3472-3513) — unreachable-labeled.
+        if (world.jC == 9) loadScreen(world)
+
+        // jc0 boot R() (k.java:3949-4100): black + logo + loading text.
+        if (world.jC == 0) bootScreen(world)
+
+        // jc18 title screen (k.java:1146-1157) — unreachable-labeled.
+        if (world.jC == 18) titleScreen(world)
+
+        // jc20 story-typewriter draw tail (k.java:1278-1298, proven):
+        // `f(false)` world behind; cu>=2 → `z[39].a(cd,1,0,eY,80)` slide
+        // icon + `y.a(cd,str,5,eZ,0)` text (cu2 = grown fa, cu>=3 = fb);
+        // cu 4/5 also `z[39].a(cd,10,0,300,80)` spinner. footerQ() arms
+        // the NEXT/SKIP footer in world.menuFooter().
+        if (world.jC == 20) storyScreen(world)
+
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
         // (align 20), values right-aligned x=305 (align 24), rows
         // 55+20i; total row y=175; `a(d(0,16),str2)` bottom hint.
-        // Ribbon/panel sprites (A[3], fJ/fK corners) are unported —
-        // procedural stand-ins, `inferred` styling.
         if (world.jC == 15) {
             val H = Level0World.VIEW_H
             batch.setColor(0f, 0f, 0f, 0.8f)
             batch.draw(white, 0f, 0f, 400f, 240f)
-            // title ribbon — `a(i2,str)`: color box + centered text
-            // (A[3] clip sprites 1/2 unported → gold bar stand-in)
+            // `a(i2,str)` title-bar proc (k.java:2328-2336, proven):
+            // A[3] anim1 centered + anim2 left-cap + j.b(87,i+9,228,183)
+            // dark panel + bW title (matches scoreScreen's use).
             val ty = world.statsTitleY
-            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
-            batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
-            batch.setColor(1f, 1f, 1f, 1f)
-            world.d0(60)?.let { t -> drawText(t, 200, ty, 1) }
+            drawFrame(95, 1, 0, 200, ty, 0)
+            drawFrame(95, 2, 0, 120, ty, 0)
+            fillAr(87, ty + 9, 228, 183, -14274509)
+            fontW.l(0)
+            world.d0(60)?.let { t -> drawText(t, 200, ty, 3, pack = 91) }
             // row labels (x=95, align 20) + values right-aligned x=305 (24)
             for (i3 in 0..4) {
                 val v = world.statsRowText[i3]
@@ -1073,23 +1300,27 @@ class Level0Renderer {
             }
         }
 
-        // ag() mission poster card (k.java:6358, proven positions):
-        // `i(0,120)` card overlay (frame12 + fill — procedural stand-in),
-        // `A[4]` frame i+4 at (200,119), brief a(y,0,d(0,110),200,150,
-        // 380,240,0,3), `j.g%10<5` → d(0,9) blink at (200,220).
+        // ag() mission poster card (k.java:6358-6386, proven):
+        // `i(0,120)` dialog panel + `A[4].a(cd, i+4, 0, 200, 119)` where
+        // i = index of aj+1 in fP={0,2,5,7} (else 4) + brief
+        // a(y,0,d(0,110),200,150,380,240,0,3) + `y.l(1)` + `j.g%10<5`
+        // d(0,9) blink at (200,220).
         if (world.jC == 10) {
             val H = Level0World.VIEW_H
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 0f, 0f, 400f, 240f)
-            // card frame (A[4] clip unported → dark plate stand-in)
-            batch.setColor(0.12f, 0.1f, 0.16f, 1f)
-            batch.draw(white, 10f, (H - 200).toFloat(), 380f, 190f)
-            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
-            batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
-            batch.setColor(1f, 1f, 1f, 1f)
+            dialogPanel(world, 0, 120)               // i(0,120)
+            // i = 1; while (i<4 && aj+1 != fP[i]) i++  → 4 for level 0
+            var pi = 1
+            while (pi < 4 && world.kAj + 1 != posterFP[pi]) pi++
+            drawFrame(98, pi + 4, 0, 200, 119, 0)    // A[4] poster frame
             if (world.posterBrief.isNotEmpty()) {
-                drawText(world.posterBrief, 200, 150, 3)
+                // a(y,0,…,200,150,380,240,0,3) — 9-arg drops i5/i6 →
+                // effective a(y,0,str,200,150,380,align=3,limit=-1)
+                dialogText(world, world.posterBrief, 200, 150, 380, 3, -1)
             }
+            fontY.l(1)                                // y.l(1) after draw
+                                                    // (blink draws pal-1)
             if (world.hintBlink) {
                 world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }

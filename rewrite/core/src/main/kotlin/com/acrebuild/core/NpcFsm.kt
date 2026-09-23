@@ -4040,6 +4040,21 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
             e.aB = 0
             if (e.animFinished()) { e.P = e.P or 32; e.P = e.P and -17 }
         }
+        // -- L15b9/L15dd (i.java:12121-12142, proven): S4 hint-banner
+        //    zone — while player box overlaps, `k.aB` = level string aF
+        //    + `k.aC = -1` (hold); leaving clears only once aC is out
+        //    (`aC>0` → L1ec7 = bare return, keeps the banner ticking).
+        4 -> if (Entity.overlapStrict(p.W, e.W)) {
+            w.kAB = w.levelString(1 + w.kAj, e.aF)
+            w.kAC = -1
+        } else if (w.kAC <= 0) w.kAB = null
+        // -- L15e8-L1625 (i.java:12144-12171, proven): S5 context pad —
+        //    overlap + (up 16388 held/edge) OR facing-tap (av→u(2),
+        //    else u(8)) → `aS.i(22)` player rise.
+        5 -> if (Entity.overlapStrict(p.W, e.W) &&
+            (w.padDown(16388) || w.padHeld(16388) ||
+             (p.av && w.padDown(2)) || (!p.av && w.padDown(8))))
+            p.setAnim(22)
         18 -> e.adChildOverlay(w, 7)                           // L42 l(7)
         // -- L45-L51: driven slide — k.ae vel + aG kick, /aI when slow-mo --
         19 -> {

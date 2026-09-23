@@ -110,6 +110,13 @@ CLIPS = {
     "clip38": ("pack-3", "entry-038-marker-003"),  # ax69 assassination target (bi[69]=38)
     "clip42": ("pack-3", "entry-042-marker-003"),  # ax34 k.D player follower (k.r(42), i.java:2754)
     "clip46": ("pack-3", "entry-046-marker-003"),  # ax71 k.E struggle-QTE overlay (k.r(46), i.java:2771)
+    "clip39": ("pack-3", "entry-039-marker-003"),  # z[39] dialog speaker icons (k.java:940)
+    # pack-2 UI bank — A[] clips load under j.a("/2") (k.java:4058-4075).
+    # A[2]/A[3] already live as clip93/clip95.
+    "clip96": ("pack-2", "entry-000-marker-003"),  # A[0] title-screen bg (k.java:1148)
+    "clip97": ("pack-2", "entry-001-marker-003"),  # A[1] title art / E() backdrop (k.java:1147-1149,2318)
+    "clip98": ("pack-2", "entry-004-marker-003"),  # A[4] dialog panel + portraits (k.java:416,938,4182)
+    "clip99": ("pack-2", "entry-005-marker-003"),  # A[5] N() load icon (k.java:3479-3486)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index
