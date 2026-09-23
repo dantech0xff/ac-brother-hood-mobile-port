@@ -302,6 +302,94 @@ class Level0Renderer {
         }
     }
 
+    /** `i.a(int,int,int,int,boolean)` (i.java:20129-20166, proven) —
+     *  the ax35 eagle-view minimap composite, drawn at the `k.aQ`
+     *  blit site (198-w, 5) as a clipped direct draw (our compositor
+     *  skips the offscreen copy — same visible result). Parts:
+     *  eu stamp grid (`k.a(g,x,y,cell)` :4504, `bt` = eu cols);
+     *  `k.a()` (:4417) ep front-layer rect + `k.b()` (:4453) er
+     *  bottom-layer rect at (cx*20-x, cy*20-y+i7); enemy blips —
+     *  ax∈{11,73,35,79} `(P&128)==0` gated by `i.a(i,i2,i+i3,i2+i4,Y)`
+     *  rect-overlap (:520); `drawRect(0,0,h-1,w-1)` border — the
+     *  verbatim h/w swap. `z2` (`Z[4]==0`) is a dead param in the
+     *  composite body (verbatim). `i7 = -(h-240)` bottom-anchored
+     *  shift, verbatim. */
+    private fun minimap(world: Level0World, r: IntArray) {
+        val x = r[0]; val y = r[1]; val w = r[2]; val h = r[3]
+        val ox = 198 - w; val oy = 5
+        val i7 = -(h - 240)
+        clipScissor(ox, oy, w, h)
+        fillAr(ox, oy, w, h, -16777216)
+        // eu stamp grid (:20136-20141): (w/20+1)×(h/20+1) cells
+        val eu = world.level.layers.firstOrNull { it.id == 2 }
+        if (eu != null) {
+            for (i8 in 0 until h / 20 + 1) {
+                for (i9 in 0 until w / 20 + 1) {
+                    if (i9 >= eu.cols || i8 >= eu.rows) continue
+                    val cell = eu.cell(i9, i8)
+                    if (cell < 0 || cell == 255) continue
+                    drawTileCell(eu.tilesetClip, cell, ox + i9 * 20,
+                                 oy + i8 * 20 + i7, eu.flag(i9, i8))
+                }
+            }
+        }
+        minimapLayer(world, 1, x, y, w, h, ox, oy, i7)  // k.a() ep rect
+        minimapLayer(world, 3, x, y, w, h, ox, oy, i7)  // k.b() er rect
+        // enemy blips (:20145-20158): ax∈{11,73,35,79} in-rect
+        for (e in world.npcs) {
+            if (e == null) continue
+            if (e.ax != 11 && e.ax != 73 && e.ax != 35 && e.ax != 79) continue
+            if ((e.P and 128) != 0) continue
+            if (!minimapOverlap(x, y, x + w, y + h, e.Y)) continue
+            val pack = e.clip?.let { clipPackOf(it) } ?: continue
+            val bx = ox + e.ak - x; val by = oy + e.al - y + i7
+            val pal = if (e.ax == 79) e.Z.getOrElse(1) { 0 } else e.palette
+            if (e.U >= 0) drawFrame(pack, e.S, e.T, bx, by, e.P and 7, pal)
+            else if (e.S >= 0) drawObject(pack, e.S, bx, by, e.P and 7, 0, pal)
+            else if (e.T >= 0) drawObject(pack, e.T, bx, by, e.P and 7, 0, pal)
+        }
+        clipScissor(0, 0, 400, 240)
+        // graphics.drawRect(0,0,i4-1,i3-1) — verbatim h/w arg swap
+        outlineAr(ox, oy, h - 1, w - 1, -256)
+    }
+
+    /** `k.a()`/`k.b()` rect draw (k.java:4417-4449/4453-4498, proven):
+     *  world-rect (x,y,w,h) → cell range (x/20..(x+w-1)/20) ×
+     *  (y/20..(y+h-1)/20), each non-empty cell stamped at
+     *  (cx*20-x, cy*20-y+i7). The `i2<0 → i2-=20` negative-round
+     *  quirk is verbatim. bh3's `dL` arm is flying-only (dead here). */
+    private fun minimapLayer(world: Level0World, id: Int, x: Int, y: Int,
+                             w: Int, h: Int, ox: Int, oy: Int, i7: Int) {
+        val layer = world.level.layers.firstOrNull { it.id == id } ?: return
+        var yy = y
+        if (yy < 0) yy -= 20                                  // i2<0 quirk
+        val c0 = x / 20; val r0 = yy / 20
+        val c1 = (x + w - 1) / 20; val r1 = (y + h - 1) / 20
+        var dx = c0 * 20 - x
+        for (cx in c0..c1) {
+            var dy = r0 * 20 - y
+            for (cy in r0..r1) {
+                val cell = layer.cell(cx, cy)
+                if (cell >= 0 && cell != 255)
+                    drawTileCell(layer.tilesetClip, cell, ox + dx,
+                                 oy + dy + i7, layer.flag(cx, cy))
+                dy += 20
+            }
+            dx += 20
+        }
+    }
+
+    /** `i.a(int,int,int,int,int[])` (i.java:520-537, proven): minimap
+     *  blip's rect-vs-Y-bounds overlap — disjoint → false; degenerate
+     *  query → false; `Y[0]==Y[2]` → `Y[1] != Y[3]`; else true. */
+    private fun minimapOverlap(x0: Int, y0: Int, x1: Int, y1: Int,
+                               r: IntArray): Boolean {
+        if (x0 > r[2] || x1 < r[0] || y0 > r[3] || y1 < r[1]) return false
+        if (x0 == x1 && y0 == y1) return false
+        if (r[0] == r[2]) return r[1] != r[3]
+        return true
+    }
+
     /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
      *  `dj` chars; inserts `\\2`/palette-2 around the newest char;
      *  after full string `dk=15` frame hold then `dj=0` restart.
@@ -1168,11 +1256,9 @@ class Level0Renderer {
 
         // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
         // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
-        // surface. `volPaintRect` records the painted rect, not pixels —
-        // drawn as a bordered mini-rect.
-        world.volPaintRect?.let { r ->
-            outlineAr(198 - r[2], 5, r[2], r[3], -256)   // 0xFFFFFF00 (compositor's border :20159)
-        }
+        // surface. `volPaintRect` records the painted rect; the composite
+        // fills it (i.a(IIIIZ) — the ax35 eagle-view window).
+        world.volPaintRect?.let { r -> minimap(world, r) }
 
         // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
         // stripe letterbox — `an` grows `fn` stripes (top `fm*fn`, bottom
