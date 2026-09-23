@@ -404,6 +404,7 @@ class Level0World(
         npcs.clear()
         pendingRemove.clear()
         pendingInsert.clear()
+        kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
         clearClaim()
         marker = null; markerTag = -1
@@ -488,6 +489,40 @@ class Level0World(
         // ax54/ax30 runners resolve their Z[1..4] uid chain via aw().
         for (e in npcs) if (e.ax == 54 || e.ax == 30)
             npcFsm.resolveRunnerWaypoints(e, this)
+        spawnCompanions()
+        // init-time k.b inserts (k.D, record-arm children) land in the
+        // live pool during load in the original — drain immediately.
+        if (pendingInsert.isNotEmpty()) { npcs += pendingInsert; pendingInsert.clear() }
+    }
+
+    /**
+     * Player-init L43 tail (i.java:2748-2779, proven): the player's
+     * ctor arm spawns the two companion overlays once each — `k.D`
+     * (ax34 follower, clip `k.r(42)`, `P|=16|512`, player's `az`) and
+     * `k.E` (ax71 struggle-QTE overlay, clip `k.r(46)`, `az=300`,
+     * `P|=16|128` hidden). Both persist until `k.V()` (the clear
+     * block above) nulls them; `k.b` = the insert queue.
+     */
+    private fun spawnCompanions() {
+        if (kD == null) {
+            kD = Entity(34, clips[42]).apply {
+                aw = -1; au = 0
+                setAnim(0); az = player.az
+                setPositionPx(player.ak, player.al)
+                av = false; refreshBoxes()
+                P = P or 16 or 512
+            }
+            queueInsert(kD!!)
+        }
+        if (kE == null) {
+            kE = Entity(71, clips[46]).apply {
+                aw = -1; au = 0
+                setAnim(0); az = 300
+                setPositionPx(player.ak, player.al)
+                av = false; refreshBoxes()
+                P = P or 16 or 128
+            }
+        }
     }
 
     /**
@@ -538,6 +573,7 @@ class Level0World(
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
     override var kE: Entity? = null            // k.E
+    override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
     override var iBy = 0                       // i.by — boss phase tier
     override var iCi: IntArray? = null         // i.ci[5]
@@ -1042,6 +1078,7 @@ class Level0World(
             else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
             else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
             else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
+            else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 

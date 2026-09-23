@@ -7879,3 +7879,57 @@ fun NpcFsm.tickAx76(e: Entity, w: LevelCellSource, p: Entity) {
         else -> {}
     }
 }
+
+// ============================================================================
+// ax34 — k.D player-follower overlay (i.ak, i.java:6914-7000, proven)
+// Spawned once by the player init arm (L43 :2748-2763): `k.D = new i();
+// ax=34; aa=k.r(42); i(0); az=player.az; ak/al=player pos; av=false; t();
+// P|=16|512; k.b`. ak() every tick: snap to k.aS (player) and apply the
+// visibility rule — `P|=128` hidden unless the carrier is "grounded",
+// the carrier's anim is not in the hide-list, and `i.z` holds.
+// ============================================================================
+
+/** i.java:6926-6976 — `k.aS.S` hide-list: L23's early `268` check plus
+ *  the L25 chain (any match → r03=false → hidden). Order preserved. */
+private val AX34_HIDE_STATES = intArrayOf(
+    268,
+    291, 61, 203, 204, 277, 276, 164, 183, 184, 317, 250, 244, 351, 353,
+    354, 355, 356, 372, 373, 24, 326, 150, 82, 74, 334, 83, 315, 318,
+    157, 156, 149, 310, 311, 43, 105,
+)
+
+/**
+ * `i.ak()` (proven). `this` = the ax34 follower; `k.aS` = the player.
+ * Position: `az=99; ak=aS.ak; al=aS.al` then per attach state:
+ *  - `g.a` bound (player riding/attached): ax51 → grounded stays false
+ *    (hidden); ax15 → `al=aS.al+1; az=100; grounded=true`; any other ax
+ *    leaves grounded false (verbatim — L10 only arms on 15).
+ *  - no `g.a`: `aS.aZ` → `al+1; grounded=true`; else scan ≤5 cells down
+ *    for cell-20 → `al=(row)*20; grounded=true`; nothing → hidden.
+ * Visibility: `P|=128` unless `grounded && S∉hide-list && i.z`.
+ */
+fun NpcFsm.tickAx34(e: Entity, w: LevelCellSource, p: Entity) {
+    e.az = 99                                               // L3
+    e.ak = p.ak; e.al = p.al                                // L4-L5
+    val r0 = e.ak / 20                                      // L6
+    val r02 = e.al / 20                                     // L7
+    var grounded = false                                    // r8
+    val ga = p.ga                                           // g.a
+    if (ga == null) {                                       // L13
+        if (p.aZ) { e.al = p.al + 1; grounded = true }
+        else {                                              // L15-L20
+            for (r92 in 0 until 5) {
+                if (e.e(w, r0, r02 + r92) == 20) {
+                    e.al = (r02 + r92) * 20
+                    grounded = true
+                    break
+                }
+            }
+        }
+    } else if (ga.ax == 15) {                               // L10
+        e.al = p.al + 1; grounded = true; e.az = 100
+    }
+    // ga.ax == 51 or any other ax → grounded stays false (L23).
+    val shown = grounded && p.S !in AX34_HIDE_STATES && w.iZ
+    e.P = if (shown) e.P and -129 else e.P or 128           // L96-L102
+}
