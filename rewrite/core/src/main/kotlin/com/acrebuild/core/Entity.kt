@@ -2069,8 +2069,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 }
                 c[2] = r16
                 val pr = ScriptPrompt()
-                if (w.mounted) { pr.clipIdx = 9; pr.setState(CT[r16], -1) }
-                else { pr.clipIdx = 74; pr.setState(0, -1) }
+                if (w.mounted) { pr.attach(9, w.clipFor(9)); pr.setState(CT[r16], -1) }
+                else { pr.attach(74, w.clipFor(74)); pr.setState(0, -1) }
                 scriptPrompts[0] = pr
                 c[1] = 0
             }
@@ -2170,8 +2170,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     var pr = scriptPrompts[r173]
                     if (pr == null) { pr = ScriptPrompt(); scriptPrompts[r173] = pr }
                     if (w.mounted) {
-                        pr.clipIdx = 9; pr.setState(CT[cArr[r173 + 1]], -1)
-                    } else { pr.clipIdx = 74; pr.setState(0, -1) }
+                        pr.attach(9, w.clipFor(9))
+                        pr.setState(CT[cArr[r173 + 1]], -1)
+                    } else { pr.attach(74, w.clipFor(74)); pr.setState(0, -1) }
                 }
                 cArr[4] = 0
                 cb?.let { it[1] = 0 }
@@ -4302,20 +4303,32 @@ interface LevelCellSource {
 val INTERACTABLE_STATES = intArrayOf(0, 1, 7, 11, 12, 26, 79)
 
 /**
- * Class `a` (the prompt/hint sprite) — minimal port for the script-QTE
- * prompts ops 107/112 spawn into `Entity.scriptPrompts` (`i.bA`).
- * `clipIdx` = `a.a(k.z[n])` (74 = touch art, 9 = key art); `e` = state set
- * by the two-int `a.a(state, flag)` (-1 = hidden/dismissed); `a`/`b` = the
- * screen-space hit-test center (`inferred` — the original assigns it in
- * the render path, never in the ops we ported).
+ * Class `a` (the prompt/hint sprite) — the script-QTE prompt ops 107/112
+ * spawn into `Entity.scriptPrompts` (`i.bA`), now riding the full
+ * `UiAnimObject` port: `clipIdx` = `a.a(k.z[n])` (74 = touch art,
+ * 9 = key art); `a`/`b`/`c`/`e`/`f`/`h`/`i`/`k` live on `anim` — the
+ * original assigns `a`/`b`/`c` in the render path (k.java:3085-3113),
+ * never in the ops.
  */
 class ScriptPrompt {
     var clipIdx = -1
-    var e = -1
+    val anim = UiAnimObject()
     var flag = 0
-    var a = 0
-    var b = 0
-    fun setState(s: Int, f: Int) { e = s; flag = f }
+
+    /** `a.a(b)` (a.java:44) — bind the clip: records the pack index for
+     *  the render's `drawFrame` AND hands the Clip to `anim`. */
+    fun attach(idx: Int, clip: Clip?) { clipIdx = idx; anim.d = clip }
+    var a: Int
+        get() = anim.a
+        set(v) { anim.a = v }
+    var b: Int
+        get() = anim.b
+        set(v) { anim.b = v }
+    val e: Int get() = anim.e
+
+    /** `a.a(i,i2)` (a.java:53) — arm anim `s` for `f` loops
+     *  (`-1` = infinite; verbatim `h = i2 - 1` inside `arm`). */
+    fun setState(s: Int, f: Int) { flag = f; anim.arm(s, f) }
 }
 
 /**

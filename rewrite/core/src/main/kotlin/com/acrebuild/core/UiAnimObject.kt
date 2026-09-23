@@ -46,9 +46,11 @@ class UiAnimObject(
     }
 
     /** `a(i)` (:62) — seek `i` ticks into the current anim
-     *  (`f = i % len`, `g = 0`); returns wrapped position or -1. */
+     *  (`f = i % len`, `g = 0`); returns wrapped position or -1.
+     *  Port guard: unbound clip (`d == null`) reports -1 — the original
+     *  always binds `a(b)` first (class-a ctor calls `e()` with a clip). */
     fun seek(i: Int): Int {
-        if (e < 0) return -1
+        if (e < 0 || d == null) return -1
         var t = i
         val len = len()
         while (t > len) t -= len
@@ -58,11 +60,11 @@ class UiAnimObject(
     }
 
     /** `a()` (:78) — current anim's frame count, -1 when unarmed. */
-    fun len(): Int = if (e >= 0) d!!.frameCount(e) else -1
+    fun len(): Int = if (e >= 0 && d != null) d!!.frameCount(e) else -1
 
     /** `f()` (:84) — current frame's duration in ms (`d.a(e,f) * 40`). */
     private fun frameDur(): Int =
-        if (e >= 0) d!!.frameDuration(e, currentFrame) * 40 else 0
+        if (e >= 0 && d != null) d!!.frameDuration(e, currentFrame) * 40 else 0
 
     /** `b()` (:93) — done check: true when unarmed or latched-stop
      *  (infinite anims `h<0` report false forever). */
@@ -75,7 +77,7 @@ class UiAnimObject(
     /** `b(i)` (:114) — advance `i` ms along frame durations; wraps or
      *  latches at the last frame per `h` (verbatim loop). */
     fun tick(i: Int) {
-        if (e < 0 || iLatched) return
+        if (e < 0 || iLatched || d == null) return
         var iF = frameDur()
         if (iF == 0) return
         while (true) {

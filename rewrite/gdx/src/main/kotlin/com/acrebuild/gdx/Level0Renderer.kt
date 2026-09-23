@@ -2,6 +2,7 @@ package com.acrebuild.gdx
 
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
+import com.acrebuild.core.ScriptPrompt
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Trig
@@ -203,6 +204,16 @@ class Level0Renderer {
         val fd = clip.frameDraw(anim, frame, flags)
         drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
                    fd.transform, palette)
+    }
+
+    /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
+     *  tick the anim by the frame ms, then draw `d.a(g, e, f, a, b, c,
+     *  0,0)` — anim e frame f at (a,b), flags c. Palette slot `k` stays
+     *  -1 in every op we ported (no producer), so palette 0. */
+    private fun drawPrompt(pr: ScriptPrompt, ms: Int) {
+        pr.anim.tick(ms)
+        drawFrame(pr.clipIdx, pr.anim.e, pr.anim.currentFrame,
+                  pr.anim.a, pr.anim.b, pr.anim.c)
     }
 
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
@@ -738,6 +749,44 @@ class Level0Renderer {
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
         drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
+
+        // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
+        // claim-script entity (`kC`) is active (`ab()`), its cb/cc state
+        // selects — `cb[1] ∈ {0,1,2}` → the single YES/NO card at
+        // (200,160); else `cc != null` → the choice-list fan
+        // (cc[0]==3 → 200±50, cc[0]==2 → 200±50, else 200; y=160). Each
+        // card ticks `b(j.f)` then `c()` draws anim e frame f at (a,b)
+        // flags c — palette slot k when set. The trailing
+        // `cd[8] && cb[3]>0` arm pulses bW palette 3 while counting down.
+        // `j.f` = the fixed 62ms tick delta for card ticks.
+        val cEnt2 = world.kC
+        if (cEnt2 != null && cEnt2.claimActive()) {
+            val cb = cEnt2.cb
+            val cc = cEnt2.cc
+            if (cb != null && (cb[1] == 0 || cb[1] == 1 || cb[1] == 2 ||
+                cc != null)) {
+                if (cb[1] == 0 || cb[1] == 1 || cb[1] == 2) {
+                    Entity.scriptPrompts[0]?.let { pr ->
+                        pr.a = 200; pr.b = 160
+                        drawPrompt(pr, 62)
+                    }
+                } else if (cc != null) {
+                    for (i54 in 0 until cc[0]) {
+                        val pr = Entity.scriptPrompts[i54] ?: continue
+                        pr.a = when {
+                            cc[0] == 3 -> 200 + 50 * (i54 - 1)
+                            cc[0] == 2 -> 200 + 50 * (if (i54 == 1) 1 else -1)
+                            else -> 200
+                        }
+                        pr.b = 160
+                        drawPrompt(pr, 62)
+                    }
+                }
+            }
+            if (cEnt2.cd[8] && cEnt2.cb != null && cEnt2.cb!![3] > 0) {
+                fontW.l(3); cEnt2.cb!![3]--
+            }
+        }
 
         if (world.bh3) {
             // bh3 arm (k.java:4187-4245, proven)
