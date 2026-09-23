@@ -9093,9 +9093,10 @@ class Slice78Test {
         assertEquals(73, w.kEc)               // "DO YOU WANT TO QUIT?"
         assertEquals(3, w.kBv)
         // YES → eC==73 → P() pops + W() teardown + l(2)
+        // verbatim: jc14 bv3 panel (93,67,214,z3) → YES row (93,117)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 110),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 110)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
         assertEquals(2, w.jC)                 // l(2) overrides P()'s restore
         assertEquals(0, w.kDs)
     }
@@ -9856,5 +9857,352 @@ class Slice86Test {
         assertTrue(clip.frameCount(10) >= 1)
         assertTrue(clip.frameCount(17) >= 1)
         assertTrue(clip.moduleWidth(clip.frameModuleIndex(10, 0)) > 0)
+    }
+}
+
+/** Slice 87 — `a(str,str2)` footer soft-keys + `a(i,i2,i3,z2)` pill
+ *  (k.java:2242-2310, proven) + verbatim per-state panel rects. */
+class Slice87Test {
+
+    @Test fun `footer labels per screen state`() {
+        val w = world()
+        w.stateL(14)                                    // pause menu
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(19); w.kDa = 0                          // eA menu
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(28)                                     // ae() path
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(29); w.kBv = 0                          // IGP poster
+        val fl29 = w.menuFooter()
+        assertNull(fl29.first)
+        assertEquals("", fl29.second)                    // bv==0 → ""
+        w.stateL(12)
+        assertEquals(null to null, w.menuFooter())       // fail screen — none
+    }
+
+    @Test fun `panel rect is verbatim per state`() {
+        val w = world()
+        w.stateL(12)
+        assertEquals(listOf(93, 67, 214), w.menuPanelRect().toList())
+        w.stateL(14); w.kBv = 3
+        assertEquals(listOf(93, 67, 214), w.menuPanelRect().toList())
+        assertTrue(w.menuPanelZ3())
+        w.kBv = 1
+        assertEquals(listOf(93, 30, 214), w.menuPanelRect().toList())
+        assertFalse(w.menuPanelZ3())
+        w.stateL(19)
+        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
+        assertFalse(w.menuPanelZ2())                     // d() → z2=false
+    }
+
+    @Test fun `footer right pill tap arms the back bit`() {
+        val w = world()
+        w.stateL(14)                                     // has BACK footer
+        // right rect: (395-cf-10, 198, cf+20, 47); cf=36 → (349,198,56,47)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // E(131072) on jc14 → back arm: `menuP(); kBw=-1` (:1765)
+        assertEquals(-1, w.kBw)
+        assertEquals(36, w.kCf)                          // right rect was hit
+    }
+
+    @Test fun `footer left pill tap runs its rect`() {
+        val w = world()
+        w.stateL(14)
+        // left rect (-5,198,ce+20,47), ce=36 → (-5,198,56,47): tap x=20
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 20, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 20, 210)))
+        assertEquals(36, w.kCe)             // left rect hit → E(262144) armed
+        // (the bit's jc14 consumption lives in the unported m() arms —
+        //  flagged `inferred`; the arming itself is verbatim :2288)
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `ce cf reset each frame then set by hit-test`() {
+        val w = world()
+        w.stateL(14)
+        w.kCe = 99; w.kCf = 99
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // both pills draw → both dims assigned; the right rect was hit
+        assertEquals(36, w.kCe)
+        assertEquals(36, w.kCf)
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `clip93 has the pill frames 41 to 44 and arrows 24 29`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        assertTrue(clip.animCount() >= 45)
+        assertTrue(clip.frameCount(41) >= 1)
+        assertTrue(clip.frameCount(44) >= 1)
+        assertTrue(clip.frameCount(24) >= 1)
+        assertTrue(clip.frameCount(29) >= 1)
+    }
+}
+
+/** Slice 88 — `j.t` pad-held latch + `j.i()` fail/win input flush
+ *  (j.java:105-345, k.java:1109, proven). */
+class Slice88Test {
+
+    @Test fun `pad press latches jT release clears it`() {
+        val w = world()
+        val (x, y) = w.cellPoint(0)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
+        assertTrue(w.kJT != 0, "DOWN in a pad zone latches j.t")
+        w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, x, y)))
+        assertEquals(0, w.kJT)
+    }
+
+    @Test fun `fail screen flushes a held pad bit for one frame`() {
+        val w = world()
+        val (x, y) = w.cellPoint(0)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
+        assertTrue(w.kJT != 0)
+        // the fatal press stays latched when the screen flips to 12 —
+        // `j.i()` true → `j.t=0` and the frame's menu is skipped
+        w.stateL(12)
+        w.tick(emptyList())
+        assertEquals(0, w.kJT)
+        assertEquals(12, w.jC)
+        // next frames dispatch normally (NO row → menu)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+        assertEquals(2, w.jC)
+    }
+
+    @Test fun `a manually latched bit flushes on the next frame`() {
+        val w = world()
+        w.stateL(12)
+        w.kJT = 1 shl 2                       // simulate a held pad bit
+        w.tick(emptyList())
+        // `j.i()` true → `j.t=0`, frame skipped; next tap dispatches
+        assertEquals(0, w.kJT)
+        assertEquals(12, w.jC)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+        assertEquals(2, w.jC)
+    }
+}
+
+/** Slice 89 — `af()` jc30 medal/level browse screen (k.java:6230-6320,
+ *  proven). */
+class Slice89Test {
+
+    @Test fun `af init counts unlocked rows and resets the cursor`() {
+        val w = world()
+        w.kBA[14] = 3                              // 3+1 = 4 unlocked → da=4
+        w.kDt = false; w.kBA[69] = 0
+        w.stateL(30)                               // bannerK(5); kFo=0
+        w.tick(emptyList())                        // af() fO==0 arm runs
+        assertEquals(4, w.kDa)
+        // fQ = #i in 0..3 with da > fP[i]={0,2,5,7} → da=4 > 0,2 → fQ=2
+        assertEquals(2, w.kFQ)
+        assertEquals(2, w.kEy)
+        assertEquals(0, w.kBL)
+        assertEquals(-1, w.kFR)
+        assertEquals(1, w.kFo)
+        assertEquals(listOf(93, 46, 214), w.menuPanelRect().toList())
+    }
+
+    @Test fun `af da is 8 when difficulty-locked or data wiped`() {
+        val w = world()
+        w.kDt = true
+        w.stateL(30)
+        w.tick(emptyList())
+        assertEquals(8, w.kDa)
+        assertEquals(4, w.kFQ)                     // 8 > all thresholds
+    }
+
+    @Test fun `af title fade climbs 20 to 255`() {
+        val w = world()
+        w.stateL(30)
+        w.tick(emptyList())                        // init sets fC=20 then
+        assertEquals(40, w.kFC)                    // the same frame fades +20
+        w.tick(emptyList())
+        assertEquals(60, w.kFC)
+        repeat(20) { w.tick(emptyList()) }
+        assertEquals(255, w.kFC)                   // clamps at 255
+    }
+
+    @Test fun `af browse nav clamps and rearms`() {
+        val w = world()
+        w.kBA[14] = 7; w.kDt = false; w.kBA[69] = 0   // da=8 → fQ=4
+        w.stateL(30)
+        w.audioStop()
+        w.tick(emptyList())                        // init: fQ=4
+        // UP at bL=0 clamps without the rearm chain
+        w.pad.queuePress(Pad.M_UP)
+        w.tick(emptyList())
+        assertEquals(0, w.kBL)
+        assertEquals(0, w.kFR)
+        // DOWN ×2 walks the cursor with the fade+shimmer rearm
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(1, w.kBL)
+        assertEquals(1, w.kBw)                     // `bw=bL` on a real move
+        assertEquals(255, w.kFE)
+        assertEquals(20, w.kFC)
+        assertEquals(21, w.menuFkArm)
+        w.menuFkArm = -1                           // renderer consumed it
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(2, w.kBL)
+        // DOWN past the end clamps at fQ-1 with no rearm
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(3, w.kBL)
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(3, w.kBL)
+    }
+
+    @Test fun `af confirm routes on fF`() {
+        val w = world()
+        w.kFF = 20
+        w.stateL(30)
+        w.tick(emptyList())
+        w.pad.queuePress(Pad.M_CONTEXT)
+        w.tick(emptyList())
+        assertEquals(20, w.jC)                     // fF==20 → l(20)
+        assertEquals(0, w.kFF)
+    }
+
+    @Test fun `af back routes on fF`() {
+        val w = world()
+        w.kFF = 19
+        w.stateL(30)
+        w.tick(emptyList())
+        w.pad.queuePress(Pad.M_CYCLE)
+        w.tick(emptyList())
+        assertEquals(19, w.jC)                     // fF==19 → fO=3 + l(19)
+        assertEquals(3, w.kFo)
+        assertEquals(0, w.kFF)
+    }
+
+    @Test fun `af footer arms right pill to back`() {
+        val w = world()
+        w.stateL(30)
+        w.tick(emptyList())
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+    }
+}
+
+/** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
+class Slice90Test {
+
+    @Test fun `ae 121 arm routes back to state 3`() {
+        val w = world()
+        w.kEc = 121
+        w.stateL(28)
+        w.kEc = 121                               // stateL(28) doesn't touch eC
+        assertEquals("" to w.d0(17), w.menuFooter())   // `a("",d(0,17))`
+        w.pad.queuePress(Pad.M_CYCLE)
+        w.tick(emptyList())
+        assertEquals(3, w.jC)                     // l(3) — the wipe confirm
+        assertEquals(3, w.kFo)                    // `fO=3` arm
+        assertEquals(255, w.kFE)
+        assertEquals(-1, w.kBw)
+    }
+
+    @Test fun `ae jc23 footer hides the right label`() {
+        val w = world()
+        w.stateL(23)
+        w.tick(emptyList())
+        // verbatim `(bv==0||j.c==23||j.c==13)?"":d(0,17)` — jc23 → ""
+        assertEquals(w.d0(79) to "", w.menuFooter())
+        assertEquals(listOf(93, 120, 214), w.menuPanelRect().toList())
+    }
+
+    @Test fun `ae jc28 footer shows back unless bv is 0`() {
+        val w = world()
+        w.kBv = 2
+        w.stateL(28)
+        w.tick(emptyList())
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.kBv = 0
+        assertEquals(w.d0(79) to "", w.menuFooter())
+    }
+}
+
+/** Slice 91 — `F()` jc4 high-scores screen (k.java:2338-2408, proven). */
+class Slice91Test {
+
+    @Test fun `F page cycles right and wraps via mod 3`() {
+        val w = world()
+        w.stateL(4)
+        w.pad.queuePress(Pad.M_RIGHT)
+        w.tick(emptyList())
+        assertEquals(1, w.kCU)
+        w.pad.queuePress(Pad.M_RIGHT)
+        w.tick(emptyList())
+        assertEquals(2, w.kCU)
+        w.pad.queuePress(Pad.M_RIGHT)
+        w.tick(emptyList())
+        assertEquals(0, w.kCU)                      // `(cU+1)%3`
+    }
+
+    @Test fun `F page cycles left and clamps to 2`() {
+        val w = world()
+        w.stateL(4)
+        w.pad.queuePress(Pad.M_LEFT)
+        w.tick(emptyList())
+        assertEquals(2, w.kCU)                      // `cU--; <0 → 2`
+    }
+
+    @Test fun `F chevron taps cycle the page`() {
+        val w = world()
+        w.stateL(4)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 260, 40),
+                      InputQueue.Event(0, InputQueue.Type.UP, 260, 40)))
+        assertEquals(1, w.kCU)                      // right chevron (240,15,50,80)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 130, 40),
+                      InputQueue.Event(0, InputQueue.Type.UP, 130, 40)))
+        assertEquals(0, w.kCU)                      // left chevron (110,15,50,80)
+    }
+
+    @Test fun `F up scrolls bw but down is verbatim dead`() {
+        val w = world()
+        w.kBw = 1
+        w.stateL(4)
+        w.pad.queuePress(Pad.M_UP)
+        w.tick(emptyList())
+        assertEquals(0, w.kBw)                      // `bw>0 → bw--`
+        w.kBw = -1
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(0, w.kBw)                      // `bw<0 → bw++` fires only
+                                                  // when bw is negative
+        w.kBw = 0
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(0, w.kBw)                      // bw=0 → dead arm
+    }
+
+    @Test fun `F back routes to jc3`() {
+        val w = world()
+        w.stateL(4)
+        w.pad.queuePress(Pad.M_CYCLE)
+        w.tick(emptyList())
+        assertEquals(3, w.jC)
+    }
+
+    @Test fun `scoreAt reads LE-16 shorts from kBA`() {
+        val w = world()
+        w.kBA[81] = 0x34; w.kBA[82] = 0x12
+        assertEquals(0x1234, w.scoreAt(81))
+        w.kBA[83] = 0xFF; w.kBA[84] = 0xFF
+        assertEquals(-1, w.scoreAt(83))
+    }
+
+    @Test fun `F footer is empty-left plus BACK`() {
+        val w = world()
+        w.stateL(4)
+        assertEquals("" to w.d0(17), w.menuFooter())
     }
 }

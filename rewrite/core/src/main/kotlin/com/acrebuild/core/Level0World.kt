@@ -26,6 +26,9 @@ class Level0World(
     /** `k.by`/`k.bz`/`k.eH` script tables (`j.e(7)` of the mission pack,
      *  k.java:6196). Null = no scripts (spawn smoke/tests w/o assets). */
     val scripts: ScriptTables? = null,
+    /** `j.f(2)` charmap bytes (shared `short[]` font map) — builds the
+     *  `y` FontClip used for `a(str,str2)` footer dims (:2276-2296). */
+    val charmap: ByteArray? = null,
 ) : LevelCellSource {
 
     companion object {
@@ -291,6 +294,10 @@ class Level0World(
     private var kCh = -1                     // k.ch — release x
     private var kCi = -1                     // k.ci — release y
     private var kCl = false                  // k.cl — release latch
+    /** `j.t` (j.java:105, proven) — pad-bits-0-4 held latch: `j.a(i)` ∨=
+     *  `1<<i` on press, `j.b(i)` clears on release; `j.i()`=`t!=0` lets
+     *  the fail/win screens force-flush held input (`j.t=0`, :1119). */
+    var kJT = 0
     /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
      *  = autoscroll/flying on missions 1 and 4. */
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
@@ -751,6 +758,16 @@ class Level0World(
     var kEe = 0                        // k.eE — stats width
     var kEf = 0                        // k.eF
     var kFo = 0                        // k.fO
+    var kFC = 0                        // k.fC — af() title fade (20→255)
+    var kFQ = 1                        // k.fQ — af() unlocked row count
+    var kBL = 0                        // k.bL — af() browse cursor
+    var kFR = -1                       // k.fR — af() pending-nav timer
+    /** `k.fP` (k.java:344) — the 4 medal-count thresholds. */
+    val kFP = intArrayOf(0, 2, 5, 7)
+    /** renderer's `fK` row-anim rearm flag — af() nav `fK.a(21,1)`:
+     *  set to a state index, renderer arms+resets to -1 (`inferred`
+     *  plumbing — the orig draws+animates in one proc). */
+    var menuFkArm = -1
     var kEy = 0                        // k.ey — eA[bv].length
     var kEd = 0                        // k.eD — banner ticker
     var kBv = 0                        // k.bv — banner index (K() arg)
@@ -821,7 +838,7 @@ class Level0World(
         58 to "MISSION FAILED. YOU DIDN'T REACH THE ESCAPE LOCATION IN TIME!",
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
         69 to "DO YOU WANT TO DELETE YOUR DATA?",
-        71 to "DIFFICULTY", 72 to "IN-GAME SOUND?",
+        71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
         73 to "DO YOU WANT TO QUIT?",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
@@ -1753,6 +1770,7 @@ class Level0World(
      *  menu row (the orig's touch row-hit in the draw loop sets `bw` +
      *  `E(32)`; folded into `menuRowAt` here, `inferred` mechanism). */
     private fun menuQ(pressY: Int) {
+        footerQ()                            // a(str,str2) rects → E()
         // ---- back arm: `v(131072)` ------------------------------------
         if (pad.v(Pad.M_CYCLE) && jC != 23 && jC != 13) {
             kCb = true
@@ -1805,14 +1823,36 @@ class Level0World(
     /** Panel Y: jc12/13 → `b(93,67,214,true,true)` (:1108); jc14 →
      *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
      *  the same 67 (`inferred` — call sites unmined). */
-    fun menuPanelY(): Int = when {
-        jC == 14 -> if (kBv == 3 || kBv == 4) 86 else 30
-        else -> 67
+    fun menuPanelY(): Int = menuPanelRect()[1]
+    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :6218):
+     *  jc12/13 `b(93,67,214,true,true)`; jc14 bv3 `b(93,67)` / bv4
+     *  `b(93,86)` / else `b(93,30)` (:1124-1129); jc19 `d(14,47,180)`;
+     *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
+     *  (:1440); other states `inferred` (93,67,214). */
+    fun menuPanelRect(): IntArray = when (jC) {
+        14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
+        19 -> intArrayOf(14, 47, 180)
+        23, 28 -> intArrayOf(93, 120, 214)
+        29 -> intArrayOf(93, 86, 214)
+        30 -> intArrayOf(93, 46, 214)   // af() `d(93,46,214)` (:6254)
+        else -> intArrayOf(93, 67, 214)
     }
     /** z3 = the 40px title strip: verbatim true for jc12/13 (`b(…,true,
      *  true)`); jc14 goes through the 4-arg `b()` → z3=false (:1124);
      *  other screens `inferred` true. */
-    fun menuPanelZ3(): Boolean = jC != 14
+    /** z2 = bordered/filled variant: `b(...,true,·)` for jc12/13/14;
+     *  `d(i,i2,i3)`→`b(...,false,false)` for jc19/23/28/29 (:5863-5868). */
+    fun menuPanelZ2(): Boolean = jC == 12 || jC == 13 || jC == 14
+    /** Panel visible this frame: jc12/13 (kAl'd) plus the footer states
+     *  drawn unconditionally each frame (:1124-1185, :6218-6227). */
+    val panelVisible: Boolean
+        get() = menuVisible || jC == 14 || jC == 19 || jC == 23 ||
+            jC == 28 || jC == 29
+    fun menuPanelZ3(): Boolean = when {
+        jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
+        jC == 12 || jC == 13 -> true
+        else -> false               // ae()/jc19/jc29 go via d() → z3=false
+    }
     /** `i10 = min(8, ey)` — only the first 8 rows ever draw (:5924). */
     fun menuRowCount(): Int = minOf(8, kEy.coerceAtLeast(0))
     /** row height — `i4 = 35` when `i13==0 && j.c==2` else 30 (:5936). */
@@ -1832,11 +1872,12 @@ class Level0World(
      *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
     fun menuRowRects(): List<IntArray> {
         val out = ArrayList<IntArray>()
-        val i3 = 214
-        var i9 = menuPanelY() + 10
+        val pr = menuPanelRect()
+        var i = pr[0]
+        val i3 = pr[2]
+        var i9 = pr[1] + 10
         if (menuPanelZ3()) i9 += 40
         val i12 = i9
-        var i = 93
         val i10 = menuRowCount()
         for (i13 in 0 until i10) {
             val i4 = menuI4(i13)
@@ -1846,7 +1887,8 @@ class Level0World(
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {
-                    i = 206
+                    i = 206               // verbatim literal (jc19 col-2
+                                          // lands off-panel — orig quirk)
                     i9 = i12 - (i4 + 3)
                 }
             }
@@ -1859,6 +1901,60 @@ class Level0World(
      *  returned in second; 83/84 → `": "+ON/OFF` (`ff=fg={21,20}` :306-307);
      *  97 → `": "+d(0,35+au)`; 103 → `l(3)`; 123 → `": "+d(0,124+k()?0:1)`);
      *  non-19 → `d(0,10)+" "+(i13+1)` = "LEVEL n". */
+    /** `ce`/`cf` footer widths (k.java:2271-2296, proven): measured via
+     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36. */
+    var kCe = -1
+    var kCf = -1
+    /** `y` font for the footer measure — same clip as renderer's fontY
+     *  (pack-1 entry-3 = clip92 + shared charmap). Null in tests without
+     *  assets → footer labels still returned, dims fall back to 36. */
+    val footerFont: FontClip? = charmap?.let { cm ->
+        clips[92]?.let { FontClip(it, FontClip.loadCharmap(cm), 4) } }
+    /** `a(str,str2)` left-label width (:2276-2281): `y.a(str,null)` →
+     *  `ce = b.d + 30` when str==d(0,16), else `ce = 36`. */
+    fun footerLeftDim(str: String): Int =
+        if (str == d0(16)) (footerFont?.measure(str)?.first() ?: 6) + 30 else 36
+    /** right-label width (:2294-2298): `cf = b.d + 30` when str2==d(0,18)
+     *  else 36. */
+    fun footerRightDim(str: String): Int =
+        if (str == d0(18)) (footerFont?.measure(str)?.first() ?: 6) + 30 else 36
+    /** `a(str,str2)` label pair per screen (proven call sites):
+     *  jc14 `a(bv==2?d(0,16):d(0,79), d(0,17))` (:1136); jc19
+     *  `a(d(0,79), d(0,17))` (:1181); jc23/28 via ae() `a(d(0,79),
+     *  (bv==0||jc==23||jc==13) ? "" : d(0,17))` (:6225); jc29
+     *  `a(null, (bv==0||bv==3) ? "" : d(0,17))` (:1444); jc12/13 → none. */
+    fun menuFooter(): Pair<String?, String?> = when (jC) {
+        14 -> Pair(d0(if (kBv == 2) 16 else 79), d0(17))
+        19 -> Pair(d0(79), d0(17))
+        // ae() `a(d(0,79),(bv==0||j.c==23||j.c==13)?"":d(0,17))` (:6225)
+        // + the eC==121 arm's `a("",d(0,17))` (:6214)
+        23, 28 -> if (kEc == 121) Pair("", d0(17))
+                 else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
+        29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
+        30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
+        else -> Pair(null, null)
+    }
+    /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
+     *  arms `E(262144)` left / `E(131072)` right (:2288/:2309). Called
+     *  from menuQ before the v() arms so the armed bits dispatch in the
+     *  same frame, matching the orig's a()→L()→Q() order. */
+    private fun footerQ() {
+        val fl = menuFooter()
+        val left = fl.first
+        kCe = -1; kCf = -1
+        if (left != null && left != "" && jC != 21 && jC != 8) {
+            kCe = footerLeftDim(left)
+            if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
+        }
+        val right = fl.second
+        if (!right.isNullOrEmpty()) {
+            kCf = footerRightDim(right)
+            if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47)) {
+                padE(Pad.M_CYCLE)
+            }
+        }
+    }
     fun menuRowText(i13: Int): Pair<String, Int> {
         if (jC == 19) {
             val iM = menuM(kBv, i13)
@@ -2030,14 +2126,116 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
+     *  `bA` save array; `kBA` stores one byte per slot so this is
+     *  `kBA[i] | kBA[i+1]<<8`. */
+    fun scoreAt(i: Int): Int =
+        ((kBA[i] and 255) or ((kBA[i + 1] and 255) shl 8)).toShort().toInt()
+
+    /** `F()` (k.java:2338-2408, proven) — the jc4 high-scores screen:
+     *  `a(30,d(0,5))` title bar (renderer), `cU` difficulty page with
+     *  left/right + chevron-tap cycling, `bw` scroll (verbatim quirk —
+     *  the down arm tests `bw<0`, dead), footer + `v(131072)` back. */
+    private fun menuF() {
+        kCb = true
+        footerQ()                                     // `a("",d(0,17))` (:2371)
+        if (pad.v(Pad.M_UP)) {                        // `v(16388)` (:2373)
+            if (kBw > 0) { kBw--; z(23) }
+            return
+        }
+        if (pad.v(Pad.M_DOWN)) {                      // `v(33024)` (:2381)
+            if (kBw < 0) { kBw++; z(23) }             // verbatim dead arm
+            return
+        }
+        if (pad.v(Pad.M_RIGHT) || pointerDownIn(240, 15, 50, 80)) {
+            kCU = (kCU + 1) % 3; z(23); return        // (:2388)
+        }
+        if (pad.v(Pad.M_LEFT) || pointerDownIn(110, 15, 50, 80)) {
+            if (--kCU < 0) kCU = 2; z(23); return     // (:2395)
+        }
+        if (pad.v(Pad.M_CYCLE)) {                     // `v(131072)` (:2404)
+            stateL(3); bannerK(4); z(30)
+        }
+    }
+
+    /** `ae()` (k.java:6204-6228, proven) — the jc23/28 screen: the
+     *  `eC==121` wipe-confirm arm (own title at y=120 + back-only
+     *  dispatch), else `d(93,120,214)` + bW title at y=80 + footer +
+     *  `L(ey); Q()`. */
+    private fun menuAe(pressY: Int) {
+        if (kEc == 121) {                                // wipe-confirm arm
+            if (pad.v(Pad.M_CYCLE)) {                    // `v(131072)` (:6209)
+                kFE = 255; kFo = 3; bannerK(4); kBw = -1
+                stateL(3); z(30); return
+            }
+            footerQ(); return
+        }
+        // `eB>0 && j.c!=23 → d(0,eB)` (:6215) — the subline lookup; its
+        // result feeds an unported draw slot (inferred — decompiled
+        // statement discards it).
+        footerQ()
+        menuL(kEy); menuQ(pressY)
+    }
+
+    /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
+     *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
+     *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
+    private fun menuAf() {
+        if (kFo == 0) {                              // init arm (:6233)
+            kFC = 20; kFE = 0; kFQ = 0
+            kDa = if (kDt || kBA[69] != 0) 8 else kBA[14] + 1
+            for (i in 0 until 4) if (kDa > kFP[i]) kFQ++
+            kEy = kFQ; kBL = 0; kFR = -1; kFo = 1
+        }
+        // `d(93,46,214)` draw + `fC` fade (:6254-6261) — renderer reads
+        if (kFC > 0 && kFC != 255) { kFC += 20; if (kFC >= 255) kFC = 255 }
+        if (kFR != -1) {
+            if (kFE > 20) kFE -= 20 else kFR = -1
+        }
+        // `a(d(0,79),d(0,17))` — footerQ already ran in menuQ? No — af()
+        // calls its own a() → arm the footer rects here instead.
+        footerQ()
+        if (pad.v(Pad.M_CONTEXT)) {                  // `v(327712)` (:6269)
+            if (kFF == 20) stateL(20) else stateL(9)
+            kFF = 0; z(23); return
+        }
+        if (pad.v(Pad.M_CYCLE)) {                    // `v(131072)` (:6279)
+            if (kFF == 19) { kFo = 3; stateL(19) } else stateL(2)
+            kFF = 0; z(30); return
+        }
+        if (kFQ > 1) {                               // browse nav (:6292)
+            if (pad.v(Pad.M_UP)) {
+                kFR = kBL
+                if (--kBL < 0) kBL = 0
+                else { kFC = 20; kFE = 255; kBw = kBL
+                       kFH = 0; kFI = 1; menuFkArm = 21 }
+                if (audioTrack == -1) z(23)
+                return
+            }
+            if (pad.v(Pad.M_DOWN)) {
+                kFC = 20; kFE = 255; kFR = kBL
+                if (++kBL >= kFQ) kBL = kFQ - 1
+                else { kBw = kBL; kFH = 0; kFI = 1; menuFkArm = 21 }
+                if (audioTrack == -1) z(23)
+            }
+        }
+    }
+
     private fun menuFrame(pressY: Int): Boolean {
         when (jC) {
             12, 13 -> {
+                if (kJT != 0) {                      // `j.i()` (:1109) —
+                    kJT = 0                          // held pad bits flush
+                    return true                      // → `j.t=0`, skip frame
+                }
                 scrollBounds()                       // b(true)
                 kEg = 0
                 menuL(kEy)
                 menuQ(pressY)
             }
+            4 -> menuF()                           // F() (:2338, proven)
+            23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
+            30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)
@@ -2396,7 +2594,8 @@ class Level0World(
                         padE(Pad.M_PAUSE)
                     else {
                         val iJ = resolvePadZone(e.x, e.y)
-                        if (iJ != -1) padE(2 shl iJ)          // E(2<<iJ)
+                        if (iJ != -1) { padE(2 shl iJ)         // E(2<<iJ)
+                            if (iJ < 5) kJT = kJT or (1 shl iJ) }
                     }
                     pointerDown = true
                     kCj = e.x; kCk = e.y
@@ -2404,6 +2603,7 @@ class Level0World(
                 InputQueue.Type.MOVE -> {                     // pointerDragged
                     val iJ = resolvePadZone(e.x, e.y)
                     if (iJ != -1 && pad.bB and (2 shl iJ) == 0) padE(2 shl iJ)
+                    if (iJ in 0..4) kJT = kJT or (1 shl iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                 }
@@ -2411,6 +2611,9 @@ class Level0World(
                     kCh = e.x; kCi = e.y
                     kCl = true
                     pad.releaseFlush()                        // eN=eL; eL=0
+                    kJT = 0                                    // b(i) — all
+                                                                 // held bits
+                                                                 // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
                 }
