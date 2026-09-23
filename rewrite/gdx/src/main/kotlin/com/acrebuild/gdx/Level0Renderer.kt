@@ -1007,6 +1007,11 @@ class Level0Renderer {
         // aO/aP timed line (k.java:4337-4343, proven)
         world.kAP?.let { drawText(it, 200, 23, 17) }
 
+        // L157 goal-milestone blit (k.java:3321-3327, proven): while
+        // the ax9 goal sits in the camera band, `z[9]` anim38 blinks
+        // every other j.f at (360,120). world.goalTicker = j.f%2 gate.
+        if (world.goalTicker) drawFrame(9, 38, 0, 360, 120, 0)
+
         // k.aD capture/fuse bar (k.java:3133-3139, proven): under the
         // C-claim gate `(C!=null && (!C.cd[6] || !C.ab())) || C==null`,
         // when the HUD-bar entity sits in S6 with Z[1]>0 → z[12] f18

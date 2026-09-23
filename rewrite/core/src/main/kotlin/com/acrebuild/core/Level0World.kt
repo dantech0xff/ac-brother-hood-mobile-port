@@ -1583,8 +1583,8 @@ class Level0World(
      *  1. Goal arm — `k.aV` (the `r8[5]==0` ax9 block `initAx9` bound)
      *     while `Z[0]==1` (script ops L146/L147 arm/disarm) and
      *     `aV.S∉{4,5}`: `w()==1` → the `j.f`-even milestone font blit
-     *     (`z[9].a(cd,38,0,360,120,…)` — draw unported; `goalTicker`
-     *     flag only, inferred); `w()==2` → `bx=56; l(13); bw=0` —
+     *     (`z[9].a(cd,38,0,360,120,…)` → `goalTicker` → renderer
+     *     `drawFrame(9,38)`); `w()==2` → `bx=56; l(13); bw=0` —
      *     the scripted win. The `j.c∈{13,31}` skip maps to `won`;
      *     screen 31 has no analog yet (inferred).
      *  2. Claimer step — `C.cd[2] && C.cd[1] && C.ab()` → `C.aa()`:
@@ -1597,7 +1597,7 @@ class Level0World(
         val aV = kAV
         if (aV != null && aV.Z[0] == 1 && !won && aV.S != 4 && aV.S != 5) {
             when (iW(aV)) {
-                1 -> if (tickIndex and 1L == 0L) goalTicker = true     // L157
+                1 -> goalTicker = (tickIndex and 1L) == 0L             // L157 j.f%2
                 2 -> { kBx = 56; screenL(13); kBw = 0 }                // L159
                 else -> goalTicker = false
             }
@@ -1609,7 +1609,7 @@ class Level0World(
         if (Entity.MISSION_BH[kAj] == 3) { camA = camX; camB = camY }  // L172
     }
 
-    /** L157's `z[9]` milestone blit active this tick (render unported). */
+    /** L157's `z[9]` milestone blit active this tick → `drawFrame(9,38)`. */
     var goalTicker = false
         private set
 
