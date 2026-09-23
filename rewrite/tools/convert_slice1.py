@@ -111,6 +111,13 @@ CLIPS = {
     "clip42": ("pack-3", "entry-042-marker-003"),  # ax34 k.D player follower (k.r(42), i.java:2754)
     "clip46": ("pack-3", "entry-046-marker-003"),  # ax71 k.E struggle-QTE overlay (k.r(46), i.java:2771)
     "clip39": ("pack-3", "entry-039-marker-003"),  # z[39] dialog speaker icons (k.java:940)
+    "clip52": ("pack-3", "entry-052-marker-003"),  # ax29 Cesare boss (bi[29]=52)
+    "clip30": ("pack-3", "entry-030-marker-003"),  # ax41 knockable prop (bi[41]=30)
+    "clip6": ("pack-3", "entry-006-marker-003"),   # ax10 trigger zones (bi[10]=6)
+    "clip5": ("pack-3", "entry-005-marker-003"),   # ax8 knife projectile (bi[8]=5)
+    "clip12": ("pack-3", "entry-012-marker-003"),  # k.dA HUD indicator (T(), k.java:4165)
+    "clip59": ("pack-3", "entry-059-marker-003"),  # ax8 boss-knife param (op111 spawnParam)
+
     # pack-2 UI bank — A[] clips load under j.a("/2") (k.java:4058-4075).
     # A[2]/A[3] already live as clip93/clip95.
     "clip96": ("pack-2", "entry-000-marker-003"),  # A[0] title-screen bg (k.java:1148)
@@ -187,7 +194,11 @@ def pack_clip(pack, entry_dir, out_dir, clip_id):
         if not pngs:
             # aU 2/5 = non-pixel modules (vector/metric carriers): no PNG
             # by design — keep an empty-name slot so indexing stays aligned.
-            assert m.get("runtime_type_aU") in (2, 5), (
+            # Same for runtime-nonrendering modules (entry-006: the pixel
+            # payload tail is absent at EOF — load-valid, draws nothing).
+            nonrender = m.get("pixel_reconstruction", {}).get(
+                "runtime_image_behavior") == "nonrendering"
+            assert m.get("runtime_type_aU") in (2, 5) or nonrender, (
                 f"missing pngs for module {m['index']} in {entry_dir}")
             module_pngs.append(("", m["ae_width"], m["af_height"]))
             continue
