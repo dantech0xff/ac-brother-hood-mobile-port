@@ -194,16 +194,18 @@ class Level0Renderer {
         }
     }
 
-    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` — single frame draw
-     *  (the `a`-object/`A[2]` path, b.java:915). */
+    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` (b.java:907-913): frame →
+     *  `av` OBJECT index → the 6-arg object draw (:915) — composite
+     *  placements via drawObject (falls back to drawModule when the
+     *  object has no placements, so single-module frames are unchanged). */
     private fun drawFrame(pack: Int, anim: Int, frame: Int, x: Int, y: Int,
                           flags: Int, palette: Int = 0) {
         val clip = clips[pack] ?: clips[-pack] ?: return
         if (anim < 0 || anim >= clip.animCount() ||
             frame < 0 || frame >= clip.frameCount(anim)) return
         val fd = clip.frameDraw(anim, frame, flags)
-        drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
-                   fd.transform, palette)
+        drawObject(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
+                   fd.transform, 0, palette)
     }
 
     /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
@@ -607,8 +609,25 @@ class Level0Renderer {
     /** `G()` draw surface (:2412-2460) — help/instructions scroller:
      *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
      *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
-     *  `z[11]`/`z[54]` page arts not converted — skipped (`inferred`). */
+     *  `cy==14` (help opened from the pause menu) → framed variant:
+     *  `b(true)` + `j.h` panel (57,10,285,eF+10) + black title bar
+     *  (57,18,285,18) + `j.h(-2013265920)` 4 borders + `bW` title
+     *  `d(0,6)` at (200,20,17). `bw==1` → page arts: `z[11]` anim17 at
+     *  (200, iK2+20) and `z[54]` anim0 palette-1 at
+     *  (200, iK2+y.k(3)+cW) — the cy==14/else arms are byte-identical
+     *  in the original (verbatim quirk). */
     private fun helpScreen(world: Level0World) {
+        if (world.kCy == 14) {                        // cy==14 framed arm
+            fillAr(57, 10, 285, world.kEf + 10, -856756498)   // j.d panel
+            fillAr(57, 18, 285, 18, -16777216)                // title bar
+            // j.h(-2013265920) — the verbatim 4 border rects
+            fillAr(57, 8, 285, 2, -2013265920)
+            fillAr(57, world.kEf + 20, 285, 2, -2013265920)
+            fillAr(55, 8, 2, world.kEf + 14, -2013265920)
+            fillAr(342, 8, 2, world.kEf + 14, -2013265920)
+            fontW.l(0)
+            world.d0(6)?.let { drawText(it, 200, 20, 17, pack = 91) }
+        }
         val iK = world.menuGIK()
         val lf = if (world.pointerMoveIn(45, iK - 15, 50, 30)) 40 else 36  // d()
         val rf = if (world.pointerMoveIn(305, iK - 15, 50, 30)) 39 else 35 // d()
@@ -619,6 +638,16 @@ class Level0Renderer {
         fontY.l(1)
         fontY.drawWrapped(page, u, 200, iK, 8 * (world.kCY - 1), 8, 3)
         { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        if (world.kBw == 1) {                         // page-1 art pair
+            val iA = u[0]                             // wrapped line count
+            val iK2 = iK - ((world.footerFont?.linesHeight(iA) ?: 0) / 2)
+            drawFrame(11, 17, 0, 200, iK2 + 20, 0)    // z[11].a(cd,17,0,…)
+            // z[54].a(cd,0,0,200, iK2+y.k(3)+cW) — h(0,1) palette-1;
+            // cy==14/else arms byte-identical (verbatim quirk)
+            drawFrame(54, 0, 0, 200,
+                      iK2 + (world.footerFont?.linesHeight(3) ?: 0) +
+                      world.kCW, 0, 1)
+        }
         var i = 0
         for (i2 in 0 until world.kBw) i += world.kCX[i2]
         fontY.l(0)
