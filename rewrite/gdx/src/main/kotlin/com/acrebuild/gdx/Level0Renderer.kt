@@ -524,8 +524,33 @@ class Level0Renderer {
             }
         }
 
-        for (e in world.npcs) drawEntity(e, camX, camY)
-        drawEntity(world.player, camX, camY)
+        // k.b(z2) entity draw pass (k.java:2904-2934, proven): iterate the
+        // `bd[]` sorted list; `ad` child draws BEFORE the parent except
+        // ax76/ax29 (after + `ad.s()`); `E` held entity + `ab` overlay.
+        world.buildDrawList()
+        for (i32 in 0 until world.drawCount) {
+            val e = world.drawList[i32]!!
+            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(e.ad!!, camX, camY)
+            if (e.ax == 21 && e.S == 1 && e.ad != null) {
+                if (world.kC == null || world.subU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
+                e.ad!!.advanceAnim()
+            }
+            drawEntity(e, camX, camY)
+            if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
+                drawEntity(e.ad!!, camX, camY); e.ad!!.advanceAnim()
+            }
+            // ag()→ah() ghost-trail draw — `a` card producer unported
+            // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
+            val kE = world.kE
+            if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
+                (world.jC == 8 || (world.jC == 21 && world.subU == 8))) {
+                drawEntity(kE, camX, camY); kE.advanceAnim()
+            }
+            if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
+            val ab = e.ab
+            if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
+                drawEntity(ab, camX, camY)
+        }
 
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
