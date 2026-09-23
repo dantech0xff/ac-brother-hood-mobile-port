@@ -945,6 +945,8 @@ class Level0World(
     var kAC = 0                                // k.aC — banner TTL
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
+    var alertSlide = 0                         // derived `i3` = 30-aH slide
+    var alertFill = 0                          // derived `i4` = min(aE,100)
     /** `dn[]` (k.java:207) — z[12] weapon-icon anim per weapon index. */
     private val kDn = intArrayOf(10, 12, 9, 11)
     /** `p(int)` (k.java:3542): bit-index scan — weapon mask → dn slot. */
@@ -2795,7 +2797,31 @@ class Level0World(
     private fun hudStep() {
         if (kAx == 0) kAx = 30                     // k.java:4177
         player.x1 = minOf(player.x1, kAx)          // g.f(ax) :4180
-        if (!bh3 && kAj < 8) {                     // score arm :4247
+        if (bh3) {
+            // bh3 arm mutations (k.java:4187-4245, proven)
+            val b = kB
+            if (iBT && b != null && b.aB > iBU) b.aB = iBU   // :4191
+            if (kAp[4] < 0) kAp[4] = 0                       // :4204
+            if (kAE > 0) {
+                if (kAH > 30) {
+                    kAH--
+                } else if (kAH >= 0) {
+                    val i2 = kAH - 1
+                    kAH = i2
+                    if (i2 < 0) {
+                        kAE = kAH                          // aE = -1 poisons
+                        kAH = 0                            // the meter (orig
+                        return                             // `return` skips the
+                    }                                      // rest of c())
+                }
+                if (kAF > 0) {
+                    if (kAF < 3) { kAE += kAF; kAF = 0 }
+                    else { kAE += 3; kAF -= 3 }
+                }
+                alertSlide = if (kAH in 0..30) 30 - kAH else 0
+                alertFill = minOf(kAE, 100)
+            }
+        } else if (kAj < 8) {                      // score arm :4247
             if (kAz < 0) kAz = 0
             if (kAz > 32767) kAz = 32767
         }
