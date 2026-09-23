@@ -312,7 +312,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `i.c(int,int,int,int)` (i.java:9053, proven): hit-anim by type —
      *  ax11 → i(r4), ax73 → i(r5) (-1 = keep); other ax → no-op. */
-    private fun hitAnimByType(a11: Int, a73: Int) {
+    fun hitAnimByType(a11: Int, a73: Int) {
         when (ax) {
             11 -> if (a11 >= 0) setAnim(a11)
             73 -> if (a73 >= 0) setAnim(a73)
@@ -324,7 +324,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  landing cell is 20-solid or 0-void the snap reverts and a diagonal
      *  `ag/ai` knockback fires instead. The `cell >= 12` arm gates on the
      *  above-side cell. */
-    private fun resolvePush(w: LevelCellSource) {
+    fun resolvePush(w: LevelCellSource) {
         ag = 0; ai = 0
         if (sideFree(w)) return
         if (w.collisionCell(ak / 20 + if (av) 1 else -1, al / 20 - 1) >= 12) return
@@ -4264,6 +4264,9 @@ interface LevelCellSource {
     // -- ax73 aJ() statics (i.java:77/100/132/9825, k.aA, g.z) -----------
     /** `i.bf` (i.java:100) — engage-claim latch for the aN-lock sweep. */
     var iBf: Boolean get() = false; set(_) {}
+    /** `i.x` (i.java:94) — the static every-3rd-hit counter shared by
+     *  all NPCs (j()'s half-HP engage arm). */
+    var iX: Int get() = 0; set(_) {}
     /** `i.bx` (i.java:132) — entity holding the grab-QTE (S147). */
     var iBx: Entity? get() = null; set(_) {}
     /** `k.aA` — shared engage/alert countdown (`aC()` zeroes it). */

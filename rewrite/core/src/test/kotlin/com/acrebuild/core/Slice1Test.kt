@@ -412,25 +412,45 @@ class Level0WorldTest {
         val w = world()
         val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
         repeat(5) { w.tick(emptyList()) }
-        // aB=120 → one 80-dmg slash leaves 40 (<=H=50 → weakened via C()),
-        // close enough for the X-arc to land the opening hit
+        // Verbatim weaken chain (i.java:1955): Z[0]==1 marks the soldier
+        // weaken-eligible; a hit leaving aB<=bu → C() flips Z0=2 + S144.
+        // (Level-0 records carry Z0=0 — they never weaken, proven.)
+        s.Z[0] = 1
         s.aB = 120
         w.player.setPositionPx(s.ak - 20, s.al)
-        w.tick(emptyList())
-        // lock claim + player mid-combo → tap → R=183|184 finisher
+        // Land a normal hit to trip the weaken: H=50 → aB=70 → hitReact
+        // Z0==1 → Z0=2 + S144 + claims the aN lock.
         w.player.setAnim(67)
-        w.player.T = 0
-        var sawFinisher = false
-        for (i in 0 until 200) {
-            if (s.S == 139 || (s.aB <= 0 && s.S == 0)) break
-            if (w.player.S == 183 || w.player.S == 184) sawFinisher = true
+        w.tick(emptyList())
+        assertTrue(s.Z[0] == 2 && s.S == 144,
+            "hit on Z0==1 soldier should weaken: Z0=2+S144 (got Z0=${s.Z[0]}, S=${s.S})")
+        assertTrue(w.lockTarget === s,
+            "weakened soldier should hold the aN lock")
+        // The weakened soldier counter-engages further normal attacks:
+        // h() (i.java:1271) — S144 ∉{11,12,6} → i() forces the player to
+        // S8 and takes S17 (aC=16) itself, preempting j().
+        for (i in 0 until 30) {
             w.player.setPositionPx(s.ak - 20, s.al)
             val (cx, cy) = w.cellPoint(4)
             w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
                           InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
+            if (s.S == 17) break
         }
-        assertTrue(sawFinisher, "weakened lock + tap → finisher anim")
-        assertTrue(s.aB <= 0, "finisher should zero the victim (aB=${s.aB})")
+        assertTrue(s.S == 17,
+            "weakened soldier should counter-engage the next attack (sS=${s.S})")
+        // S216 is h()-exempt (i.java:1272): it reaches j()'s finisher arm
+        // (i.java:1334) — aB=0 + diagonal launch (ag=±5120, ai=∓2560).
+        // Let the anim run until its X-arc frames land.
+        w.player.setAnim(216)
+        for (i in 0 until 60) {
+            w.player.setPositionPx(s.ak - 20, s.al)
+            w.tick(emptyList())
+            if (s.aB <= 0) break          // check the launch before friction decays it
+        }
+        assertTrue(s.aB <= 0,
+            "S216 finisher should zero the victim (aB=${s.aB})")
+        assertTrue(s.ag != 0,
+            "S216 should launch the victim (ag=${s.ag} — decays post-hit)")
     }
 
     @Test fun `npc strike on a metered player counters the attacker`() {
