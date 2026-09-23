@@ -891,6 +891,9 @@ class Level0World(
               "DOESN'T KNOW IS THAT SPYING EYES ARE FOLLOWING HIS " +
               "EVERY MOVEMENT...",
         66 to "DID YOU LIKE THIS GAME? CHECK OUT OTHER GAMELOFT GAMES!",
+        // `bU[77]` splice (:3988-3991, proven): `$VVV` → `GloftASBR.b`
+        // = MIDlet-Version JAD property = "1.2.7" (MANIFEST.MF, proven).
+        77 to ("\\0ASSASSIN'S CREED BROTHERHOOD\nV \$VVV\n\n© 2010 UBISOFT ENTERTAINMENT.\nALL RIGHTS RESERVED. ASSASSIN'S CREED, UBISOFT AND THE UBISOFT LOGO ARE TRADEMARKS OF UBISOFT ENTERTAINMENT IN THE U.S. AND/OR OTHER COUNTRIES. PUBLISHED AND DEVELOPED BY GAMELOFT UNDER LICENSE FROM UBISOFT ENTERTAINMENT.\nSOFTWARE © 2010 GAMELOFT.\nALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER COUNTRIES.\n\nINFO AND CUSTOMER CARE:\nWWW.GAMELOFT.COM\nSUPPORT@GAMELOFT.COM\n\n\\0EXECUTIVE PRODUCERS\n\\1CHARLOTTE LAVERGNE\nMARTIAL VALERY\n\n\\0PRODUCERS\n\\1LUO JUN JIE\nMA LIN\n\n\\0GAME DESIGN\n\\1CAI QIAN\nSHI YAO\nPAN XIN\nLI YI NAN\nJIANG WEI\nWANG JI\nZHANG3 LEI\n\n\\0GRAPHICS\n\\1LI MIN\nZOU XU BIN\nCHEN ZI GUANG\nYAN BO\nYANG CHAO\nDAI SI TONG\nLIU LU\nXU XIANG\nZENG XIN\nLI YU AN\nZHONG HONG YU\nLIANG XIAO BAI\n\n\\0PROGRAMMERS\n\\1WEN YAN BIN\nSHI FENG\nZHOU CHAO FENG\nZHAO YU\n\n\\0SOUND DIRECTOR\n\\1ARNAUD GALAND\n\n\\0SOUND DESIGNER\n\\1EMANUEL BURCEA\n\n\\0LOCALIZATION MANAGER\n\\1ALEXIS GREEN-PAINCHAUD\n\n\\0LOCALIZATION COORDINATORS\n\\1ALICJA BUFFA\nFRED LEUNG\n\n\\0LOCALIZATION\n\\1KASPER HARTMAN\nOWEN WEISS\nTIMOTHY LECLAIR\nMARIKO MCDONALD\n\n\\0QA MANAGER\n\\1DU JING\n\n\\0QA LEAD\n\\1HENG XIN\n\n\\0QUALITY ASSURANCE\n\\1HU YI WEI\nZHU JIAN\nDONG MIN YOU\nLIU HAI\nLIU XING\nMU RANG\nZHANG XIANG\nYUAN GUANG SHENG\nWANG YUE\nXU PEI\nJIANG HAN\nKAN LIANG\nHUANG PENG\nYANG YUE SHENG\nPENG HONG\nTANG JIAN WEI\nZENG WEI XUAN\nLI RUO FAN\nXIAO KAI JIE\nLI2 JIE\nHE JUN\nHUANG HAI TAO\nJIA YI\nTANG LI\nXIAO QIAN\n\n\\0SOUND QA MANAGER\\1\nULRICH FRANTZ\n\n\\0SOUND QA TESTERS\\1\nNICOLAS TROVATO\nMARIA COLONA\n\n\\0STUDIO MANAGERS\\1\nYU FEI\nLI KAI JUN\n").replace("\$VVV", "1.2.7"),
         98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
         99 to "CONGRATULATIONS!\n\nYOU UNLOCKED HARD MODE!",
         // 51-54: city names for the mission-select sub-labels
@@ -2248,6 +2251,9 @@ class Level0World(
         23, 28 -> if (kEc == 121) Pair("", d0(17))
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        // case 6 `if (!dx) a("",d(0,17))` (:851-853) — ABOUT's BACK
+        // footer shows only on the non-dx variant.
+        6 -> if (!kDx) Pair("", d0(17)) else Pair(null, null)
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
         5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
@@ -2444,7 +2450,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(-1, 0, 1, 2, 3, 4, 5, 6, 9, 11, 14, 18, 19, 20, 23, 24, 25, 26, 27, 28, 29, 30)
+    private val menuStates = intArrayOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 14, 18, 19, 20, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2840,6 +2846,20 @@ class Level0World(
      *  the vendor store intent; no IGP layer on this target → no-op. */
     private fun enterIgp() { }
 
+    /** `k.a()` case 6 (k.java:844-858, proven) — the ABOUT screen's
+     *  tick. `cb=true`; `f(false)`/`d(0,7)`/`bW.l(1)`/`j.a(cd,…)` are
+     *  draw-side (renderer); `b(y,1,d(0,77),200,50,390,155,0,1)` is the
+     *  scrollable credits roll on the `y` font → `scrollPanel`; the
+     *  exit arm is `v(131072) && !dx → l(3) + z(30)` — CYCLE-only, and
+     *  only on the non-dx variant (the `!dx → a("",d(0,17))` BACK
+     *  footer is `menuFooter()`'s `6 ->` arm). Reached via menuItem 7
+     *  (:3732 `case 7 → l(6)`) and `menuJc25`'s `!dx` arm (:1392). */
+    private fun menuJc6() {
+        kCb = true
+        scrollPanel(d0(77) ?: "", 50, 155, 390, true)
+        if (pad.v(Pad.M_CYCLE) && !kDx) { stateL(3); z(30) }
+    }
+
     /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
      *  screen's tick. `G(j.g)` is the staged loader (:4741-5090): each
      *  `j.g` milestone loads one resource — 1 strings+save bytes
@@ -3012,11 +3032,16 @@ class Level0World(
             0 -> bootR()                             // case 0 = R() (:3949)
             20 -> menuJc20()                         // case 20 (:1208-1306)
             9 -> menuJc9()                           // case 9 (:1067-1088)
+            6 -> menuJc6()                           // case 6 (:844-858)
             24 -> menuJc24()                         // case 24 (:1326-1386)
             25 -> menuJc25()                         // case 25 (:1388-1420)
             // `a()` has no `case 26` (:1388 → :1422, proven) — j.c==26
             // is a dead screen that consumes ticks verbatim.
-            26 -> { }
+            // `a()` has no cases for 7/16/26/32/33/34 either (:796-1450,
+            // proven) — all dead screens consuming ticks verbatim. `16`
+            // stays off this list: `l(16)` sets `al` → the frozen-state
+            // fallback (`kAl && M_CONTEXT → reload`) is its live behavior.
+            7, 26, 32, 33, 34 -> { }
             27 -> menuJc27()                         // case 27 (:1422-1435)
             11 -> jC = -1                            // case 11 (:1104, proven)
             -1 -> { /* j.c==-1 — suspended/dead state; consumes ticks */ }

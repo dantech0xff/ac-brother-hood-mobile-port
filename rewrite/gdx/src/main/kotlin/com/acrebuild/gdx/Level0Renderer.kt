@@ -834,6 +834,18 @@ class Level0Renderer {
         drawText("${i + world.kCY}/${world.kCZ}", 200, 220, 33)
     }
 
+    /** `case 6` draw surface (k.java:844-853, proven): `d(0,7)` "ABOUT"
+     *  title on `bW.l(1)` + `b(y,1,d(0,77),200,50,390,155,0,1)` — the
+     *  scrollable credits roll clipped to (0,50,400,155). */
+    private fun aboutScreen(world: Level0World) {
+        fontW.l(1)
+        world.d0(7)?.let { drawText(it, 200, 24, 3, pack = 91) }
+        clipScissor(0, 50, 400, 105)
+        fontY.l(1)
+        drawText(world.d0(77) ?: "", 200, world.kFd, 3, pack = 91)
+        clipScissor(0, 0, 400, 240)
+    }
+
     /** `F()` draw surface (:2338-2371) — `a(30,d(0,5))` title bar,
      *  subtitle, chevrons, 8 score rows + TOTAL. */
     private fun scoreScreen(world: Level0World) {
@@ -1279,6 +1291,7 @@ class Level0Renderer {
         // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
         if (world.jC == 4) scoreScreen(world)
         if (world.jC == 5) helpScreen(world)
+        if (world.jC == 6) aboutScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],
