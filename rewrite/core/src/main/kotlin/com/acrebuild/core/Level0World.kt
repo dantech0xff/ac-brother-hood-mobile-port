@@ -93,6 +93,12 @@ class Level0World(
         private set
     var deaths = 0                     // mission-fail count (instrumentation)
     var failed = false                 // j.c==12 mission-fail screen active
+    /** `k.l(13)` (k.java:2031 `r6==13 → L12 → al=true → j.c=13`) — the
+     *  win/milestone screen: same freeze contract as `failed`; confirm
+     *  (`v(65568)`, k.java:1804) advances the milestone flow — ported as
+     *  context edge → reload(), our only level so far (screen unported,
+     *  `inferred`). */
+    var won = false                      // j.c==13 win screen active
         private set
 
     /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id. */
@@ -211,7 +217,7 @@ class Level0World(
     override val camRect: IntArray get() =
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
     /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
-    override val inPlay: Boolean get() = !failed
+    override val inPlay: Boolean get() = !failed && !won
     /** `k.cm` — mounted flag (k.k() at k.java:638; `cm=true` writes 1 at
      *  g.java:3564). */
     var cm = 0
@@ -987,10 +993,11 @@ class Level0World(
             kAw = 0; kAv = false; kDz = 120                         // k.r()
         }
     }
-    /** `k.l(int)` — 12 mission-fail, 15 mission-complete. */
+    /** `k.l(int)` — 12 mission-fail, 13 win, 15 mission-complete, 21 modal. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
         else if (n == 21) dialogModal = true
+        else if (n == 13 && !won) { won = true; missionWon = true }  // k.l(13)
     }
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's
      *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
@@ -1117,6 +1124,7 @@ class Level0World(
         resetPlayerToSpawn()
         spawnEntities()
         failed = false
+        won = false
         kM(kAd)                                   // C()/f() `m(ad)` snap
     }
 
@@ -1232,8 +1240,11 @@ class Level0World(
         if (pointerDown) player.gJ = 5
         playerFsm.tickCount = tickIndex
 
-        // mission-fail screen: world frozen; context edge = retry (reload)
-        if (failed) {
+        // mission-fail / win screens: world frozen; context edge = retry
+        // (k.java:1804 `v(65568)` → advance, k.java:2268-2280; the win
+        // screen's confirm runs `f(false)`-equivalent — reload() here,
+        // `inferred` for the milestone flow which is unported).
+        if (failed || won) {
             if (pad.v(Pad.M_CONTEXT)) reload()
             tickIndex++
             return
@@ -1283,10 +1294,7 @@ class Level0World(
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
-
-
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 

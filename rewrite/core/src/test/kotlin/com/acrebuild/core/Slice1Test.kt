@@ -8495,3 +8495,30 @@ class Slice70CamTest {
         assertEquals(0, w.kR); assertEquals(0, w.kSBound)
     }
 }
+// =========================================================================
+// Slice 71 — k.l(13) win screen (k.java:2031 r6==13 → L12 → j.c=13).
+// =========================================================================
+class Slice71WinTest {
+    @Test fun `screenL(13) freezes world and context edge reloads`() {
+        val w = world()
+        w.tick(emptyList())
+        w.screenL(13)                                   // script op105 → k.l(13)
+        assertTrue(w.won, "k.l(13) must raise the win screen")
+        assertTrue(w.missionWon)
+        val pos = w.player.ak to w.player.al
+        repeat(5) { w.tick(emptyList()) }
+        assertEquals(pos, w.player.ak to w.player.al, "world frozen while won")
+        assertFalse(w.inPlay)
+        // v(65568) confirm edge → advance = reload() (only level so far)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertFalse(w.won, "context edge should advance the win screen")
+        assertEquals(90, w.player.x1, "reload refills the meter")
+    }
+
+    @Test fun `screenL(13) is idempotent`() {
+        val w = world()
+        w.screenL(13); w.screenL(13)
+        assertTrue(w.won); assertTrue(w.missionWon)
+    }
+}
