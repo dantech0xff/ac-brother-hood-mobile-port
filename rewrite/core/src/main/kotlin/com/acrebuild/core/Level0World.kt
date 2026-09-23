@@ -3874,7 +3874,7 @@ class Level0World(
 
         for (n in npcs) {
             if (n.ax == 44) npcFsm.tickDoor(n, player)
-            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player)
+            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)

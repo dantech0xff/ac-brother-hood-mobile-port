@@ -3048,6 +3048,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.bA[]` (i.java:22336 `new a[4]`, proven) — script-QTE prompt
          *  slots shared across claim runs (class `a` = the prompt sprite). */
         val scriptPrompts = arrayOfNulls<ScriptPrompt>(4)
+        /** `i.cs[]` (i.java:184, proven) — pad mask per QTE lane type
+         *  (S55 zone's `p` selects the mask the player must press). */
+        val CS = intArrayOf(1, 2, 16388, 8, 4112, 65568, 8256, 128, 33024, 512)
         /** `g.u[]` (g.java:6400, proven) — player meter cost per weapon
          *  tier, indexed by `k.au`: {5,10,15}. */
         val PLAYER_DMG = intArrayOf(5, 10, 15)
