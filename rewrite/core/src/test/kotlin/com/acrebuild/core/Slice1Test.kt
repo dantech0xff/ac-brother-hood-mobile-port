@@ -268,6 +268,10 @@ class Level0WorldTest {
         // settle so the press lands while grounded
         var t = 0
         while (w.player.ah != 0 && t++ < 600) w.tick(emptyList())
+        // start past the spawn-intro ax5 claim zone [49,863,116,941] — else
+        // the first tap binds it and velClampTail locks the run mid-vault.
+        w.player.setPositionPx(300, 940)
+        w.kM(2)
         val q = InputQueue()
         // hold RIGHT: the tap edge fires the proven vault-jump (S233), and
         // the aS-edge-bump in land() keeps aZ correct after landing.
@@ -590,8 +594,9 @@ class Level0WorldTest {
         assertEquals(28, w.scrollTriggers.size)
         // aw=133: zone (913,553)-(1133,853), mask=9 (minX+maxY), mode=0
         w.player.setPositionPx(1050, 750)
-        w.tick(emptyList())          // camera still at spawn → view-gate holds
-        w.tick(emptyList())          // camera arrived → fire
+        w.kM(2)                     // m(ad) snap — camera onto the player
+        w.tick(emptyList())          // view-gate holds, trigger fires
+        w.tick(emptyList())
         assertEquals(853, w.boundMaxY, "X[3]=al-50+300=853 → k.U")
         w.player.setPositionPx(5000, 900)   // target camY 740 > ceiling
         w.tick(emptyList())
@@ -837,6 +842,7 @@ class Level0WorldTest {
         val w = world()
         val e = Entity(67, w.clips[27])
         w.npcFsm.initDecor(e, listOf(67, 901, 200, 400, 0, 21, 0, 1, 0))
+        e.setPositionPx(100, 920)                 // inside the tracked view
         // fabricate an ax68-linked child overlapping W (the k.bd[] scan)
         val child = Entity(68, w.clips[27])
         child.setPositionPx(e.ak, e.al)
@@ -915,7 +921,7 @@ class Level0WorldTest {
         // player on real ticks so one tick centers the view on them.
         e.setPositionPx(300, 150)
         w.player.setPositionPx(300, 150)
-        w.tick(emptyList())
+        w.kM(2)                              // m(ad) snap → shove in view
         w.player.refreshBoxes()
         w.npcFsm.tickDecor(e, w.player)
         // i(309), aC=5, ag=±2560 by side, av, g.a=null
@@ -1155,7 +1161,7 @@ class Level0WorldTest {
         val p = w.player
         p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
         p.gJ = 4                              // mount request bit
-        w.tick(emptyList())                   // camera follows → on-screen
+        w.kM(2)                               // m(ad) snap → mount in view
         val e = Entity(72, null)
         e.aB = 10
         e.setPositionPx(350, 150)
@@ -1292,7 +1298,7 @@ class Level0WorldTest {
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
-        w.tick(emptyList())
+        w.kM(2)
         // ax16 S39 marker overlapping player -> J|=4
         requestMarkerAt(w, 39, 305, 150).also { w.npcFsm.tickRequestMarker(it, p, Pad()) }
         assertTrue(p.gJ and 4 != 0)
@@ -1327,6 +1333,7 @@ class Level0WorldTest {
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0; p.z = true
+        w.kM(2)                                     // m(ad) snap → in view
         val m = ax72MountAt(w, 340, 150, 1)          // Z[0]==1, dist < Z[3]
         Entity.at = m
         p.gJ = 4
@@ -1363,6 +1370,7 @@ class Level0WorldTest {
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        w.kM(2)                               // m(ad) snap → mount in view
         val m = ax72MountAt(w, 340, 150, 1)
         Entity.at = m
         p.gJ = 4                                    // armed but NO press
@@ -1400,6 +1408,7 @@ class Level0WorldTest {
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
+        w.kM(2)                               // m(ad) snap → mount in view
         val m = ax72MountAt(w, 340, 150, 1)
         Entity.at = m
         p.gJ = 1                                  // bit0 only — no mount request
@@ -2181,7 +2190,10 @@ class Level0WorldTest {
         w.npcs.clear()
         val d = directorAt(w)
         d.aA = 7; d.S = 2                    // director in play
-        // player Y empty -> aS.v() false -> k.l(15)
+        // player off the camera view -> aS.v() false -> k.l(15)
+        // (the real tracker follows the player — teleport far from the
+        // current view so the quad no longer overlaps k.ac)
+        w.player.setPositionPx(6000, 200); w.player.refreshBoxes()
         w.npcFsm.tickDirector(d, w.player, Pad())
         assertTrue(w.missionWon, "k.l(15) ported as missionWon flag")
         assertTrue(w.pendingInsert.isEmpty(), "no floatie spawned")
@@ -2403,6 +2415,7 @@ class Level0WorldTest {
         val p = w.player
         p.setAnim(0)
         p.setPositionPx(240, 150); p.refreshBoxes()
+        w.kM(2)                                      // m(ad) snap → boss in view
         w.npcFsm.tickBoss(b, p, Pad())
         assertEquals(7, b.S, "idle+inPlay -> grab i(7)")
         assertEquals(0, w.iCi!![1], "ci[1] reset")
@@ -4310,6 +4323,8 @@ class Slice44Test {
         w.npcs.add(af)
         val e = ax35At(w, 300, 200, 28, z = intArrayOf(0,0,0,0,0,0,0,0,0,777))
         e.af = af
+        w.player.setPositionPx(300, 200); w.player.refreshBoxes()
+        w.kM(2)                              // m(ad) snap → entity in view
         w.kAT = true
         w.pad.edge = 0; w.pad.held = 8256                       // k.u(8256)
         w.npcFsm.tickAx35(e, w, w.player)
@@ -5764,9 +5779,10 @@ class Slice54Test {
         w.npcFsm.initAx24(seed, listOf(24, 0, 0, 0, 0, 0, 0, 0), w)
         // Z[8]=1 anim-set, Z[9]=1 → aG, Z[10]=1 shot, Z[11]=1 burst count,
         // Z[12]=1 → aF fires on the first attack-window tick
-        val e = ax54At(w, 100, 200, 1, 0,0,0,0, 0, 50, 300, 1,2, 1,1,1, 900, 7)
+        val e = ax54At(w, 500, 600, 1, 0,0,0,0, 0, 50, 300, 1,2, 1,1,1, 900, 7)
         e.runnerBz = true
         w.player.setPositionPx(500, 600)                           // aim target
+        w.kM(2)                                // m(ad) snap → runner in view
         e.X[0] = e.ak - 10; e.X[2] = e.ak + 10
         e.X[1] = e.al - 10; e.X[3] = e.al + 10
         // S5 arm with U==0 && animFinished → burst runs Z[10]=1 shot;
@@ -5775,6 +5791,7 @@ class Slice54Test {
         e.setAnim(5)
         e.T = e.clip!!.frameCount(5) - 2
         e.U = e.clip!!.frameDuration(5, e.T) - 1
+        e.refreshBoxes()                            // t() — land Y in view
         w.tick(emptyList())
         val shot = w.projectilePool!![0]!!
         assertEquals(16, shot.P and 16)
@@ -5942,6 +5959,9 @@ class Slice56Test {
         val w = world()
         val e = ax24(w, 0, 50, 50); e.aG = 1; e.aC = -1  // aC-- <0 on OLD
         e.af = Entity(56, w.clips[19])
+        w.player.setPositionPx(50, 50); w.player.refreshBoxes()
+        w.kM(2)                                // m(ad) snap → in view
+        w.kM(2)                                     // m(ad) snap → in view
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(-2, e.aC)
         assertTrue(e.P and 128 != 0, "P|=128")
@@ -5953,6 +5973,8 @@ class Slice56Test {
         val e = ax24(w, 0, 100, 100); e.aG = 3; e.aw = 5
         val c = Entity(56, w.clips[19]); c.setPositionPx(100, 100)
         c.setAnim(0); c.refreshBoxes(); e.c = c
+        w.player.setPositionPx(100, 100); w.player.refreshBoxes()
+        w.kM(2)                                    // m(ad) snap → in view
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(9, e.S, "this i(9)")
         assertEquals(10, c.S, "ax56 c → i(10)")
@@ -5963,6 +5985,7 @@ class Slice56Test {
     @Test fun `flight overlap on player pays op38 then S0-4 removed (L44)`() {
         val w = world()
         w.player.setPositionPx(50, 50); w.player.refreshBoxes()
+        w.kM(2)                                // m(ad) snap → in view
         val e = ax24(w, 2, 50, 50)
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(3, w.player.aB, "op38 → aB=3")
@@ -8376,5 +8399,99 @@ class Slice69AdTest {
         assertTrue(d.bh3)
         assertTrue(d.tailUp)
         assertFalse(d.flip)                           // av suppressed under bh3
+    }
+}
+
+// ============================================================================
+// Slice 70 — k.m(int) camera tracker (replaces the placeholder follow)
+// ============================================================================
+class Slice70CamTest {
+
+    @Test fun `init m(ad) snaps camera onto the player`() {
+        val w = world()
+        // init{} ran kM(kAd): ae=aS, snapped centered
+        // camX = ak-200 clamped to [0, worldW-400] by the L362 floor
+        assertEquals((w.player.ak - 200).coerceIn(0, w.level.worldW - 400), w.camX)
+        assertTrue(w.kAe === w.player)
+        assertEquals(0, w.kR); assertEquals(0, w.kSBound)   // snap cleared walls
+    }
+
+    @Test fun `per-tick m(1) lerps camera toward the target`() {
+        val w = world()
+        val startX = w.camX
+        // teleport far right, keep tracking per-tick
+        w.player.setPositionPx(startX + 300, w.player.al)
+        repeat(3) { w.tick(emptyList()) }
+        val d = w.player.ak - 200 - w.camX
+        assertTrue(kotlin.math.abs(d) < 300 - startX)      // caught up partially
+        assertTrue(w.camX > startX)                        // moved forward
+    }
+
+    @Test fun `look-ahead margin tracks run direction`() {
+        val w = world()
+        val p = w.player
+        // run right: !av && ag>0 → cM decays toward 133 → camera leads right
+        p.av = false; p.ag = 2560; p.S = 99               // non-normal state so margin applies
+        w.kM(1)
+        assertEquals(180, w.javaClass.getDeclaredField("camM").let { it.isAccessible = true; it.get(w) as Int })
+        // run left: av && ag<0 → cM grows toward 266
+        p.av = true; p.ag = -2560
+        w.kM(1)
+        assertEquals(200, w.javaClass.getDeclaredField("camM").let { it.isAccessible = true; it.get(w) as Int })
+    }
+
+    @Test fun `combo anim freezes the camera (aS_c)`() {
+        val w = world()
+        val frozenX = w.camX
+        w.player.setPositionPx(w.player.ak + 500, w.player.al)
+        w.player.S = 112                                  // combo anim → aS.c()
+        w.kM(1)
+        assertEquals(frozenX, w.camX)                     // early return, no move
+    }
+
+    @Test fun `kAi latch freezes tracking entirely`() {
+        val w = world()
+        val frozenX = w.camX
+        w.kAi = true
+        w.player.setPositionPx(w.player.ak + 500, w.player.al)
+        w.kM(1)
+        assertEquals(frozenX, w.camX)
+    }
+
+    @Test fun `scroll wall clamps the target inside ah_W`() {
+        val w = world()
+        val wall = Entity(37, null).apply {
+            // wall W >= 400 wide (narrower walls can't satisfy both clamps)
+            W[0] = w.camX + 50; W[1] = 0; W[2] = w.camX + 550; W[3] = 240
+            aF = 1
+        }
+        w.kAh = wall
+        w.player.setPositionPx(w.player.ak + 800, w.player.al)
+        w.kM(1)
+        val a = w.javaClass.getDeclaredField("camA").let { it.isAccessible = true; it.get(w) as Int }
+        assertTrue(a >= wall.W[0] && a + 400 <= wall.W[2] + 1)
+    }
+
+    @Test fun `airborne unlisted state keeps cB sticky`() {
+        val w = world()
+        val p = w.player
+        // prime a known camB via grounded state
+        p.S = 0; w.kM(1)
+        val bField = w.javaClass.getDeclaredField("camB").let { it.isAccessible = true; it.get(w) as Int }
+        // airborne with a state not in any list → camB must NOT change
+        p.aZ = false; p.ga = null; p.S = 43               // falling, unlisted
+        w.kM(1)
+        val bField2 = w.javaClass.getDeclaredField("camB").let { it.isAccessible = true; it.get(w) as Int }
+        assertEquals(bField, bField2)
+    }
+
+    @Test fun `m(ad) inside tick clears walls and snaps`() {
+        val w = world()
+        w.kR = 4000; w.kSBound = 9000
+        val ae = Entity(44, null).apply { setPositionPx(5000, 300); refreshBoxes() }
+        w.kAe = ae                                       // focus elsewhere
+        w.kM(2)                                          // r5&ad arm
+        assertTrue(w.kAe === w.player)                   // ae=aS restored
+        assertEquals(0, w.kR); assertEquals(0, w.kSBound)
     }
 }

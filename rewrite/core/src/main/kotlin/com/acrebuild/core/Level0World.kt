@@ -344,10 +344,29 @@ class Level0World(
         return lo + (if (r >= 0) r else -r) % (hi - lo)
     }
 
-    var camX = 0
+    var camX = 0                              // k.O — camera x
         private set
-    var camY = 0
+    var camY = 0                              // k.P — camera y
         private set
+    // -- k.m(int) tracker state (k.java:2346-2703, proven) -------------
+    private var camA = 0                      // cA — x target (static, sticky)
+    private var camB = 0                      // cB — y target (static, sticky)
+    private var camCC = 0                     // cC — x step (lerp out / ax43 speed)
+    private var camCD = 0                     // cD — y step
+    private var camM = 200                    // cM — look-ahead x margin
+    private var camCI = 0                     // cI — focus-N watch
+    private var camXw = -7                    // m()'s X watch counter (L300);
+                                              // the original reuses k.X, but
+                                              // D()'s Y=X<<8 refresh is
+                                              // unported — keep it private so
+                                              // kY stays a stable snapshot
+                                              // (inferred)
+    private var camAf = 0                     // af — lookahead x offset
+    private var camAg = 0                     // ag — lookahead y offset
+    private var camCF = 0                     // cF — snap-arm scratch
+    private var camCE = 0                     // cE — snap-arm scratch
+    var gV = false                            // g.v — full camera warp flag
+    var kDz = 120                             // k.dz — fade counter
 
     /** ax37 scroll-bound trigger (i.java:7053 al()).
      *  W = zone rect ak+f7,al+f8,+f9,+f10 ; X = bound rect ak+f11..f14 ;
@@ -604,7 +623,7 @@ class Level0World(
     override val jG: Long get() = tickIndex      // j.g — 62ms tick counter
     override val kBb: List<Entity> get() = npcs  // k.bb follower list
     override val kBc: Int get() = npcs.size      // k.bc
-    override var kAd = 0                         // k.ad — k.m() mask
+    override var kAd = 2                         // k.ad=2 (k.java:8348 static init)
     override var kAV: Entity? = null             // k.aV
     override var kAQ: Entity? = null             // k.aQ
     override var kAv = false                     // k.av
@@ -787,6 +806,187 @@ class Level0World(
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
     }
+
+    /** `k.l(int,int)` (k.java:2844, proven): `clamp(d/2, -k, k)` —
+     *  the per-axis camera lerp step. */
+    private fun lerpStep(d: Int, k: Int): Int {
+        val h = d / 2
+        return if (h > k) k else if (h < -k) -k else h
+    }
+
+    /** `k.m(int)` (k.java:2346-2703, proven): the per-frame camera
+     *  tracker — focus entity `ae` (`kAe`), look-ahead margin `cM`,
+     *  scroll-wall `ah` (`kAh`), bound walls `R/S/T/U`, shake `cO/cP`.
+     *  `r5 & ad` (kAd = 2) snaps the camera back to the player and
+     *  clears walls — the dialog-release / level-init path. */
+    override fun kM(r5: Int) {
+        if (kAh == null) kN()                                       // head
+        val p = player
+        if ((r5 and kAd) != 0) {                                    // snap arm
+            p.refreshBoxes()                                        // aS.t()
+            kAe = p; Entity.aL = null                               // ae=aS; i.aL=null
+            kN()                                                    // n()
+            camCF = 0; camCE = 0; camM = 200
+        }
+        if (kAi) return                                             // L9: frozen
+        val ae = kAe
+        if (!kZ) {
+            if (ae === p) {
+                if (p.aSC()) return                                 // aS.c() combo freeze
+                if (p.S !in Entity.GRABBABLE_STATES &&
+                    p.S != 101 && p.S != 92 && p.S != 11) {         // L19-L41
+                    if (p.av && p.ag < 0) camM = minOf(camM + 20, 266)
+                    if (!p.av && p.ag > 0) camM = maxOf(camM - 20, 133)
+                }
+                // ---- cA target (L41-L132) ----
+                val gg = p.gg; val ga = p.ga
+                var cAdone = false
+                if (gg != null && (ga == null || ga.ax != 43)) {    // L46 midpoint
+                    camA = p.ak + ((gg.ak - p.ak) shr 1) - 200
+                    cAdone = true
+                }
+                if (!cAdone) {
+                    val at = Entity.at
+                    if (at != null && at.ax == 72) {                // L48 i.at rope mid
+                        camA = p.ak + ((at.ak - p.ak) shr 1) - 200
+                    } else if (gc != null && gc!!.ax == 43) {       // L61 → target rope
+                        camA = gc!!.ak - 200
+                    } else if (ga != null && ga.ax == 43) {         // L64 → own rope
+                        camA = ga.ak - 200
+                    } else if (p.S in CAM_CENTER_STATES || gj ||
+                        (ga != null && ga.ax == 51) ||
+                        (p.S == 38 && p.ac != null && p.ac!!.ax == 22)) {
+                        camA = p.ak - 200                           // L116 centered
+                    } else {
+                        if (p.S == 317) {                           // L120 chase-cam
+                            if (p.av && p.ag < 0) camM = 300
+                            if (!p.av && p.ag > 0) camM = 100
+                        }
+                        camA = p.ak - camM                          // L131/L132
+                    }
+                }
+                // ---- cB target (L134-L201) ----
+                val ropeAttached = ga != null && ga.ax == 43
+                var l149 = false
+                if (p.aZ || ropeAttached) {                         // L134→L140
+                    if (p.S == 203 || p.S == 204 || p.S == 62) {
+                        if ((r5 and kAd) != 0) camB = p.al - 150
+                        else l149 = true
+                    } else camB = p.al - 150                        // L147
+                } else if ((r5 and kAd) != 0) {                     // L146→L147
+                    camB = p.al - 150
+                } else l149 = true                                  // → L149
+                if (l149) {                                         // L149-L201
+                    if (p.S in CAM_B_DOWN_STATES) camB = p.al + 60  // L158 hang-look
+                    else if (p.S in CAM_B_CENTER_STATES || gj ||
+                        (p.S == 38 && p.ac != null && p.ac!!.ax == 22))
+                        camB = p.al - 120                           // L199
+                    // else: camB keeps its last value (verbatim sticky)
+                }
+                // L204-L207: keep the focus box 40px inside view
+                if (p.W[1] < camB + 40) camB = p.W[1] - 40
+                if (p.W[3] > camB + 240 - 40) camB = p.W[3] + 40 - 240
+                // L214-L217: lookahead offsets
+                if (camAf != 0) camA = p.ak - 200 + camAf
+                if (camAg != 0) camB = p.al - 120 + camAg
+            } else if (ae != null) {                                // L220 ae!=aS
+                if (ae.ax == 43 && (ae.S == 1 || ae.S == 4)) {      // L224-L278
+                    val z1 = ae.Z[1]
+                    val dx = ae.ak - camX
+                    val inView = Entity.overlapI(p.Y, camRect)      // i.b(aS.Y, ac)
+                    if (ae.av) {                                    // L228 arm
+                        if (!inView)                                // L251
+                            camCC = if (ae.Y[2] <= camRect[2]) z1 * 150 / 100
+                                    else z1 * 50 / 100
+                        else if (dx < 200) camCC = z1 * 150 / 100   // L237
+                        else if (dx < 300 && ae.ag == (z1 shl 8))
+                            camCC = z1 * 150 / 100
+                        else if (dx in 300..349 && ae.ag == (z1 shl 8))
+                            camCC = z1                              // L239
+                        else if (dx >= 350 &&
+                            kotlin.math.abs(ae.ag) >=
+                                kotlin.math.abs(z1 shl 8) * 50 / 100)
+                            camCC = z1 * 50 / 100                   // L246
+                        // else camCC sticky (verbatim L246→L280)
+                    } else {                                        // L255 mirror
+                        if (!inView)                                // L276
+                            camCC = if (ae.Y[0] >= camRect[0]) z1 * 150 / 100
+                                    else z1 * 50 / 100
+                        else if (dx <= 50 && ae.ag <= (z1 shl 8))
+                            camCC = z1 * 50 / 100                   // L271
+                        else if (dx <= 100 && ae.ag == (z1 shl 8))
+                            camCC = z1                              // L264
+                        else if (dx <= 200) camCC = z1 * 150 / 100  // L262
+                        else if (ae.ag == (z1 shl 8)) camCC = z1 * 150 / 100
+                    }
+                    camB = ae.al - 120                              // L280
+                } else {                                            // L279
+                    camA = ae.ak - 200
+                    camB = ae.al - 120                              // L280
+                }
+            }
+            // L282-L297: scroll-wall containment
+            val wall = kAh
+            if (wall != null && wall.W != null && wall.aF == 1) {
+                if (camA < wall.W[0]) camA = wall.W[0]
+                if (camA + 400 > wall.W[2]) camA = wall.W[2] - 400
+                if (camB < wall.W[1]) camB = wall.W[1]
+                if (camB + 240 > wall.W[3]) camB = wall.W[3] - 240
+            }
+            // L300-L305: focus-N watch → X lerp cap 20..40 (private
+            // camXw — the original reuses k.X; see field note)
+            if (ae != null) {
+                if (camCI != ae.N) { if (camXw < 40) camXw++ } else camXw = 20
+                camCI = ae.N
+            }
+            // L311-L325: R/S/T/U bound walls (>0 = armed)
+            if (kR > 0 && camA < kR) camA = kR
+            if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400
+            if (kT > 0 && camB < kT) camB = kT
+            if (kU > 0 && camB > kU - 240) camB = kU - 240
+        }
+        // ---- L325+ settle ----
+        val r6 = if (iAH && iAI > 0) iAI else 1
+        if ((r5 and kAd) != 0) {                                    // L331 snap
+            camX = camA; camY = camB; camCC = 0; camCD = 0
+            kU = 0; kSBound = 0; kT = 0; kR = 0                     // snap clears walls
+        } else if (ae != null) {
+            if (ae.ax == 43 && ae.S != 1) {                         // L339: speed-follow
+                camX += camCC / r6
+                camCD = lerpStep(camB - camY, 28)
+                camY += camCD / r6
+            } else {                                                // L340: both lerp
+                camCC = lerpStep(camA - camX, camXw)
+                camCD = lerpStep(camB - camY, 28)
+                camX += camCC / r6; camY += camCD / r6
+            }
+            // L342-L357: ab / rope cd[3] snap-x override (clears kAb too)
+            val gcx = gc; val ga2 = p.ga
+            if (kAb || (gcx != null && gcx.ax == 43 && gcx.cd[3]) ||
+                (ga2 != null && ga2.ax == 43 && ga2.cd != null && ga2.cd[3])) {
+                kAb = false; camX = camA
+            }
+        }
+        // L359: g.v full warp
+        if (gV && ae != null) { camX = ae.ak - 200; camY = ae.al - 120 }
+        // L362-L371: world-edge floor
+        if (camX < 0) camX = 0
+        if (camX > level.worldW - 400) camX = level.worldW - 400
+        if (camY < 0) camY = 0
+        if (camY > level.worldH - 240) camY = level.worldH - 240
+        // L374-L378: cO alternating decay shake (cP read is a
+        // decompile artifact — the original leaves it unused)
+        if (kCO > 0) {
+            camY += if ((kCO and 1) == 0) kCO else -kCO
+            kCO--
+        }
+        // L380-L388: av latch → r() once the camera settles on the
+        // ax10 end-trigger (i.ai(): ae.ax==10 && ae.S==52)
+        if (kAv && camCC == 0 && camCD == 0 && ae != null &&
+            ae.ax == 10 && ae.S == 52) {
+            kAw = 0; kAv = false; kDz = 120                         // k.r()
+        }
+    }
     /** `k.l(int)` — 12 mission-fail, 15 mission-complete. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
@@ -917,6 +1117,7 @@ class Level0World(
         resetPlayerToSpawn()
         spawnEntities()
         failed = false
+        kM(kAd)                                   // C()/f() `m(ad)` snap
     }
 
     /**
@@ -943,6 +1144,14 @@ class Level0World(
             if (t.mask and 4 != 0) boundMinY = t.bound[1]
             if (t.mask and 2 != 0) boundMaxX = t.bound[2]
             if (t.mask and 8 != 0) boundMaxY = t.bound[3]
+            // Register as the scroll-wall entity k.ah (k.a(i), k.java:2860):
+            // its bound rect doubles as the L282 wall clamp (aF==1 active),
+            // and kAh!=null keeps m()'s head kN() from wiping the bounds.
+            kAh = Entity(37, null).apply {
+                W[0] = t.bound[0]; W[1] = t.bound[1]
+                W[2] = t.bound[2]; W[3] = t.bound[3]
+                aF = 1
+            }
         }
     }
 
@@ -1118,14 +1327,10 @@ class Level0World(
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
 
-        camX = (player.ak - VIEW_W / 2).coerceIn(0, (level.worldW - VIEW_W).coerceAtLeast(0))
-        camY = (player.al - VIEW_H * 2 / 3).coerceIn(0, (level.worldH - VIEW_H).coerceAtLeast(0))
-        // ax37 scroll bounds (k.java:2430-2486 proven): camera target is
-        // clamped inside [R, S-400]x[T, U-240] when each bound is set (>0).
-        if (boundMinX > 0 && camX < boundMinX) camX = boundMinX
-        if (boundMaxX > 0 && camX > boundMaxX - VIEW_W) camX = boundMaxX - VIEW_W
-        if (boundMinY > 0 && camY < boundMinY) camY = boundMinY
-        if (boundMaxY > 0 && camY > boundMaxY - VIEW_H) camY = boundMaxY - VIEW_H
+        // k.m(cJ) per-tick (k.java:3320 proven, `bh[aj]!=3` gate):
+        // the verbatim tracker — lookahead margin, scroll walls, bounds,
+        // lerp `l(dx/2, kX|28)`, cO shake. Replaces the placeholder follow.
+        if (Entity.MISSION_BH[kAj] != 3) kM(1)
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) missionFail()
@@ -1139,4 +1344,22 @@ class Level0World(
             if (sawRelease) { lastMoveX = -1; lastMoveY = -1 }
         }
     }
+
+    // Second init block: runs after every property initializer, so the
+    // C() init `m(ad)` snap (k.java:2343) sees kAe/kAd in their set state.
+    init {
+        kM(2)
+    }
 }
+
+
+// Camera-state sets for k.m (k.java:2364-2545, proven):
+// cA centered-anim list (S60-62/148-150/210/59/65/258-266 + g.j + g.a-51 + S38-ac22)
+private val CAM_CENTER_STATES = intArrayOf(
+    60, 61, 62, 148, 149, 150, 210, 59, 65,
+    258, 259, 260, 261, 262, 263, 264, 265, 266)
+// cB hang-look-down list (L158 → +60) and centered list (L199 → -120)
+private val CAM_B_DOWN_STATES = intArrayOf(28, 29, 315, 318)
+private val CAM_B_CENTER_STATES = intArrayOf(
+    148, 149, 150, 210, 59, 65,
+    258, 259, 260, 261, 262, 263, 264, 265, 266)

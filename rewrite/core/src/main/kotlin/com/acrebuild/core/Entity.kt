@@ -1437,6 +1437,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
     fun claimActive(): Boolean = ca >= 0 && !cd[0] && scriptStep >= 0
 
+    /** `g.c()` (g.java:421, proven): player mid-combo anims
+     *  {112, 113, 114, 115} — `k.m` early-returns while true. */
+    fun aSC(): Boolean = S == 112 || S == 113 || S == 114 || S == 115
+
     /** `i.f(int,int)` (i.java:6852, proven): the alternating-mash QTE
      *  meter — `bm` latches the last-pressed mask; only the OTHER mask's
      *  edge adds +8 to `bl`, absence decays -1/tick; `bl>=10` wins and
@@ -2800,6 +2804,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
         var at: Entity? = null
+        /** `i.aL` (i.java:75) — the claim-script camera-focus entity;
+         *  `k.m`'s snap arm (`k.java:2354`) and `n()` clear it. */
+        var aL: Entity? = null
         /** `i.L`/`i.M` (i.java:9825 `o(x,y)`) — the static indicator
          *  point; -1 = unset (cleared by `U()`). */
         var L = -1
