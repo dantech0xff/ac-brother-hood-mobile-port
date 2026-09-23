@@ -279,8 +279,100 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 world.scrollWallClamp(p)                 // i.f(this)
             }
             21, 233 -> preJumpArm(p)          // L859
+            // g.java:1490-1497 (proven) — wall-kick: hold still for the
+            // wind-up anim, then `r()` → i(18) + ∓2048 horizontal,
+            // -5120 vertical (kick off the wall).
+            17 -> {
+                p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    p.setAnim(18)
+                    p.ag = if (p.av) -2048 else 2048
+                    p.ah = -5120
+                }
+            }
             20, 22, 23, 25, 215 -> airFamily(p, pad)
             43 -> fallArm(p)
+            // g.java:2736-2757 (proven) — S102 wall-cling: grounded →
+            // `l()` input-consume; else `aC` counts down — on expiry or
+            // wall-contact lost (`aR!=4`) `a(0)` fling + `al+=21` drop;
+            // dir-held → `av` + i(332) shimmy; UP edge / toward-wall tap
+            // (av?2:8) → i(17) wall-kick.
+            102 -> {
+                if (p.aZ) {
+                    l(p, pad)
+                } else {
+                    val i15 = p.aC
+                    p.aC = i15 - 1
+                    if (i15 <= 0 || p.aR != 4) {
+                        p.flingAirborne(0, world)
+                        p.al += 21
+                    } else if (pad.u(Pad.M_LEFT)) {
+                        p.av = true; p.setAnim(332)
+                    } else if (pad.u(Pad.M_RIGHT)) {
+                        p.av = false; p.setAnim(332)
+                    } else if (pad.v(Pad.M_UP) ||
+                               (p.av && pad.v(2)) || (!p.av && pad.v(8))) {
+                        p.setAnim(17)
+                    }
+                }
+            }
+            // g.java:4065-4099 (proven) — S317 wall-run dash: `aj=128`,
+            // `ah` capped 512, `ag=∓2560`; UP edge hops `ah=-2048`.
+            // `y()` wall / `aR>=12 || aR==5` contact → `ag=0` + spawn the
+            // clip-30 marker `g.f` (`i.a(8,30,4,av,±W,al,300)`); when its
+            // anim finishes → `k.c(f)` + `i(50)` crash death. Zone latch:
+            // `!g.q` → `G()` release `ae`; in-zone → `a(1,ak,al-60)`
+            // dust marker. (Script/zone-entered — no i(317) call sites.)
+            317 -> {
+                p.aj = 128
+                if (p.ah >= 512) p.ah = 512
+                p.ag = if (p.av) -2560 else 2560
+                if (pad.v(Pad.M_UP)) p.ah = -2048
+                if (p.hitWall() || p.aR >= 12 || p.aR == 5) {
+                    p.ag = 0
+                    if (world.clipFor(30) != null && Entity.gf == null) {
+                        Entity.gf = p.spawnFx8(world, 30, 4, p.av,
+                            if (p.av) p.W[0] else p.W[2], p.al, 300)
+                    }
+                    val fm = Entity.gf
+                    if (fm != null && fm.animFinished()) {
+                        world.removeEntity(fm)              // k.c(f)
+                        Entity.gf = null
+                        p.aj = 0; p.ah = 0
+                        p.setAnim(50)
+                    }
+                }
+                if (!Entity.gq) {
+                    p.releaseAe()                           // G()
+                } else {
+                    p.spawnMarker(world, 1, p.ak, p.al - 60) // a(1,ak,al-60)
+                }
+            }
+            // g.java:4100-4138 (proven) — S332 wall-shimmy: `ag=∓2560`
+            // cut at aT/aU>=12 walls; `aZ` → `l()`; `aR!=4` lost wall →
+            // `a(0)` fall; UP/toward-tap → i(17); dir-held re-faces +
+            // re-enters shimmy; `r()` → vel0 + `aC=18` + i(102) cling.
+            332 -> {
+                p.ag = if (p.av) -2560 else 2560
+                if (p.aT >= 12 && p.ag < 0) p.ag = 0
+                if (p.aU >= 12 && p.ag > 0) p.ag = 0
+                if (p.aZ) {
+                    l(p, pad)
+                } else if (p.aR != 4) {
+                    p.flingAirborne(0, world)
+                } else if (pad.v(Pad.M_UP) ||
+                           (p.av && pad.v(2)) || (!p.av && pad.v(8))) {
+                    p.setAnim(17)
+                } else {
+                    if (pad.u(Pad.M_LEFT)) { p.av = true; p.setAnim(332) }
+                    else if (pad.u(Pad.M_RIGHT)) { p.av = false; p.setAnim(332) }
+                    if (p.animFinished()) {
+                        p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                        p.aC = 18
+                        p.setAnim(102)
+                    }
+                }
+            }
             257 -> ledgeDropArm(p)            // L1770
             63 -> {                           // climb-up end — inferred arm
                 if (p.animFinished()) p.setAnim(0)
@@ -790,7 +882,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- post-switch tail (g.e() L2083 block, proven) -------------------------
     private fun postTail(p: Entity, pad: Pad) {
-        if (p.cq && pad.v(Pad.M_ACTION_FAMILY)) {
+        // g.java:788 (proven): the shared jump tail is `cq && !E` — the
+        // ax10-S55 suppress zone holds `g.E` so wall-run-family arms
+        // (S102/332/317) keep their own `i(17)`/`i(50)` transitions.
+        if (p.cq && !Entity.gE && pad.v(Pad.M_ACTION_FAMILY)) {
             if (pad.v(Pad.M_UP) || pad.v(Pad.M_TAP_L) || pad.v(Pad.M_TAP_R)) {
                 if (pad.v(Pad.M_TAP_L)) p.av = true
                 if (pad.v(Pad.M_TAP_R)) p.av = false
