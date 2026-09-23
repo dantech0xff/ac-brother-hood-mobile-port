@@ -810,7 +810,7 @@ class Level0World(
     val kBA = IntArray(160)
     var kAu = 0                        // k.au — medal-condition field
     var kDx = false                    // k.dx — cheat-enabled flag
-    var kAo = false                    // k.ao — fade-side flag
+    override var kAo = false           // k.ao — fade-side flag
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
     var kFb: Any? = null               // k.fb — font measurer (unported)
@@ -974,7 +974,7 @@ class Level0World(
     override var iBL = 0                       // i.bL — vestigial no-op
     /** `k.bI`/`k.fk` (k.java:313-314, proven): fade ramp timer + step.
      *  `B(i)`/`C(i)` arms set fk=26 (:5738-5750); init 4. */
-    var kBI = 0
+    override var kBI = 0
     var kFk = 4
     /** `k.fn`/`k.fl`/`k.fm` (k.java:315-317, proven): stripe-letterbox
      *  counter/limit/height — `aa()` ramps fn to fl=9 stripes of fm=13px. */
@@ -2465,6 +2465,11 @@ class Level0World(
     /** `e.b()` (e.java:87, proven) — stop the current track. */
     fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
+
+    /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
+     *  synthetic kAh has no per-tick fn; the equivalent is the ax37
+     *  bounds refresh (inferred mapping). */
+    override fun refreshScrollBounds() = fireScrollTriggers()
     /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
      *  else `ee[aj]` when != -1. */
     private fun missionInit() {
@@ -2934,12 +2939,12 @@ class Level0World(
     /** `k.B(i)` (k.java:5738-5743, proven): fade-IN arm — `an`, ramp
      *  from 0, step 26 (i is ignored verbatim). Called by `i.bh()`'s
      *  door-exit arm (i.java:14434). */
-    fun fadeIn() { kAn = true; kAo = false; kBI = 0; kFk = 26 }
+    override fun fadeIn() { kAn = true; kAo = false; kBI = 0; kFk = 26 }
 
     /** `k.C(i)` (k.java:5745-5750, proven): fade-OUT arm — `ao`, ramp
      *  from 255, step 26 (i ignored). Called by `i.bi()`'s door-arrival
      *  arm (i.java:14448). */
-    fun fadeOut() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
+    override fun fadeOut() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
 
     /** `i.o()` (i.java:5423): player alive-and-acting —
      *  S ∉ {2,20..29}. */
@@ -3112,7 +3117,7 @@ class Level0World(
 
         for (n in npcs) {
             if (n.ax == 44) npcFsm.tickDoor(n, player)
-            else if (n.ax == 10) npcFsm.tickTrigger(n, player)
+            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player)
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
