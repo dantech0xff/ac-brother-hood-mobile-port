@@ -627,10 +627,10 @@ class NpcFsm(val world: LevelCellSource) {
                 if (!e.animFinished()) return
                 if (e.m > 0) {
                     world.spawnWisp(e); e.m--
-                    world.apStats[5]++; world.shake()
+                    world.kAp[5]++; world.shake()
                     if (e.m > 0) {
                         world.spawnWisp(e)
-                        world.apStats[5]++; world.shake()
+                        world.kAp[5]++; world.shake()
                         e.m--
                     }
                 }
@@ -7039,7 +7039,7 @@ private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
 /** `i.S()` (i.java:9253, proven): `repeat(3){ m(-1); k.o(5); k.s() }` —
  *  wisp burst + stat + shake, shared by every k() kill arm. */
 private fun wispBurst(e: Entity, w: LevelCellSource) {
-    repeat(3) { w.spawnWisp(e); w.apStats[5]++; w.shake() }
+    repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.shake() }
 }
 
 /** `i.k()` (i.java:2057-2255, proven): the shared stealth-kill driver.

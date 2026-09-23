@@ -8,6 +8,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.FrameBuffer
@@ -35,6 +36,7 @@ class Level0Renderer {
     private lateinit var fbo: FrameBuffer
     private lateinit var batch: SpriteBatch
     private lateinit var white: Texture
+    private lateinit var font: BitmapFont
 
     // (module index, palette slot) -> TextureRegion, per pack id.
     // palette-00 is canonical (clip.moduleNames); palette-NN siblings are
@@ -48,6 +50,7 @@ class Level0Renderer {
         fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
         fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
+        font = BitmapFont()
         Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
             setColor(1f, 1f, 1f, 1f); fill()
             white = Texture(this); dispose()
@@ -228,15 +231,200 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
-        // mission-fail banner — k.java:1782 (proven): b(93,67,214,true,true)
-        // solid dark box over the frozen world; y-down→y-up: box (93,47) 214x126.
-        if (world.failed) {
+        // menu screens — k.L462 (k.java:1775, proven): frozen world +
+        // `b(93,67,214,true,true)` panel, `eB` title, `eC` prompt, eA[bv]
+        // rows with `bw` cursor. Glyph stand-in: BitmapFont (inferred —
+        // the original's `bW`/`y` bitmap-font clips are unported). Layout
+        // `inferred` (rows ~36px from y≈130 in world y-down space).
+        if (world.menuVisible) {
             batch.setColor(0f, 0f, 0f, 0.85f)
-            batch.draw(white, 93f, 47f, 214f, 126f)
+            batch.draw(white, 93f, 40f, 214f, 150f)
             batch.setColor(0.8f, 0.15f, 0.15f, 1f)
-            batch.draw(white, 95f, 49f, 210f, 2f)
-            batch.draw(white, 95f, 169f, 210f, 2f)
+            batch.draw(white, 95f, 42f, 210f, 2f)
+            batch.draw(white, 95f, 186f, 210f, 2f)
             batch.setColor(1f, 1f, 1f, 1f)
+            font.setColor(1f, 1f, 1f, 1f)
+            world.menuTitle()?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 76f)
+            }
+            world.menuPrompt()?.let { t ->
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 98f)
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+            for ((i, row) in world.menuRows().withIndex()) {
+                val (text, sel) = row
+                if (sel) {
+                    batch.setColor(0.85f, 0.8f, 0.5f, 0.35f)
+                    batch.draw(white, 100f,
+                               (Level0World.VIEW_H - 130 - i * 36 - 14).toFloat(),
+                               200f, 20f)
+                    batch.setColor(1f, 1f, 1f, 1f)
+                }
+                font.draw(batch, text, 200f - text.length * 3.5f,
+                          Level0World.VIEW_H - 130 - i * 36f)
+            }
+        }
+
+        // stats screen — k.L466 (k.java:1788, proven): `d(0,bx)` text +
+        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173).
+        if (world.statsVisible) {
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 93f, 40f, 214f, 150f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            font.setColor(0.9f, 0.85f, 0.5f, 1f)
+            world.statsText()?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 90f)
+            }
+            font.setColor(1f, 1f, 1f, 1f)
+            if (world.jG % 6L < 3L) {
+                val t = world.d0(9) ?: "TOUCH THE SCREEN"
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 173f)
+            }
+        }
+
+        // M() win-stats screen (k.java:3280-3445, proven positions):
+        // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
+        // (align 20), values right-aligned x=305 (align 24), rows
+        // 55+20i; total row y=175; `a(d(0,16),str2)` bottom hint.
+        // Ribbon/panel sprites (A[3], fJ/fK corners) are unported —
+        // procedural stand-ins, `inferred` styling.
+        if (world.jC == 15) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.8f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            // title ribbon — `a(i2,str)`: color box + centered text
+            // (A[3] clip sprites 1/2 unported → gold bar stand-in)
+            val ty = world.statsTitleY
+            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
+            batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            world.d0(60)?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          (H - ty).toFloat())
+            }
+            // row labels + right-aligned values
+            font.setColor(1f, 1f, 1f, 1f)
+            for (i3 in 0..4) {
+                val v = world.statsRowText[i3]
+                if (v.isEmpty()) continue
+                world.d0(38 + i3)?.let { t ->
+                    font.draw(batch, t, 95f, (H - 55 - i3 * 20).toFloat())
+                }
+                font.draw(batch, v, 305f - v.length * 7f,
+                          (H - 55 - i3 * 20).toFloat())
+            }
+            // total row (y=175, one-shot after jG>10)
+            if (world.statsScoreVisible) {
+                world.d0(43)?.let { t ->
+                    font.draw(batch, t, 95f, (H - 175).toFloat())
+                }
+                val t = world.fmtJ(world.statsScore)
+                font.draw(batch, t, 305f - t.length * 7f,
+                          (H - 175).toFloat())
+            }
+            // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
+            if (world.statsTypeNext >= 0) {
+                val t = (world.d0(16) ?: "NEXT") + " " +
+                        world.typewriterText
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, t, 390f - t.length * 7f,
+                          (H - 222).toFloat())
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+        }
+
+        // ag() mission poster card (k.java:6358, proven positions):
+        // `i(0,120)` card overlay (frame12 + fill — procedural stand-in),
+        // `A[4]` frame i+4 at (200,119), brief a(y,0,d(0,110),200,150,
+        // 380,240,0,3), `j.g%10<5` → d(0,9) blink at (200,220).
+        if (world.jC == 10) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            // card frame (A[4] clip unported → dark plate stand-in)
+            batch.setColor(0.12f, 0.1f, 0.16f, 1f)
+            batch.draw(white, 10f, (H - 200).toFloat(), 380f, 190f)
+            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
+            batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            if (world.posterBrief.isNotEmpty()) {
+                font.draw(batch, world.posterBrief, 20f, (H - 150).toFloat())
+            }
+            if (world.hintBlink) {
+                world.d0(9)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 200f - t.length * 3.5f,
+                              (H - 220).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
+        }
+
+        // ah() medal/unlock viewer (k.java:6392-6490, proven positions):
+        // title d(0,113) at (210,43); panel (114,59,172,155); rows
+        // (114,70+45i,172,40) labels at (164, 70+45i+21); j.g<10 →
+        // black fade (10-j.g)*25 alpha; blink hint (200,220).
+        if (world.jC == 22) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            if (world.medalTitle.isNotEmpty()) {
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, world.medalTitle,
+                          210f - world.medalTitle.length * 3.5f,
+                          (H - 43).toFloat())
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+            batch.setColor(0.08f, 0.07f, 0.1f, 0.95f)
+            batch.draw(white, 114f, (H - 59 - 155).toFloat(), 172f, 155f)
+            for (i in 0 until world.medalRowCount) {
+                val ry = (H - 70 - i * 45 - 40).toFloat()
+                batch.setColor(0.16f, 0.14f, 0.2f, 1f)
+                batch.draw(white, 114f, ry, 172f, 40f)
+                // medal icon placeholder — z[73] frame circle
+                val icon = world.medalRowIcon[i]
+                if (icon >= 0) {
+                    if (world.medalRowDim[i])
+                        batch.setColor(0.3f, 0.3f, 0.35f, 1f)
+                    else
+                        batch.setColor(0.85f, 0.7f, 0.25f, 1f)
+                    batch.draw(white, 122f, ry + 12f, 16f, 16f)
+                }
+                val t = world.medalRowText[i]
+                if (t.isNotEmpty()) {
+                    batch.setColor(1f, 1f, 1f, 1f)
+                    font.setColor(1f, 1f, 1f, 1f)
+                    font.draw(batch, t, 146f, ry + 26f)
+                }
+            }
+            batch.setColor(1f, 1f, 1f, 1f)
+            if (world.screenFadeAlpha > 0) {
+                batch.setColor(0f, 0f, 0f,
+                               (world.screenFadeAlpha / 255f).coerceIn(0f,1f))
+                batch.draw(white, 0f, 0f, 400f, 240f)
+                batch.setColor(1f, 1f, 1f, 1f)
+            }
+            if (world.hintBlink && !world.hintBack) {
+                world.d0(9)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 200f - t.length * 3.5f,
+                              (H - 220).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
+            if (world.hintBack) {
+                world.d0(17)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 390f - t.length * 7f,
+                              (H - 222).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
         }
 
         batch.end()
@@ -274,6 +462,7 @@ class Level0Renderer {
 
     fun dispose() {
         fbo.dispose(); batch.dispose()
+        if (::font.isInitialized) font.dispose()
         if (::white.isInitialized) white.dispose()
         clipModules.values.forEach { arr ->
             arr.filterNotNull().forEach { it.texture.dispose() }

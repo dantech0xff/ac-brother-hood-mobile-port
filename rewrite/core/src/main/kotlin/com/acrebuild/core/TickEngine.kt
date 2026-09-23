@@ -92,6 +92,7 @@ class TickEngine(
         for (c in commands) {
             when (c) {
                 is Command.PlaySfx -> { md.update(1); putInt(md, c.slot) }
+                is Command.PersistBA -> { md.update(2); md.update(c.record) }
                 is Command.RequestSave -> { md.update(2); putInt(md, c.snapshot.posX) }
             }
         }
