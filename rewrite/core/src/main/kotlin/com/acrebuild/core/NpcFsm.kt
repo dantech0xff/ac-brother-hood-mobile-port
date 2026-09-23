@@ -469,8 +469,9 @@ class NpcFsm(val world: LevelCellSource) {
     // ===========================================================    // ax10 — `i.aV()` TriggerController (i.java:11800-13181; semantics
     // reconstructed in docs/i-av-reconstruction.md). Level-0 carries 15
     // records using S ∈ {16,33,34,36,43,53}; this slice ports init L96
-    // (i.java:2882) + the zone arms {33,34,36,43,53}. S16 (rope-attach,
-    // L625) needs the unported g.a/k.an/k.ao/k.bI machinery — stubbed.
+    // (i.java:2882) + the zone arms {33,34,36,43,53}. S16 (door-teleport,
+    // L177d) ported in slice 99; the rope-attach reading in this comment
+    // was wrong — the arm is a door/teleport pair, not a rope zone.
 
     /** Init arm L96 (i.java:2882): `aB=0; P|=512; az=0` then S-switch. */
     fun initTrigger(e: Entity, f: List<Int>) {
