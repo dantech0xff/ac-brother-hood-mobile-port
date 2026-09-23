@@ -113,6 +113,34 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 // (the case `break`s to the shared post-switch code —
                 //  the l() input handler does NOT run for S12)
             }
+            // g.java:2641-2660 (proven) — kill-QTE big launch: per tick
+            // `ae=null` + `ah=0` + `G()` (releaseAe) + `v()` input flush +
+            // `D=true`; the `g.p` launch arg is consumed once (1 →
+            // `ag=4096/av=false`, 2 → `ag=-4096/av=true`, `ah=-768`, then
+            // `i(157)` — S157 has no e() arm so the flight anim exits via
+            // the default `a(0)` fling); else on `r()` near-edge →
+            // `i(0)`+`E()` settle else `a(0)`.
+            90 -> {
+                p.ae = null
+                p.ah = 0
+                p.releaseAe()                          // G()
+                pad.edge = 0                           // v()
+                p.gD = true                            // D = true
+                if (world.gP != 0) {
+                    if (world.gP == 1) { p.ag = 4096; p.av = false }
+                    else if (world.gP == 2) { p.ag = -4096; p.av = true }
+                    p.ah = -768
+                    p.setAnim(157)
+                    world.gP = 0
+                } else if (p.animFinished()) {         // r()
+                    if (p.aR >= 20 || p.aS >= 20) {
+                        p.setAnim(0)
+                        p.eSettle(world)               // E()
+                    } else {
+                        p.flingAirborne(0, world)      // a(0)
+                    }
+                }
+            }
             // g.java:1938-2015 (proven) — wall-rebound jump: `cp=true`,
             // `aj=512`; `A()` → ledge snap i(74); direction-toward-av
             // press → x() probe, `aR|aS∈{5,20}` → a(43,32) else

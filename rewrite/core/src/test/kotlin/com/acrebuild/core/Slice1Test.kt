@@ -745,7 +745,7 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 53 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        // gD false (producer arm unported): stays inert
+        // gD false (no S90 launch ran): stays inert
         w.player.setAnim(0)
         w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertTrue(w.npcs.contains(t))
@@ -15201,4 +15201,61 @@ class Slice158Test {
         // bk[0]=24 → 800/400 + 240/120 = 4
         assertEquals(4, prop(0).au)
     }
+}
+
+class Slice159Test {
+
+    private fun launchTick(p: Entity, w: Level0World, gp: Int): Entity {
+        w.gP = gp
+        p.setAnim(90)
+        p.ae = Entity(14, null)
+        w.playerFsm.tick(p, w.pad)
+        return p
+    }
+
+    @Test fun `S90 launch arg one flings right g2647`() {
+        val w = world()
+        val p = launchTick(w.player, w, 1)
+        assertEquals(4096, p.ag); assertFalse(p.av)
+        assertEquals(-768, p.ah); assertEquals(157, p.S)
+        assertEquals(0, w.gP); assertTrue(p.gD); assertNull(p.ae)
+    }
+
+    @Test fun `S90 launch arg two flings left g2651`() {
+        val w = world()
+        val p = launchTick(w.player, w, 2)
+        assertEquals(-4096, p.ag); assertTrue(p.av)
+        assertEquals(-768, p.ah); assertEquals(157, p.S)
+        assertEquals(0, w.gP); assertTrue(p.gD)
+    }
+
+    @Test fun `S90 anim end near edge settles i0 g2658`() {
+        val w = world()
+        w.gP = 0
+        w.player.setAnim(90)
+        w.player.clip = null               // r() -> animFinished
+        w.player.aR = 20
+        w.playerFsm.tick(w.player, w.pad)
+        assertEquals(0, w.player.S); assertTrue(w.player.gD)
+    }
+
+    @Test fun `S90 anim end mid cell flings a0 g2660`() {
+        val w = world()
+        w.gP = 0
+        w.player.setAnim(90)
+        w.player.clip = null
+        w.player.aR = 0; w.player.aS = 0
+        w.playerFsm.tick(w.player, w.pad)
+        assertEquals(43, w.player.S); assertEquals(1536, w.player.aj)
+    }
+
+    @Test fun `S12 entry clears gD g1316`() {
+        val w = world()
+        w.player.gD = true
+        w.player.setAnim(12)
+        w.player.ag = 0
+        w.playerFsm.tick(w.player, w.pad)
+        assertFalse(w.player.gD)
+    }
+
 }
