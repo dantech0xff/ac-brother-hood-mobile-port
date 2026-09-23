@@ -1462,6 +1462,41 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ae = null
     }
 
+    /** `i.g(i)` (i.java:7758, proven): is `o` on my facing side —
+     *  `r0 = o.ak < ak` (other left) then `r0 == av`; with this port's
+     *  `av` = "facing/mirroring left" that reads "other is in front". */
+    fun faces(o: Entity): Boolean = (o.ak < ak) == av
+
+    /** `i.T()` (i.java:9879, proven): marker alive — `ae` exists, is the
+     *  clip-74 prompt clip, and `S ∈ {0,1}`. Our markers spawn on clip 9
+     *  (`spawnPickup`) so the clip-identity check is dropped (`inferred` —
+     *  same effect: `ae` is always the marker entity). */
+    fun markerAlive(): Boolean = ae != null && ae!!.S in 0..1
+
+    /** `i.o(int,int)` (i.java:9825, proven): park the last marker point —
+     *  class statics `L`/`M` consumed by `b(x,y)` (:9829). */
+    fun markerPoint(x: Int, y: Int) { markerLx = x; markerLy = y }
+
+    /**
+     * `i.d(int,int)` (i.java:9856, proven): move the `ae` marker to (x,y);
+     *  when `T()` re-park `o()`; then pick anim 1 when the touch point is
+     *  within 70px of the marker on screen (`k.a(J,K, x-O, y-P, 70)`),
+     *  else 0.
+     */
+    fun moveMarker(w: LevelCellSource, x: Int, y: Int) {
+        val m = ae ?: return
+        m.ak = x; m.al = y
+        if (markerAlive()) markerPoint(x, y)
+        m.setAnim(if (w.touchNearView(m, 70)) 1 else 0)
+    }
+
+    /** `i.V()` (i.java:9903, proven): marker-touch check — `ae` live and
+     *  `k.a(k.H,k.I, ae.ak-k.O, ae.al-k.P, 70)`. */
+    fun markerTouched(w: LevelCellSource): Boolean {
+        val m = ae ?: return false
+        return w.touchNearView(m, 70)
+    }
+
     /** `i.as()` (i.java:7680, proven): instant kill — `aB=0` plus the
      *  death-anim map {11→i(0), 17→i(69), 23→i(79)}. Other ax types get
      *  aB=0 with no anim change. */
@@ -2711,6 +2746,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     companion object {
         val ZERO_RECT = IntArray(4)
+        /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
+         *  (written by `o()`, read by `b(x,y)` :9829). */
+        var markerLx = -1
+        var markerLy = -1
         /** `i.bu[]` (i.java:22315, proven) — per-weapon damage table,
          *  indexed by `k.au` (weapon slot). */
         val WEAPON_DMG = intArrayOf(300, 400, 500)
@@ -2883,6 +2922,45 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (oState()) setAnim(3)
                 av = attacker != null && attacker.ak < ak
                 ag = if (av) 512 else -512
+            }
+        }
+    }
+
+    /** `i.a(6, anim, snapX, attacker)` victim arm (i.java:4586 L142,
+     *  proven): play `anim` then per-anim handling —
+     *  49 (mid-range backstab): vel0 + `ag=((snapX-ak)/10)<<8` slide +
+     *     `k.e(0,aw)` + `k.o(3)` + `k.A(20)`;
+     *  283 (near backstab): `ak=attacker.ak ∓10` (`av==true→+10` —
+     *     i.java:4599-4609) + vel0 + same stats/sfx;
+     *  other (90 = ceiling kill): `ak=snapX`; `k.bK` → `a(8,59,…)` marker;
+     *     anim==90 → `al=attacker.al` + vel0; `attacker.ax==47` adds
+     *     `k.e(0,aw)`, `k.o(3)` runs for every 90. */
+    fun applyHit6(anim: Int, snapX: Int, attacker: Entity?, world: LevelCellSource) {
+        setAnim(anim)
+        when (anim) {
+            49 -> {
+                aj = 0; ah = 0; ag = 0
+                ag = ((snapX - ak) / 10) shl 8
+                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+            }
+            283 -> {
+                val ax2 = attacker?.ak ?: ak
+                ak = ax2 + if (av) 10 else -10
+                aj = 0; ah = 0; ag = 0
+                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+            }
+            else -> {
+                ak = snapX
+                if (world.kBK && attacker != null)
+                    spawnFx8(world, 59, 1, av, attacker.ak, al, 300)
+                if (anim == 90) {
+                    // ax47 attacker → k.e(0,aw) stat; every attacker → k.o(3).
+                    if (attacker?.ax == 47) world.kStatE(aw)
+                    world.apStats[3]++
+                } else {
+                    al = attacker?.al ?: al
+                }
+                aj = 0; ah = 0; ag = 0
             }
         }
     }
@@ -3707,10 +3785,10 @@ interface LevelCellSource {
     fun spawnWisp(src: Entity)
 
     // -- globals read by prop FSMs --------------------------------------
-    /** `k.Y` — global fall impulse (k.java:2336 `Y = X<<8`; source writes
-     *  at phase transitions are unmined; level-0 arms reading it are
-     *  unreachable). */
-    val kY: Int get() = 0
+    /** `k.Y` — global fall impulse (k.java:2336/2742 `Y = X << 8`,
+     *  proven): derived from `kX` so the wind write `k.X = …` re-prices
+     *  every ballistic bias like the original's `Y = X << 8` reload. */
+    val kY: Int get() = kX shl 8
     /** `k.O` — camera left edge in world px (subtract operand at
      *  i.java:9837; ax14 pickups pin to `k.O+{20,380}` = the view edges;
      *  writable — `aa()`'s op11/12 camera lerp advances it). */
@@ -3979,6 +4057,10 @@ interface LevelCellSource {
     var kBw: Int get() = 0; set(_) {}
     /** `k.F` — claim-locked entity reference (sub-ops 10/11 gate). */
     var kF: Entity? get() = null; set(_) {}
+    /** `i.bn` — level alert flag loaded from checkpoint slot bA[79]
+     *  (k.java:6696-6702): gates the ax17/50 `l()` notice arms — while set,
+     *  civilians/pouncers never panic (i.java:2385/2396). */
+    var iBn: Boolean get() = false; set(_) {}
     /** `i.ce`/`i.bD`/`i.bQ`/`i.cO`/`i.cg`/`i.ch`/`i.z` — `i` statics the
      *  arg-ops write (i.java:153-204). */
     var iCe: Boolean get() = false; set(_) {}
@@ -4038,8 +4120,29 @@ interface LevelCellSource {
     fun padDown(mask: Int): Boolean = false
     /** `k.x(mask)` (k.java:7224, proven): double-tap-window edge (`eM`). */
     fun padTap(mask: Int): Boolean = false
+    /** `k.w(mask)` (k.java:7217, proven): released-input `(eM & mask) != 0`
+     *  — `eN` latches the held bits at pointer-release. */
+    fun padRelease(mask: Int): Boolean = false
     /** `k.v()` (k.java:7260, proven): full input-latch reset. */
     fun clearLatches() {}
+
+    // -- slice 65: ax64 `bl()` hooks ------------------------------------
+    /** `g.s` — in-cutscene flag (g.java static; no producer ported —
+     *  always false during gameplay; gates the ax64 S1 grab check at
+     *  i.java:15773). */
+    val gS: Boolean get() = false
+    /** `i.bi` — ax64 grab-hitlag flag (set by the S2 hold arm,
+     *  i.java:15686). */
+    var iBi: Boolean get() = false; set(_) {}
+    /** `av()` + `k.aX[50]` (i.java:7813, k.java:8423, proven): the pooled
+     *  shot-slot allocator — `P&128` marks free slots. Returns null when
+     *  all slots are live. Slot ax/clip are `inferred` (the original pool
+     *  is ax-generic; clip5 stands in as the shared projectile clip). */
+    fun allocShot(): Entity? = null
+    /** `k.aX` pool step (`inferred` — the pooled-shot tick path is
+     *  unmined): ballistic `am+=ag; an+=ah; ah+=kY`, `aC--` lifetime →
+     *  `P|=128` frees the slot. */
+    fun tickShotPool() {}
     /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at
      *  k.java:4073 as `120*(Z[1]-Z[2])/Z[1]`). ax27 claims/releases it. */
     var kAD: Entity? get() = null; set(_) {}
@@ -4065,6 +4168,20 @@ interface LevelCellSource {
     /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
      *  same-entity refresh else `prio<co || prio==1` steals it. */
     fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
+    // -- ax73 aJ() statics (i.java:77/100/132/9825, k.aA, g.z) -----------
+    /** `i.bf` (i.java:100) — engage-claim latch for the aN-lock sweep. */
+    var iBf: Boolean get() = false; set(_) {}
+    /** `i.bx` (i.java:132) — entity holding the grab-QTE (S147). */
+    var iBx: Entity? get() = null; set(_) {}
+    /** `k.aA` — shared engage/alert countdown (`aC()` zeroes it). */
+    var kAA: Int get() = 0; set(_) {}
+    /** `g.z` — player-side latch cleared on grab-entry/leap re-arm. */
+    var gZ: Boolean get() = false; set(_) {}
+    /** `i.L`/`i.M` (i.java:9825) — clip74 marker position latch. */
+    var iL: Int get() = -1; set(_) {}
+    var iM: Int get() = -1; set(_) {}
+    /** `aS.l()` (g.java:4968) — grab-release resolver (`PlayerFsm.l`). */
+    fun grabResolve(p: Entity): Boolean = false
     /** `g.c` (g.java:7) — static crate link: the ax51 the player is
      *  claimed on top of (bs() L188/L192 claim, L184 release). */
     var gc: Entity? get() = null; set(_) {}
@@ -4079,6 +4196,23 @@ interface LevelCellSource {
     fun kS(i: Int): Int = -1
     /** `k.S` — arena right bound (aP arena clamp). `k.R`/`k.S` pair. */
     var kSBound: Int get() = 0; set(_) {}
+    // -- slice 64: k.N/cq prompt-marker + g.p kill-bonus (k.java:58/870/888,
+    //    g.java:21) — the stealth-kill driver `k()` (i.java:2057) uses them.
+    /** `k.N` — the shared prompt-marker entity (ax14/clip9/S54/az302)
+     *  spawned by `k.c(x,y,aw)` and released by `k.k(aw)`. */
+    var kN: Entity? get() = null; set(_) {}
+    /** `k.cq` — uid bound to `k.N`; `k.k(aw)` releases iff `cq==aw` or
+     *  `aw==-1`. -1 when idle. */
+    var kCq: Int get() = -1; set(_) {}
+    /** `k.c(int,int,int)` (k.java:870, proven): create `k.N` once then
+     *  reposition it to (x,y) every call; bind `cq=aw`. */
+    fun showPrompt(x: Int, y: Int, aw: Int) {}
+    /** `k.k(int)` (k.java:888, proven): `cq==aw || aw==-1` → `N.p()` +
+     *  `N=null` + `cq=-1`. */
+    fun clearPrompt(aw: Int) {}
+    /** `g.p` (g.java:21) — kill-bonus flag the `k()` arms write
+     *  (`Z[14]`→1/2 for ax11; own `Z[0]` for ax47/50). */
+    var gP: Int get() = 0; set(_) {}
 }
 
 /* `g.c(int)` (g.java:404, proven): interact-eligible player states —

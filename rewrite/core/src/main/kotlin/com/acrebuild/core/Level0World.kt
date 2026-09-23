@@ -65,6 +65,10 @@ class Level0World(
             58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
             60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
             43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
+            69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
+            64 to 6,      // ax64 harrier — bi[64]=-1 (clipless record spawn);
+                          // unconverted index → null clip, matching the
+                          // original's own clipless record path
         )
     }
 
@@ -229,10 +233,12 @@ class Level0World(
     /** `k.aS.W` — player hitbox. */
     override fun playerRect(): IntArray = player.W
 
-    /** `k.q(o)` (k.java:5887, proven): resolve a linked entity by `aw` —
-     *  `aS.aw==o → aS` else the `bb[]` scan (our npcs list). */
-    override fun findByAw(aw: Int): Entity? =
-        if (player.aw == aw) player else npcs.firstOrNull { it.aw == aw }
+    /** `k.q(aw)` (k.java:5887, proven): `aw==-1 → null` head guard, then
+     *  `aS.aw==aw → aS` else the `bb[]` scan by uid. */
+    override fun findByAw(aw: Int): Entity? {
+        if (aw == -1) return null
+        return if (player.aw == aw) player else npcs.firstOrNull { it.aw == aw }
+    }
 
     /**
      * `i.a(int,int,int)` (i.java:9810) → `a(ax,clip,anim,az)` spawner
@@ -403,7 +409,15 @@ class Level0World(
             if (f.isEmpty()) continue
             if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
             if (f.size < 7) continue
-            val type = f[0]
+            // Retype head (i.java:2640-2651, proven): ax11 records whose
+            // spawn anim r8[5]∈{80,93} become ax47 ledge sentinels; ax17
+            // records with r8[5]==120 become ax50 pouncers. The switch
+            // dispatch sees the retyped ax — apply before clip lookup.
+            val type = when {
+                f[0] == 11 && f.size > 5 && (f[5] == 80 || f[5] == 93) -> 47
+                f[0] == 17 && f.size > 5 && f[5] == 120 -> 50
+                else -> f[0]
+            }
             // ax67: per-record clip from bk[kind] (i.java:2633); others use
             // the bi[] table. decorClip(-1)/missing clip → record skipped.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
@@ -444,7 +458,13 @@ class Level0World(
             else if (type == 54 || type == 30) npcFsm.initAx54(e, f.toList(), this)
             else if (type == 56) npcFsm.initAx56(e, f.toList(), this)
             else if (type == 60) npcFsm.initAx60(e, f.toList(), this)
+            else if (type == 69) npcFsm.initAx69(e, f.toList(), this)
+            else if (type == 73) npcFsm.initAx73(e, f.toList())
+            else if (type == 47) npcFsm.initAx47(e, f.toList())
+            else if (type == 50) npcFsm.initAx50(e, f.toList())
+            else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
+            else if (type == 64) npcFsm.initAx64(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -525,7 +545,7 @@ class Level0World(
     override var iAH = false                   // i.aH — slow-mo flag
     override var iAI = 0                       // i.aI
     override var iAJ = 0                       // i.aJ
-    override var kX = 0                        // k.X
+    override var kX = -7                       // k.X (k.java:2334 init, proven)
     override var kW = 0                        // k.W
     override var kAw = 0                       // k.aw
     override var kAe: Entity? = null           // k.ae — player link entity
@@ -548,9 +568,14 @@ class Level0World(
     override var kAv = false                     // k.av
     override var kAT = false                     // k.aT
     override var kAL = 0                         // k.aL
-    override var kBK = false                     // k.bK — never set true in JAR
+    override var kBK = false                     // k.bK — HAS-BLOOD JAD
+                                                 // flag (GloftASBR:36):
+                                                 // manifest lacks it →
+                                                 // NPE catch → false
+                                                 // (censored anim set)
     override var kBx = 0                         // k.bx — l(12) sentinel
     override var kBw = 0                         // k.bw — l(13) sentinel
+    override var iBn = false                     // i.bn — bA[79] alert flag
     override var kAJ = 0                         // k.aJ — ax42 fuse phase
     override var kAK = 0                         // k.aK — countdown init
     override var kAM = 0                         // k.aM — fuse accumulator
@@ -604,9 +629,33 @@ class Level0World(
     /** `k.ac` — the same camera view rect as `camRect` (aliased;
      *  ax35's off-screen containment test reads it via this name). */
     override val kAc: IntArray? get() = camRect
+    override var iBi = false                     // i.bi — ax64 grab hitlag
+    override val gS = false                      // g.s — cutscene (no producer)
+    /** `k.aX` pooled-shot slots (k.java:8423 `aW=50`, proven) — lazily
+     *  grown to 50 `new i()`-blank slots (ax=0, clipless — the ax64
+     *  tether/barrage spawn config never touches ax/aa; `inferred`); the
+     *  spawner's `P &= -129` un-reserves the slot → `P&128` = free. */
+    val shotPool = ArrayList<Entity>()
+    override fun allocShot(): Entity? {
+        if (shotPool.size < 50) shotPool += Entity(0, null).apply { P = P or 128 }
+        return shotPool.firstOrNull { (it.P and 128) != 0 }
+    }
+    override fun tickShotPool() {
+        for (s in shotPool) {
+            if ((s.P and 128) != 0) continue
+            s.aC--
+            if (s.aC < 0) { s.P = s.P or 128; continue }   // slot freed
+            s.am += s.ag; s.an += s.ah
+            s.ah += kY                                     // k.Y bias (0 today)
+            s.N = s.am; s.O = s.an
+            s.ak = s.am shr 8; s.al = s.an shr 8
+            s.refreshBoxes()
+        }
+    }
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
+    override fun padRelease(mask: Int): Boolean = pad.w(mask)       // k.w
     override fun clearLatches() { pad.clearLatches() }   // k.v()
     override fun padRearm() { pad.edge = pad.held }      // k.v = k.w
     override var kCO = 0                               // k.cO transition count
@@ -689,8 +738,47 @@ class Level0World(
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
+    override var iBf = false                       // i.bf engage latch
+    override var iBx: Entity? = null               // i.bx grab-QTE holder
+    override var kAA = 0                           // k.aA
+    override var gZ = false                        // g.z
+    override var iL = -1                           // i.L
+    override var iM = -1                           // i.M
+    /** `aS.l()` (g.java:4968) — grab-release; bM=null first per the
+     *  original head, then the shared `PlayerFsm.l` resolver. */
+    override fun grabResolve(p: Entity): Boolean {
+        p.bM = null
+        return playerFsm.l(p, pad)
+    }
     override var gc: Entity? = null                // g.c crate-top link
     override var iBq = 0                           // i.bq floor-Y latch
+    override var kN: Entity? = null                // k.N prompt marker
+    override var kCq = -1                          // k.cq bound uid
+    override var gP = 0                            // g.p kill-bonus flag
+    /** `k.c(int,int,int)` (k.java:870, proven): the ax14/clip9/S54/az302
+     *  prompt marker — created once then repositioned every call; `cq` is
+     *  bound to the requesting entity's uid. */
+    override fun showPrompt(x: Int, y: Int, aw: Int) {
+        if (kN == null) {
+            kN = Entity(14, clips[9]).apply {
+                this.aw = -1; au = 0
+                setAnim(54); az = 302
+                setPositionPx(x, y); av = false
+                refreshBoxes()
+            }
+            pendingInsert += kN!!
+            kCq = aw
+        }
+        kN?.setPositionPx(x, y)
+    }
+    /** `k.k(int)` (k.java:888, proven): `cq==aw || aw==-1` → `N.p()` +
+     *  `N=null` + `cq=-1`. */
+    override fun clearPrompt(aw: Int) {
+        val n = kN ?: return
+        if (kCq == aw || aw == -1) {
+            n.deactivate(); pendingRemove += n; kN = null; kCq = -1
+        }
+    }
     var gs = false                                 // g.s transition bool
     var gT = 0                                     // g.t transition int
     override fun gH(): Boolean = gs || gT != 0     // g.h() latch
@@ -921,6 +1009,12 @@ class Level0World(
             else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
             else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
             else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
+            else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
+            else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
+            else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
+            else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
+            else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
+            else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
@@ -929,6 +1023,7 @@ class Level0World(
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()
         }
+        tickShotPool()                            // k.aX pool step (inferred)
         if (pendingInsert.isNotEmpty()) {         // k.b(aK) drain
             npcs += pendingInsert
             pendingInsert.clear()

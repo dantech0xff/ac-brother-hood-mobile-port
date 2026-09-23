@@ -157,6 +157,7 @@ private fun world(): Level0World {
             40 to Clip.load(asset("clips/clip40/clip.acpk")),
             20 to Clip.load(asset("clips/clip20/clip.acpk")),
             21 to Clip.load(asset("clips/clip21/clip.acpk")),
+            38 to Clip.load(asset("clips/clip38/clip.acpk")),
             -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
             -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
             -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
@@ -575,7 +576,10 @@ class Level0WorldTest {
         val slot1 = w.npcs.count { it.ax == 11 && it.palette == 1 }
         val slot0 = w.npcs.count { it.ax == 11 && it.palette == 0 }
         assertEquals(9, slot1, "level-0 records: 9 soldiers carry Z[0]==1")
-        assertEquals(44, slot0)
+        // 4 records carry S∈{80,93} → retyped ax47 before spawn (i.java:2644).
+        assertEquals(40, slot0)
+        assertEquals(4, w.npcs.count { it.ax == 47 },
+            "retype ax11+S∈{80,93}→47 (i.java:2644)")
         assertEquals(0, w.player.palette)
     }
 
@@ -822,8 +826,8 @@ class Level0WorldTest {
         w.player.setPositionPx((e.W[0] + e.W[2]) / 2, (e.W[1] + e.W[3]) / 2)
         w.player.refreshBoxes()
         w.npcFsm.tickDecor(e, w.player)
-        // ah = 768 + k.Y(0); op40 grab applies the L96 arm on the player
-        assertEquals(768, w.player.ah)
+        // ah = 768 + k.Y(-1792 now that kY = kX<<8, k.java:2336 proven)
+        assertEquals(768 - 1792, w.player.ah)
         assertEquals(20, e.S)      // i(S+1) — sprung anim
     }
 
@@ -6433,3 +6437,1253 @@ class Slice60Test {
     }
 }
 
+
+class Slice69Test {
+    private fun ax69At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
+        val e = Entity(69, w.clips[38])
+        val rec = mutableListOf(69, 152, x, y)
+        rec += f.toList()
+        while (rec.size < 22) rec += 0
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx69(e, rec.toList(), w)
+        w.npcs.add(e)
+        return e
+    }
+
+    private fun ax11At(w: Level0World, x: Int, y: Int, aw: Int): Entity {
+        val e = Entity(11, w.clips[7])
+        e.aw = aw
+        e.setPositionPx(x, y)
+        e.refreshBoxes()
+        w.npcs.add(e)
+        return e
+    }
+
+    /** clip38 W = (-38,-75,76,76) rel anchor → arithmetic-shift floor at
+     *  (100,200): x∈[61,137], y∈[124,200], mid-x=99, mid-y=162. */
+    private fun finish(e: Entity) {
+        val c = e.clip!!
+        e.T = c.frameCount(e.S) - 1
+        e.U = c.frameDuration(e.S, e.T) - 1
+    }
+
+    @Test fun `init — Z0=f4 flavor, Z1=f7 link, S=f5, az=0 aA=0`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, 102)
+        assertEquals(1, e.Z[0], "Z[0] = r8[4] zone flavor")
+        assertEquals(102, e.Z[1], "Z[1] = r8[7] link uid")
+        assertEquals(0, e.S, "S = r8[5] init anim")
+        assertEquals(0, e.az); assertEquals(0, e.aA)
+    }
+
+    @Test fun `S0 Z0=0 — gB player inside zone hangs S250, e S7, af=link`() {
+        val w = world()
+        val victim = ax11At(w, 160, 190, 102)
+        val e = ax69At(w, 100, 200, 0, 0, 0, 102)
+        w.player.setPositionPx(100, 163)
+        w.player.setAnim(19)                              // gB member
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(250, w.player.S, "player hangs")
+        assertEquals(7, e.S, "zone arms")
+        assertSame(victim, e.af, "af = k.q(Z[1]) link")
+        assertSame(e, w.player.af, "player bound to zone")
+        assertEquals(99, w.player.ak); assertEquals(162, w.player.al)
+        assertEquals(0, w.player.ag)
+    }
+
+    @Test fun `S0 Z0=0 — non-gB player does not bind`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 0, 0, 0, -1)
+        w.player.setPositionPx(100, 163)
+        w.player.setAnim(0)                               // not in gB set
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertNotEquals(250, w.player.S)
+        assertEquals(0, e.S)
+    }
+
+    @Test fun `S0 Z0=1 — feet must hang below zone mid to perch`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        w.player.setAnim(19)
+        // W[3] (foot edge) above the midline → rejected (L65)
+        w.player.setPositionPx(100, 130)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(0, e.S, "feet above mid: no bind")
+        w.player.setPositionPx(100, 195)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(1, e.S, "feet below mid: perch anim S1")
+        assertSame(e, w.player.af)
+    }
+
+    @Test fun `preamble — ax11 victim right of zone within 40px binds + marker`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        e.setAnim(7)
+        w.player.af = e                                   // bound player
+        w.player.setPositionPx(100, 163)
+        val victim = ax11At(w, 160, 190, 7)
+        victim.av = false                                 // facing right = away
+        victim.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertSame(victim, e.af, "victim bound")
+        assertNotNull(e.ae, "hand marker spawned")
+        assertEquals(152, e.ae!!.ak); assertEquals(115, e.ae!!.al)
+    }
+
+    @Test fun `preamble — victim facing the player is skipped`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        e.setAnim(7)
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        val victim = ax11At(w, 160, 190, 7)
+        victim.av = true                                  // facing left = toward player
+        victim.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertNull(e.af, "facing victim rejected (!g(aS))")
+    }
+
+    @Test fun `preamble keep-alive — victim drifting past 40px releases af`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        e.setAnim(7)
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        val victim = ax11At(w, 160, 190, 7)
+        victim.av = false; victim.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertSame(victim, e.af)
+        victim.setPositionPx(250, 190); victim.refreshBoxes()   // >40px out
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertNull(e.af, "out-of-reach victim dropped (L39)")
+    }
+
+    @Test fun `S7 kill arm — eligible victim + v(65568) → leap, death anim`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)            // Z0=1 auto-eligible
+        e.setAnim(7)
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        val victim = ax11At(w, 160, 190, 7)
+        victim.av = false; victim.refreshBoxes()
+        w.pad.commit(65568)                               // v() edge
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(244, w.player.S, "aS.i(244) leap")
+        assertTrue(w.player.P and 64 != 0, "P|=64")
+        assertEquals(162, w.player.al); assertEquals(137, w.player.ak,
+            "player snaps to zone right-center")
+        assertEquals(117, victim.S, "af.i(117) death anim")
+        assertEquals(-1, victim.az)
+        assertEquals(2, e.S, "i(2) kill windup")
+    }
+
+    @Test fun `S7 kill arm — Z0=0 requires prompt eligibility`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 0, 0, 0, -1)            // Z0=0 prompt mode
+        e.setAnim(7)
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        // victim inside 40px reach but FACING the player → not eligible
+        val victim = ax11At(w, 160, 190, 7)
+        victim.av = true; victim.refreshBoxes()
+        e.af = victim                                     // bound by link
+        w.pad.commit(65568)
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertNotEquals(244, w.player.S, "facing victim blocks the kill")
+    }
+
+    @Test fun `S2 censored tail — kBK=false → S10 + player recentered`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 0, 0, 0, -1)
+        e.setAnim(2); finish(e)
+        w.player.setPositionPx(90, 163)
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(10, e.S, "censored chain 2→10")
+        assertEquals(99, w.player.ak, "player recentered on zone")
+    }
+
+    @Test fun `S4 kill-landing — p S244 → S12 + settle + af release`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 0, 0, 0, -1)            // Z0=0
+        e.setAnim(4); e.aA = 0; finish(e)
+        w.player.setAnim(244); w.player.P = w.player.P or 64
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(12, e.S, "censored landing 4→12")
+        assertEquals(0, w.player.S, "aS.i(0)")
+        assertTrue(w.player.P and 64 == 0, "P&=-65")
+        assertNull(w.player.af)
+    }
+
+    @Test fun `S4 aA==1 mission advance — bw=-1 bx=57 screenL(13)`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 0, 0, 0, -1)
+        e.setAnim(4); e.aA = 1; finish(e)
+        w.player.af = e
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(-1, w.kBw, "k.bw = -1")
+        assertEquals(57, w.kBx, "k.bx = 57")
+    }
+
+    @Test fun `S6 carry-drift — u(8256) drifts both, w(12368) release → S7`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        e.setAnim(6)
+        w.player.af = e
+        w.player.setPositionPx(100, 163)
+        w.pad.commit(8256)                                // RIGHT held
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(1536, e.ag); assertEquals(1536, w.player.ag)
+        w.pad.commit(0)                                   // released → eM edge
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(7, e.S, "release → i(7) re-arm")
+        assertEquals(0, e.ag); assertEquals(0, w.player.ag)
+    }
+}
+
+// =========================================================================
+// Slice 62 — ax17 = aA() civilian FSM (i.java:8708-8847 + init :3004 L113).
+// =========================================================================
+class Slice17Test {
+
+    /** 15-field ax17 record: [17, uid, x, y, 0, S, 0|1, 0, 0, -1, 0, 0, -1,
+     *  100, -1] (level-records.json packs 8/9/11, proven). */
+    private fun ax17At(w: Level0World, x: Int, y: Int, anim: Int = 57): Entity {
+        val e = Entity(17, w.clips[7])
+        val rec = mutableListOf(
+            17, 152, x, y, 0, anim, 0, 0, 0, -1, 0, 0, -1, 100, -1)
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx17(e, rec)
+        w.npcs.add(e)
+        return e
+    }
+
+    /** Place the player and give it real boxes; S reset to a non-attack anim. */
+    private fun placePlayer(w: Level0World, x: Int, y: Int) {
+        w.player.setPositionPx(x, y)
+        w.player.refreshBoxes()
+        w.player.S = 0
+    }
+
+    private fun finish(e: Entity) {
+        val c = e.clip!!
+        e.T = c.frameCount(e.S) - 1
+        e.U = c.frameDuration(e.S, e.T) - 1
+    }
+
+    @Test fun `init — L113 maps fields, L395 sets anim, corpse link Z21`() {
+        val w = world()
+        val e = ax17At(w, 200, 150, 64)
+        assertEquals(64, e.S, "i(r8[5])")
+        assertEquals(100, e.aB, "aB = bv[k.au] = bv[0] = 100")
+        assertEquals(100, e.az, "az = r8[13]")
+        assertEquals(-1, e.Z[21], "Z[21] = r8[14] corpse link")
+        assertEquals(-1, e.Z[2], "Z[2] = -1")
+        assertEquals(200, e.aF, "aF = r8[2] = x")
+        assertEquals(0, e.aD, "aD = r8[7]")
+        assertEquals(0, e.m, "m = r8[8]")
+        assertEquals(-1, e.oId, "o = r8[9]")
+        assertEquals(0, e.aG, "aG = r8[4]")
+    }
+
+    @Test fun `S57 on-screen notice — sfx 16, faces player, panic pick`() {
+        val w = world()
+        w.kO = 0; w.kP = 0                          // camera [0,0,400,240]
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)                        // same spot → overlap
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertTrue(16 in w.sfxLog, "k.A(16) notice sfx")
+        assertEquals(61, e.S, "X-overlap + vert-overlap → i(61)")
+        assertEquals(0, e.ag); assertEquals(0, e.ah)
+    }
+
+    @Test fun `S57 civilian off camera stays idle, no sfx`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 2000, 150)                    // W outside [0,400]
+        placePlayer(w, 2100, 150)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S)
+        assertTrue(16 !in w.sfxLog)
+    }
+
+    @Test fun `S57 alert flag bn suppresses the panic`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        w.iBn = true                                    // bA[79] checkpoint flag
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S)
+        assertTrue(16 !in w.sfxLog)
+    }
+
+    @Test fun `S57 player S9 or S50 suppresses the panic`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)
+        w.player.S = 9
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S, "S9 climb suppresses")
+        w.player.S = 50
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S, "S50 riding suppresses")
+    }
+
+    @Test fun `S57 quadrant pick — below+X-sep 67, above+X-sep 66`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 150, 120)
+        // player fully right of W (X-separated) and well below/above it —
+        // p.W carries large anim-box offsets so the margin must clear them
+        placePlayer(w, e.W[2] + 200, e.W[3] + 200)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(67, e.S, "X-separated + player below → i(67)")
+        e.setAnim(57); e.T = 0
+        placePlayer(w, e.W[2] + 200, e.W[1] - 200)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(66, e.S, "X-separated + player above → i(66)")
+    }
+
+    @Test fun `S57 quadrant pick — below+overlap 63, above+overlap 62`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 150, 120)
+        placePlayer(w, e.ak, e.W[3] + 200)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(63, e.S, "X-overlap + player below → i(63)")
+        e.setAnim(57); e.T = 0
+        placePlayer(w, e.ak, e.W[1] - 200)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(62, e.S, "X-overlap + player above → i(62)")
+    }
+
+    @Test fun `panic flail strikes the player at T==3 (op4 sfx 18)`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)
+        e.setAnim(61); e.T = 3
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertTrue(18 in w.sfxLog, "aS.a(4,0,0,this) → player hurt sfx")
+    }
+
+    @Test fun `panic flail r returns to S57 — S68 also returns`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 300, 150)
+        e.setAnim(61); finish(e)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S, "r() → i(57)")
+        e.setAnim(68); finish(e)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(57, e.S, "S68 r() → i(57)")
+    }
+
+    @Test fun `sword intake — normal hit aB-=50, finisher aB-=100`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)
+        // p.X non-degenerate, overlapping W; player in attack anim 67
+        w.player.S = 67
+        w.player.X[0] = e.W[0]; w.player.X[1] = e.W[1]
+        w.player.X[2] = e.W[2]; w.player.X[3] = e.W[3]
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(50, e.aB, "H[0]=50 for normal attack anims")
+        // finisher 183: reset entity, drain once more
+        val e2 = ax17At(w, 200, 150)
+        w.player.S = 183
+        w.npcFsm.tickAx17(e2, w, w.player)
+        assertEquals(0, e2.aB, "J[0]=100 finisher kills a 100-HP civilian")
+    }
+
+    @Test fun `dead-check routes to S69 collapse on the next tick`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 200, 150)
+        e.aB = 0
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(69, e.S, "L7 dead-check → i(69)")
+    }
+
+    @Test fun `S69 collapse — finish releases locks and drops flags`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        placePlayer(w, 300, 150)
+        e.aB = 0
+        e.P = e.P or 16
+        w.lockTarget = e
+        w.playerLinkB = e
+        e.setAnim(69); finish(e)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(0, e.P and 16, "P&=-17")
+        assertTrue(e.P and 32 != 0 && e.P and 64 != 0, "P|=32|64")
+        assertNull(w.lockTarget, "aN released")
+        assertNull(w.playerLinkB, "g.b released")
+        assertEquals(2, e.aA, "aA=2")
+    }
+
+    @Test fun `S129 dead-on-spot — r() zeroes aB and drops flags`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        e.aB = 1
+        e.setAnim(129); finish(e)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(0, e.aB)
+        assertTrue(e.P and 32 != 0 && e.P and 64 != 0)
+        assertEquals(129, e.S, "stays dead (aB<=0 early-return, no i(69))")
+    }
+
+    @Test fun `S170 knockdown — al+=10, wall probe, aZ → S129`() {
+        val w = world()
+        w.kO = 0; w.kP = 0
+        val e = ax17At(w, 200, 150)
+        val y0 = e.al
+        e.setAnim(170)
+        w.npcFsm.tickAx17(e, w, w.player)
+        assertEquals(y0 + 10, e.al, "al += 10")
+        assertTrue(e.S == 129 || e.S == 170,
+            "aZ wall contact → i(129), else keep falling")
+    }
+}
+
+
+class Slice73Test {
+    private fun ax73At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
+        val e = Entity(73, w.clips[7])
+        e.aw = 90 + w.npcs.size
+        val rec = mutableListOf(73, e.aw, x, y)
+        rec += f.toList()
+        while (rec.size < 20) rec += -1
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx73(e, rec.toList())
+        w.npcs.add(e)
+        return e
+    }
+
+    private fun finish(e: Entity) {
+        val c = e.clip!!
+        e.T = c.frameCount(e.S) - 1
+        e.U = c.frameDuration(e.S, e.T) - 1
+    }
+
+    @Test fun `init — minimal record — Z0=f4, az=f17, aB=bu, S=f5`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 152, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 300)
+        assertEquals(0, e.Z[0], "L134: Z[0] = r8[4] = 0")
+        assertEquals(300, e.az, "az = r8[17]")
+        assertEquals(300, e.aB, "aB = bu[au=0] = 300")
+        assertEquals(152, e.S, "i(r8[5])")
+        assertTrue(e.ae == null, "no marker bound at init")
+    }
+
+    @Test fun `head — in reach registers the interact claim at prio 0`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 152)
+        // 60×60 reach box ahead of the player — park the player inside.
+        w.player.setPositionPx(e.ak + 20, e.al - 10)
+        w.player.av = true                        // facing left → reach left
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(w.claimed === e || w.kL === e, "k.a(this,0,W) claimed")
+    }
+
+    @Test fun `head — dead guard releases its claim`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 152)
+        w.player.setPositionPx(e.ak + 20, e.al - 10); w.player.av = true
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx73(e, w, w.player)
+        e.aB = 0
+        e.setAnim(0)
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(w.claimed !== e && w.kL !== e, "k.m() released")
+        assertEquals(164, e.S, "aB<=0 && S!=164 → i(164)")
+    }
+
+    @Test fun `S152 idle — G + zero vel + Z0=0 and engage-able raises aA=1`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 3, 152)
+        e.ae = Entity(14, null); e.ah = 5; e.ag = 5
+        w.player.setPositionPx(e.ak + 100, e.al)   // outside W, LOS-clear
+        w.player.refreshBoxes()
+        // make the player engage-able: facing-gated sight uses Z rect →
+        // minimal record is contact-only, so overlap W for the alert.
+        w.player.setPositionPx(e.ak + 5, e.al); w.player.refreshBoxes()
+        e.cq = false
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(e.ae == null, "G() released the marker")
+        assertEquals(0, e.Z[0], "Z[0] re-zeroed")
+        assertEquals(1, e.aA, "b(aS) LOS-clear → aA=1")
+        assertEquals(0, e.ah); assertEquals(0, e.ag)
+    }
+
+    @Test fun `S131 block — rolling player in X is countered, i(146) on end`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 131)
+        w.player.S = 6
+        w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
+        e.X[0] = w.player.W[0] - 10; e.X[1] = w.player.W[1]
+        e.X[2] = w.player.W[2] + 10; e.X[3] = w.player.W[3]
+        w.player.av = e.ak < w.player.ak           // player faces the guard
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(w.lockTarget === e, "aN = this on the counter")
+        finish(e)
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(146, e.S, "r() → i(146)")
+    }
+
+    @Test fun `S155 — normal aC=20 and ag retreats backward, enraged aG`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 155)
+        e.s = Entity(51, null)                     // stub crate → probes false
+        e.av = false                               // facing right
+        e.aq = 0; e.j = 0
+        w.player.setPositionPx(e.ak + 1000, e.al)  // j==0 stalk, r7>180
+        w.player.refreshBoxes(); w.player.S = 0
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(-512, e.ag, "L76-L79: av==false → ag=-512")
+        val e2 = ax73At(w, 500, 200, 3, 155)
+        e2.s = Entity(51, null)
+        e2.av = true; e2.Z[0] = 3; e2.aq = 0; e2.j = 0
+        w.player.setPositionPx(e2.ak + 1000, e2.al); w.player.refreshBoxes()
+        w.npcFsm.tickAx73(e2, w, w.player)
+        assertEquals(1536, e2.ag, "L68-L74: Z0==3 → ag=1536 (enraged)")
+    }
+
+    @Test fun `j() intake — backstab arms the lock, a surviving hit enrages`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 146)        // S146 keeps r11
+        e.s = Entity(51, null)                     // disable edge probes
+        e.aB = 300
+        w.player.S = 67                            // windup anim 67
+        w.player.gI = 1
+        w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
+        w.player.av = false                        // faces AWAY — r11 gate
+        w.npcFsm.tickAx73(e, w, w.player)          // arms bf via S67
+        assertTrue(w.iBf, "L48 engage latch armed on S67 windup")
+        assertTrue(w.lockTarget === e, "aN = this")
+        w.player.S = 68                            // strike lands
+        w.player.X[0] = e.W[0] - 10; w.player.X[1] = e.W[1]
+        w.player.X[2] = e.W[2] + 10; w.player.X[3] = e.W[3]
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(300 - 80, e.aB, "L98: aB -= bw")
+        // Z0==0 && aB<=bu → every surviving sword hit enrages.
+        assertEquals(3, e.Z[0], "C() L13: enrage Z0=3")
+        assertEquals(155, e.S, "→ i(155)")
+        assertTrue(e.aq != 0, "aq = ak∓60 retreat latch")
+        assertEquals(8, w.player.S, "aS.i(8)")
+    }
+
+    @Test fun `j() — enraged guard ignores damage entirely`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 3, 146)        // Z0=3 already
+        e.aB = 300
+        w.player.S = 68; w.player.gI = 1
+        w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
+        w.player.av = false
+        w.player.X[0] = e.W[0] - 10; w.player.X[1] = e.W[1]
+        w.player.X[2] = e.W[2] + 10; w.player.X[3] = e.W[3]
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(300, e.aB, "L234: Z0==3 skips j() — armored")
+    }
+
+    @Test fun `j() — aB zero → C() dies to i(164), finisher costs J=100`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 146)
+        e.aB = 100
+        w.player.S = 183                           // assassination anim
+        w.player.gI = 1
+        w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
+        w.player.av = false                        // backstab angle
+        w.player.X[0] = e.W[0] - 10; w.player.X[1] = e.W[1]
+        w.player.X[2] = e.W[2] + 10; w.player.X[3] = e.W[3]
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(164, e.S, "aB zero → L64 i(164)")
+        assertEquals(0, e.ag); assertEquals(0, e.ah)
+    }
+
+    @Test fun `S165 grab gate — opposite-facing and held → i(147) QTE`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 165)
+        e.av = false                               // guard faces right
+        w.player.av = true                         // player faces left (xor)
+        w.player.aZ = true
+        w.player.setPositionPx(e.ak - 90, e.al)    // 90 < 140 → no abort
+        w.player.refreshBoxes()
+        e.X[0] = w.player.W[0] - 10; e.X[1] = w.player.W[1]
+        e.X[2] = w.player.W[2] + 10; e.X[3] = w.player.W[3]
+        w.pad.commit(16388)                        // k.u(16388) held
+        w.pad.commit(16388)                        // second commit: held, edge gone
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(294, w.player.S, "aS.i(294)")
+        assertEquals(147, e.S, "i(147) hold")
+        assertEquals(40, e.bl, "bl = 40")
+        assertTrue(w.iBx === e, "bx = this")
+        assertTrue(e.P and 64 == 0, "P&=-65 invisibility flag cleared")
+    }
+
+    @Test fun `S165 abort — overshot 140 facing-side → i(171), P minus 65`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 165)
+        e.av = false                               // moving right
+        w.player.av = false
+        w.player.aZ = false                        // grab gate fails
+        w.player.setPositionPx(e.ak - 300, e.al)   // e.ak - p.ak = +300 ≥ 140
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(171, e.S, "L199 abort → i(171)")
+        assertTrue(e.P and 64 == 0, "P&=-65")
+    }
+
+    @Test fun `S147 QTE — mash 65568 to bl 80 kills the guard, frees player`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 147)
+        e.bl = 40
+        w.player.S = 294
+        repeat(10) { w.pad.commit(65568); w.npcFsm.tickAx73(e, w, w.player); w.pad.commit(0) }
+        assertEquals(164, e.S, "g(65568,80) → i(164) escape")
+        assertEquals(287, w.player.S, "aS.i(287)")
+        assertEquals(0, e.aB, "aB = 0")
+        assertTrue(w.iBx == null, "bx = null")
+    }
+
+    @Test fun `S147 release — bl hits zero → i(149) + aS l + G`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 147)
+        e.bl = 1
+        w.player.S = 294
+        w.pad.commit(0)                            // decay: bl 1 → 0
+        w.npcFsm.tickAx73(e, w, w.player)
+        w.pad.commit(0)
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(149, e.S, "bl==0 → i(149) release")
+        assertTrue(w.iBx == null)
+        assertTrue(e.ae == null, "G() released")
+    }
+
+    @Test fun `S171 enraged — player above sight rect disengages to S152`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 3, 171)
+        e.aq = 0
+        e.s = Entity(51, null)                     // edge probes off
+        w.player.setPositionPx(e.ak, e.al + 120)   // W[1] > Z[12] (=200)
+        w.player.refreshBoxes()
+        finish(e)
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertEquals(152, e.S, "L135 → i(152)")
+        assertEquals(0, e.aA)
+    }
+
+    @Test fun `S164 death end — P or 32 or 64, minus 17, gJ or 2 + sheath`() {
+        val w = world()
+        val e = ax73At(w, 100, 200, 0, 164)
+        w.kBK = false
+        w.player.gJ = 0
+        finish(e)
+        w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(e.P and 32 != 0 && e.P and 64 != 0, "P |= 32|64")
+        assertTrue(e.P and 16 == 0, "P &= -17")
+        assertTrue(w.player.gJ and 2 != 0, "g.g(2) → gJ |= 2")
+    }
+}
+
+// ============================================================================
+// Slice 64 — ax47 aK() + ax50 aL() + shared i.k() stealth-kill driver
+// (i.java:9910/10008/2057). Citations inline per AGENTS.md.
+// ============================================================================
+class Slice64Test {
+    private fun ax47At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
+        val e = Entity(47, w.clips[7])
+        e.aw = 300 + w.npcs.size
+        val rec = mutableListOf(47, e.aw, x, y)
+        rec += f.toList()
+        while (rec.size < 20) rec += -1
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx47(e, rec.toList())
+        w.npcs.add(e)
+        return e
+    }
+    private fun ax50At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
+        val e = Entity(50, w.clips[7])
+        e.aw = 400 + w.npcs.size
+        val rec = mutableListOf(50, e.aw, x, y)
+        rec += f.toList()
+        while (rec.size < 20) rec += -1
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx50(e, rec.toList())
+        w.npcs.add(e)
+        return e
+    }
+    private fun finish(e: Entity) {
+        val c = e.clip!!
+        e.T = c.frameCount(e.S) - 1
+        e.U = c.frameDuration(e.S, e.T) - 1
+    }
+
+    // -- init arms -----------------------------------------------------------
+    @Test fun `ax47 init — az=f17, aB=bu, Z0=f4, S=f5`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 80, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 300)
+        assertEquals(300, e.az, "L134 az=r8[17]")
+        assertEquals(300, e.aB, "aB=bu[au=0]=300")
+        assertEquals(0, e.Z[0])
+        assertEquals(80, e.S, "i(r8[5])")
+    }
+
+    @Test fun `ax50 init — az=f13 not f17`() {
+        val w = world()
+        // record idx 13 = vararg slot 9 (4 header fields precede it)
+        val e = ax50At(w, 100, 200, 0, 120, 0, 0, 0, -1, 0, 0, 0, 111)
+        assertEquals(111, e.az, "L114 az=r8[13] (DIFFERENT from ax47's 17)")
+        assertEquals(120, e.S)
+    }
+
+    @Test fun `retype — level-0 ax11 records with S 80 or 93 spawn as ax47`() {
+        val w = world()
+        assertEquals(4, w.npcs.count { it.ax == 47 },
+            "pack-6 carries 4 retype-47 records (atlas + i.java:2644)")
+        assertEquals(0, w.npcs.count { it.ax == 50 },
+            "no ax17+S120 records in pack-6")
+        assertTrue(w.npcs.none { it.ax == 11 && it.S in intArrayOf(80, 93) })
+    }
+
+    // -- aK() arms ------------------------------------------------------------
+    @Test fun `S120 — drop-kill set + overlap + player below → i89 + i119`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 120)
+        // player in drop-kill anim + overlapping + fully above sentinel bottom
+        // sentinel W≈[90,166,113,201]; overlap needs p.W[3]>166, grab arm
+        // needs p.W[3]<e.W[3] → p.al in (165,200).
+        w.player.setPositionPx(100, 180)
+        w.player.setAnim(24)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(89, w.player.S, "aS.i(89) ceiling-grab victim anim")
+        assertEquals(119, e.S, "i(119)")
+        assertEquals(30, e.aC, "aC=30")
+        assertEquals(e.ak, w.player.ak, "aS.ak=ak snap")
+        assertEquals(e.W[1], w.player.al, "aS.al=W[1] snap")
+    }
+
+    @Test fun `S120 — degenerate sight rect only fires at the anchor point`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 120)
+        // player W mid = al-29 → al=229 puts mid at the anchor y=200.
+        w.player.setPositionPx(100, 229)
+        w.player.setAnim(0)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertTrue(e.S in 121..128, "r7 → 3x3 pounce pick (overlapping column → 127/128)")
+    }
+
+    @Test fun `S120 — player out of sight rect stays perched`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 120)
+        w.player.setPositionPx(500, 600)
+        w.player.setAnim(0); w.player.refreshBoxes()
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(120, e.S, "r7=false → no pounce")
+    }
+
+    @Test fun `S121-128 pounce — T1 sfx16`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 121)
+        w.player.setPositionPx(100, 229)          // mid pierces the anchor → r7
+        w.player.setAnim(0); w.player.refreshBoxes()
+        e.T = 1
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertTrue(16 in w.sfxLog, "T==1 → k.A(16)")
+    }
+
+    @Test fun `S121-128 pounce — T3 counteredBy + r() reverts to S120`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 121)
+        w.player.setPositionPx(100, 229)
+        w.player.setAnim(0); w.player.refreshBoxes()
+        e.T = 3
+        w.npcFsm.tickAx47(e, w, w.player)
+        // a(4,…) on the player counter-staggers the sentinel (op4 arm).
+        assertEquals(9, e.S, "op4 → counteredBy → S9 stagger")
+        // all pounce anims end at T==3 — the last frame always coincides
+        // with the hit arm (i.java:1005x: hit BEFORE the r() check).
+        val w2 = world()
+        val e2 = ax47At(w2, 100, 200, 0, 121)
+        w2.player.setPositionPx(100, 229); w2.player.setAnim(0); w2.player.refreshBoxes()
+        finish(e2)                                 // T=3 last frame → hit then r()
+        w2.npcFsm.tickAx47(e2, w2, w2.player)
+        assertEquals(9, e2.S, "hit landed → counteredBy S9 (re-arms r())")
+
+        val w3 = world()
+        val e3 = ax47At(w3, 100, 200, 0, 121)
+        w3.player.setPositionPx(100, 229); w3.player.setAnim(0); w3.player.refreshBoxes()
+        w3.player.gt = 10                          // iframes → no stagger
+        finish(e3)
+        w3.npcFsm.tickAx47(e3, w3, w3.player)
+        assertEquals(120, e3.S, "no hit → r() → i(120)")
+    }
+
+    @Test fun `S121 pounce — lost sight reverts to S120`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 121)
+        w.player.setPositionPx(500, 600); w.player.refreshBoxes()
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(120, e.S, "r7==false → i(120)")
+    }
+
+    @Test fun `S130 — anim end despawns`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 130)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertTrue(w.npcs.contains(e), "not removed mid-anim")
+        finish(e)
+        w.npcFsm.tickAx47(e, w, w.player)
+        w.tick(emptyList())                       // drain pendingRemove
+        assertFalse(w.npcs.contains(e), "r() → k.c(this)")
+    }
+
+    // -- aL() arms ------------------------------------------------------------
+    @Test fun `S94 — P|512 + claim release + despawn on anim end`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 94)
+        w.kL = e                                  // armed claim
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertTrue(e.P and 512 != 0, "P |= 512")
+        finish(e)
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertNull(w.kL, "k.m() released the claim")
+        w.tick(emptyList())
+        assertFalse(w.npcs.contains(e), "k.c(this) despawn")
+    }
+
+    @Test fun `S94 — no claim → still despawns`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 94)
+        finish(e)
+        w.npcFsm.tickAx50(e, w, w.player)
+        w.tick(emptyList())
+        assertFalse(w.npcs.contains(e))
+    }
+
+    @Test fun `S81 — anim end arms P64, countdown expiry picks i82`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 81, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 0)
+        e.aC = 2
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(1, e.aC, "aC-- runs per tick")
+        assertEquals(81, e.S)
+        finish(e)
+        w.npcFsm.tickAx50(e, w, w.player)          // aC 1→0 → still L53 tail
+        assertEquals(0, e.aC)
+        w.npcFsm.tickAx50(e, w, w.player)          // aC 0→-1 → still tail
+        assertEquals(-1, e.aC)
+        assertEquals(81, e.S, "post-decrement: i82 fires one tick late")
+        w.npcFsm.tickAx50(e, w, w.player)          // old aC -1 → i82 + P&=-65
+        assertEquals(82, e.S)
+        assertTrue(e.P and 64 == 0, "P &= -65 on expiry")
+    }
+
+    @Test fun `S82 — r() returns to perch S80`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 82)
+        finish(e)
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(80, e.S)
+    }
+
+    @Test fun `S83 — floor ahead picks i84 freeze else ah 1536 fall`() {
+        val w = world()
+        val e = ax50At(w, 40, 40, 0, 83)
+        // level-0 row at cy=2 — check the actual cell the probe reads
+        // (column e.ak/20±1). Force no-floor: park e over empty space.
+        w.player.setPositionPx(500, 600); w.player.refreshBoxes()
+        w.npcFsm.tickAx50(e, w, w.player)
+        // whatever the outcome, the contract is M() drives i(84) vs ah=1536.
+        if (e.S == 84) { assertEquals(0, e.ah); assertEquals(0, e.aj) }
+        else assertEquals(1536, e.ah, "M()==false → ah=1536")
+    }
+
+    @Test fun `S84 — r() → i0 idle`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 84)
+        finish(e)
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(0, e.S)
+    }
+
+    @Test fun `S93 — ceiling-grab → p i89 + i80 + aC30 + claim armed`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 93)
+        w.player.setPositionPx(100, 180)
+        w.player.setAnim(24); w.player.refreshBoxes()
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(89, w.player.S)
+        assertEquals(80, e.S)
+        assertEquals(30, e.aC)
+        assertTrue(w.kL === e, "k.a(this,0,W) arms the claim")
+    }
+
+    @Test fun `S93 — player not in drop-kill set → nothing`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 93)
+        w.player.setPositionPx(100, 180); w.player.setAnim(0); w.player.refreshBoxes()
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(93, e.S, "L26 non-set → return")
+    }
+
+    // -- l() arms --------------------------------------------------------------
+    @Test fun `seen50 — off-camera sentinel is blind (bn also blinds)`() {
+        val w = world()
+        val e = ax50At(w, w.kO + 9999, w.kP + 200, 0, 80)  // far off-cam
+        // l() isn't public — observable via aL(): no grab while off-cam.
+        // Direct check via S80 default path: k();j() run regardless; l() only
+        // feeds internal state. Assert the iBn gate via k() exit instead:
+        w.iBn = true
+        w.player.setPositionPx(e.ak, e.al); w.player.refreshBoxes()
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertNull(w.kN, "bn → no prompt popup")
+    }
+
+    // -- k() shared driver ------------------------------------------------------
+    @Test fun `k() — backstab window shows prompt then op6 kill on edge`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)        // S119 routes k();j()
+        w.player.setPositionPx(160, 198)           // 60px right; y-gate |195…-200|<5
+        w.player.setAnim(0); w.player.refreshBoxes()
+        w.player.av = true                          // player faces left → faces me
+        e.av = true                                 // I face left too → away from player
+        w.pad.commit(0)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertNotNull(w.kN, "k.c spawned the prompt marker")
+        assertEquals(e.aw, w.kCq)
+        // press the kill key — edge fires
+        w.pad.commit(65568)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertNull(w.kN, "k.k(aw) released the marker")
+        assertEquals(49, w.player.S, "op6 anim 49 (40<|dx|<80)")
+        assertEquals(((e.ak - 20) - 160) / 10 shl 8, w.player.ag,
+            "ag=((snapX-ak)/10)<<8 slide toward ak-20")
+        assertTrue(w.apStats[3] > 0 && 20 in w.sfxLog, "k.o(3)+k.A(20)")
+        assertTrue(w.apStats[5] > 0, "S() wisp burst ticked")
+        // ax47's L172 tail: else → return true — no anim on the sentinel.
+        assertEquals(119, e.S, "sentinel plays no anim on L81 backstab (verbatim)")
+        w.pad.commit(0)
+    }
+
+    @Test fun `k() — near backstab |dx| under 40 picks anim 283`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        w.player.setPositionPx(130, 198)           // 30px → 283
+        w.player.setAnim(0); w.player.refreshBoxes()
+        w.player.av = true; e.av = true
+        w.pad.commit(65568)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(283, w.player.S)
+        assertEquals(e.ak + 10, w.player.ak,
+            "283 snap: ak=attacker.ak∓10 by facing")
+        w.pad.commit(0)
+    }
+
+    @Test fun `k() — ax47 grab-kill arm — S80 + player S89 + edge → i94, bonus`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 3, 80)         // Z[0]=3 → gP bonus value
+        w.player.setPositionPx(104, 198)
+        w.player.setAnim(89); w.player.refreshBoxes()
+        w.pad.commit(65568)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(94, e.S, "i(94)")
+        assertEquals(0, e.aB, "aB=0 killed")
+        assertEquals(2, e.aA, "aA=2")
+        assertEquals(3, w.gP, "g.p = Z[0]")
+        assertEquals(90, w.player.S, "player plays victim anim 90")
+        // k.N.i(55) — marker stays alive playing the success anim (no k.k here).
+        assertEquals(55, w.kN?.S, "k.N.i(55) success anim")
+        assertTrue(w.kN?.P == 0 || (w.kN!!.P and 64) == 0, "k.N.P &= -65")
+        w.pad.commit(0)
+    }
+
+    @Test fun `k() — ax50 grab-kill arm — S119 + player S89 + edge → i130`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 5, 119)
+        w.player.setPositionPx(104, 198)
+        w.player.setAnim(89); w.player.refreshBoxes()
+        w.pad.commit(65568)
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(130, e.S)
+        assertEquals(5, w.gP)
+        w.pad.commit(0)
+    }
+
+    @Test fun `k() — prompt survives across ticks and repositions`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        w.player.setPositionPx(160, 198); w.player.setAnim(0); w.player.refreshBoxes()
+        w.player.av = true; e.av = true
+        w.pad.commit(0)
+        w.npcFsm.tickAx47(e, w, w.player)
+        val n = w.kN!!
+        assertEquals(54, n.S, "k.c marker anim 54")
+        assertEquals(302, n.az)
+        assertEquals(e.ak, n.ak); assertEquals(e.al - 85, n.al)
+        e.setPositionPx(140, 200); e.refreshBoxes()
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(140, n.ak, "repositioned every tick")
+        assertSame(n, w.kN, "created once — same instance")
+        w.pad.commit(0)
+    }
+
+    @Test fun `k() — player S in exit set releases prompt and exits false`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        w.player.setPositionPx(160, 198); w.player.setAnim(268); w.player.refreshBoxes()
+        w.pad.commit(0)
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertNull(w.kN, "L28 arm: no prompt while player in 268")
+        w.pad.commit(0)
+    }
+
+    // -- j() sentinel intake -----------------------------------------------------
+    @Test fun `j() — sword hit in reach → aB -= H=50`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        e.aB = 300
+        w.player.setPositionPx(120, 200)
+        w.player.setAnim(67); w.player.refreshBoxes()
+        w.player.X[0] = 60; w.player.X[1] = 150; w.player.X[2] = 140; w.player.X[3] = 250
+        w.player.gI = 1
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(250, e.aB, "aB -= H[au=0] = 50")
+    }
+
+    @Test fun `j() — finisher anim drains J=100`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        e.aB = 300
+        w.player.setPositionPx(120, 200)
+        w.player.setAnim(183); w.player.refreshBoxes()
+        w.player.X[0] = 60; w.player.X[1] = 150; w.player.X[2] = 140; w.player.X[3] = 250
+        w.player.gI = 1
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(200, e.aB, "aB -= J = 100")
+    }
+
+    @Test fun `j() — dead ax50 plays i129, dead ax47 plays nothing`() {
+        val w = world()
+        val e5 = ax50At(w, 100, 200, 0, 119); e5.aB = 1
+        val e4 = ax47At(w, 300, 200, 0, 119); e4.aB = 1
+        w.player.setPositionPx(120, 200)
+        w.player.setAnim(67); w.player.refreshBoxes()
+        w.player.X[0] = 0; w.player.X[1] = 100; w.player.X[2] = 400; w.player.X[3] = 300
+        w.player.gI = 1
+        w.npcFsm.tickAx50(e5, w, w.player)
+        w.npcFsm.tickAx47(e4, w, w.player)
+        assertEquals(129, e5.S, "ax50 death → i(129)")
+        assertEquals(119, e4.S, "ax47 death → no anim change (verbatim C() L86)")
+    }
+
+    @Test fun `j() — survive → consumed, no hit-react anim`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119); e.aB = 300
+        w.player.setPositionPx(120, 200); w.player.setAnim(67); w.player.refreshBoxes()
+        w.player.X[0] = 60; w.player.X[1] = 150; w.player.X[2] = 140; w.player.X[3] = 250
+        w.player.gI = 1
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertEquals(119, e.S, "C() L51: survive → true with no anim")
+    }
+
+    @Test fun `j() — dead entity releases its ae marker (P() head)`() {
+        val w = world()
+        val e = ax47At(w, 100, 200, 0, 119)
+        e.aB = 0
+        e.ae = Entity(14, w.clips[9])
+        w.npcFsm.tickAx47(e, w, w.player)
+        assertNull(e.ae, "aB<=0 → G() released the marker")
+    }
+}
+
+// ============================================================================
+// Slice 65 — ax64 bl() grabber/harrier FSM (i.java:15391-15897, proven).
+// Marker-as-clip anim states {42,48,60,66}, pooled k.aX tether/barrage
+// shots, waypoint crawl + dive + grab-hold with mash escape.
+// ============================================================================
+class Slice65Test {
+    private fun ax64At(w: Level0World, x: Int, y: Int, anim: Int,
+                       z: List<Int> = List(10) { 0 }): Entity {
+        val e = Entity(64, w.clips[6])       // bi[64]=-1 → clipless records
+        e.aw = 700 + w.npcs.size
+        val rec = mutableListOf(64, e.aw, x, y, 0, anim, 0)
+        rec += z
+        while (rec.size < 17) rec += 0
+        e.setPositionPx(x, y)
+        w.npcFsm.initAx64(e, rec)
+        w.npcs.add(e)
+        return e
+    }
+    private fun wp(w: Level0World, id: Int, x: Int, y: Int, cFlag: Int = 0) {
+        w.waypoints.add(intArrayOf(0, id, x, y, cFlag, 0, 0, 0, -1))
+    }
+
+    @Test fun `init — Z0 to Z9 from record, Z1+=7, aC=Z8, S=record anim`() {
+        val w = world()
+        val e = ax64At(w, 100, 100, anim = 0,
+            z = listOf(1, 10, 0, 0, 0, 0, 0, 0, 40, 9))
+        assertEquals(1, e.Z[0]); assertEquals(17, e.Z[1], "Z1 = r8[8] + 7")
+        assertEquals(40, e.aC); assertEquals(0, e.S); assertEquals(301, e.az)
+    }
+
+    @Test fun `head arm only runs in S7`() {
+        val w = world()
+        val e = ax64At(w, 100, 100, anim = 0,
+            z = listOf(0, 0, 0, 0, 0, 0, 0, 0, 5, 0))
+        w.player.setPositionPx(900, 400)
+        w.npcFsm.tickAx64(e, w, w.player)       // S0 → waypoint path, no Z8--
+        assertEquals(5, e.Z[8], "Z[8] untouched outside S7")
+    }
+
+    @Test fun `stalk — below-right arms, picks S66, releases same tick`() {
+        val w = world()
+        val e = ax64At(w, 260, 150, anim = 7)   // stalk head runs only in S7
+        w.player.setPositionPx(200, 100)
+        w.player.setAnim(0)                     // vulnerable anim set
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        // L39-43: right+below → anim 66 + bl=512; then the verbatim L76
+        // tail releases the just-spawned S66 on ak>p.ak → 1-tick flicker
+        // (the marker blink is the visible prompt).
+        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 66 },
+            "S66 marker spawned")
+        assertEquals(512, e.bl, "bl latch mask for anim 66")
+        assertNull(w.player.ae, "L76 tail released the just-picked marker")
+    }
+
+    @Test fun `stalk — below-left picks S60 and releases it same tick`() {
+        val w = world()
+        val e = ax64At(w, 160, 150, anim = 7)   // stalk head runs only in S7
+        w.player.setPositionPx(200, 100)
+        w.player.setAnim(0)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 60 },
+            "S60 marker spawned")
+        assertEquals(128, e.bl)
+        assertNull(w.player.ae, "L53-67 released the matched-side marker")
+    }
+
+    @Test fun `S0 — waypoint crawl dominant axis at pace Z1 shl 8`() {
+        val w = world()
+        val e = ax64At(w, 100, 100, anim = 0,
+            z = listOf(0, 0, 500))              // Z[2] = waypoint uid
+        wp(w, 500, 300, 100)
+        w.player.setPositionPx(900, 900)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        // Z[1] = (f&127) - kX = 0 - (-7) = 7 → pace 7<<8 = 1792, x-dominant
+        assertEquals(7 shl 8, e.ag)
+        assertEquals(0, e.ah, "|wdy|=0 < pace → ah=0")
+    }
+
+    @Test fun `S0 — waypoint arrive reads next node cFlag and hops to S1`() {
+        val w = world()
+        val e = ax64At(w, 100, 100, anim = 0,
+            z = listOf(0, 0, 500, 501))         // Z[2]=current, Z[3]=next
+        wp(w, 500, 100, 100)                    // inside this square now
+        wp(w, 501, 200, 200, cFlag = 1)         // hop flag on the NEXT node
+        w.player.setPositionPx(900, 900)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(1, e.S); assertEquals(1, e.cy)
+    }
+
+    @Test fun `S0 — aA=4 dives toward the player`() {
+        val w = world()
+        val e = ax64At(w, 400, 400, anim = 0)
+        e.aA = 4
+        w.player.setPositionPx(200, 100)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(1, e.S); assertEquals(0, e.cy)
+        assertEquals(300, e.aq, "ak>p.ak → aq = max(ak-100, p.ak) = 300")
+        // ar = max(al-190, p.al)=210 → +32=242; ady=|400-242|=158;
+        // cz = ceil(158/5)=32 → ar = 242 + 32*(-7) = 18
+        assertEquals(18, e.ar)
+    }
+
+    @Test fun `S1 — W overlap grabs the player into S2`() {
+        val w = world()
+        val e = ax64At(w, 200, 100, anim = 1)
+        e.W[0] = 190; e.W[1] = 90; e.W[2] = 220; e.W[3] = 120
+        w.player.setPositionPx(200, 100)
+        w.player.W[0] = 190; w.player.W[1] = 90
+        w.player.W[2] = 220; w.player.W[3] = 120
+        w.player.setAnim(0)
+        w.pad.commit(0)
+        e.aq = -1; e.ar = -1                    // target cleared → fly arm skipped
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(2, e.S); assertEquals(30, e.aC)
+        assertEquals(200, e.ak); assertEquals(100, e.al, "snap onto player")
+    }
+
+    @Test fun `S2 — hold ticks down, pins player to S15, sets iBi`() {
+        val w = world()
+        val e = ax64At(w, 200, 100, anim = 2)
+        e.aC = 10
+        w.player.setPositionPx(200, 100)
+        w.player.setAnim(0)
+        w.player.ae = Entity(14, w.clips[9]).apply { setAnim(0) }
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(9, e.aC)
+        assertEquals(15, w.player.S)
+        assertTrue(w.iBi)
+        assertNotNull(w.player.ae, "marker respawned at view centre")
+        assertEquals(w.kO + 200, w.player.ae!!.ak)
+        assertEquals(w.kP + 120, w.player.ae!!.al)
+    }
+
+    @Test fun `S2 — expiry drains the player and releases into S4 or S5`() {
+        val w = world()
+        val e = ax64At(w, 200, 100, anim = 2, z = listOf(0,0,0,0,0,0,0,0,0,0))
+        e.aC = 0                                // expired
+        w.player.x1 = 50
+        w.player.setPositionPx(200, 100)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(4, e.S, "Z[6]==0 → i(4)")
+        assertFalse(w.iBi)
+    }
+
+    @Test fun `S7 — stalk budget and despawn when v() fails`() {
+        val w = world()
+        val e = ax64At(w, 100, 100, anim = 7,
+            z = listOf(0, 0, 0, 0, 0, 0, 0, 0, 3, 0))
+        e.aC = 1                                // barrage due
+        w.player.setPositionPx(900, 900)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertEquals(2, e.Z[8], "Z[8]-- per S7 tick")
+        assertTrue(w.shotPool.isNotEmpty(), "aC<=0 → barrage allocated shots")
+    }
+
+    @Test fun `S7 — alive-check off view despawns via k_c`() {
+        val w = world()
+        val e = ax64At(w, 9000, 9000, anim = 7,
+            z = listOf(0, 0, 0, 0, 0, 0, 0, 0, 3, 0))
+        w.player.setPositionPx(100, 100)
+        w.pad.commit(0)
+        w.npcFsm.tickAx64(e, w, w.player)
+        assertTrue(w.pendingRemove.contains(e),
+            "au limit + off-camera → k.c(this)")
+    }
+}

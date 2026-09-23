@@ -79,6 +79,8 @@ class Level0Renderer {
                 60 -> "clips/clip60/modules"
                 51 -> "clips/clip51/modules"
                 63 -> "clips/clip63/modules"
+                21 -> "clips/clip21/modules"
+                38 -> "clips/clip38/modules"
                 else -> "level0/tileset-${-packId}/modules"  // negated keys
             }
             for (i in clip.moduleNames.indices) {
