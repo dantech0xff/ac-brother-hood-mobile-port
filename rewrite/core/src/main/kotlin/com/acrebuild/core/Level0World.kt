@@ -668,6 +668,23 @@ class Level0World(
     /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
      *  ported as the last-painted rect, `inferred`). */
     override var volPaintRect: IntArray? = null
+    override var bubbleDraw: BubbleDraw? = null      // ad() draw channel
+    /** `k.a(k.y, text, 120)` (inferred): greedy word wrap at ~6px/char
+     *  (20 chars/line); returns the line table — [0] = line count,
+     *  [1..n] = per-line start char offsets. */
+    override fun wrapDialogText(text: String, widthPx: Int): IntArray {
+        val per = (widthPx / 6).coerceAtLeast(1)
+        val starts = ArrayList<Int>(); var pos = 0; var lines = 0
+        while (pos < text.length) {
+            starts += pos; lines++
+            val end = minOf(pos + per, text.length)
+            pos = if (end < text.length) {
+                val sp = text.lastIndexOf(' ', end - 1)
+                if (sp > pos) sp + 1 else end
+            } else end
+        }
+        return intArrayOf(lines) + starts.toIntArray()
+    }
     /** `k.ac` — the same camera view rect as `camRect` (aliased;
      *  ax35's off-screen containment test reads it via this name). */
     override val kAc: IntArray? get() = camRect
@@ -1083,6 +1100,9 @@ class Level0World(
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
+            // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
+            // every entity except soldiers (11) and civilians (17).
+            if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
