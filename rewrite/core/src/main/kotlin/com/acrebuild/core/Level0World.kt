@@ -241,6 +241,27 @@ class Level0World(
      *  and `cl` clears them the frame after release. */
     var lastMoveX = -1
     var lastMoveY = -1
+
+    // -- pointer pipeline (slice 79 — k.java:486-519 verbatim) -----------
+    private var kCj = -1                     // k.cj — held/drag x
+    private var kCk = -1                     // k.ck — held/drag y
+    private var kCh = -1                     // k.ch — release x
+    private var kCi = -1                     // k.ci — release y
+    private var kCl = false                  // k.cl — release latch
+    /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
+     *  = autoscroll/flying on missions 1 and 4. */
+    val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
+    val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
+    /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
+     *  `inferred` — orig's u is written by script ops). */
+    var subU = 0
+    /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
+     *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
+     *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
+    var anchorLx = -1
+    var anchorLy = -1
+    fun setInteractAnchor(x: Int, y: Int) { anchorLx = x; anchorLy = y }  // i.o()
+    fun clearInteractAnchor() { anchorLx = -1; anchorLy = -1 }            // i.U() tail
     override fun clipFor(idx: Int): Clip? = clips[idx]
     /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): touch point vs
      *  entity in view space — equivalent to world-space vs (k.H+k.O). */
@@ -660,10 +681,11 @@ class Level0World(
 
     // -- k.l() screen-state machine (k.java:2031-2300 simple, structured
     //    :1637 — proven core) -----------------------------------------------
-    /** `j.c` — game state: 10 in-play; 12 fail; 13/31 win; 15 complete
-     *  stats; 16/17 frozen; 21 dialog; 22 medal-unlock; 5 win-stats
-     *  build; others per `stateL`. Init 10 = in-play (`inferred`). */
-    var jC = 10
+    /** `j.c` — game state: 8 in-play (proven — `j()` gates on j.c==8,
+     *  k.java:576; 10 is the level-select screen, NOT play); 12 fail;
+     *  13/31 win; 15 complete stats; 16/17 frozen; 21 dialog; 22
+     *  medal-unlock; 5 win-stats build; others per `stateL`. */
+    var jC = 8                           // j.c — in-play screen state
         private set
     var kCy = 0                        // cy — previous j.c, written at commit
     private var kCz = false            // cz — u==8 dialog-tail flag
@@ -1380,7 +1402,9 @@ class Level0World(
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
         if (!kCz) inputReset()
         kCz = false
-        if (i == 15 || i == 31 || i == 13) missionWon = true  // our aggregate flag
+        // aggregate flag keyed on the ENTRY state — l(15) may redirect to
+        // i=22/10 (medal screen / level select) before this tail runs.
+        if (iArg == 15 || iArg == 31 || iArg == 13) missionWon = true
     }
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:
@@ -1850,7 +1874,7 @@ class Level0World(
     private fun reload() {
         resetPlayerToSpawn()
         spawnEntities()
-        jC = 10                                  // back to play (`inferred`)
+        jC = 8                                   // back to play (j.c==8)
         kAl = false
         kM(kAd)                                   // C()/f() `m(ad)` snap
     }
@@ -1927,50 +1951,142 @@ class Level0World(
     // -- input ------------------------------------------------------------
 
     private var pointerDown = false
-    private var zoneMask = 0
+
+    /** `k.ce`/`k.cf` (k.java:147-148, proven): safe-area insets for the
+     *  400×240 canvas — the soft-key row excludes x≤ce / x≥400-cf below
+     *  y207 (`cg`=37 is the top-inset, k.java:149). */
+    private val ce = 60
+    private val cf = 60
 
     /** Any DOWN edge in this tick's event list — the screen-21 dialog's
      *  dismiss input (press anywhere, like the original's `k.v` edge). */
     private fun sawPressPending(events: List<InputQueue.Event>): Boolean =
         events.any { it.type == InputQueue.Type.DOWN }
 
-    /** Raw InputQueue events are screen px in the 400x240 view. */
+    // -- hit-test helpers (k.java:537-546 + h() :5301, all proven) -------
+    /** `b(x,y,x0,y0,w,h)` — rect hit; (-1,-1) never hits. */
+    private fun insideRect(x: Int, y: Int, x0: Int, y0: Int, w: Int, h: Int): Boolean =
+        !(x == -1 && y == -1) && x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h
+    /** `a(x,y,cx,cy,r)` — radial hit via `h()` octagonal hypot. */
+    private fun insideRadial(x: Int, y: Int, cx: Int, cy: Int, r: Int): Boolean =
+        !(x == -1 && y == -1) &&
+            player.h(kotlin.math.abs(x - cx), kotlin.math.abs(y - cy)) <= r
+    /** `k(x,y)` (k.java:722): the `N` marker's 50×50 zone (view space). */
+    private fun markerZoneHit(x: Int, y: Int): Boolean {
+        val n = kN ?: return false
+        return insideRect(x, y, (n.ak - 25) - camX, (n.al - 25) - camY, 50, 50)
+    }
+    /** `i.b(x,y)` (i.java:7686): the L/M anchor ±70px radial (view space). */
+    private fun anchorZoneHit(x: Int, y: Int): Boolean =
+        anchorLx != -1 && anchorLy != -1 &&
+            insideRadial(x, y, anchorLx - camX, anchorLy - camY, 70)
+
+    /** `k.E(int)` (k.java:553, proven): clear → set → bh3 remap → latch. */
+    private fun padE(mask: Int) {
+        pad.e(mask, jC == 8 && bh3 && !mounted)
+    }
+
+    /** `c(x,y,x1,x2,y1,y2)` (k.java:623, proven): the wheel cell index
+     *  0..8 — 3×3 split at the rect bounds; mounted widens the inner
+     *  column split (inner halves → 3/5). */
+    private fun wheelCell(x: Int, y: Int, x1: Int, x2: Int, y1: Int, y2: Int): Int {
+        if (x == -1 && y == -1) return -1
+        val i7 = if (y < y1) 0 else if (y > y2) 2 else 1
+        val i8 = if (x < x1) 0 else if (x > x2) 2 else 1
+        if (mounted && y > y1 && y < y2) {
+            val mid = (x1 + x2) / 2
+            if (x > x1 && x <= mid) return 3
+            if (x > mid && x < x2) return 5
+        }
+        return i7 * 3 + i8
+    }
+
+    /** `j(x,y)` (k.java:576-621, proven): resolve a canvas tap to the
+     *  wheel index for `E(2<<iJ)` — only live in play states
+     *  (j.c==8 or the u∈{8,10} arms of 21). Returns -1 when the tap is
+     *  outside the wheel or hits a consumed zone. */
+    fun resolvePadZone(x: Int, y: Int): Int {
+        if (!((jC == 21 && subU == 8) || jC == 8 || (jC == 21 && subU == 10)) ||
+            x == -1 || y == -1 || y >= 240) return -1
+        // margins below the soft-key row + pause-icon rect are not wheel
+        if (((x <= ce || x >= VIEW_W - cf) && y >= 207) ||
+            insideRect(x, y, 354, 0, 46, 37)) return -1
+        val p = player
+        if (mounted) {                                          // k()
+            if (!bh3) {
+                if (insideRadial(x, y, 270, 165, 70)) return 4
+                if (insideRadial(x, y, 320, 110, 70)) return 1
+            }
+            val cn = if (bh3) 50 else 5                          // k.java:3146
+            if (!insideRect(x, y, cn - 10, 124, 116, 116)) return -1
+            val cell = wheelCell(x, y, (cn - 10) + 38, (cn - 10) + 77, 162, 201)
+            return if (cell == 4) -1 else cell
+        }
+        if (bh3 && insideRect(x, y, (p.ak - camX) - 10, ((p.al - camY) - 20) - 25, 20, 25)) {
+            p.aq = -1; p.ar = -1                                 // head-tap = drop hint
+            return 4
+        }
+        val l = kL; val cp = claimRect
+        if (l != null && cp != null &&
+            x >= cp[0] - camX && x <= cp[2] - camX &&
+            y >= cp[1] - camY && y <= cp[3] - camY)
+            return if (claimCo == 1) 1 else 4
+        if (markerZoneHit(x, y) || anchorZoneHit(x, y)) return -1
+        if (p.S == 250 || p.S == 244) {
+            val i3 = (p.ak - camX) - 38
+            return wheelCell(x, y, i3, i3 + 76,
+                (p.al - camY) - 38, (p.al - camY) + 38)
+        }
+        if (p.W[1] == p.W[3]) { p.W[1] = p.Y[1]; p.W[3] = p.Y[3] }
+        val i6 = (p.ak - camX) - 25
+        return wheelCell(x, y, i6, i6 + 50, (p.W[1] - camY) - 10, (p.W[3] - camY) + 10)
+    }
+
+    /** Canvas point guaranteed inside wheel `cell` for the current player
+     *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). */
+    fun cellPoint(cell: Int): Pair<Int, Int> {
+        val p = player
+        val x = when (cell % 3) { 0 -> (p.ak - camX) - 30; 1 -> p.ak - camX; else -> (p.ak - camX) + 30 }
+        val y = when (cell / 3) { 0 -> (p.W[1] - camY) - 15; 1 -> (p.W[1] + p.W[3]) / 2 - camY; else -> (p.W[3] - camY) + 15 }
+        return x to y
+    }
+
+    /** Raw InputQueue events are screen px in the 400x240 view.
+     *  `pointerPressed/Dragged/Released` (k.java:486-519, proven). */
     private fun consume(events: List<InputQueue.Event>) {
         for (e in events) {
             when (e.type) {
                 InputQueue.Type.DOWN -> {
-                    pointerDown = true
-                    lastTouchX = e.x; lastTouchY = e.y   // k.H/k.I
-                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
-                    zoneMask = zoneFor(e.x, e.y)
-                    when (zoneMask) {
-                        Pad.M_LEFT -> pad.queuePress(Pad.M_TAP_L)
-                        Pad.M_RIGHT -> pad.queuePress(Pad.M_TAP_R)
-                        Pad.M_UP -> pad.queuePress(Pad.M_UP)
-                        // bottom-third TAP = attack/context key 65568 edge;
-                        // holding the zone still maps to DOWN (inferred)
-                        Pad.M_DOWN -> pad.queuePress(Pad.M_CONTEXT)
+                    // pause icon (c(354,0,46,37)→E(262144), k.java:1054)
+                    if (insideRect(e.x, e.y, 354, 0, 46, 37) && jC == 8)
+                        padE(Pad.M_PAUSE)
+                    else {
+                        val iJ = resolvePadZone(e.x, e.y)
+                        if (iJ != -1) padE(2 shl iJ)          // E(2<<iJ)
                     }
+                    pointerDown = true
+                    kCj = e.x; kCk = e.y
                 }
-                InputQueue.Type.MOVE -> {
-                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
-                    if (pointerDown) zoneMask = zoneFor(e.x, e.y)
+                InputQueue.Type.MOVE -> {                     // pointerDragged
+                    val iJ = resolvePadZone(e.x, e.y)
+                    if (iJ != -1 && pad.bB and (2 shl iJ) == 0) padE(2 shl iJ)
+                    pointerDown = true
+                    kCj = e.x; kCk = e.y
                 }
-                InputQueue.Type.UP, InputQueue.Type.CANCEL -> {
-                    pointerDown = false; zoneMask = 0
-                    // k.H/k.I = release point, one tick (k.java:548-552)
-                    lastTouchX = e.x; lastTouchY = e.y
-                    lastMoveX = e.x; lastMoveY = e.y     // k.J/k.K
+                InputQueue.Type.UP, InputQueue.Type.CANCEL -> {// pointerReleased
+                    kCh = e.x; kCi = e.y
+                    kCl = true
+                    pad.releaseFlush()                        // eN=eL; eL=0
+                    pointerDown = false
+                    kCj = e.x; kCk = e.y
                 }
             }
         }
-    }
-
-    private fun zoneFor(x: Int, y: Int): Int = when {
-        y >= VIEW_H * 2 / 3 -> Pad.M_DOWN
-        y < VIEW_H / 3 -> Pad.M_UP
-        x < VIEW_W / 2 -> Pad.M_LEFT
-        else -> Pad.M_RIGHT
+        // input-sample tail (k.java:1509-1519, proven)
+        lastMoveX = kCj; lastMoveY = kCk                       // k.J/k.K
+        if (kCl) { kCj = -1; kCk = -1; kCl = false }
+        lastTouchX = kCh; lastTouchY = kCi                     // k.H/k.I
+        kCh = -1; kCi = -1
     }
 
     // -- sim --------------------------------------------------------------
@@ -1980,18 +2096,19 @@ class Level0World(
         // k.H/k.I live for one frame (k.java:1874-77 — `H=ch;I=ci;ch=-1;
         // ci=-1`); k.J/k.K persist while touching and clear the frame
         // after release (the `cl` latch, k.java:1869-72).
-        val lastPointerEvent = events.lastOrNull {
-            it.type == InputQueue.Type.DOWN || it.type == InputQueue.Type.MOVE ||
-                it.type == InputQueue.Type.UP || it.type == InputQueue.Type.CANCEL }
-        val sawRelease = lastPointerEvent?.let {
-            it.type == InputQueue.Type.UP ||
-                it.type == InputQueue.Type.CANCEL } == true
         try {
-        pad.commit(if (pointerDown) zoneMask else 0)
+        pad.commit()                                          // k.java:1594-1608 tail
         // k.F(aj) (k.java:4644): input events reset g.J to f0do[key]=5
         // (all 9 keys). ef[] is held-state per frame → set while held.
         // `inferred` on cadence; value 5 proven (k.java:8384).
         if (pointerDown) player.gJ = 5
+        // pause icon edge (k.java:1056-1063): v(262144) → claimer pause
+        // + bw=0 + l(14) — read inside the play arm.
+        if (jC == 8 && pad.v(Pad.M_PAUSE)) {
+            kC?.pauseScript()                             // C.Y() — cd[0]=true
+            kBw = 0
+            stateL(14)
+        }
         playerFsm.tickCount = tickIndex
 
         // `k.al` world-freeze (i.I() gate): mission-fail / win / frozen
@@ -2116,8 +2233,7 @@ class Level0World(
 
         tickIndex++; jG++
         } finally {
-            lastTouchX = -1; lastTouchY = -1
-            if (sawRelease) { lastMoveX = -1; lastMoveY = -1 }
+            lastTouchX = -1; lastTouchY = -1     // k.H/k.I live one frame
         }
     }
 
