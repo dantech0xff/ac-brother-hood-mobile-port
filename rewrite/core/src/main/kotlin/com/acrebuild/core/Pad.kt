@@ -54,7 +54,7 @@ class Pad {
      *  `j.c==8 && bh[aj]==3 && !k()`. */
     fun e(mask: Int, bh3Remap: Boolean = false) {
         clearLatches()
-        eK = mask
+        eK = eK or mask                                            // `eK |= i`
         if (bh3Remap) eK = when (mask) { 2 -> 20; 8 -> 68; 128 -> 272; 512 -> 320; else -> eK }
         bC = bC or eK
         eL = eL or eK
