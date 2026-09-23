@@ -241,7 +241,9 @@ class Level0Renderer {
     private fun dialogPanel(world: Level0World, i: Int, bP: Int) {
         drawFrame(98, 12, 0, 0, bP, 0)                // A[4].a(cd,12,0,0,i2)
         fillAr(0, bP, 400, 68, Int.MIN_VALUE)         // j.h(MIN_VALUE);j.d
-        if (world.dlgU in 8..10 && world.jG % 10L < 5L) {
+        // blink tail (k.java:418-429): u8 never blinks; every other u
+        // blinks `d(0,9)` while `j.g%10 < 5`.
+        if (world.dlgU != 8 && world.jG % 10L < 5L) {
             drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
         }
     }
@@ -925,7 +927,7 @@ class Level0Renderer {
             val e = world.drawList[i32]!!
             if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(e.ad!!, camX, camY)
             if (e.ax == 21 && e.S == 1 && e.ad != null) {
-                if (world.kC == null || world.subU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
+                if (world.kC == null || world.dlgU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
                 e.ad!!.advanceAnim()
             }
             drawEntity(e, camX, camY)
@@ -936,7 +938,7 @@ class Level0Renderer {
             // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
-                (world.jC == 8 || (world.jC == 21 && world.subU == 8))) {
+                (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
                 drawEntity(kE, camX, camY); kE.advanceAnim()
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
@@ -1146,7 +1148,7 @@ class Level0Renderer {
         // claim footer (k.java:3164, proven): `C!=null && (C.ab()||u==9)
         // && C.cd[2]` → `a("", d(0,18))` — right-pill "context" softkey.
         val kC = world.kC
-        if (kC != null && (kC.claimActive() || world.subU == 9) && kC.cd[2]) {
+        if (kC != null && (kC.claimActive() || world.dlgU == 9) && kC.cd[2]) {
             footer(world, "", world.d0(18))
         }
 
@@ -1220,34 +1222,56 @@ class Level0Renderer {
         // typewriter text. The world suspends behind it (i.java:20190);
         // the press tail lives in the tick.
         if (world.dialogModal) {
-            val v = world.dlgV
-            val page = world.dlgBM.getOrNull(v) ?: ""
-            var i3 = -1
-            var bP: Int
-            if (world.dlgBN[v] == 1) {                          // (:908-909)
-                bP = 137; i3 = 1
-            } else if (world.dlgBN[v] in 2..10) {               // (:910-912)
-                bP = 50; i3 = world.dlgBN[v]
-            } else if (world.player.al - world.kP < 120) {      // (:921)
-                bP = 137
-            } else {
-                bP = 50
-            }
-            if (world.bO == 0) bP = 50                          // u==9 (:922-924)
-            else if (world.bO == 1) bP = 137
-            dialogPanel(world, 0, bP)                           // i(0,bP) (:414-429)
-            val bT = if (world.dlgSuppressed()) world.dlgBT     // gate (:946)
-                     else world.dlgTypeTick(page.length)        // typewriter (:947-955)
-            if (i3 == -1) {
-                dialogText(world, page, 200, bP + 34, 380, 3, bT)  // centered (:935)
-            } else {
-                if (i3 == 1) {
-                    drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
-                } else {                                        // z[39] icon (:940)
-                    drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+            // `j.a(cd,0,0,400,240,true)` dim behind the modal (:869).
+            fillAr(0, 0, 400, 240, -16777216)
+            if (world.dlgU == 7)                              // (:870-873)
+                fillAr(0, 0, 400, 240, -16777216)
+            when (world.dlgU) {
+                0, 4, 5, 7 -> {                               // (:878-892)
+                    val bP = if (world.dlgU == 4 || world.dlgU == 5) 60 else 240
+                    dialogPanel(world, 0, bP)
+                    val ty = if (world.dlgU == 4 || world.dlgU == 5)
+                        bP + 120 else bP + 30
+                    dialogText(world, world.dlgBM[0] ?: "",
+                               200, ty, 400, 3, world.dlgBT)
                 }
-                dialogText(world, page, 10, bP + 4, 300, 20, bT)   // left (:942)
+                else -> {                                     // u∈{1,2,3,6,8,9,10}
+                    val v = world.dlgV
+                    val page = world.dlgBM.getOrNull(v) ?: ""
+                    var i3 = -1
+                    var bP: Int
+                    if (world.dlgU == 6) {                    // (:913-914)
+                        bP = 137
+                    } else if (world.dlgBN[v] == 1) {         // (:908-909)
+                        bP = 137; i3 = 1
+                    } else if (world.dlgBN[v] in 2..10) {     // (:910-912)
+                        bP = 50; i3 = world.dlgBN[v]
+                    } else if (world.player.al - world.kP < 120) {  // (:921)
+                        bP = 137
+                    } else {
+                        bP = 50
+                    }
+                    if (world.dlgU == 9) {                    // (:926-932)
+                        if (world.bO == 0) bP = 50
+                        else if (world.bO == 1) bP = 137
+                    }
+                    dialogPanel(world, 0, bP)                 // i(0,bP) (:414-429)
+                    val bT = if (world.dlgSuppressed()) world.dlgBT  // gate (:946)
+                             else world.dlgTypeTick(page.length)     // (:947-955)
+                    if (world.dlgU == 6 || i3 == -1) {        // (:934-935)
+                        dialogText(world, page, 200, bP + 34, 380, 3, bT)
+                    } else {
+                        if (i3 == 1) {
+                            drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
+                        } else {                              // z[39] icon (:940)
+                            drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+                        }
+                        dialogText(world, page, 10, bP + 4, 300, 20, bT)
+                    }
+                }
             }
+            if (world.kFS >= 0)                               // fS tip (:1037)
+                drawText(world.tipStr, 390, 40, 10, pack = 92)
         }
 
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
