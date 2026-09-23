@@ -417,7 +417,10 @@ class Level0WorldTest {
         // (Level-0 records carry Z0=0 — they never weaken, proven.)
         s.Z[0] = 1
         s.aB = 120
-        w.player.setPositionPx(s.ak - 20, s.al)
+        // +4px: feet must embed into the floor row (W[3]+1 inside cell-5)
+        // or x() reports aZ=false and the :2473 arm falls before the hit
+        // lands — same in the original.
+        w.player.setPositionPx(s.ak - 20, s.al + 4)
         // Land a normal hit to trip the weaken: H=50 → aB=70 → hitReact
         // Z0==1 → Z0=2 + S144 + claims the aN lock.
         w.player.setAnim(67)
@@ -12353,9 +12356,10 @@ class Slice127Test {
 // ---- Slice 128: bs() bp() polarity + S43 aQ==3 dismount + i.D() link sweep ----
 class Slice128Test {
 
-    private class MarkerWorld : LevelCellSource {
+    class MarkerWorld(val cell: Int = 3) : LevelCellSource {
         override var gc: Entity? = null
         override var vehicle: Entity? = null
+        val clampCalls = mutableListOf<Entity>()
         override val cellPx = 20
         override var lockTarget: Entity? = null
         override val npcs = mutableListOf<Entity>()
@@ -12393,7 +12397,7 @@ class Slice128Test {
         override var kAE = 0
         override var kAH = 0
         override var kAR = 0
-        override fun collisionCell(cx: Int, cy: Int): Int = 3
+        override fun collisionCell(cx: Int, cy: Int): Int = cell
         override fun isSolid(v: Int): Boolean = v >= 12
         override fun isOneWay(v: Int): Boolean = v == 3
         override fun removeEntity(e: Entity) {}
@@ -12405,6 +12409,7 @@ class Slice128Test {
         override fun spawnWisp(src: Entity) {}
         override fun spawnPickup(anim: Int, x: Int, y: Int): Entity = Entity(14, null)
         override fun spawnProjectile(av: Boolean, x: Int, y: Int): Entity = Entity(24, null)
+        override fun scrollWallClamp(e: Entity) { clampCalls += e }
     }
 
     @Test fun `S43 aQ==3 dismounts to i147`() {
@@ -12496,3 +12501,75 @@ class Slice128Test {
         assertNull(w.gc, "i.D() link sweep on entity-system reset")
     }
 }
+
+// ---- Slice 129: ay() attack-step + i.f scroll-wall clamp + combo-case tail ----
+class Slice129Test {
+
+    @Test fun `attackStep advances 1792 on flagged combo tick g5363`() {
+        // ay() S67: T==1 + V<=0 → ag=+1792 facing right (av=false)
+        val w = Slice128Test.MarkerWorld(cell = 20)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 67; p.T = 1; p.av = false; p.aZ = true
+        p.W[0] = 0; p.W[2] = 40; p.W[3] = 100
+        fsm.tick(p, Pad())
+        assertEquals(1792, p.ag, "ay() attack step on T==1 (g.java:5383)")
+        assertTrue(p in w.clampCalls, "i.f(this) scroll-wall tail called")
+    }
+
+    @Test fun `attackStep ledge guard never steps off edge g5363`() {
+        // cells are marker-3 (not 20/5) → z2 false → ai=ag=0, no step
+        val w = Slice128Test.MarkerWorld(cell = 3)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 67; p.T = 1; p.av = false; p.aZ = true
+        p.W[0] = 0; p.W[2] = 40; p.W[3] = 100
+        fsm.tick(p, Pad())
+        assertEquals(0, p.ag, "ledge guard kills the step (g.java:5396)")
+        assertEquals(0, p.ai)
+    }
+
+    @Test fun `attackStep clamps at the lock target edge g5363`() {
+        // aN ahead on the right: W[0]=105 → the +2 approach check trips
+        val w = Slice128Test.MarkerWorld(cell = 20)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 67; p.T = 1; p.av = false; p.aZ = true
+        p.ak = 80; p.W[0] = 60; p.W[2] = 100; p.W[3] = 100
+        val t = Entity(11, null)
+        t.W[0] = 105; t.W[2] = 140; t.ak = 120
+        w.lockTarget = t
+        fsm.tick(p, Pad())
+        assertEquals(0, p.ag,
+            "ak+ag>>8+(W2-ak)+2 = 80+7+20+2 = 109 >= 105 → clamped")
+    }
+
+    @Test fun `comboArm falls through when footing lost g2469`() {
+        // !aZ && a==null after ay() → a(0) — enterFall before combo logic
+        val w = Slice128Test.MarkerWorld(cell = 20)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 67; p.T = 1; p.av = false
+        p.aZ = false; p.standingOn = null
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S, "lost footing → a(0) enterFall (g.java:2473)")
+    }
+
+    @Test fun `scrollWallClamp pins the player inside mode1 bounds i5382`() {
+        // level-0 ax37 @1627,669: zone (1577,619)-(1877,799),
+        // bound (1577,619)-(1927,799), mask=1 → left wall at x=1577.
+        val w = world()
+        val p = w.player
+        p.setPositionPx(1700, 700)
+        w.tick(emptyList())                        // zone overlap → claim
+        p.ag = -5120                               // -20px/tick toward wall
+        p.Y[0] = 1590; p.Y[1] = 660; p.Y[2] = 1610; p.Y[3] = 700
+        w.scrollWallClamp(p)
+        assertEquals(0, p.ag)
+        assertEquals(0, p.ai)
+        assertEquals(1687, p.ak, "ak = (1700-1590)+1577 pinned to bound")
+    }
+}
+
+
+

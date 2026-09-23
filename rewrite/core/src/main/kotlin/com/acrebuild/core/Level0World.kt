@@ -3319,6 +3319,40 @@ class Level0World(
         if (scrollHolder == null) kAh = null
     }
 
+    /** `i.f(i)` (i.java:5382-5430, proven): the player scroll-wall
+     *  clamp — while the ax37 scroll-holder is in overlap mode
+     *  (`k.ah.Z[3]==1`), the player's Y box may not cross the holder's
+     *  bound rect (`k.ah.X`): velocity at a crossing edge is zeroed and
+     *  position pinned to the bound. A top-bound hit while the player
+     *  plays a `g.b(int)` aerial/action anim drops it via `k.aS.a(0)`.
+     *  `k.ah.Z[0]` is the wall-side mask (1 left, 2 right, 4 top,
+     *  8 bottom). Player-only in the original — all 16 call sites sit
+     *  inside g's motion arms. */
+    override fun scrollWallClamp(e: Entity) {
+        val h = scrollHolder ?: return                          // k.ah == null
+        if (h.mode != 1) return                                 // k.ah.Z[3] != 1
+        if (e.ag == 0 && e.ah == 0) return
+        val X = h.bound                                         // k.ah.X
+        val m = h.mask                                          // k.ah.Z[0]
+        if (e.ag <= 0 && (e.Y[0] shl 8) + e.ag <= (X[0] shl 8) && (m and 1) != 0) {
+            e.ag = 0; e.ai = 0
+            e.ak = (e.ak - e.Y[0]) + X[0]
+        }
+        if (e.ag >= 0 && (e.Y[2] shl 8) + e.ag >= (X[2] shl 8) && (m and 2) != 0) {
+            e.ag = 0; e.ai = 0
+            e.ak = (e.ak - e.Y[2]) + X[2]
+        }
+        if (e.ah <= 0 && (e.Y[1] shl 8) + e.ah <= (X[1] shl 8) && (m and 4) != 0) {
+            e.ah = 0; e.aj = 0
+            e.al = (e.al - e.Y[1]) + X[1]
+            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall()
+        }
+        if (e.ah >= 0 && (e.Y[3] shl 8) + e.ah >= (X[3] shl 8) && (m and 8) != 0) {
+            e.ah = 0; e.aj = 0
+            e.al = (e.al - e.Y[3]) + X[3]
+        }
+    }
+
     private fun rectsOverlap(a: IntArray, b: IntArray) =
         a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
 

@@ -610,11 +610,65 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * arm settles to `i(0)` (the `l()` call). The `i.aN` weakened-target
      * assassination shortcut (R=183/184 via rand) is omitted — needs lock-on.
      */
+    /**
+     * `ay()` (g.java:5363-5421, proven) — the sword-combo advance step:
+     * ledge-guard ahead of the player (never steps off the support
+     * edge), ±1792 steps on the flagged anim ticks while the `i.V`
+     * hit-pause is idle, the `i.aN` approach clamp (stop at the target's
+     * hitbox edge), and the `i.f` scroll-wall tail. Decompiler gap: when
+     * `i.aN == null` the ledge expression is unassigned — the ±1-column
+     * arm is the minimal consistent read (aN!=null widens it to ±2).
+     */
+    private fun attackStep(p: Entity) {
+        val a = p.standingOn                                   // g.a
+        var z2 = true
+        if (a == null || (!p.av || a.W[0] >= p.W[0]) && (p.av || a.W[2] <= p.W[2])) {
+            val iE = p.e(world, p.W[2] / 20 + 1, p.W[3] / 20)
+            val iE2 = p.e(world, p.W[0] / 20 - 1, p.W[3] / 20)
+            // conjunct polarity (proven, g.java:5374): facing right
+            // (av=false) probes the right columns, left the left —
+            // the aN!=null arm widens to ±2 cells on the same side.
+            z2 = (p.av || iE == 20 || iE == 5) &&
+                 (!p.av || iE2 == 20 || iE2 == 5)
+            val t = world.lockTarget                           // i.aN
+            if (t != null) {
+                val iE3 = p.e(world, p.W[2] / 20 + 2, p.W[3] / 20)
+                val iE4 = p.e(world, p.W[0] / 20 - 2, p.W[3] / 20)
+                z2 = (p.av || iE3 == 20 || iE3 == 5) &&
+                     (!p.av || iE4 == 20 || iE4 == 5) && z2
+            }
+        }
+        if (!z2) { p.ai = 0; p.ag = 0; return }
+        when (p.S) {
+            67, 69 -> p.ag = if (p.T == 1 && p.V <= 0) (if (p.av) -1792 else 1792) else 0
+            68 -> p.ag = if ((p.T == 0 || p.T == 1) && p.V <= 0) (if (p.av) -1792 else 1792) else 0
+        }
+        val t = world.lockTarget
+        if (t != null) {
+            t.refreshBoxes()                                   // aN.t()
+            if (p.ak >= t.ak || p.ag < 0) {
+                if (p.ak > t.ak && p.ag <= 0 &&
+                    (p.ak + (p.ag shr 8) + (p.W[0] - p.ak)) - 2 <= t.W[2]) {
+                    p.ai = 0; p.ag = 0
+                }
+            } else if (p.ak + (p.ag shr 8) + (p.W[2] - p.ak) + 2 >= t.W[0]) {
+                p.ai = 0; p.ag = 0
+            }
+        }
+        world.scrollWallClamp(p)                               // i.f(this)
+    }
+
     private fun comboArm(p: Entity, pad: Pad) {
-        // L1355-L1373 (proven): tap 65568 in S67/68 with a weakened lock
-        // (ax11, Z0==2, aB<=bw) → R = rand%2 ? 184 : 183 finisher
+        // L2469-2475 (proven): attack step → wall-stop → footing-loss
+        // fall through the same case body, then the combo logic.
+        attackStep(p)
+        if (p.ag != 0 && p.forwardWall()) p.ag = 0
+        if (!p.aZ && p.standingOn == null) { p.enterFall(); return }
+        // L2480-2486 (proven): tap 65568 in S67/68 with a weakened lock
+        // (ax11, Z0==2, aB<=bw, a==null) → R = rand%2 ? 184 : 183
         val t = world.lockTarget
         if (pad.v(Pad.M_CONTEXT) && (p.S == 67 || p.S == 68) &&
+            p.standingOn == null &&
             t != null && t.ax == 11 && t.Z[0] == 2 && t.aB <= BW_MOCK &&
             t.aB > 0) {
             p.cl = false
@@ -625,10 +679,19 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // combo chain (same pose map as the attack entry).
             world.kE?.heldRelease(p)
         }
-        if (p.R != -1 && (p.cl || p.animFinished())) {
-            p.setAnim(p.R); p.R = -1; p.cl = false
-        } else if (p.animFinished()) {
-            p.setAnim(0)
+        // L2510-2525 (proven): cl||r() tail — crate interrupt, kill-cam
+        // freeze, dead-target guard, then R→anim or l().
+        if (p.cl || p.animFinished()) {
+            if (p.R == 112 && p.standingOn?.ax == 51 && p.animFinished()) p.R = -1
+            p.cl = false
+            if ((t != null && t.aB > 0 && p.R == 183) || p.R == 184 || p.R == 205) {
+                p.lockInput(world); p.ag = 0; p.ah = 0         // k.o()
+            } else if (t != null && t.aB <= 0) {
+                p.R = -1
+            }
+            if (p.R != -1) { p.setAnim(p.R); p.R = -1 }
+            else p.setAnim(0)                                  // l()
+            if (p.T == 2) world.sfx(10)                        // k.A(10)
         }
     }
 
@@ -794,6 +857,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         /** `g.b()` no-arg attack table (proven, L9→L10 in g.java). */
         private val ATTACK = intArrayOf(67, 68, 69, 81, 112, 113, 114, 115, 183, 184, 216, 217, 286, 287)
         fun isAttackState(s: Int): Boolean = s in ATTACK
+        /** `g.b(int)` (g.java:288, proven) — the aerial/action anim set
+         *  the `i.f` top-bound arm tests (`k.aS.a(0)` knock-off). */
+        private val AIR_ACTION = intArrayOf(18, 19, 20, 22, 23, 24, 25, 35, 36, 43,
+            150, 157, 165, 233, 242, 243, 263, 264, 265, 266)
+        fun isAirAction(s: Int): Boolean = s in AIR_ACTION
 
         /** Combo chain tables `cj`/`ck` from g clinit (proven):
          *  4 rows × {anim, then next-anim at +1, min-frame at +n, key at +2n}. */
