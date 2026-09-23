@@ -355,6 +355,23 @@ class Level0Renderer {
         return if (n <= 0) 0 else ((world.jG - world.kDu) % n).toInt()
     }
 
+    /** jc20 overlay — `z[39]` slide icon + wrapped story text + spinner. */
+    private fun storyScreen(world: Level0World) {
+        if (world.kCu < 2) return
+        val icon = clips[39]
+        if (icon != null && world.kCu <= 4) {
+            val n = icon.frameCount(1)
+            drawFrame(39, 1, if (n <= 0) 0 else (world.jG % n).toInt(),
+                      0, world.kEY, 80)
+        }
+        drawText(world.storyText(), 5, world.kEz, 0)
+        if (icon != null && world.kCu >= 4) {
+            val n = icon.frameCount(10)
+            drawFrame(39, 10, if (n <= 0) 0 else (world.jG % n).toInt(),
+                      300, 80, 0)
+        }
+    }
+
     private fun titleScreen(world: Level0World) {
         drawFrame(97, 1, 0, 0, 0, 0)                 // A[1] anim 1
         drawFrame(96, 0, 0, 0, 0, 0)                 // A[0] frame 0
@@ -1238,6 +1255,13 @@ class Level0Renderer {
 
         // jc18 title screen (k.java:1146-1157) — unreachable-labeled.
         if (world.jC == 18) titleScreen(world)
+
+        // jc20 story-typewriter draw tail (k.java:1278-1298, proven):
+        // `f(false)` world behind; cu>=2 → `z[39].a(cd,1,0,eY,80)` slide
+        // icon + `y.a(cd,str,5,eZ,0)` text (cu2 = grown fa, cu>=3 = fb);
+        // cu 4/5 also `z[39].a(cd,10,0,300,80)` spinner. footerQ() arms
+        // the NEXT/SKIP footer in world.menuFooter().
+        if (world.jC == 20) storyScreen(world)
 
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
