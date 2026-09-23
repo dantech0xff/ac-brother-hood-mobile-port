@@ -653,7 +653,9 @@ class Level0World(
                                                  // manifest lacks it →
                                                  // NPE catch → false
                                                  // (censored anim set)
-    override var kBx = 0                         // k.bx — l(12) sentinel
+    override var kBx = -1                        // k.bx — stats text idx;
+                                              // -1 = none pending (else the
+                                              // `l(13)&&bx>=0→31` remap mis-fires)
     override var kBw = 0                         // k.bw — l(13) sentinel
 
     // -- k.l() screen-state machine (k.java:2031-2300 simple, structured
@@ -687,8 +689,14 @@ class Level0World(
     var kEy = 0                        // k.ey — eA[bv].length
     var kEd = 0                        // k.eD — banner ticker
     var kBv = 0                        // k.bv — banner index (K() arg)
-    /** `k.eA` — banner row tables; contents unmined (`unknown`). */
-    val kEA = Array(6) { IntArray(0) }
+    /** `eA[]` (k.java:8458, proven): menu item-id rows per `bv` — the
+     *  game's whole menu corpus: 0 main, 1 pause, 2 difficulty,
+     *  3 YES/NO dialog, 4 options, 5 heroes. Items are `bU[]` indices. */
+    val kEA = arrayOf(
+        intArrayOf(2, 1, 3, 32), intArrayOf(11, 12, 4, 6, 0, 8),
+        intArrayOf(35, 36, 37), intArrayOf(14, 15),
+        intArrayOf(83, 84, 123, 97, 5, 113, 7, 87),
+        intArrayOf(106, 107, 108, 109))
     /** `k.cc` — mission medal flags, stamped into `bA[130+i]` on l(15). */
     val kCc = IntArray(3)
     /** `k.fP` — unlocked-mission list (save system unbuilt): all eight
@@ -703,6 +711,61 @@ class Level0World(
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
     var kFb: Any? = null               // k.fb — font measurer (unported)
+
+    // -- menu machine (K()/L()/m()/Q() — k.java:6956/:7084/:5472/:3576) ----
+    /** `dp[]/dq[]/dr[]/ds` — the O()/P() state stack (structured
+     *  k.java:3561-3573, proven): O() pushes (j.c,bv,bw), P() pops → K(dq). */
+    val kDp = IntArray(16); val kDq = IntArray(16); val kDr = IntArray(16)
+    var kDs = 0
+    var kEx = 0                        // k.ex — Q()'s caller state (menus)
+    var kFF = 0                        // k.fF — delayed l() target
+    var kFG = false                    // k.fG — wipe-confirm flag
+    var kFH = 0                        // k.fH — row-anim phase
+    var kFI = 0                        // k.fI — row-anim dir
+    var kFE = 0                        // k.fE — fade alpha
+    var kDa = 0                        // k.da — menu param (l(19) arg)
+    var kDt = false                    // k.dt — difficulty-locked flag
+    var kDB = 0                        // k.dB — lives byte (bA[44])
+    var kDC = 0                        // k.dC — sync byte (bA[46])
+    var kDD = 0                        // k.dD — progress (bA[32]/az)
+    var kDF = 0                        // k.dF — misc byte (bA[48])
+    var kBG = 0                        // k.bG — score flag (Q case14)
+    var kEJ = false                    // k.eJ — tutorial done (bA[10])
+    var kDM = false                    // k.dM — resume flag
+    var kCm = 0                        // k.cm — control-style flag
+                                     // (inferred distinct from mount cm)
+
+    /** `bU[]` (k.java:5166-5175) — the global UI string table `d(0,n)`.
+     *  Strings from `docs/gameplay-mining/string-corpus.md` (proven where
+     *  listed); guesses marked `inferred`. */
+    private val bU = mapOf(
+        0 to "MAIN MENU", 1 to "NEW GAME", 2 to "CONTINUE",
+        3 to "SELECT LEVEL", 4 to "OPTIONS", 5 to "HIGH SCORES",
+        6 to "HELP", 7 to "ABOUT", 8 to "EXIT", 9 to "TOUCH THE SCREEN",
+        10 to "LEVEL", 11 to "RESUME", 12 to "RESTART",
+        13 to "ARE YOU SURE YOU WANT TO EXIT?",
+        14 to "YES", 15 to "NO", 16 to "NEXT", 17 to "BACK", 18 to "SKIP",
+        22 to "SOUND", 23 to "TOTAL", 24 to "LOADING",
+        25 to "DO YOU WANT TO RESTART?",
+        32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
+        35 to "EASY", 36 to "NORMAL", 37 to "HARD",
+        38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
+        41 to "SOULS", 42 to "TIME", 43 to "SCORE",
+        56 to "MISSION FAILED. YOU DID NOT CATCH YOUR TARGET!",
+        57 to "MISSION FAILED. THE GUARDS HAVE SOUNDED THE ALARM!",
+        58 to "MISSION FAILED. YOU DIDN'T REACH THE ESCAPE LOCATION IN TIME!",
+        59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
+        69 to "DO YOU WANT TO DELETE YOUR DATA?",
+        71 to "DIFFICULTY", 72 to "IN-GAME SOUND?",
+        73 to "DO YOU WANT TO QUIT?",
+        83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
+        97 to "CONTROL", 103 to "PLAYER LIST",
+        104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
+        106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
+        109 to "NOBLEMAN", 113 to "ACHIEVEMENTS", 117 to "NEW GAME",
+        121 to "THE GAME DATA HAS BEEN DELETED.", 123 to "CONTROL STYLE")
+    /** `d(0,n)` = `bU[n]` (k.java:486, proven). */
+    fun d0(n: Int): String? = bU[n]
 
     // -- audio (`e.a(n,false)`/`e.b()`, e.java:50-87; `z()` k.java:7363) ----
     /** `e.e` — current audio track index (-1 = silent, `e.b()` stop). */
@@ -1317,17 +1380,342 @@ class Level0World(
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
         if (!kCz) inputReset()
         kCz = false
-        if (i == 15 || i == 31) missionWon = true      // our aggregate flag
+        if (i == 15 || i == 31 || i == 13) missionWon = true  // our aggregate flag
     }
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:
      *  `bw=-1; bv=n; ey=eA[n].length; eD=0`. Per-n row content and K(0)'s
      *  `Y()/Z()` checks are unmined (`unknown`). */
-    private fun bannerK(n: Int) {
-        kBw = -1; kBv = n; kEy = kEA[n].size; kEd = 0
+    private fun bannerK(i: Int) {
+        kBw = -1; kBv = i; kEy = kEA[i].size; kEd = 0
+        when (i) {
+            0 -> {
+                kEb = 0
+                kEA[0][0] = if (menuHasSave()) 2 else 117   // Y(): CONTINUE?
+                if (!menuSlotReady()) kEy--                  // Z(): no save slot
+            }
+            1 -> kEb = 72
+            2 -> { kEb = 71; kBw = -1; if (kBA[69] == 0) kEy-- }
+            3 -> {
+                kEb = -1
+                if (kEc != -1) kEd = menuTextHeight(d0(kEc))
+                // orig: `bx != -1` adds more eD via eF-area math — folded
+                // into the panel tail (inferred measure, flagged)
+            }
+            4 -> kEb = 4
+            5 -> { if (jC != 14) { if (!menuHasSave()) kEy-- } else kEy -= 5 }
+        }
+        kEe = (when (kBv) {
+            0 -> 312
+            1 -> kEy * 28 + 6
+            3 -> kEy * 36 + 6
+            else -> kEy * 30 + 2        // bv ∈ {2,4,5} — orig's chain
+                                        // keeps a bv==2/0 branch but the
+                                        // decompile reaches this last arm
+        }) + kEd
+        kEf = 37 + kEe
     }
+
+    /** `Y()` = `bA[15]==1 || bA[14]>0` (structured :5465, proven) —
+     *  "has save progress" → eA[0][0] shows CONTINUE. */
+    private fun menuHasSave() = kBA[15] == 1 || kBA[14] > 0
+    /** `Z()` — save-slot picker (`f.a()` device call, unported); the
+     *  original rewrites `eA[0][3]` ∈ {32,33,34}. Stubbed ready. */
+    private fun menuSlotReady() = true
+    /** `y.k(a(y,str,206)[0])` — font measure (`inferred` 18px rows). */
+    private fun menuTextHeight(s: String?) = if (s == null) 0 else 18
+
+    /** `k.L(i)` (k.java:7084 / structured :5489, proven) — cursor nav:
+     *  `v(16388)` up → `bw-1` clamp 0; `v(33024)` down → `bw+1` clamp
+     *  `i-1`; each writes `fH=0;fI=1` (anim) and `z(23)` blip unless a
+     *  track is already playing (`e.a()`). */
+    private fun menuL(i: Int) {
+        if (i <= 0) return
+        if (pad.v(Pad.M_UP)) {
+            kBw--
+            if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1 }
+            if (audioTrack >= 0) return
+            z(23); return
+        }
+        if (pad.v(Pad.M_DOWN)) {
+            kBw++
+            if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1 }
+            if (audioTrack >= 0) return
+            z(23)
+        }
+    }
+
+    /** `m(i,i2)` (structured :5472, proven) — cursor resolve:
+     *  bv==0 skips the SAVE-LOAD entry (idx 3) when Z() off; clamps to
+     *  `eA[i].length-1`. */
+    private fun menuM(i: Int, i2: Int): Int {
+        var v = i2
+        if (i == 0 && i2 >= 3 && !menuSlotReady()) v++
+        if (v > kEA[i].size - 1) v = kEA[i].size - 1
+        return v
+    }
+
+    /** `O()` (structured :3561, proven) — push (j.c,bv,bw) onto the
+     *  menu stack. `P()` (:3569) — pop: `j.c=dp[ds]` direct write + K(dq). */
+    private fun menuO() {
+        if (kDs in 0 until 16) {
+            kDp[kDs] = jC; kDq[kDs] = kBv; kDr[kDs] = kBw
+        }
+        kDs++; kBw = -1
+    }
+    private fun menuP() {
+        if (kDs <= 0) return                        // orig lacks bounds guard
+        jC = kDp[kDs - 1]                           // j.c direct write (verbatim)
+        bannerK(kDq[kDs - 1])
+        kBw = -1; kDs--
+    }
+
+    /** `e(true)` — RMS save flush; unported → stub (`inferred`). */
+    private fun saveFlush() { /* e(true): RecordStore commit — unported */ }
+    /** `f.a(str,0)` — "LOADING" overlay proc; unported → stub. */
+    private fun loadingShow() { /* f.a(d(0,24),0) — unported */ }
+    /** `W()` (structured :5093) — full game teardown on quit-to-menu:
+     *  clips/claims/director/records released. Light port: drop the
+     *  entity pools (level reload re-spawns) (`inferred` coverage). */
+    private fun teardown() {
+        npcs.clear(); pendingInsert.clear()
+        kC = null                                   // claimer released
+    }
+    /** `a(z2)` (structured :5139) — level (re)load: `e.b(); V(); d(z2)`.
+     *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
+     *  Maps to our `reload()` (`inferred`). */
+    private fun reloadCheckpoint(full: Boolean) { reload() }
+
+    /** `Q()` (structured :3576-3940, proven) — menu back/confirm
+     *  dispatch. `v(131072)` = back key (our `M_CYCLE` — no zone emitter
+     *  yet); `v(327712)` = confirm-complex — `M_CONTEXT` OR a tap on a
+     *  menu row (the orig's touch row-hit in the draw loop sets `bw` +
+     *  `E(32)`; folded into `menuRowAt` here, `inferred` mechanism). */
+    private fun menuQ(pressY: Int) {
+        // ---- back arm: `v(131072)` ------------------------------------
+        if (pad.v(Pad.M_CYCLE) && jC != 23 && jC != 13) {
+            kCb = true
+            if (kBv == 2) { stateL(2); z(30) }
+            if (kBv != 3 && kBv != 4) {
+                if (kBv == 1) { kC?.resumeScript(); stateL(8); z(30); return }
+                // `bv == 4` dead code in the orig (same guard excludes it)
+                return
+            }
+            z(30); kFF = 0
+            if (kEx == 8 || jC == 14) { menuP(); kBw = -1; return }
+            if (kEx != 3) { stateL(2); return }      // ex==28 → l(2) too
+            kFE = 255; kFo = 3; bannerK(4); kBw = -1; stateL(3); return
+        }
+        // ---- confirm arm: `v(327712)` ---------------------------------
+        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        if (pad.v(Pad.M_CONTEXT) || rowTap >= 0) {
+            kCb = true
+            if (kBv == 2) {
+                kAu = if (kBw < 0) 0 else kBw
+                z(23)
+                kBA[16] = kAu                        // j.a(bA,16,byte au)
+                kBA[16] = 0                          // a(bA,16,short 0) — verbatim
+                saveFlush(); kFF = 20; stateL(30); return
+            }
+            if (rowTap >= 0) kBw = rowTap            // row hit → `bw=i13`+E(32)
+            if (kBw == -1) { kBw = 0; return }
+            val iM = menuM(kBv, kBw)
+            if (kEA[kBv][iM] != 83 && kEA[kBv][iM] != 84) z(23)
+            menuItem(kEA[kBv][iM])
+        }
+    }
+
+    /** Row hit-test for the touch-confirm (`inferred` layout — the
+     *  orig's rects live in the unported draw proc at :6020-6120; rows
+     *  stack at ~36px inside the `b(93,67,214)` panel). */
+    private fun menuRowAt(y: Int): Int {
+        if (kEy <= 0) return -1
+        val pitch = when (kBv) {                    // K()'s eE row heights
+            1 -> 28; 3 -> 36; else -> 30
+        }
+        val row = (y - 110) / pitch
+        return if (row in 0 until kEy) row else -1
+    }
+
+    /** `Q()`'s item switch (structured :3649-3940, proven arms; callees
+     *  `e(true)`/`W()`/`a(bool)`/`f.*`/`j.*` stubbed — see docs). */
+    private fun menuItem(item: Int) {
+        when (item) {
+            0 -> {                                   // MAIN MENU
+                menuO(); kEc = 73; bannerK(3); kEb = 0; kBw = -1
+            }
+            1 -> {                                   // NEW GAME
+                if (menuHasSave()) {
+                    kEc = 69; bannerK(3); kEb = 87; kFG = true
+                    stateL(28); kBw = -1
+                } else {
+                    kAj = 0; kAz = 0; kDD = 0
+                    kBA[32] = kAz; kBA[14] = kAj; kBA[15] = 0
+                    saveFlush(); kDB = 30; kDC = 30; kDF = 0
+                    stateL(29)
+                }
+            }
+            2 -> {                                   // CONTINUE
+                if (kBA[15] == 1) { kBw = 0; kDa = 8; stateL(19) }
+                else {
+                    kAj = kBA[14]
+                    kDB = kBA[44]; if (kDB == 0) kDB = 30
+                    kDC = kBA[46]; if (kDC == 0) kDC = 30
+                    kDF = kBA[48]
+                    kAu = kBA[8]
+                    kDD = kBA[32]; kAz = kDD
+                    stateL(30)
+                }
+            }
+            3 -> {                                   // SELECT LEVEL
+                kBw = -1
+                kDa = if (kDt || kBA[69] != 0) 8 else kBA[14] + 1
+                stateL(19)
+            }
+            4 -> {                                   // OPTIONS
+                if (jC == 14) menuO() else stateL(3)
+                bannerK(4)
+            }
+            5 -> { stateL(4); kBw = 0 }              // HIGH SCORES
+            6 -> { kBw = 0; stateL(5) }              // HELP
+            7 -> stateL(6)                           // ABOUT
+            8 -> {                                   // EXIT
+                if (jC == 14) menuO() else { kFG = false; stateL(28) }
+                kEc = 13; bannerK(3); kEb = 8; kBw = -1
+            }
+            11 -> {                                  // RESUME
+                kC?.resumeScript()
+                if (kCy == 21) { stateL(21); kX = 48 } else stateL(8)
+                when (kFi) {                          // k.fi — music slot
+                    1 -> z(1)
+                    9 -> z(9)
+                    -1 -> { }
+                    else -> missionInit()
+                }
+                kDM = true
+            }
+            12 -> {                                  // RESTART
+                menuO(); kEc = 25; bannerK(3); kEb = 12; kBw = -1
+            }
+            14 -> {                                  // YES
+                when (kEc) {
+                    13 -> jC = 11                    // exit-confirm → app
+                    25 -> {                          // restart-confirm
+                        kBG = 0
+                        if (jC != 12 && jC != 13) {
+                            menuP(); reloadCheckpoint(false); kAz = kDD
+                        } else { kBx = -1; reloadCheckpoint(true); kBv = 0 }
+                    }
+                    69 -> {                          // wipe-save-confirm
+                        kAj = 0; kAz = 0; kDD = 0; kAx = 30
+                        kBA[14] = kAj
+                        for (i in 0 until 3) { kCc[i] = 0; kBA[130 + i] = 0 }
+                        kBA[44] = kAx; kBA[28] = kAx; kBA[32] = kAz
+                        kBA[14] = kAj; kBA[15] = 0
+                        kDB = 30; kDC = 30; kDF = 0
+                        if (kFG) { kFF = 29; stateL(29) }
+                        else {
+                            kBA[69] = 0; kAu = 1
+                            for (i in 0 until 24) kBA[81 + (i shl 1)] = 0
+                            kEc = 121
+                        }
+                        kFG = false; saveFlush()
+                    }
+                    73 -> { menuP(); teardown(); stateL(2) }
+                }
+            }
+            15 -> {                                  // NO
+                kFG = false
+                if (jC != 12 && jC != 13) {
+                    if (kEx == 2) stateL(2)
+                    else if (kEx != 3 || jC != 28) {
+                        if (kDs < 16 && kDp[kDs] != 2 && kDp[kDs] != 14) {
+                            menuP(); jG = 0
+                        } else { menuP(); kBw = -1 }
+                    } else {
+                        kFE = 255; kFo = 3; bannerK(4); kBw = -1; stateL(3)
+                    }
+                } else { kBx = -1; teardown(); stateL(2) }
+            }
+            32, 33, 34 -> {                          // save slots
+                loadingShow(); stateL(27)
+                if (!kEJ) { kEJ = true; kBA[10] = 1; saveFlush() }
+            }
+            83 -> {                                  // MUSIC toggle
+                kBE = !kBE; jG = 0
+                if (kBE) { if (jC == 3) z(0) else z(6) }
+                else { audioStop(); kFi = -1 }
+            }
+            84 -> {                                  // SFX toggle
+                kBF = !kBF
+                if (kBF) { audioStop(); z(23) }
+            }
+            87 -> {                                  // RESET GAME
+                kEc = 69; bannerK(3); kEb = 87; kFG = false
+                stateL(28); kBw = -1
+            }
+            97 -> {                                  // CONTROL cycle
+                kAu = (kAu + 1) % 3
+                if (kAu == 2 && kBA[69] == 0) kAu = 0
+                kBA[8] = kAu; saveFlush()
+            }
+            103 -> { /* f.b() unported */ stateL(27) }
+            113 -> { jG = 0; stateL(22) }            // ACHIEVEMENTS → medals
+            117 -> {                                 // NEW GAME (no-save)
+                kAj = 0; kAz = 0; kDD = 0; kAu = 1
+                kDB = 30; kDC = 30; kDF = 0
+                stateL(9)
+            }
+            123 -> { kCm = 1 - kCm; kBA[80] = kCm }  // STYLE toggle
+        }
+    }
+
+    /** The `a()`-proc's frozen-state menu frame (k.java:1775-1800,
+     *  proven): `j.i()→j.t=0` input flush skipped (`inferred` — we run
+     *  the menu every frozen tick); 12/13 → `L(ey)` nav + `Q()`; 31 →
+     *  stats (`bx<0→l(13)`; `v(65568)` → `l(13);bx=-1`). Returns true
+     *  when the tick was consumed by a menu screen. */
+    /** `a()`'s "others→menus" arm (k.java:1000-1070, proven): every
+     *  non-play screen whose proc is the generic `L(ey);Q()` menu frame
+     *  — states entered through `l()` + `K(bv)` (level select, options,
+     *  score tables...). The world doesn't tick behind them (`inferred`
+     *  — orig suspends sim on menu screens). */
+    private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
+
+    private fun menuFrame(pressY: Int): Boolean {
+        when (jC) {
+            12, 13 -> {
+                scrollBounds()                       // b(true)
+                kEg = 0
+                menuL(kEy)
+                menuQ(pressY)
+            }
+            in menuStates -> { menuL(kEy); menuQ(pressY) }
+            31 -> {
+                if (kBx < 0) stateL(13)
+                else if (pad.v(Pad.M_CONTEXT) || pressY >= 0) {
+                    stateL(13); kBx = -1
+                }
+            }
+            else -> return false
+        }
+        return true
+    }
+
+    // -- render view (Level0Renderer overlay reads these) ----------------
+    /** Fail/YES-NO dialog up (L462 semantics): panel + title + rows. */
+    val menuVisible get() = kAl && (jC == 12 || jC == 13)
+    fun menuTitle(): String? = if (kEb >= 0) d0(kEb) else null
+    fun menuPrompt(): String? = if (kEc != -1) d0(kEc) else null
+    fun menuRows(): List<Pair<String, Boolean>> =
+        (0 until kEy.coerceIn(0, kEA[kBv].size)).map { i ->
+            (d0(kEA[kBv][menuM(kBv, i)]) ?: "?") to (i == kBw)
+        }
+    /** Stats screen (L466): `d(0,bx)` + "TOUCH THE SCREEN" blink. */
+    val statsVisible get() = kAl && jC == 31 && kBx >= 0
+    fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
     /** `e.b()` (e.java:87, proven) — stop the current track. */
-    private fun audioStop() { audioTrack = -1 }
+    fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
     /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
      *  else `ee[aj]` when != -1. */
@@ -1611,8 +1999,13 @@ class Level0World(
         // k.java:2268-2280; the win screen's confirm runs `f(false)`-
         // equivalent — reload() here, `inferred` for the milestone flow).
         // j.c==21 keeps its own block below — it needs the dismiss edge.
-        if (kAl && jC != 21) {
-            if (pad.v(Pad.M_CONTEXT)) reload()
+        if ((kAl && jC != 21) || jC in menuStates) {
+            // menu screens run their own frame (Q()/L() dispatch —
+            // structured k.java:3576+); states without a menu proc
+            // (16/17) stay fully frozen.
+            if (!menuFrame(events.firstOrNull { it.type == InputQueue.Type.DOWN }?.y ?: -1)) {
+                if (pad.v(Pad.M_CONTEXT) && kAl) reload()  // non-menu frozen states
+            }
             tickIndex++; jG++
             return
         }
