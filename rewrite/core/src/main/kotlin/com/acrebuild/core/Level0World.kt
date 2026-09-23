@@ -3127,6 +3127,7 @@ class Level0World(
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
     override var iBf = false                       // i.bf engage latch
+    override var iX = 0                            // i.x — every-3rd-hit static
     override var iBx: Entity? = null               // i.bx grab-QTE holder
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
