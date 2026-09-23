@@ -2397,7 +2397,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 20, 23, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2611,6 +2611,26 @@ class Level0World(
         }
     }
 
+    /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
+     *  screen's tick. `G(j.g)` is the staged loader (:4741-5090): each
+     *  `j.g` milestone loads one resource — 1 strings+save bytes
+     *  (dD=save32, dB=save44), 2 U()+bh3 dL, 3 I(aj), 4-7 tilesets,
+     *  8 K()+scripts, 9 clip-demand el[]+dv, 10-84 per-clip z[] loads,
+     *  85 palette binds, 87-161 anim masks, 163-164 anim links;
+     *  `i > 164` → done. All clips/scripts load at world-init here, so
+     *  `G(j.g)` collapses to its counter: done at `j.g > 164`.
+     *  Then `w(65568)||j()` → `ax=dB; ay=dC; aN=dF` (restore mission
+     *  state from the save bytes), `dz=120; aw=0`, `l(8)` + `z(23)` +
+     *  `F(aj)` — `missionInit()` covers the `g.e(ax)`/music arm; bG/dl/
+     *  A[]-release are script/render side (unported). */
+    private fun menuJc9() {
+        if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
+            kAx = kDB; kAy = kDC; kAN = kDF
+            kDz = 120; kAw = 0
+            stateL(8); z(23)
+        }
+    }
+
     /** `k.a()` case 18 (k.java:1146-1175, proven) — the title screen
      *  input arm: `v(65568)||k.j()` (press-fire or touch) →
      *  `cT=100; cS=true; z(23)`. `cS`: `cb=true; cT-=10; !e.a()→z(0)`
@@ -2690,6 +2710,7 @@ class Level0World(
             5 -> menuG()                           // G() (:2412, proven)
             0 -> bootR()                             // case 0 = R() (:3949)
             20 -> menuJc20()                         // case 20 (:1208-1306)
+            9 -> menuJc9()                           // case 9 (:1067-1088)
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
