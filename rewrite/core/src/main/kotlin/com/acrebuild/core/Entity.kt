@@ -138,6 +138,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var au = 10                    // i.au screen-distance score (u() rewrites
                                    // it per v() call; ctor 10, i.java:819)
     var ae: Entity? = null         // i.ae player's spawned ax14 pickup ref
+    /** `i.cr` (i.java:111 `i[][]`, proven) — the ax10-S30 pursuer-pool
+     *  matrix: `cr[row][col]` members allocated on first overlap by the
+     *  La72 arm; `aS()` drains it (null), `aT()` reports all-dead. */
+    var cr: Array<Array<Entity>>? = null
     var gb: Entity? = null         // g.b grabbed-prop ref (op40 arm)
     var ge: Entity? = null         // g.e hide-spot owner (bB S12 arm)
     var gg: Entity? = null         // g.g hide-spot busy guard
@@ -2659,6 +2663,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
 
+    /** `i.aS()` (i.java:8963, proven): drop the whole `cr` pool
+     *  (original nulls every cell then the matrix — same observable). */
+    fun poolDrain() { cr = null }
+
+    /** `i.aT()` (i.java:8975, proven): every `cr` member `P()` — i.e.
+     *  all dead (`P()` itself `G()`-deactivates dead members); a null
+     *  pool reports dead too. */
+    fun poolAllDead(): Boolean {
+        val pool = cr ?: return true
+        for (row in pool) for (m in row) if (!m.deadRelease()) return false
+        return true
+    }
+
     /**
      * `i.S()` (i.java:7276, proven): the victim-payoff tick inside the
      *  S183/184 assassination arm — three bursts of `m(-1)` wisp spawn,
@@ -3035,6 +3052,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  difficulty `k.au` (spawn init i.java:2340/2399 + the
          *  ax17 HP-bar scale k.java:2947). */
         val NPC_HP_BV = intArrayOf(100, 140, 200)
+        /** `k.bi[]` (k.java:266, proven) — default clip index per ax;
+         *  `-1` = clipless record spawn. bi[11]=bi[17]=bi[23]=7. */
+        val AX_CLIP_BI = intArrayOf(
+            0, -1, 1, 2, 3, 1, 4, 60, 5, 47, 6, 7, 8, 61, 9, 25, 10, 7,
+            -1, 11, -1, 13, 14, 7, 40, 16, 15, 48, -1, 52, 36, 44, 36,
+            -1, 42, 62, -1, -1, -1, -1, 45, 30, -1, 31, 32, 33, 29, 7,
+            13, -1, 7, 28, -1, -1, 19, -1, 19, -1, 20, -1, 21, 71, -1,
+            -1, 22, -1, 23, -1, 26, 38, 43, -1, 51, 7, 54, 55, 56, -1,
+            63, 0, 57)
         /** `i.H[]` (i.java:22318, proven) — carried-entity damage (bc()/bd()). */
         val WEAPON_H = intArrayOf(50, 50, 50)
         /** `i.K[]` (i.java:22322, proven) — ax32 wall-break damage (bc()). */

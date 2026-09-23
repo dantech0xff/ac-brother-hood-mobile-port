@@ -809,6 +809,164 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 return
             }
+            // `aV()` S30 arm (i.java:10427-11736 La72-L12e3, proven;
+            // dispatch `case 30: goto La72` i.java:9199) — pursuer-pool
+            // wave spawner. While the player overlaps: `P|=16`;
+            // `Z[6]==3` forces the infinite-wave config (Z[1]=-1, Z[2]=3);
+            // `pv=Z[1]` rows (-1→1), `aG=Z[2]` cols.
+            // First tick (`cr==null`): allocate the `pv×aG` grid; each
+            // member gets `aw=5000+row*pv+col`, `au=0`, fresh `Z(22)`,
+            // flavor by `Z[6]` (0→ax11 `i(4)`/`bu[au]`; 1→ax17 `i(59)`/
+            // `bu[au]`; 2→ax23 `i(71)`/`bv[au]`; 3→ax11 `i(4)`/`bu[au]`
+            // + col0→Z[0]=1 engaged / col≥1→0, col0→zone Z[5]=1 spawn
+            // side / col≥1→0, `aC=Z[7]`); then the Lcb7 common tail
+            // (`az=100`, `P|=16`, `Z[1]=0`, `Z[2]=-1`, `Z[14]=0`,
+            // `av=zone Z[5]!=0`, `Z[15]=-160`, `Z[16]=-64`, `Z[17]=320`,
+            // `Z[18]=100`); row-0 members only get position+registration
+            // (`aq=Z[3]+k.O`, `ar=Z[4]`, `ak` offscreen ±`20*(col+1)`
+            // by side, `al=Z[4]`, `ag=ah=0`, `Z[3]=ak`, `Z[4]=al`,
+            // `k.b()`); ends `aA=0`.
+            // Later ticks (`cr!=null`): `Z[1]!=-1 && aT()` (all dead) →
+            // clear the linked uid `k.q(Z[0])` (`P&=~32`; `bi[ax]!=-1` →
+            // `P&=~128`), `k.c(this)`, `aS()`. Z[6]==3 → per dead member
+            // respawn (cooldown `aC`: `aC>0` skips + `aC--`; respawned
+            // member `Z[0]=1` iff no other engaged member; same spawn
+            // tail + `aC=Z[7]` reload). Else — finite pool: current row
+            // wiped → `Z[1]==-1` → `aS()` + re-enter `aV()` (`goto L0`);
+            // else `aA++` (≥pv → done) and re-position the new row
+            // (also zeroes `ai/aj`) + `k.b()`.
+            30 -> {
+                while (true) {
+                    if (!rectsOverlap(e.W, player.W)) return        // La72
+                    e.P = e.P or 16
+                    if (e.Z[6] == 3) { e.Z[1] = -1; e.Z[2] = 3 }
+                    e.pv = e.Z[1]; e.aG = e.Z[2]                     // p/aG
+                    if (e.pv == -1) e.pv = 1
+                    else if (e.pv <= 0 || e.aG <= 0) return          // Lad9
+                    if (e.cr == null) {
+                        e.cr = Array(e.pv) { Array(e.aG) { Entity(0, null) } }
+                        for (r9 in 0 until e.pv) for (r8 in 0 until e.aG) {
+                            // `new i()` + field writes — ctor carries the
+                            // flavor's ax/clip since `ax` is immutable.
+                            val m = when (e.Z[6]) {
+                                0 -> Entity(11, w.clipFor(7)).also {
+                                       it.setAnim(4)
+                                       it.aB = Entity.WEAPON_DMG[w.weaponSlot] }
+                                1 -> Entity(17, w.clipFor(7)).also {
+                                       it.setAnim(59)
+                                       it.aB = Entity.WEAPON_DMG[w.weaponSlot] }
+                                2 -> Entity(23, w.clipFor(7)).also {
+                                       it.setAnim(71)
+                                       it.aB = Entity.NPC_HP_BV[w.weaponSlot] }
+                                3 -> Entity(11, w.clipFor(7)).also {
+                                       it.setAnim(4)
+                                       it.aB = Entity.WEAPON_DMG[w.weaponSlot]
+                                       it.Z[0] = if (r8 != 0) 0 else 1  // Lc88
+                                       e.Z[5] = if (r8 >= 1) 0 else 1   // Lc96
+                                       e.aC = e.Z[7] }                  // Lcac
+                                else -> Entity(0, null)                 // Lcb7
+                            }
+                            e.cr!![r9][r8] = m
+                            m.aw = 5000 + r9 * e.pv + r8             // uid
+                            m.au = 0
+                            // `Z = new int[22]` — fresh Entity already
+                            // carries a zeroed IntArray(22).
+                            // ---- Lcb7 common tail ----
+                            m.az = 100
+                            m.P = m.P or 16
+                            m.Z[1] = 0; m.Z[2] = -1; m.Z[14] = 0
+                            m.av = e.Z[5] != 0                       // Ld16
+                            m.Z[15] = -160; m.Z[16] = -64
+                            m.Z[17] = 320; m.Z[18] = 100
+                            if (r9 == 0) {                           // row-0 only
+                                m.aq = e.Z[3] + w.kO                 // Lda0
+                                m.ar = e.Z[4]
+                                m.ak = if (e.Z[5] == 0)              // Lda7
+                                    w.kO - 20 * (r8 + 1)
+                                else w.kO + 400 + 20 * (r8 + 1)
+                                m.al = e.Z[4]
+                                m.ag = 0; m.ah = 0
+                                m.Z[3] = m.ak; m.Z[4] = m.al         // Ldc0
+                                w.queueInsert(m)                     // k.b()
+                            }
+                        }
+                        e.aA = 0                                     // Le30
+                        return
+                    }
+                    // ---- steady state: cr != null (Le36) ----
+                    if (e.Z[1] != -1 && e.poolAllDead()) {           // aT()
+                        val t = w.findByAw(e.Z[0])                   // k.q(Z[0])
+                        if (t != null) {
+                            t.P = t.P and -33                        // P&=~32
+                            if (Entity.AX_CLIP_BI[t.ax] != -1)
+                                t.P = t.P and -129                   // P&=~128
+                        }
+                        w.removeEntity(e)                            // k.c()
+                        e.poolDrain()                                // aS()
+                        return
+                    }
+                    if (e.Z[6] == 3) {
+                        // ---- pursuer-wave respawn (Le8e) ----
+                        var r9 = 0
+                        while (e.aC <= 0 && r9 < e.aG) {
+                            val row = e.cr!![e.aA]
+                            if (row[r9].deadRelease()) {             // P()
+                                var engaged = false                  // r8
+                                for (r10 in 0 until e.aG)
+                                    if (r10 != r9 && row[r10].Z[0] != 0) {
+                                        engaged = true; break
+                                    }
+                                val m = Entity(11, w.clipFor(7))
+                                row[r9] = m
+                                m.aw = 5000 + e.aA * e.pv + r9
+                                m.au = 0
+                                m.setAnim(4)
+                                m.aB = Entity.WEAPON_DMG[w.weaponSlot]
+                                m.Z[0] = if (engaged) 0 else 1       // Lf90
+                                e.Z[5] = if (r9 >= 1) 0 else 1       // Lfa1
+                                m.az = 100
+                                m.P = m.P or 16
+                                m.Z[1] = 0; m.Z[2] = -1; m.Z[14] = 0
+                                m.av = e.Z[5] != 0
+                                m.Z[15] = -160; m.Z[16] = -64
+                                m.Z[17] = 320; m.Z[18] = 100
+                                m.aq = e.Z[3] + w.kO
+                                m.ar = e.Z[4]
+                                m.ak = if (e.Z[5] == 0)
+                                    w.kO - 20 * (r9 + 1)
+                                else w.kO + 400 + 20 * (r9 + 1)
+                                m.al = e.Z[4]
+                                m.ag = 0; m.ah = 0
+                                m.Z[3] = m.ak; m.Z[4] = m.al
+                                w.queueInsert(m)                     // k.b()
+                                e.aC = e.Z[7]                        // reload
+                            }
+                            r9++
+                        }
+                        if (e.aC > 0) e.aC--                         // L1173
+                        return
+                    }
+                    // ---- finite pool (L1185): row wipe → advance ----
+                    val row = e.cr!![e.aA]
+                    for (m in row) if (!m.deadRelease()) return      // L11a1
+                    if (e.Z[1] == -1) { e.poolDrain(); continue }    // → L0
+                    e.aA++
+                    if (e.aA >= e.pv) return                         // L1ec7
+                    for (r9 in 0 until e.aG) {                       // L11cf
+                        val m = e.cr!![e.aA][r9]
+                        m.aq = e.Z[3] + w.kO
+                        m.ar = e.Z[4]
+                        m.ak = if (e.Z[5] == 0)
+                            w.kO - 20 * (r9 + 1)
+                        else w.kO + 400 + 20 * (r9 + 1)
+                        m.al = e.Z[4]
+                        m.ag = 0; m.ah = 0; m.ai = 0; m.aj = 0
+                        m.Z[3] = m.ak; m.Z[4] = m.al
+                        w.queueInsert(m)
+                    }
+                    return                                           // L12e3
+                }
+            }
             // `aV()` S31 arm (i.java:9804-10466 L5ea-La66, proven;
             // dispatch `case 31: goto L5ea` i.java:9200) — the
             // claim-QTE zone: 4 pad lanes from Z[1] nibbles (types index
