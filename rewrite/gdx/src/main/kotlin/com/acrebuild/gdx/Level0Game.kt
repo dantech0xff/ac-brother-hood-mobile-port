@@ -99,6 +99,14 @@ class Level0Game : ApplicationAdapter() {
             accumulatorMs -= TICK_MS
             ticks++
         }
+        // `z()`/`e.b()` audio commands (e.java:50-87): the 34 track
+        // samples are not decoded into the app — log the command the
+        // original would have issued. `audioTrack` mirrors e.e.
+        for (c in world.drainCommands()) {
+            if (c is com.acrebuild.core.Command.PlaySfx) {
+                Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
+            }
+        }
         if (accumulatorMs >= TICK_MS) accumulatorMs = 0 // drop backlog
         renderer.render(world)
     }

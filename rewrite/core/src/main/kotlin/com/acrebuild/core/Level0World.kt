@@ -635,7 +635,11 @@ class Level0World(
      *  the `k.*`/`i.*` statics the arg-op sub-switches write. */
     override val kBr: Int get() = level.worldW   // k.br — level width px
     override val kBs: Int get() = level.worldH   // k.bs — level height px
-    override val jG: Long get() = tickIndex      // j.g — 62ms tick counter
+    /** `j.g` — the render-frame counter: separate from `j.f` (tickIndex);
+     *  `l()` resets it to 0 on every state entry (k.java:2047, proven)
+     *  and the frame loop increments it once per tick. Blink/`%N` checks
+     *  in entity code read this, not tickIndex. */
+    override var jG = 0L
     override val kBb: List<Entity> get() = npcs  // k.bb follower list
     override val kBc: Int get() = npcs.size      // k.bc
     override var kAd = 2                         // k.ad=2 (k.java:8348 static init)
@@ -699,6 +703,36 @@ class Level0World(
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
     var kFb: Any? = null               // k.fb — font measurer (unported)
+
+    // -- audio (`e.a(n,false)`/`e.b()`, e.java:50-87; `z()` k.java:7363) ----
+    /** `e.e` — current audio track index (-1 = silent, `e.b()` stop). */
+    var audioTrack = -1
+        private set
+    /** `k.bE`/`k.bF` — the two audio-channel enables (settings-bound;
+     *  default on): `z()` plays n<10 only when bE, n>=10 only when bF
+     *  (e.java:50-60, proven). */
+    var kBE = true
+    var kBF = true
+    /** `k.ee[]` — per-mission music table (k.java:8436, proven):
+     *  `B()` plays `ee[aj]` (or track 9 when `aJ==1`). */
+    val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
+    /** Deferred audio commands — drained by the game loop each tick
+     *  (same pattern as SpikeWorld's Command queue; real samples for
+     *  the 34 tracks are not decoded into the app — adapters log). */
+    private val pendingCommands = ArrayDeque<Command>()
+    fun drainCommands(): List<Command> {
+        val out = pendingCommands.toList(); pendingCommands.clear(); return out
+    }
+    /** `z(int)` (k.java:7363, proven): `n∉[0,34) → nop`, then `e.a(n,false)`
+     *  — play iff `a[n]!=null` (assumed available, inferred) &&
+     *  `(kBE || n>=10)` && `(kBF || n<10)`. Sets loop count 1 (verbatim). */
+    private fun z(n: Int) {
+        if (n < 0 || n >= 34) return
+        if (!kBE && n < 10) return
+        if (!kBF && n >= 10) return
+        audioTrack = n
+        pendingCommands += Command.PlaySfx(n)
+    }
     override var iBn = false                     // i.bn — bA[79] alert flag
     override var kAJ = 0                         // k.aJ — ax42 fuse phase
     override var kAK = 0                         // k.aK — countdown init
@@ -1219,6 +1253,7 @@ class Level0World(
         var i = iArg
         while (true) {                               // L2 — re-entry for i=22 only
             kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0
+            jG = 0                                   // j.g=0 (k.java:2047)
             if (i == 27) audioStop()                 // e.b() — audio stop (unported)
             when {
                 i == 9 -> {                          // L7: renderer teardown
@@ -1231,11 +1266,11 @@ class Level0World(
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
                     kEc = 25; bannerK(3); kEb = 59   // L17 (simple decompile —
                                                      // structured omits; high-confidence)
-                    // z(7) screen init — unported
+                    z(7)                             // fail/win sting
                 }
                 i == 15 -> {                         // mission-complete stats
                     kEe = 0; kEf = 37                // j.g=0 — derived counter, no-op
-                    if (ex != 10 && ex != 22) { audioStop(); /* z(6) unported */ }
+                    if (ex != 10 && ex != 22) { audioStop(); z(6) }
                     // L26-L61 (proven): medal stamps → `bA[130+i]`
                     if (kAp[0] >= 7 && kCc[0] == 0) kCc[0] = 1           // L35
                     if (kAu == 2 && kCc[1] == 0) kCc[1] = 1              // L40
@@ -1259,9 +1294,8 @@ class Level0World(
                 i == 2 -> {                            // quit arm
                     kFo = 0                            // E() unported
                     bannerK(0); kDx = false
-                    // switch(j.c): non-exempt states run `e.b(); z(0)` —
-                    // audio/screen teardown (unported)
-                    if (jC !in intArrayOf(2, 3, 4, 5, 6, 18, 19, 20, 22, 28, 29, 30)) audioStop()
+                    // switch(j.c): non-exempt states run `e.b(); z(0)`
+                    if (jC !in intArrayOf(2, 3, 4, 5, 6, 18, 19, 20, 22, 28, 29, 30)) { audioStop(); z(0) }
                 }
                 i == 14 -> {
                     if (jC == 8 || jC == 21) scrollBounds()
@@ -1292,9 +1326,14 @@ class Level0World(
     private fun bannerK(n: Int) {
         kBw = -1; kBv = n; kEy = kEA[n].size; kEd = 0
     }
-    private fun audioStop() { /* e.b() — audio stop, unported */ }
+    /** `e.b()` (e.java:87, proven) — stop the current track. */
+    private fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
-    private fun missionInit() { /* B() — per-mission z() table, unported */ }
+    /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
+     *  else `ee[aj]` when != -1. */
+    private fun missionInit() {
+        if (kAJ == 1) z(9) else if (kEE[kAj] != -1) z(kEE[kAj])
+    }
     private fun inputReset() { pad.edge = 0 }        // v() — input reset (inferred)
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's
      *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
@@ -1574,7 +1613,7 @@ class Level0World(
         // j.c==21 keeps its own block below — it needs the dismiss edge.
         if (kAl && jC != 21) {
             if (pad.v(Pad.M_CONTEXT)) reload()
-            tickIndex++
+            tickIndex++; jG++
             return
         }
 
@@ -1589,7 +1628,7 @@ class Level0World(
             } else if (sawPressPending(events)) {
                 kC?.resumeScript(); leaveDialog()
                 pad.edge = 0        // eat the dismiss edge — not a gameplay tap
-            } else { tickIndex++; return }
+            } else { tickIndex++; jG++; return }
         }
 
         player.collideSides(this, true)
@@ -1682,7 +1721,7 @@ class Level0World(
         // Fires when the player falls past where the clamped camera can follow.
         else if (player.al > camY + VIEW_H) stateL(12)
 
-        tickIndex++
+        tickIndex++; jG++
         } finally {
             lastTouchX = -1; lastTouchY = -1
             if (sawRelease) { lastMoveX = -1; lastMoveY = -1 }
