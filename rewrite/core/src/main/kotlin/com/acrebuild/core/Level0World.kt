@@ -69,6 +69,7 @@ class Level0World(
             64 to 6,      // ax64 harrier — bi[64]=-1 (clipless record spawn);
                           // unconverted index → null clip, matching the
                           // original's own clipless record path
+            74 to 54,     // ax74 wisp (bi[74]=54, proven)
         )
     }
 
@@ -465,6 +466,7 @@ class Level0World(
             else if (type == 17) npcFsm.initAx17(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 64) npcFsm.initAx64(e, f.toList())
+            else if (type == 74) npcFsm.initAx74(e, f.toList(), this)
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -553,7 +555,7 @@ class Level0World(
     override var kZ = false                    // k.Z
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
-    override val kAj = 0                       // k.aj — level index 0
+    override var kAj = 0                       // k.aj — level index 0
     /** Slice-43b claim-script VM state (aa() arms): world bounds for the
      *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
      *  the `k.*`/`i.*` statics the arg-op sub-switches write. */
@@ -629,6 +631,26 @@ class Level0World(
     /** `k.ac` — the same camera view rect as `camRect` (aliased;
      *  ax35's off-screen containment test reads it via this name). */
     override val kAc: IntArray? get() = camRect
+    override var kAz = 0                         // k.az — collect streak
+    override var kAq = 0                         // k.aq — wisp counter
+    /** `k.o(int)` (k.java:4304): `ap[slot]++`; slot 3 skipped when aj==7. */
+    override fun kCount(slot: Int) {
+        if (slot != 3 || kAj != 7) kAp[slot]++
+    }
+    /** `k.s()` (k.java:5338 + `dE` at :8403, proven). */
+    override fun kCollectStreak() {
+        kAz++
+        if (kAx < 105 && kAx < 30) kAx = 30      // meter floor clamp
+        val dE = intArrayOf(0, 100, 200, 400, 600, 800)
+        var tier = dE.size - 1
+        while (tier > 0 && kAz < dE[tier]) tier--
+        if (tier == 0) return                    // streak < 100 → nothing
+        val old = kAx
+        if (kAx > 105) return                    // L28
+        kAx = 30 + tier * 15
+        player.x1 = minOf(player.x1, kAx)        // g.f(ax)
+        if (old < kAx) player.x1 = kAx           // g.e(ax)
+    }
     override var iBi = false                     // i.bi — ax64 grab hitlag
     override val gS = false                      // g.s — cutscene (no producer)
     /** `k.aX` pooled-shot slots (k.java:8423 `aW=50`, proven) — lazily
@@ -1014,6 +1036,7 @@ class Level0World(
             else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
             else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
             else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
+            else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
