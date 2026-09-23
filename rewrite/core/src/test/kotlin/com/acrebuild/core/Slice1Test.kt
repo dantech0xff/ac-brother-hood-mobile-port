@@ -805,10 +805,10 @@ class Level0WorldTest {
         assertEquals(6, d.S)
         assertTrue(14 in w.sfxLog)
         // drive just this FSM: S6 anim ends → m bursts (m=2 → two m(-1)
-        // wisps via k.b(aK)), kAp[5]+=2, shake+=2, then k.c(self)
+        // wisps via k.b(aK)), kAp[5]+=2, k.s() → az+=2, then k.c(self)
         repeat(40) { w.npcFsm.tickDestructible(d, w.player) }
         assertEquals(2, w.kAp[5])
-        assertEquals(2, w.shake)
+        assertEquals(2, w.kAz)
         // pending removal — drain via a tick to drop it from npcs
         w.tick(emptyList())
         assertFalse(w.npcs.contains(d))

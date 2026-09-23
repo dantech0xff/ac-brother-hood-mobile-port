@@ -2320,7 +2320,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /**
      * `i.bJ()` (i.java:20024, proven): reload the script-op buffer —
      * `cd[0]=cd[2]=false`, `cK=-1`, `cb=null`, `cL` = copy of
-     * `k.bz[ca]`. `claimOps` is the k.bz accessor (table unported → null).
+     * `k.bz[ca]`. `claimOps` is the k.bz accessor.
      */
     fun reloadScriptOps(w: LevelCellSource) {
         cd[0] = false; cd[2] = false
@@ -2541,7 +2541,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  ax10 zipline `ac` — inferred: the decompile's r0 flag only arms on
      *  `ac.ax!=10`), dispatch by equip `I`:
      *   1 → zero h-vel; unless crouch-rope (`S==79 && a.ax==51 &&
-     *       a.aD!=0`) → `i(S==79?81:67)` sword swing; `k.E.K()` unported;
+     *       a.aD!=0`) → `i(S==79?81:67)` sword swing; `k.E.K()` = `heldRelease` (ported slice 125);
      *   8 → `S!=79` → `ai=ag=0; K=0; cN=0; i(303)` standing gauge;
      *   2 → `i(286)` + sfx 29 knife anim.
      *  `g.a` vehicle static approximated by `standingOn` (inferred). */
@@ -2962,7 +2962,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             }
             // L75 (proven structure): marker-engage — `g.b = r13`, `aB=3`,
             // `o()?i(3)`, face + push ±512 toward the marker. The `g.a()`
-            // damage-gate chain (h()/g()/d()) is unported — gated open.
+            // damage-gate chain ported as `playerDamageable`.
             38 -> {
                 if (S == 3 || S == 6 || S == 7) return
                 if (!playerDamageable(g, world)) return   // g.a() gate now
@@ -3141,7 +3141,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * `i.bc()` (i.java:14396, proven): the flight-impact sweep — X-overlap
      *  neighbors by type. Own `af` (thrower) is protected: `af.ax` in the
      *  prop family skips matching `r0.ax` (e.g. af==54 → ax54s skipped).
-     *  `d(8,…)` floatie spawns flagged unported. `cF` is the i-STATIC
+     *  `d(8,…)` floatie spawns = `spawnDebris24` (ported slice 125). `cF` is the i-STATIC
      *  gauge-full flag (i.java:184) — ax32 `S∈[21,27]` (armed walls) only
      *  break on full-gauge throws; when unset the scan ABORTS. */
     fun sweepNeighborsB(w: LevelCellSource): Boolean {
@@ -3822,10 +3822,8 @@ interface LevelCellSource {
     // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
     var aq: Int
     val kAp: IntArray
-    var shake: Int
     val sfxLog: List<Int>
     fun sfx(id: Int)
-    fun shake()
 
     // -- i.a() big-op plumbing (k.b/k.n(int)/k.v=k.w/pointer/spawn) -----
     /** `k.b(idx,str,flag)` (k.java:430): queue the op105 dialog —
@@ -3931,7 +3929,7 @@ interface LevelCellSource {
     var cv: Entity?
     // -- marker/sweep globals (bb() L21 tail) ---------------------------------
     /** `i.cF` — i-STATIC gauge-full flag (i.java:184/18543; set by the
-     *  charge-fill arm `aB+=5 → bU`, unported — stays false). ax32 armed
+     *  charge-fill arm `aB+=5 → bU` ported at NpcFsm (iQ/iBU/cFFlag)). ax32 armed
      *  walls (`S∈[21,27]`) only break when this is true. */
     var cFFlag: Boolean
     /** `g.b` — the marker-engage link on the player (op38 writes it). */
@@ -4121,7 +4119,8 @@ interface LevelCellSource {
     val kBz: Array<IntArray> get() = emptyArray()
     /** `k.t(int)` (k.java:7162, proven): `eI[op-100]` payload length. */
     fun kT(op: Int): Int = ScriptTables.EI[op - 100]
-    /** `k.bz[ca]` — the claim-script op table (unported → null). */
+    /** `k.bz[ca]` — the claim-script op table (`Level0World` supplies the
+     *  real table; `null` = no ops for this block). */
     fun claimOps(ca: Int): IntArray? = null
 
     // -- claim-script VM (`i.aa()` i.java:19429) world surface ------------
@@ -4249,7 +4248,8 @@ interface LevelCellSource {
      *  is gated on `k.aj == 7` in the original. */
     fun kCount(slot: Int) {}
     /** `k.az` — collect-streak counter consumed by `k.s()` (k.java:5338,
-     *  proven). */
+     *  proven); also the medal-band driver `ax = 30 + tier*15` → `g.f`/`g.e`
+     *  refill — see `kCollectStreak`. */
     var kAz: Int get() = 0; set(_) {}
     /** `k.aq` — level wisp/anim-0 record counter (`k.aq++` at
      *  i.java:3033). */
