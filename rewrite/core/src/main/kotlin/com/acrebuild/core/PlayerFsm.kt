@@ -180,6 +180,34 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     p.setAnim(if (p.Q == 79) 79 else 0)
                 }
             }
+            // `e()` case 27 (fallback g.java:5811-5818 L27da, proven):
+            // link lost → `a(0)` fling; the rest is the shared tail.
+            27 -> { if (p.ac == null) p.flingAirborne(0, world) }
+            // `e()` case 28/318 (L23fa, proven): freeze then a held
+            // dir-key (`v(33024)`) flings with the current `ah` (0).
+            28, 318 -> {
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (world.padHeld(33024)) p.flingAirborne(p.ah, world)
+            }
+            // `e()` case 29/315 (L23bb, proven): `g.o != 0` →
+            // `al > o` upgrades to the next climb anim (315→318,
+            // 29→28); else `g.k == -1` → `a(ah)` fling.
+            29, 315 -> {
+                if (p.go != 0) {
+                    if (p.al > p.go) p.setAnim(if (p.S == 315) 318 else 28)
+                } else if (p.gk == -1) p.flingAirborne(p.ah, world)
+            }
+            // `e()` case 34 (L1a0a, proven): `aA()` wall-kick input;
+            // `(av?aT:aU)!=20` → `a(0)` fling; `aR>=19 || aR==5` →
+            // `l()` climb input + `k.v()` latch clear.
+            34 -> {
+                wallJumpKick(p, world, pad)                           // aA()
+                if ((if (p.av) p.aT else p.aU) != 20)
+                    p.flingAirborne(0, world)
+                if (p.aR >= 19 || p.aR == 5) {
+                    l(p, pad); world.clearLatches()
+                }
+            }
             // L1863 — lunge states tick the arc (g.java:886-906 dispatch)
             272, 273, 274, 275, 292 -> {
                 val mount = Entity.at
