@@ -7933,3 +7933,118 @@ fun NpcFsm.tickAx34(e: Entity, w: LevelCellSource, p: Entity) {
     val shown = grounded && p.S !in AX34_HIDE_STATES && w.iZ
     e.P = if (shown) e.P and -129 else e.P or 128           // L96-L102
 }
+
+// ============================================================================
+// i.ad() — in-world dialog bubble (i.java:20624-20755, proven state machine;
+// draw ops emitted as w.bubbleDraw for the renderer)
+// ============================================================================
+
+/** Draw descriptor emitted while a `cQ` dialog is presenting (the arm
+ *  gated on `cQ[2] > 0`). `bh3` selects the filled (`k.f`) vs outlined
+ *  (`j.a/b`) bubble style; `tailUp` is the `r18` flip when the bubble
+ *  would clip the top edge; `flip` is `r17` (facing/mount override). */
+class BubbleDraw(
+    val x: Int, val y: Int, val w: Int, val h: Int,
+    val pageStart: Int, val lines: Int,
+    val flip: Boolean, val tailUp: Boolean, val bh3: Boolean,
+    val text: String, val textX: Int, val textY: Int,
+)
+
+/**
+ * `i.bK()` (i.java:20602, proven): refill the bubble with the next
+ * dialog string `k.d(1+k.aj, cQ[5])`, reset the page timer
+ * `cQ[2]=cQ[3]`, re-wrap at 120px into `cS`, and recompute the page
+ * fields: `cQ[4]=min(3, cS[0])`, `cQ[0]=0`, `cQ[1]=cS[0]-1` (clamped).
+ */
+private fun NpcFsm.bubbleRefill(e: Entity, w: LevelCellSource) {
+    val q = e.cQ ?: return
+    e.cR = (w.levelString(1 + w.kAj, q[5]) ?: "") + "\n"        // L2-L3
+    q[2] = q[3]                                               // L4
+    e.cS = w.wrapDialogText(e.cR, 120)                        // L5
+    q[4] = minOf(3, e.cS!![0])                                // L6
+    q[0] = 0                                                  // L7
+    q[1] = e.cS!![0] - 1                                      // L8
+    if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]                // L10
+}
+
+/**
+ * `i.ad()` (i.java:20624, proven): per-entity speech-bubble tick. Called
+ * for entities with `ax != 11 && ax != 17` in the frame loop
+ * (k.java:3740-3749). Font/draw calls map to `w.bubbleDraw` +
+ * `w.wrapDialogText`/`w.dialogAdvance` hooks.
+ */
+fun NpcFsm.tickBubble(e: Entity, w: LevelCellSource) {
+    val q = e.cQ ?: return                                    // L6
+    if (q[5] < 0) return                                      // L8
+    if (q[5] > q[6]) return                                   // L11
+    if (q[7] == 1) {                                          // L14-L19
+        val kc = w.kC
+        if (kc == null || !kc.claimActive()) {
+            q[4] = 0; e.cS = null; e.cR = ""; q[1] = -1
+            e.cT = null; e.cQ = null
+            return
+        }
+    }
+    if (q[2] == -1) {                                         // L22-L27
+        if (q[5] <= q[6]) bubbleRefill(e, w)                  // L27 → bK()
+        else { q[6] = -1; e.cR = ""; return }
+    }
+    q[2] = q[2] - 1                                           // L28
+    if (q[2] > 0) {
+        // L31-L84 draw arm — emit the descriptor; re-wrap for cS.
+        val bh3 = Entity.MISSION_BH[w.kAj] == 3              // k.bh[k.aj]==3
+        val r02 = w.dialogAdvance(q[4]) + 10                  // k.y.k(n)+10
+        var r14 = e.ak - w.kO                                 // screen x
+        val r03 = e.al - w.kP - 70                            // bubble top base
+        var r15 = r03
+        var r16 = r03 - r02
+        var r17 = e.av                                        // flip flag
+        var r18 = false                                       // tail-up flag
+        if (bh3) {                                            // L56
+            r17 = false
+            if (r16 < 0) {                                    // L60-L63
+                r18 = true
+                val r04 = e.al - w.kP
+                r16 = r04; r15 = r04
+            }
+            if (r17) r14 -= 120                               // L66 (dead)
+            // L68: k.f(r14, r16, 120, r02) filled bubble
+        } else {
+            // L56: style flag cQ[8]==1 overrides the facing flip
+            if (q[8] == 1) r17 = !r17                         // L60-L61
+            if (r17) r14 -= 120                               // L66
+            // L68: white outline + black fill bubble rects
+        }
+        // tail (a(5-arg) interpolates the 2-line wedge; tailUp flips it)
+        w.bubbleDraw = BubbleDraw(
+            x = r14, y = r16, w = 120, h = r02,
+            pageStart = q[0], lines = q[4],
+            flip = r17, tailUp = r18, bh3 = bh3,
+            text = e.cR, textX = r14 + 60, textY = r16 + 5,
+        )
+        // k.y.l(1) — typewriter advance (inferred; no core op)
+        e.cS = w.wrapDialogText(e.cR, 120)                    // L81
+        if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]            // L84
+        // L84 tail: k.y.a(bg, cR, cS, x+60, y+5, q[0], q[4], 17, -1)
+        return
+    }
+    // L31+: page/string advance on timer expiry
+    if (q[0] + q[4] == q[1]) {                                // last line
+        q[5] = q[5] + 1                                       // next string idx
+        if (q[5] <= q[6]) bubbleRefill(e, w)                  // L43 → bK()
+        else {                                                // done
+            q[4] = 0; e.cS = null; e.cR = ""; q[1] = -1; e.cT = null
+            if (q[9] == 1) {                                  // release flag
+                val kc = w.kC
+                if (kc != null && kc.claimActive()) {
+                    kc.cd[2] = true; kc.cd[1] = true          // cd arms
+                    if (Entity.MISSION_BH[w.kAj] != 3) w.kM(w.kAd)  // k.m(k.ad)
+                }
+            }
+        }
+    } else {
+        q[0] = q[0] + q[4]                                    // L44 next page
+    }
+    if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]                // L46
+    q[2] = q[3]                                               // L48 re-arm
+}
