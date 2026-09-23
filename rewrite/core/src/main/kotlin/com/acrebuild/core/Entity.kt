@@ -4151,6 +4151,11 @@ interface LevelCellSource {
     var kP: Int get() = 0; set(_) {}
     /** `k.ac` — camera view rect [x1,y1,x2,y2] world px (v()'s L83/L85). */
     val camRect: IntArray get() = IntArray(4)
+    /** `k.af`/`k.ag` — camera focus-point offsets written by ax10 S0 zones
+     *  (i.java:9772 L5ac) and consumed by the `k.m()` tracker
+     *  (k.java:1959-1965: camA = ak-200+af, camB = al-120+ag). */
+    var camAf: Int get() = 0; set(_) {}
+    var camAg: Int get() = 0; set(_) {}
     /** `k.bh[k.aj] == 3` — in-play phase (v()'s ax14 arm L61). */
     val inPlay: Boolean get() = true
     /** `k.aS.W` — the player's hitbox (v()'s ax14 tail). */

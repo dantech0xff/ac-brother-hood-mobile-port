@@ -464,8 +464,9 @@ class Level0World(
     private var camCH = -1                    // cH — cached corridor right
                                               // (populated by the k.ai row
                                               // scan, read back when iBV>0)
-    private var camAf = 0                     // af — lookahead x offset
-    private var camAg = 0                     // ag — lookahead y offset
+    override var camAf = 0                    // af — lookahead x offset;
+                                              // ax10-S0 zones write it
+    override var camAg = 0                    // ag — lookahead y offset
     private var camCF = 0                     // cF — snap-arm scratch
     private var camCE = 0                     // cE — snap-arm scratch
     var gV = false                            // g.v — full camera warp flag

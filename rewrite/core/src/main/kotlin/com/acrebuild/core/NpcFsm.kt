@@ -484,6 +484,18 @@ class NpcFsm(val world: LevelCellSource) {
         e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
         e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
         when (e.S) {
+            // L59 (i.java:2119): Z = {r8[4], r8[12], r8[13], r8[14]} —
+            // Z0 = spawn-S (gate selector), Z[1] = target uid, Z[2] = guard
+            // uid, Z[3] = P-flag mask. NOTE: this arm does NOT run L111.
+            2, 3 -> {
+                e.Z[0] = rf(4); e.Z[1] = rf(12)
+                e.Z[2] = rf(13); e.Z[3] = rf(14)
+            }
+            // L95 (i.java:2166): Z = {r8[11..15]} — likewise no L111 tail.
+            10 -> {
+                e.Z[0] = rf(11); e.Z[1] = rf(12); e.Z[2] = rf(13)
+                e.Z[3] = rf(14); e.Z[4] = rf(15)
+            }
             // L102 (i.java:2961): Z = {r8[11], r8[13]}; P |= 16
             34 -> {
                 e.Z[0] = rf(11); e.Z[1] = rf(13)
@@ -493,7 +505,8 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> e.Z[0] = 0
             // L110 (i.java:2986): Z = {r8[20]} → falls through to L111
             16 -> { e.Z[0] = rf(20); l111(e, f) }
-            // switch default → L111 (covers S33/S36/S53 and every unlisted S)
+            // switch default → L111 (covers S0/S1/S33/S36/S53 and every
+            // unlisted S)
             else -> l111(e, f)
         }
     }
@@ -522,6 +535,60 @@ class NpcFsm(val world: LevelCellSource) {
      */
     fun tickTrigger(e: Entity, w: LevelCellSource, player: Entity, pad: Pad) {
         when (e.S) {
+            // `aV()` S0 arm (i.java:9772-9800 L5ac-L5e0, proven) — camera
+            // focus zone: while the player overlaps a visible zone the
+            // tracker reads k.af/k.ag as focus offsets (camA = ak-200+af,
+            // camB = al-120+ag; k.java:1959-1965). Params are sticky when
+            // zero: `p==0 → L5d1` skips the af write (keeps prior value),
+            // `aG==0 → L1ec7` bare-returns keeping ag. A non-overlapping or
+            // invisible zone clears BOTH globals — verbatim quirk: with
+            // several S0 zones the last-ticked loser wins the wipe.
+            0 -> {
+                if (rectsOverlap(player.W, e.W) && e.wasHitRecently(w)) {
+                    if (e.pv != 0) w.camAf = e.pv                    // L5c7
+                    if (e.aG == 0) return                          // → L1ec7
+                    w.camAg = e.aG                                 // L5d7
+                    return
+                }
+                w.camAf = 0; w.camAg = 0                           // L5e0
+            }
+            // `aV()` S2 arm (i.java:11834-11976 L13a1-L14a2, proven) —
+            // one-shot flag-apply trigger. Gates: Z0∈{1,2} → player must
+            // overlap; Z0==2 → additionally the Z[2]-uid guard must be
+            // gone (null or off-screen `!v()`). Then the Z[1]-uid target
+            // gets `P |= Z[3]` (bit0 → `av=true` facing); if the target is
+            // the player and `g.a` exists, bit-512 propagates to it. The
+            // L1451 sweep then sets bit-512 on every ax11 soldier whose
+            // linked `.s` already has it (squad arming). One-shot: the
+            // zone removes itself via `k.c(this)` either way.
+            2 -> {
+                if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L13b5
+                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                }
+                if (e.Z[0] == 2) {                                 // L13c5
+                    if (e.Z[2] == 0) return                        // → L1ec7
+                    val gate = w.findByAw(e.Z[2])                  // k.q(Z[2])
+                    if (gate != null && gate.wasHitRecently(w)) return
+                }
+                val t = w.findByAw(e.Z[1])                         // L13ed k.q
+                if (t != null) {
+                    t.P = t.P or e.Z[3]                            // L13f5
+                    if (t.P and 1 != 0) t.av = true                // L1412
+                    if (t === player && player.ga != null) {       // L1418
+                        if (e.Z[3] and 512 != 0)
+                            player.ga!!.P = player.ga!!.P or 512   // L1432
+                        else
+                            player.ga!!.P = player.ga!!.P and 512.inv()
+                    }                                              // L1443
+                    for (b in w.npcs) {                            // L1451
+                        if (b.ax != 11) continue
+                        val bs = b.s ?: continue
+                        if (bs.P and 512 == 0) continue
+                        b.P = b.P or 512                           // L1496
+                    }
+                }
+                w.removeEntity(e); return                          // L14a2
+            }
             // `aV()` S10 arm (i.java:9338-9363 L1e1, proven) — wall-run
             // zone: sets `g.q`/`g.d` while the player overlaps; clears
             // both when this zone still owns the link after contact ends.
