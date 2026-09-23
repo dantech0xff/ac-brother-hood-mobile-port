@@ -13911,6 +13911,67 @@ class Slice140Test {
         assertEquals(listOf(1, 2, 3, 4, 5), e.Z.take(5))
         assertEquals(0, e.pv, "L95 arm does not run L111")
     }
+
+    // slice 143 — remaining per-S init arms (i.java:2173-2229); each
+    // replaces the `default → L111` field map for its S value.
+
+    @Test fun `initTrigger S31 record fills the QTE Z quintet i2205`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 7, 31, 0, 0, 0, 0, 0, 0x1234, 0, 3, 9, 42)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(31, e.S)
+        assertEquals(7, e.Z[0]); assertEquals(0x1234, e.Z[1])
+        assertEquals(3, e.Z[2]); assertEquals(9, e.Z[3]); assertEquals(42, e.Z[4])
+        assertEquals(0, e.aE, "S31 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S30 record fills the eight-slot Z i2194`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(30, e.S)
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8), e.Z.take(8),
+            "Z = f12..f19")
+    }
+
+    @Test fun `initTrigger S24 record binds aA from f11 i2187`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 66)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(66, e.aA, "aA = f11")
+        assertEquals(0, e.aE, "S24 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S11 record Z0 from f0 i2173`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 11)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(10, e.Z[0], "Z[0] = f0")
+        assertEquals(0, e.aE, "S11 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S28 skips L111 field map i2190`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 55, 28, 0, 0, 0, 0, 0, 77)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(0, e.Z[0]); assertEquals(0, e.aE); assertEquals(0, e.pv)
+    }
+
+    @Test fun `initTrigger S39 arms P16 unless P32 set i2219`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 39)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(16, e.P and 16, "P&32==0 → P|=16")
+        val e2 = Entity(10, null); e2.P = 32
+        NpcFsm(w).initTrigger(e2, f)
+        assertEquals(0, e2.P and 16, "P&32!=0 → unchanged")
+    }
 }
 
 // ============================================================ slice 141

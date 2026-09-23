@@ -505,6 +505,28 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> e.Z[0] = 0
             // L110 (i.java:2986): Z = {r8[20]} → falls through to L111
             16 -> { e.Z[0] = rf(20); l111(e, f) }
+            // i.java:2173 S11 arm: Z = {r8[0]} — single field, no L111.
+            11 -> e.Z[0] = rf(0)
+            // i.java:2187 S24 arm: aA = r8[11] — script uid only, no L111.
+            24 -> e.aA = rf(11)
+            // i.java:2190 S28 arm: Z = {0} — no L111.
+            28 -> e.Z[0] = 0
+            // i.java:2194 S30 arm: Z = {r8[12..19]} — no L111.
+            30 -> {
+                e.Z[0] = rf(12); e.Z[1] = rf(13); e.Z[2] = rf(14)
+                e.Z[3] = rf(15); e.Z[4] = rf(16); e.Z[5] = rf(17)
+                e.Z[6] = rf(18); e.Z[7] = rf(19)
+            }
+            // i.java:2205 S31 arm: Z = {r8[4], r8[11], r8[13], r8[14],
+            // r8[15]} — Z0 flags, Z[1] lane-type nibble pack, Z[2] required
+            // presses, Z[3] done-sentinel aA, Z[4] initial script uid.
+            // No L111 tail.
+            31 -> {
+                e.Z[0] = rf(4); e.Z[1] = rf(11)
+                e.Z[2] = rf(13); e.Z[3] = rf(14); e.Z[4] = rf(15)
+            }
+            // i.java:2219 S39 arm: P&32==0 → P|=16 — no L111.
+            39 -> { if (e.P and 32 == 0) e.P = e.P or 16 }
             // switch default → L111 (covers S0/S1/S33/S36/S53 and every
             // unlisted S)
             else -> l111(e, f)
