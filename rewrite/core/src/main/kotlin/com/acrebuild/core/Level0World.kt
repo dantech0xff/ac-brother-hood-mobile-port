@@ -84,9 +84,10 @@ class Level0World(
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
-    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
-     *  default is the x1 init value (inferred — dB restore path unmined). */
-    override var kAx = 90
+    /** `k.ax` — meter-restore byte (k.java:223 `byte ax = 30`,
+     *  proven); `ax = dB` on load, `g.e(ax)` writes `x[1] = ax`,
+     *  `ax == 0 → 30` in the meter draw (:4176). */
+    override var kAx = 30
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -729,6 +730,18 @@ class Level0World(
     override val kBb: List<Entity> get() = npcs  // k.bb follower list
     override val kBc: Int get() = npcs.size      // k.bc
     override var kAd = 2                         // k.ad=2 (k.java:8348 static init)
+    var kBg = -1                            // k.bG=-1 (:310) — one-shot music slot
+    var kAk = 0                             // k.ak (:66) — flying group marker
+    var kQ = 0                              // k.Q (:42) — flying scroll count
+    var kV = -7                             // k.V=-7 (:49) — camera watch
+    var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
+    var kDA: Entity? = null                 // k.dA — HUD indicator entity
+    /** `k.ef[]` (k.java:264, proven) — all-false trail-enable table:
+     *  `if (ef[aj]) ab()` at the jc9 exit is dead code in this build. */
+    val kEfArr = BooleanArray(9)
+    /** `k.f0do[]` (k.java:210, proven) — per-mission held-mask table,
+     *  all entries 5 → `g.g(5)` at every mission start. */
+    val kF0Do = intArrayOf(5, 5, 5, 5, 5, 5, 5, 5, 5)
     override var kAV: Entity? = null             // k.aV
     override var kAQ: Entity? = null             // k.aQ
     override var kAv = false                     // k.av
@@ -837,8 +850,8 @@ class Level0World(
     var kFE = 0                        // k.fE — fade alpha
     var kDa = 0                        // k.da — menu param (l(19) arg)
     var kDt = false                    // k.dt — difficulty-locked flag
-    var kDB = 0                        // k.dB — lives byte (bA[44])
-    var kDC = 0                        // k.dC — sync byte (bA[46])
+    var kDB = 30                       // k.dB — lives byte (bA[44]; :225 init 30)
+    var kDC = 30                       // k.dC — sync byte (bA[46]; :226 init 30)
     var kDD = 0                        // k.dD — progress (bA[32]/az)
     var kDF = 0                        // k.dF — misc byte (bA[48])
     var kBG = 0                        // k.bG — score flag (Q case14)
@@ -2793,12 +2806,84 @@ class Level0World(
      *  state from the save bytes), `dz=120; aw=0`, `l(8)` + `z(23)` +
      *  `F(aj)` — `missionInit()` covers the `g.e(ax)`/music arm; bG/dl/
      *  A[]-release are script/render side (unported). */
+    /** `k.a()` case 9 (k.java:797-812, proven) — load screen tick:
+     *  `N()` draws the spinner (renderer); the `G(j.g)` gate (~164
+     *  frames) then `w(65568)||j()` runs the play-entry arm:
+     *  `bG=0; dl=null; A[5]=A[1]=null; a(bA,16,0); ax=dB; ay=dC;
+     *  aN=dF; g.e(ax); C(); T(); dz=120; aw=0; if(ef[aj]) ab();
+     *  l(8); z(23); F(aj)`. `dl`/`A[]` are resource-management
+     *  releases with no port equivalents (eager decode). */
     private fun menuJc9() {
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
-            kAx = kDB; kAy = kDC; kAN = kDF
+            kBg = 0                                  // bG = 0
+            kBA[16] = 0                              // a(bA,16,(short)0)
+            kAx = kDB; kAy = kDC; kAN = kDF          // ax=dB;ay=dC;aN=dF
+            player.x1 = kAx                          // g.e(ax) → x[1]=ax
+            camResetC()                              // C()
+            hudIndicatorT()                          // T()
             kDz = 120; kAw = 0
+            if (kAj < kEfArr.size && kEfArr[kAj]) trailAb()  // ef[aj]
             stateL(8); z(23)
+            missionF(kAj)                            // F(aj)
         }
+    }
+
+    /** `C()` (k.java:1851-1875, proven) — camera/sim accumulator reset
+     *  at play entry: `P=O=cB=cA=cD=cC=Q=0; Z=false; ab=false`; then
+     *  `bh[aj]!=3 → aR=-1; ak=0; X=0; n(); m(ad)`, else the flying arm
+     *  `dU=0; dR=-1; ak=0; aR=-1; dS=-2; dT=(bu-20)-(20*aR); Q=230;
+     *  D(); cA=O=aS.ak-200; cB=P=aS.al-230; W=0; X=-7; V=-7; Y=X<<8`. */
+    private fun camResetC() {
+        camY = 0; camX = 0                         // P = 0; O = 0
+        camB = 0; camA = 0                         // cB = 0; cA = 0
+        camCD = 0; camCC = 0                       // cD = 0; cC = 0
+        kQ = 0; kZ = false; kAb = false            // Q=0; Z=false; ab=false
+        if (!bh3) {
+            kAR = -1; kAk = 0; kX = 0              // aR=-1; ak=0; X=0
+            kN()                                   // n() — bound release
+            kM(kAd)                                // m(ad) — mode-2 snap
+        } else {
+            kDU = 0; kDR = -1; kAk = 0; kAR = -1   // dU/dR/ak/aR
+            kDS = (-1) - 1                          // dS = (-1)-1 = -2
+            kDT = (kBu - 20) - (20 * kAR)           // dT=(bu-20)-(20*aR)
+            kQ = 230
+            kD()                                   // D()
+            camA = player.ak - 200; camX = camA    // cA=O=aS.ak-200
+            camB = player.al - 230; camY = camB    // cB=P=aS.al-230
+            kW = 0; kX = -7; kV = -7               // W=0; X=-7; V=-7
+            // Y = X << 8 — the kY derived getter
+        }
+    }
+
+    /** `T()` (k.java:4165-4173, proven) — spawn the HUD indicator
+     *  entity: `dA = new i(); dA.aa = z[12]; dA.i(0); dA.ak=al=0;
+     *  aA = 0`. `dA` is standalone (never enters `bb[]`). */
+    private fun hudIndicatorT() {
+        kDA = Entity(0, clips[12]).apply { S = 0; ak = 0; al = 0 }
+        kAA = 0
+    }
+
+    /** `ab()` (k.java:5752-5767, proven) — flying-level trail LUT:
+     *  reads `z[58]` frame rects (`d()/e()/f()`) into `ft[]`/`fu[]`
+     *  {x,255}/{x,255+fx} pairs. Unreachable in this build (`ef[]`
+     *  is all-false) — needs the clip frame-rect API; left as the
+     *  documented stub the gate guarantees never runs. */
+    private fun trailAb() {
+        // unreachable — kEfArr is all-false (verbatim dead code)
+    }
+
+    /** `F(int)` (k.java:3551-3558, proven) — per-mission play-entry
+     *  input setup: `i.bS=0` (dead flag), `i>0 → i.j(1)` (`bS|=1`,
+     *  still dead), `g.I=1; g.J=0; g.g(f0do[i])` — held-mask init
+     *  from the all-5 table (`gJ|=5` then `q()` equip rebuild). */
+    private fun missionF(i: Int) {
+        Entity.entBSLatch = 0                       // i.bS = 0
+        if (i > 0) Entity.entBSLatch =
+            Entity.entBSLatch or 1                // i.j(1) → bS |= 1
+        player.gI = 1                             // g.I = 1
+        player.gJ = 0                             // g.J = 0
+        player.gJ = player.gJ or kF0Do[i]         // g.g(f0do[i])
+        rebuildEquip()                            // k.q()
     }
 
     /** `k.a()` case 18 (k.java:1146-1175, proven) — the title screen
