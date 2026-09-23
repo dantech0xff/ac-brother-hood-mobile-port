@@ -26,6 +26,9 @@ class Level0World(
     /** `k.by`/`k.bz`/`k.eH` script tables (`j.e(7)` of the mission pack,
      *  k.java:6196). Null = no scripts (spawn smoke/tests w/o assets). */
     val scripts: ScriptTables? = null,
+    /** `j.f(2)` charmap bytes (shared `short[]` font map) — builds the
+     *  `y` FontClip used for `a(str,str2)` footer dims (:2276-2296). */
+    val charmap: ByteArray? = null,
 ) : LevelCellSource {
 
     companion object {
@@ -821,7 +824,7 @@ class Level0World(
         58 to "MISSION FAILED. YOU DIDN'T REACH THE ESCAPE LOCATION IN TIME!",
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
         69 to "DO YOU WANT TO DELETE YOUR DATA?",
-        71 to "DIFFICULTY", 72 to "IN-GAME SOUND?",
+        71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
         73 to "DO YOU WANT TO QUIT?",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
@@ -1753,6 +1756,7 @@ class Level0World(
      *  menu row (the orig's touch row-hit in the draw loop sets `bw` +
      *  `E(32)`; folded into `menuRowAt` here, `inferred` mechanism). */
     private fun menuQ(pressY: Int) {
+        footerQ()                            // a(str,str2) rects → E()
         // ---- back arm: `v(131072)` ------------------------------------
         if (pad.v(Pad.M_CYCLE) && jC != 23 && jC != 13) {
             kCb = true
@@ -1805,14 +1809,35 @@ class Level0World(
     /** Panel Y: jc12/13 → `b(93,67,214,true,true)` (:1108); jc14 →
      *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
      *  the same 67 (`inferred` — call sites unmined). */
-    fun menuPanelY(): Int = when {
-        jC == 14 -> if (kBv == 3 || kBv == 4) 86 else 30
-        else -> 67
+    fun menuPanelY(): Int = menuPanelRect()[1]
+    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :6218):
+     *  jc12/13 `b(93,67,214,true,true)`; jc14 bv3 `b(93,67)` / bv4
+     *  `b(93,86)` / else `b(93,30)` (:1124-1129); jc19 `d(14,47,180)`;
+     *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
+     *  (:1440); other states `inferred` (93,67,214). */
+    fun menuPanelRect(): IntArray = when (jC) {
+        14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
+        19 -> intArrayOf(14, 47, 180)
+        23, 28 -> intArrayOf(93, 120, 214)
+        29 -> intArrayOf(93, 86, 214)
+        else -> intArrayOf(93, 67, 214)
     }
     /** z3 = the 40px title strip: verbatim true for jc12/13 (`b(…,true,
      *  true)`); jc14 goes through the 4-arg `b()` → z3=false (:1124);
      *  other screens `inferred` true. */
-    fun menuPanelZ3(): Boolean = jC != 14
+    /** z2 = bordered/filled variant: `b(...,true,·)` for jc12/13/14;
+     *  `d(i,i2,i3)`→`b(...,false,false)` for jc19/23/28/29 (:5863-5868). */
+    fun menuPanelZ2(): Boolean = jC == 12 || jC == 13 || jC == 14
+    /** Panel visible this frame: jc12/13 (kAl'd) plus the footer states
+     *  drawn unconditionally each frame (:1124-1185, :6218-6227). */
+    val panelVisible: Boolean
+        get() = menuVisible || jC == 14 || jC == 19 || jC == 23 ||
+            jC == 28 || jC == 29
+    fun menuPanelZ3(): Boolean = when {
+        jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
+        jC == 12 || jC == 13 -> true
+        else -> false               // ae()/jc19/jc29 go via d() → z3=false
+    }
     /** `i10 = min(8, ey)` — only the first 8 rows ever draw (:5924). */
     fun menuRowCount(): Int = minOf(8, kEy.coerceAtLeast(0))
     /** row height — `i4 = 35` when `i13==0 && j.c==2` else 30 (:5936). */
@@ -1832,11 +1857,12 @@ class Level0World(
      *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
     fun menuRowRects(): List<IntArray> {
         val out = ArrayList<IntArray>()
-        val i3 = 214
-        var i9 = menuPanelY() + 10
+        val pr = menuPanelRect()
+        var i = pr[0]
+        val i3 = pr[2]
+        var i9 = pr[1] + 10
         if (menuPanelZ3()) i9 += 40
         val i12 = i9
-        var i = 93
         val i10 = menuRowCount()
         for (i13 in 0 until i10) {
             val i4 = menuI4(i13)
@@ -1846,7 +1872,8 @@ class Level0World(
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {
-                    i = 206
+                    i = 206               // verbatim literal (jc19 col-2
+                                          // lands off-panel — orig quirk)
                     i9 = i12 - (i4 + 3)
                 }
             }
@@ -1859,6 +1886,56 @@ class Level0World(
      *  returned in second; 83/84 → `": "+ON/OFF` (`ff=fg={21,20}` :306-307);
      *  97 → `": "+d(0,35+au)`; 103 → `l(3)`; 123 → `": "+d(0,124+k()?0:1)`);
      *  non-19 → `d(0,10)+" "+(i13+1)` = "LEVEL n". */
+    /** `ce`/`cf` footer widths (k.java:2271-2296, proven): measured via
+     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36. */
+    var kCe = -1
+    var kCf = -1
+    /** `y` font for the footer measure — same clip as renderer's fontY
+     *  (pack-1 entry-3 = clip92 + shared charmap). Null in tests without
+     *  assets → footer labels still returned, dims fall back to 36. */
+    val footerFont: FontClip? = charmap?.let { cm ->
+        clips[92]?.let { FontClip(it, FontClip.loadCharmap(cm), 4) } }
+    /** `a(str,str2)` left-label width (:2276-2281): `y.a(str,null)` →
+     *  `ce = b.d + 30` when str==d(0,16), else `ce = 36`. */
+    fun footerLeftDim(str: String): Int =
+        if (str == d0(16)) (footerFont?.measure(str)?.first() ?: 6) + 30 else 36
+    /** right-label width (:2294-2298): `cf = b.d + 30` when str2==d(0,18)
+     *  else 36. */
+    fun footerRightDim(str: String): Int =
+        if (str == d0(18)) (footerFont?.measure(str)?.first() ?: 6) + 30 else 36
+    /** `a(str,str2)` label pair per screen (proven call sites):
+     *  jc14 `a(bv==2?d(0,16):d(0,79), d(0,17))` (:1136); jc19
+     *  `a(d(0,79), d(0,17))` (:1181); jc23/28 via ae() `a(d(0,79),
+     *  (bv==0||jc==23||jc==13) ? "" : d(0,17))` (:6225); jc29
+     *  `a(null, (bv==0||bv==3) ? "" : d(0,17))` (:1444); jc12/13 → none. */
+    fun menuFooter(): Pair<String?, String?> = when (jC) {
+        14 -> Pair(d0(if (kBv == 2) 16 else 79), d0(17))
+        19 -> Pair(d0(79), d0(17))
+        23 -> Pair(d0(79), "")
+        28 -> Pair(d0(79), if (kBv == 0) "" else d0(17))
+        29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        else -> Pair(null, null)
+    }
+    /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
+     *  arms `E(262144)` left / `E(131072)` right (:2288/:2309). Called
+     *  from menuQ before the v() arms so the armed bits dispatch in the
+     *  same frame, matching the orig's a()→L()→Q() order. */
+    private fun footerQ() {
+        val fl = menuFooter()
+        val left = fl.first
+        kCe = -1; kCf = -1
+        if (left != null && left != "" && jC != 21 && jC != 8) {
+            kCe = footerLeftDim(left)
+            if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
+        }
+        val right = fl.second
+        if (!right.isNullOrEmpty()) {
+            kCf = footerRightDim(right)
+            if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47)) {
+                padE(Pad.M_CYCLE)
+            }
+        }
+    }
     fun menuRowText(i13: Int): Pair<String, Int> {
         if (jC == 19) {
             val iM = menuM(kBv, i13)

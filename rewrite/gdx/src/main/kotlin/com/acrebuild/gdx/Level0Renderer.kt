@@ -271,6 +271,63 @@ class Level0Renderer {
         return str
     }
 
+    /** `a(i,i2,i3,z2)` (k.java:2242, proven) — the soft-key pill:
+     *  frames `z2?41,42:43,44`, cached `cQ`/`cR` frame-0 module widths,
+     *  cap + do-while fill + inner `i5` + mirrored cap. */
+    private var pillCQ = -1
+    private var pillCR = -1
+    private fun softPill(x: Int, yBottom: Int, w: Int, pressed: Boolean) {
+        val clip = clips[93] ?: return
+        val i4 = if (pressed) 41 else 43
+        val i5 = if (pressed) 42 else 44
+        if (pillCQ == -1) {
+            val fd = clip.frameDraw(i4, 0, 0)
+            pillCQ = clip.moduleWidth(fd.module and 0x3FFF)
+        }
+        if (pillCR == -1) {
+            val fd = clip.frameDraw(i5, 0, 0)
+            pillCR = clip.moduleWidth(fd.module and 0x3FFF)
+        }
+        drawFrame(93, i4, 0, x, yBottom, 0)
+        var i7 = x + pillCQ
+        do {
+            drawFrame(93, i5, 0, i7, yBottom, 0)
+            i7 += pillCR
+        } while (i7 + pillCR < x + w)
+        drawFrame(93, i5, 0, (x + w) - pillCQ - pillCR, yBottom, 0)
+        drawFrame(93, i4, 0, x + w, yBottom, 1)
+    }
+
+    /** `a(str,str2)` (k.java:2270, proven) — the footer soft-key strip:
+     *  left pill at (5,235) skipped on jc21/8, `y` text when str==d(0,16);
+     *  right pill at (395-cf,235), `y` text when str2==d(0,18) else the
+     *  A[2] arrow `zD?29:24`. Hit-test lives in world.footerQ. */
+    private fun footer(world: Level0World, left: String?, right: String?) {
+        if (left != null && left != "" && world.jC != 21 && world.jC != 8) {
+            val ce = world.footerLeftDim(left)
+            world.kCe = ce
+            softPill(5, 235, ce,
+                     world.pointerMoveIn(-5, 198, ce + 20, 47))
+            if (left == world.d0(16)) {
+                fontY.l(0)
+                drawText(left, 5 + (ce shr 1), 222, 3, pack = 92)
+            }
+        }
+        if (!right.isNullOrEmpty()) {
+            val cf = world.footerRightDim(right)
+            world.kCf = cf
+            val zD = world.pointerMoveIn(395 - cf - 10, 198, cf + 20, 47)
+            softPill(395 - cf, 235, cf, zD)
+            if (right == world.d0(18)) {
+                fontY.l(0)
+                drawText(right, 395 - (cf shr 1), 222, 3, pack = 92)
+            } else {
+                drawFrame(93, if (zD) 29 else 24, 0,
+                          395 - (cf shr 1), 222, 0)
+            }
+        }
+    }
+
     /** `b(i,i2,i3,z2,z3)` (k.java:5903-6150, proven) — the menu panel +
      *  row renderer. The `c()→bw` tap hook is the world's `menuRowAt`;
      *  the j.c==2 side soft-buttons are unported (jC==2 unreachable). */
@@ -447,19 +504,21 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
-        // menu screens — k.L462/Q() (k.java:1108-1138 + :5960+, proven):
-        // `b(93,67,214,true,true)` panel, `bW.l(1)` prompt centered on
-        // (200,93) align 3, eA[bv] rows `bW.a(cd,strA,i14-ez,i9+(i4>>1),3)`
-        // (row-center x, align 3; i4=30px rows). `b()` panel and the A[2]
-        // row-icon/selection-pill procs unported — procedural panel +
-        // inferred sel strip; `a(strD,zD,w)` fit-scroll not yet mined.
-        if (world.menuVisible) {
-            // `b(93,67,214,true,true)` + `bW.l(1)` prompt at the
-            // clip-centered variant's anchor (~200,93) + `L(ey);Q()`.
-            val py = world.menuPanelY()
-            menuPanel(world, 93, py, 214, true, world.menuPanelZ3())
-            world.menuPrompt()?.let { t ->
-                drawText(t, 200, py + 26, 3, palette = 1, pack = 91)
+        // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
+        // :5903-6150, proven): `b(x,y,w,z2,z3)` panel + `bW` prompt/title +
+        // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
+        if (world.panelVisible) {
+            val pr = world.menuPanelRect()
+            menuPanel(world, pr[0], pr[1], pr[2],
+                      world.menuPanelZ2(), world.menuPanelZ3())
+            if (world.menuVisible) {
+                world.menuPrompt()?.let { t ->
+                    drawText(t, 200, pr[1] + 26, 3, palette = 1, pack = 91)
+                }
+            }
+            val fl = world.menuFooter()
+            if (fl.first != null || fl.second != null) {
+                footer(world, fl.first, fl.second)
             }
         }
 
