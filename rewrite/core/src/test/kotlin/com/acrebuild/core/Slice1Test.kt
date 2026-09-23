@@ -11155,3 +11155,88 @@ class Slice106Test {
             "ticker must alternate with tickIndex parity")
     }
 }
+
+
+// --------------------------------------------------------------- slice 107
+// ax9 S4 hint-banner + S5 context pad (aV() L15b9/L15e8, i.java:12121-12171).
+// op22 scripts arm anims {0..8} onto ax9 uids — S4/S5 are live script states.
+class Slice107Test {
+
+    private fun ax9At(w: Level0World, x: Int, y: Int, s: Int, aF: Int = 0): Entity {
+        val e = Entity(9, w.clips[47])
+        e.setPositionPx(x, y)
+        val f = mutableListOf(9, 0, x, y, 0, s, 0, -1, 0)
+        for (i in 9..15) f += 0
+        w.npcFsm.initAx9(e, f, w)
+        e.aF = aF
+        w.npcs.add(e)
+        return e
+    }
+
+    private fun boxAroundPlayer(w: Level0World, e: Entity) {
+        val p = w.player; p.refreshBoxes()
+        e.W[0] = p.W[0] - 10; e.W[1] = p.W[1] - 10
+        e.W[2] = p.W[2] + 10; e.W[3] = p.W[3] + 10
+    }
+
+    @Test fun `S4 overlap shows the aF level string and holds aC=-1`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 4, aF = 3)
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(w.levelString(1 + w.kAj, 3), w.kAB, "k.aB = d(1+aj, aF)")
+        assertEquals(-1, w.kAC, "aC = -1 — banner holds while touching")
+    }
+
+    @Test fun `S4 leave clears the banner only when aC is out`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 4, aF = 3)
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        // walk off: empty k.aC → the banner clears (L15dd aC<=0 arm)
+        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertNull(w.kAB, "aC<=0 + no overlap → aB = null")
+        // re-show, then leave while the countdown is still live
+        boxAroundPlayer(w, e)
+        w.npcFsm.tickAx9(e, w, w.player)
+        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
+        w.kAC = 5                                     // countdown live
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertNotNull(w.kAB, "aC>0 → L1ec7 = return, banner kept")
+    }
+
+    @Test fun `S5 overlap plus up press rises the player to S22`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 5)
+        boxAroundPlayer(w, e)
+        w.pad.commit(16388)                            // u(16388) held
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(22, w.player.S, "u(16388) → aS.i(22)")
+    }
+
+    @Test fun `S5 directional tap matches facing — av uses u2 else u8`() {
+        val w = world(); w.npcs.clear()
+        val e = ax9At(w, 0, 0, 5)
+        boxAroundPlayer(w, e)
+        w.player.av = true
+        w.pad.commit(2)                                // av → u(2)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(22, w.player.S)
+
+        val w2 = world(); w2.npcs.clear()
+        val e2 = ax9At(w2, 0, 0, 5)
+        boxAroundPlayer(w2, e2)
+        w2.player.av = false
+        w2.pad.commit(8)                               // !av → u(8)
+        w2.npcFsm.tickAx9(e2, w2, w2.player)
+        assertEquals(22, w2.player.S)
+
+        val w3 = world(); w3.npcs.clear()
+        val e3 = ax9At(w3, 0, 0, 5)
+        boxAroundPlayer(w3, e3)
+        w3.pad.commit(0)                               // no press → no rise
+        w3.npcFsm.tickAx9(e3, w3, w3.player)
+        assertNotEquals(22, w3.player.S)
+    }
+}
