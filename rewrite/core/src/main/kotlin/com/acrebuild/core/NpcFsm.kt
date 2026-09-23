@@ -767,6 +767,114 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gq = false; player.gd = null
                 }
             }
+            // ---- `aV()` small-arm batch (all proven) -----------------
+            // S4 = L15b9 (i.java:12121-12137): dialog-text zone —
+            // overlap publishes `k.aB = k.d(1+k.aj, aF)` (level string)
+            // + `k.aC = -1`; leaving clears `k.aB` when `aC <= 0`.
+            4 -> {
+                if (rectsOverlap(e.W, player.W)) {
+                    w.kAB = w.levelString(1 + w.kAj, e.aF)          // L15b9
+                    w.kAC = -1
+                } else if (w.kAC <= 0) w.kAB = null                 // L15dd
+                return
+            }
+            // S5 = L15e8 (i.java:12144-12167): auto-jump zone — overlap +
+            // (fire `u(16388)`/`v(16388)` OR direction-held matching
+            // facing: `av ? u(2) : u(8)`) → player `i(22)` rise anim.
+            5 -> {
+                if (rectsOverlap(e.W, player.W) &&
+                    (w.padDown(16388) || pad.v(16388) ||
+                     (player.av && w.padDown(2)) ||
+                     (!player.av && w.padDown(8))))
+                    player.setAnim(22)                              // L1625
+                return
+            }
+            // S6/S7 = L162e/L1643 (i.java:12173-12194): persisted flag
+            // zones — overlap writes `k.aZ = 1` / `k.aZ = 0` (save byte
+            // 68 — event-done toggles).
+            6 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = true; return }
+            7 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = false; return }
+            // S9 = L1658, S19 = L15b8, S39 = L1a02: bare `return` arms —
+            // no port (dead states; the dispatch records them verbatim
+            // here for the table's completeness).
+            // S12 = L175c (i.java:12309-12321): one-shot screen
+            // transition `k.n(aF)` (cO/cP) + self-remove.
+            12 -> {
+                if (rectsOverlap(e.W, player.W)) {
+                    w.kNSet(e.aF)                                   // k.n(aF)
+                    w.removeEntity(e)
+                }
+                return
+            }
+            // S13 = L1778 (i.java:12322-12325): unconditional
+            // `k.c(this)` — the "remove me" marker state.
+            13 -> { w.removeEntity(e); return }
+            // S14 = L1659-L1750 (i.java:12195-12308): assassination-
+            // target release zone. Player's `af` must be a live ax69
+            // (Z[0]∈{0,1,2}) whose rect overlaps the zone: zero the
+            // target's velocities, `i(0)` + `P&=~64` + `E()` settle the
+            // player, `G()` the target's link; Z[0]∈{1,2} pins `ak` to
+            // the target's center-x; Z[0]==0 hurls the player
+            // (`ag=∓3328` by `av`, `ah=-6656`, `i(243)`). Then `af=null`
+            // + `k.c(this)`.
+            14 -> {
+                val t = player.af ?: return                         // L1659
+                if (t.ax != 69) return
+                if (t.Z[0] != 0 && t.Z[0] != 1 && t.Z[0] != 2) return
+                if (!rectsOverlap(t.W, e.W)) return                 // L169c
+                t.ah = 0; t.ag = 0
+                player.setAnim(0)
+                player.P = player.P and -65                         // ~64
+                player.eSettle(w)                                   // E()
+                t.releaseAe()                                       // af.G()
+                if (t.Z[0] == 1 || t.Z[0] == 2)
+                    player.ak = (t.W[0] + t.W[2]) shr 1             // L1704
+                else {
+                    player.ag = if (player.av) -3328 else 3328      // L1726
+                    player.ah = -6656
+                    player.setAnim(243)
+                }
+                player.af = null                                    // L1750
+                w.removeEntity(e)
+                return
+            }
+            // S21 = L1855 (i.java:12432-12456): checkpoint-write zone —
+            // overlap → `k.b(8, 1+k.aj, aF, p)` (mark map region);
+            // true → `k.l(21)` dialog screen; then `k.x = 48` +
+            // self-remove regardless.
+            21 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    if (w.kBMark(8, 1 + w.kAj, e.aF, e.pv))
+                        w.screenL(21)                               // L187f
+                    w.kX = 48
+                    w.removeEntity(e)
+                }
+                return
+            }
+            // S22 = L157d (i.java:12090-12117): checkpoint-audio zone —
+            // overlap → `aF<0 → k.w()` (e.b() stop); `aF==2 → k.z(2)`;
+            // else `k.A(aF)` = `z(aF)` (the ==2 branch is verbatim
+            // redundant — `A` delegates to `z`). Then `k.c(this)`.
+            22 -> {
+                if (rectsOverlap(e.W, player.W)) {
+                    if (e.aF < 0) w.audioStop()                     // k.w()
+                    else w.audioTrackPlay(e.aF)                     // z/A(aF)
+                    w.removeEntity(e)
+                }
+                return
+            }
+            // S23 = L1889 (i.java:12457-12489): linked-entity watch —
+            // `o` uid → `k.q`; ax11 + rect-overlap → `cq = alive ? 1:0`
+            // (`P()` side-effects the dead release); else `cq = 0`;
+            // `o == -1` or link missing → return.
+            23 -> {
+                if (e.oId == -1) return                             // L1889
+                val t = w.findByAw(e.oId) ?: return                 // L18c7
+                if (t.ax == 11 && rectsOverlap(t.W, e.W))
+                    t.cq = !t.deadRelease()                         // P()→cq
+                else t.cq = false
+                return
+            }
             // `aV()` S17 arm (i.java:12794-12951 L1b44-L1c92, proven;
             // dispatch `case 17: goto L1b44` i.java:9182) — balance
             // zone. `aA` phases: 0 → wait for overlap (claim-busy freezes
@@ -778,7 +886,7 @@ class NpcFsm(val world: LevelCellSource) {
             // leaving the rect also → `aA=2`; 2 → `aZ || g.a` (landed
             // or grabbed) resets `aA=0`.
             17 -> {
-                if (w.kC != null && w.kC!!.claimActive() && e.aA == 1)
+                if (w.kC != null && w.kC!!.claimAb() && e.aA == 1)
                     return                                          // L1b44
                 if (e.aA == 0) {
                     if (rectsOverlap(player.W, e.W)) {              // entry
@@ -1007,6 +1115,54 @@ class NpcFsm(val world: LevelCellSource) {
                     return                                           // L12e3
                 }
             }
+            // S28 = L1aa7 (i.java:12720-12793): grab-guard zone —
+            // enter: `g.g==null && (aA&8)==0 && overlap && Z[0]==0` →
+            // `aA|=8`, `g.z=0`, `Z[0]=1`; `i.bn` → `az=-1`. Exit:
+            // `aA&8 && !overlap && Z[0]==1` → `aA&=~8`, `g.z=1`,
+            // `Z[0]=0`; `i.bn` → `az=100`. (First tick skips the exit
+            // arm via `goto L1be7` — folded in by ordering.)
+            28 -> {
+                if (player.gg == null && (player.aA and 8) == 0 &&
+                    rectsOverlap(player.W, e.W) && e.Z[0] == 0) {
+                    player.aA = player.aA or 8                        // L1aba
+                    player.z = false                                // g.z = 0
+                    e.Z[0] = 1
+                    if (w.iBn) player.az = -1                       // L1b0b
+                }
+                if ((player.aA and 8) != 0 && !rectsOverlap(player.W, e.W)
+                    && e.Z[0] == 1) {
+                    player.aA = player.aA and -9                    // ~8
+                    player.z = true                                 // g.z = 1
+                    e.Z[0] = 0
+                    if (w.iBn) player.az = 100                      // L1b71
+                }
+                return
+            }
+            // S29 = L12e4 (i.java:11732-11833): release-zone — waits on
+            // the `o`-linked group: `k.q(o)` → null or member with
+            // neither P32 nor P128 → `k.c(this)`; else set P32|P128,
+            // clear P16; `p`/`aG`/`ay` uids (skip -1) must each resolve
+            // to an entity with `at()` done (else return — keep
+            // waiting); then `P&=~32`, `G()`, `bi[ax]!=-1 → P&=~128`,
+            // `k.c(this)`.
+            29 -> {
+                val t = if (e.oId == -1) null else w.findByAw(e.oId)  // L12fd
+                if (t == null || ((t.P and 32) == 0 && (t.P and 128) == 0)) {
+                    w.removeEntity(e); return                        // L1314
+                }
+                t.P = t.P or 32 or 128                               // L1330
+                t.P = t.P and -17                                    // ~16
+                // L1395-L14c0: pv/aG/ay member uids must all be done.
+                for (uid in intArrayOf(e.pv, e.aG, e.ay)) {
+                    if (uid == -1) continue
+                    val m = w.findByAw(uid)
+                    if (m != null && !m.atDone()) return
+                }
+                t.P = t.P and -33                                    // ~32 L1434
+                t.releaseAe()                                        // G()
+                if (Entity.AX_CLIP_BI[t.ax] != -1) t.P = t.P and -129// ~128
+                w.removeEntity(e); return                            // L14cd
+            }
             // `aV()` S31 arm (i.java:9804-10466 L5ea-La66, proven;
             // dispatch `case 31: goto L5ea` i.java:9200) — the
             // claim-QTE zone: 4 pad lanes from Z[1] nibbles (types index
@@ -1153,6 +1309,58 @@ class NpcFsm(val world: LevelCellSource) {
                 boss.ak = e.ak                                        // aU.ak ← zone x
                 boss.ah = 0                                           // zero velocities
                 boss.ag = 0
+                return
+            }
+            // S32 = L18d1 (i.java:12477-12520): balance-hold zone —
+            // enter: overlap + `g.ac==null` → `g.ac=this`, `i(38)`,
+            // `k.v()` clear latches. Exit: `!overlap && ac==this` →
+            // `ac=null`. While bound (`ac==this`): arc `al` toward the
+            // zone's center — `al = cy + 10*(halfW-|dx|)/halfW`,
+            // `ah = 0`.
+            32 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    if (player.ac == null) {
+                        player.ac = e                                  // L18f0
+                        player.setAnim(38)                             // i(38)
+                        w.clearLatches()                               // k.v()
+                    }
+                } else if (player.ac === e) player.ac = null           // L1920
+                if (player.ac === e) {
+                    val dx = Math.abs(player.ak - ((e.W[0] + e.W[2]) shr 1))
+                    val hw = (e.W[2] - e.W[0]) shr 1
+                    player.al = ((e.W[1] + e.W[3]) shr 1) +
+                        (10 * (hw - dx)) / hw                          // L1a02
+                    player.ah = 0
+                }
+                return
+            }
+            // S41 = L1a03 (i.java:12647-12671): `g.a` driver zone —
+            // player's held entity `ga` is ax51 and overlaps → remove.
+            41 -> {
+                val ga = player.ga ?: return
+                if (ga.ax != 51 || !rectsOverlap(ga.W, e.W)) return
+                w.removeEntity(e); return
+            }
+            // S42 = L1d75 (i.java:13074): overlap → `k.c(this)`
+            // (one-shot remove trigger).
+            42 -> { if (rectsOverlap(player.W, e.W)) w.removeEntity(e); return }
+            // S44 = L1a59 (i.java:12683-12696): meter-write zone —
+            // overlap → `k.W = k.V - aE`, remove.
+            44 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    w.kW = w.kV - e.aE                                 // L1a67
+                    w.removeEntity(e)
+                }
+                return
+            }
+            // S45 = L1a79 (i.java:12698-12718): hurt-prop zone —
+            // overlap → `bh[k.aj]==3` → player `i(34)` (hit react);
+            // else `k.l(12)` mission-fail + remove.
+            45 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    if (w.missionBh() == 3) player.setAnim(34)           // L1a97
+                    else { w.screenL(12); w.removeEntity(e) }          // L1aad
+                }
                 return
             }
             33 -> if (rectsOverlap(player.W, e.W)) {

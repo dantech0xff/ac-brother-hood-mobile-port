@@ -738,7 +738,7 @@ class Level0World(
     override var kBH = -1                   // k.bH=-1 (:311) — saved music slot
     var kAk = 0                             // k.ak (:66) — flying group marker
     var kQ = 0                              // k.Q (:42) — flying scroll count
-    var kV = -7                             // k.V=-7 (:49) — camera watch
+    override var kV = -7                    // k.V=-7 (:49) — camera watch
     var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
     var kDA: Entity? = null                 // k.dA — HUD indicator entity
     /** `k.ef[]` (k.java:264, proven) — all-false trail-enable table:
@@ -1002,6 +1002,18 @@ class Level0World(
     override var kAP: String? = null           // k.aP — HUD message text
     override var kAB: String? = null           // k.aB — c(z2) center banner (k.java:4327)
     override var kAC = 0                       // k.aC — banner TTL
+    override var kAZ = false                   // k.aZ (:252) — save byte 68 flag
+    override var kBQ = false                   // k.bQ (:140) — map dirty flag
+    override fun audioTrackPlay(n: Int) { z(n) } // e.a(n,false) → private z()
+    /** `k.b(8,level,row,span)` (k.java:350, proven) — checkpoint-map
+     *  marker; `row==-1 → false`, else `kU=slot` and the map region is
+     *  marked complete (the `w` count is consumed by the map screen —
+     *  stubbed there; `inferred` bookkeeping, proven signature). */
+    override fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean {
+        if (row == -1) return false
+        kU = slot; kBQ = true
+        return true
+    }
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
     var alertSlide = 0                         // derived `i3` = 30-aH slide
@@ -3101,7 +3113,7 @@ class Level0World(
     val statsVisible get() = kAl && jC == 31 && kBx >= 0
     fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
     /** `e.b()` (e.java:87, proven) — stop the current track. */
-    fun audioStop() { audioTrack = -1 }
+    override fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
 
     /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
