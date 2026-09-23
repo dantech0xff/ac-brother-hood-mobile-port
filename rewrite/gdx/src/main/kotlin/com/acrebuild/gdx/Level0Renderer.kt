@@ -1103,8 +1103,9 @@ class Level0Renderer {
             if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
                 drawEntity(world, e.ad!!, camX, camY); e.ad!!.advanceAnim()
             }
-            // ag()→ah() ghost-trail draw — `a` card producer unported
-            // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
+            // `iVar2.ag() → iVar2.ah()` (k.java:2920-2921, proven): the
+            // per-entity ghost-trail draw, after the entity's own blit.
+            if (e.hasTrail()) drawGhostTrail(e, camX, camY)
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
@@ -1661,6 +1662,37 @@ class Level0Renderer {
      *  (palette, remapTable) pairs for ax0 entities. */
     private val boArt = arrayOf(
         intArrayOf(0, -1), intArrayOf(3, 1), intArrayOf(5, 2), intArrayOf(6, 3))
+
+    /** `i.ah()` (i.java:19648-19683, proven): the 5-dot afterimage trail.
+     *  Each live dot — `(x != ak && x > -200) || (y != al && y > -120)` —
+     *  draws the entity's clip at armed-S anim `trailAnim` (`a.e`), frame
+     *  `trailFrame()` (`a.f` at the card clock), alpha `255*(100-i*20)/100`
+     *  (`d.g(cW,…)` palette fade — `a(z2,i)` hardcodes `cV=true` so the
+     *  `d.h(cW,i+2)` palette-remap branch is dead for this path), flip
+     *  bit `|=1` by `av`, at world pos `cU[i]` minus `k.O`/`k.P`. The
+     *  trailing `d.g(cW,255)`/`d.h(cW,1)` restore is render-side only —
+     *  the port never mutates the clip palette. Dots draw at palette 0
+     *  (row `cW=0` is the one the fade touches — `inferred` for entities
+     *  running a non-0 variant). */
+    private fun drawGhostTrail(e: Entity, camX: Int, camY: Int) {
+        val t = e.cU ?: return
+        val clip = e.clip ?: return
+        val pack = clipPackOf(clip) ?: return
+        val anim = e.trailAnim
+        if (anim < 0 || anim >= clip.animCount()) return
+        val frame = e.trailFrame()
+        if (frame < 0 || frame >= clip.frameCount(anim)) return
+        for (i in 0 until 5) {
+            val x = t[i * 2]; val y = t[i * 2 + 1]
+            if (!((x != e.ak && x > -200) || (y != e.al && y > -120))) continue
+            val fd = clip.frameDraw(anim, frame, if (e.av) 1 else 0)
+            val obj = clip.remap(e.remapTable, fd.module)
+            batch.setColor(1f, 1f, 1f, (255 * (100 - i * 20) / 100) / 255f)
+            drawObject(pack, obj, x - camX - fd.dx, y - camY - fd.dy,
+                       fd.transform, palette = 0)
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
+    }
 
     private fun drawEntity(world: Level0World, e: Entity, camX: Int, camY: Int) {
         // `aU()` (i.java:3047 → :8989-9143, proven): ax10 early-outs of

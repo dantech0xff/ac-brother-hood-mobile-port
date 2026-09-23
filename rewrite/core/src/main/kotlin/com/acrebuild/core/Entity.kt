@@ -259,6 +259,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cU: IntArray? = null
     var cV = false                // i.cV — trail-fadeout flag
     var cW = 0                    // i.cW — trail clip workspace index
+    /** `a.e` (a.java:33-42) — the anim index each trail card carries:
+     *  captured `S` at arm time (`cU[i].a(this.S,-1)` i.java:19611/19615). */
+    var trailAnim = -1
+    /** `a.g` (a.java:110-140, proven) — the trail cards' shared ms
+     *  accumulator: `b(j.g)` adds ~1/draw; frames hold `dur*40` units so
+     *  dots sit on armed-S frame ~0 for the trail's short life. */
+    var trailClock = 0
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
@@ -3675,14 +3682,39 @@ open class Entity(val ax: Int, var clip: Clip?) {
         t[0] = ak; t[1] = al
         for (i in 1..4) { t[i * 2] = -200; t[i * 2 + 1] = -120 }
         cU = t; cV = true; cW = 0
+        trailAnim = S
+        trailClock = 0
     }
 
     /** `i.af()` (i.java:21513, proven): ring-shift the trail dots —
-     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. */
+     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. The card clock
+     *  ticks here (`ah()`→`b(j.g)` in the original runs per draw; j.g is
+     *  ~1 in gameplay so +1/push is the same rate — `inferred`). */
     fun pushTrail() {
         val t = cU ?: return
         for (i in 3 downTo 0) { t[(i + 1) * 2] = t[i * 2]; t[(i + 1) * 2 + 1] = t[i * 2 + 1] }
         t[0] = ak; t[1] = al
+        trailClock++
+    }
+
+    /** `a.b(i)`/`a.f()` (a.java:60,112-142, proven): the trail cards'
+     *  frame position — walk `dur*40`ms thresholds through `trailAnim`,
+     *  wrapping forever (`h=-2` < 0 → `f=0` loop, never `i=true`). */
+    fun trailFrame(): Int {
+        val c = clip ?: return 0
+        if (trailAnim < 0 || trailAnim >= c.animCount()) return 0
+        val n = c.frameCount(trailAnim)
+        if (n <= 0) return 0
+        var rem = trailClock
+        var f = 0
+        var guard = 0
+        while (guard++ < 1024) {
+            val d = c.frameDuration(trailAnim, f) * 40
+            if (d <= 0 || rem < d) break
+            rem -= d
+            f = (f + 1) % n
+        }
+        return f
     }
 
     /** `i.ag()` (i.java:21529, proven): trail armed. */
