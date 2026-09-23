@@ -770,7 +770,8 @@ class Level0World(
     var kCY = 1                        // k.cY — G() current 8-line screen
     var kCW = 0                        // k.cW — G() page-1 pad
     var kCb = false                    // k.cb
-    var kCu = 0                        // k.cu — k-side flag (entity cu is i's)
+    var kCu = 0                        // k.cu — boot R() sub-phase (entity cu is i's)
+    var kDu = 0L                       // k.du — jG snapshot at a cu transition
     var kFd = 0                        // k.fd
     var kFe = 0                        // k.fe
     // k.aD → `kAD` (existing field, HUD fuse entity — same original field)
@@ -872,6 +873,17 @@ class Level0World(
         122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
+        63 to "ALSO AVAILABLE ON THE\n PLAYSTATION®3 SYSTEM.\n " +
+              "ASSASSIN'S CREED IS AVAILABLE ON THE\n PSP® " +
+              "(PLAYSTATION®PORTABLE) SYSTEM.\n WWW.ASSASSINSCREED.COM ",
+        65 to "© 2010 UBISOFT ENTERTAINMENT. ALL RIGHTS RESERVED. " +
+              "ASSASSIN'S CREED, UBISOFT AND THE UBISOFT LOGO ARE " +
+              "TRADEMARKS OF UBISOFT ENTERTAINMENT IN THE U.S. AND/OR " +
+              "OTHER COUNTRIES. PUBLISHED AND DEVELOPED BY GAMELOFT " +
+              "UNDER LICENSE FROM UBISOFT ENTERTAINMENT. SOFTWARE © 2010 " +
+              "GAMELOFT. ALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT " +
+              "LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER " +
+              "COUNTRIES.",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
         106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
         109 to "NOBLEMAN", 113 to "ACHIEVEMENTS", 117 to "NEW GAME",
@@ -2368,7 +2380,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 18, 19, 23, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 23, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2465,6 +2477,47 @@ class Level0World(
         menuL(kEy); menuQ(pressY)
     }
 
+    /** `k.R()` (k.java:3949-4100, proven) — the boot driver, `k.a()`
+     *  case 0: `cu` is its sub-phase counter (`l()` resets `cu=0`, and
+     *  `j.c==0` only at boot — nothing else `l()`s there).
+     *  Splash clips, font/string/audio loads and the `e(false)` save
+     *  read are create()-time here, so cases 0/1/4/5 collapse to their
+     *  `cu++` transitions; what survives is the observable frame:
+     *  `bX` logo anim 0 for 3000ms (pause-key skips → `z(23)`), anim 1
+     *  + `d(0,63)` legal text for 3000ms (also skippable), then the
+     *  `d(0,65)` copyright/loading text for 5000ms (not skippable) →
+     *  `l(23)` sound prompt. Timers map wall-clock `System
+     *  .currentTimeMillis() - du` onto `jG` ticks — `>= 3000ms` ⇔
+     *  `jG - kDu >= 49` (⌈3000/62⌉), `>= 5000ms` ⇔ `>= 81`
+     *  (`inferred` — same semantics, deterministic clock). */
+    private fun bootR() {
+        when (kCu) {
+            0 -> { kCu = 1; kDu = jG }
+            1 -> kCu = 2
+            2 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
+                kCu = 3; kDu = jG
+                if (pad.v(Pad.M_PAUSE)) z(23)
+            }
+            3 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
+                kCu = 4; kDu = jG
+                if (pad.v(Pad.M_PAUSE)) z(23)
+            }
+            4 -> kCu = 5
+            5 -> {
+                kCu = 6                      // S() preload frame — orig
+                bootLoadCheck()              // falls through to case 6
+            }
+            6 -> bootLoadCheck()
+        }
+    }
+
+    /** `R()` case 6 (k.java:4086-4099, proven): copyright text for
+     *  5000ms from the case-3→4 transition, then `f.a(...)` resize
+     *  notify (view-size fixed at create — nop) + `l(23)`. */
+    private fun bootLoadCheck() {
+        if (jG - kDu >= 81) { kCu = 7; stateL(23) }
+    }
+
     /** `k.a()` case 18 (k.java:1146-1175, proven) — title screen tick.
      *  `!cS`: `v(65568)||j()` (context edge or a play-area tap) →
      *  `cT=100; cS=true; z(23)`. `cS`: `cb=true; cT-=10; !e.a()→z(0)`
@@ -2546,7 +2599,8 @@ class Level0World(
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
             // `l(18)` → title. 327712 = pause|context union.
-            23 -> if (!pad.v(327712)) menuAe(pressY)
+            0 -> bootR()                             // case 0 = R() (:3949)
+        23 -> if (!pad.v(327712)) menuAe(pressY)
                   else {
                       if (kBw == 0) { kBE = true; kBF = true; z(0) }
                       else if (kBw == 1) { kBE = false; kBF = false }

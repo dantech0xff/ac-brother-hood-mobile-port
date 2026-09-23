@@ -329,6 +329,32 @@ class Level0Renderer {
      *  **unreachable-labeled** (boot-flow only): `A[1].a(cd,1,0,0,0)` +
      *  `A[0].a(cd,0,0,0,0)` + `A[1].a(cd,2,0,0,0)`; `!cS` → `d(0,9)`
      *  blink at (200,205) `j.g%10>5`. */
+    /** `R()` draw side (k.java:4004-4099, proven): every case fills
+     *  black first (`cd.setColor(0); j.b`), then `bX` (clip 0 = pack-3
+     *  entry-0 logo bank) anim 0 for cu≤2, anim 1 + `d(0,63)` for
+     *  cu==3, `d(0,65)` copyright text for cu≥4. `b.a` ticks the logo
+     *  one frame per call — `(jG-kDu) % frameCount` reproduces it. */
+    private fun bootScreen(world: Level0World) {
+        fillAr(0, 0, 400, 240, -16777216)              // 0xFF000000
+        when (world.kCu) {
+            in 0..2 -> drawFrame(0, 0, bootFrame(world, 0), 200, 120, 0)
+            3 -> {
+                drawFrame(0, 1, bootFrame(world, 1), 200, 120, 0)
+                world.d0(63)?.let {
+                    dialogText(world, it, 10, 140, 380, 3, Int.MAX_VALUE) }
+            }
+            else -> world.d0(65)?.let {
+                dialogText(world, it, 10, 120, 380, 3, Int.MAX_VALUE) }
+        }
+    }
+
+    /** `b.a` per-call anim tick → frame = elapsed ticks mod count. */
+    private fun bootFrame(world: Level0World, anim: Int): Int {
+        val clip = clips[0] ?: return 0
+        val n = clip.frameCount(anim)
+        return if (n <= 0) 0 else ((world.jG - world.kDu) % n).toInt()
+    }
+
     private fun titleScreen(world: Level0World) {
         drawFrame(97, 1, 0, 0, 0, 0)                 // A[1] anim 1
         drawFrame(96, 0, 0, 0, 0, 0)                 // A[0] frame 0
@@ -1206,6 +1232,9 @@ class Level0Renderer {
 
         // N() load screen (k.java:3472-3513) — unreachable-labeled.
         if (world.jC == 9) loadScreen(world)
+
+        // jc0 boot R() (k.java:3949-4100): black + logo + loading text.
+        if (world.jC == 0) bootScreen(world)
 
         // jc18 title screen (k.java:1146-1157) — unreachable-labeled.
         if (world.jC == 18) titleScreen(world)

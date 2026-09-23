@@ -96,6 +96,9 @@ class Level0Game : ApplicationAdapter() {
         // e(false) (k.java:4045): load the /ASBR record at boot — nop
         // when no record exists (orig swallows the same path).
         save.read()?.let { world.saveLoad(it) }
+        // j.c==0 + cu==0 (k.a() case 0 = R(), k.java:3949): the real
+        // boot — splash logos → sound prompt → title → menu → play.
+        world.stateL(0)
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
