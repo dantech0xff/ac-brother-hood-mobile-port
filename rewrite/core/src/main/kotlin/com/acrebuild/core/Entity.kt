@@ -53,6 +53,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aZ = false                   // standing flag (aR != 18 when probing feet)
     var bd = false; var v = true     // x() status flags
     var bb = false; var bc = false   // wall flags left/right (a(boolean))
+
+    /** `y()` (i.java:918-927, proven): wall-contact flag on the travel
+     *  side — `ag<0` (moving left) or `ag<=0 && av` (stopped, facing
+     *  left) reads `bb`; otherwise `bc`. */
+    fun wallOnFacingSide(): Boolean =
+        if (ag < 0) bb else if (ag <= 0 && av) bb else bc
     var ba = false                   // unused third flag, kept for parity
     val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
     val X = IntArray(4)              // attackbox (t())
