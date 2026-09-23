@@ -14043,3 +14043,77 @@ class Slice141Test {
         assertTrue(w.removed.isEmpty())
     }
 }
+
+// ============================================================ slice 142
+// ax10 small linked-entity triggers: S47 claim-clear (L219), S48 boss
+// speed (L166), S49 →S20 (L1bc), S54 S29→S30 advance (L136).
+
+class Slice142Test {
+    class S142World(cell: Int = 0) : Slice139Test.S55World(cell) {
+        override var kAQ: Entity? = null
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+    }
+
+    private fun trig(s: Int, uid: Int = 7, pv: Int = 0): Entity {
+        val z = Entity(10, null); z.S = s; z.oId = uid; z.pv = pv
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        return z
+    }
+
+    private fun overlapped(w: S142World): Entity {
+        val p = w.player; p.Y[0] = 190; p.Y[1] = 110; p.Y[2] = 210; p.Y[3] = 130
+        return p
+    }
+
+    @Test fun `S47 clears the claim slot every tick L219`() {
+        val w = S142World(); w.kAQ = w.player
+        NpcFsm(w).tickTrigger(trig(47), w, w.player, Pad())
+        assertNull(w.kAQ)
+    }
+
+    @Test fun `S48 copies pv onto the linked entity aG L166`() {
+        val w = S142World(); overlapped(w)
+        val boss = Entity(29, null); boss.aw = 7
+        w.npcs += boss
+        NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
+        assertEquals(12, boss.aG)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S48 requires player-Y overlap`() {
+        val w = S142World()
+        val boss = Entity(29, null); boss.aw = 7
+        w.npcs += boss
+        NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
+        assertEquals(0, boss.aG); assertTrue(w.removed.isEmpty())
+    }
+
+    @Test fun `S49 advances the linked entity to S20 L1bc`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(21, null); t.aw = 7
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(49), w, w.player, Pad())
+        assertEquals(20, t.S)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S54 advances S29 target to S30 on overlap L136`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(11, null); t.aw = 7; t.S = 29
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(54), w, w.player, Pad())
+        assertEquals(30, t.S)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S54 holds while the target is not at S29`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(11, null); t.aw = 7; t.S = 3
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(54), w, w.player, Pad())
+        assertEquals(3, t.S); assertTrue(w.removed.isEmpty())
+    }
+}

@@ -610,6 +610,37 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 w.removeEntity(e); return                          // L1526
             }
+            // `aV()` small linked-entity triggers (proven):
+            // S47 = L219: clears the global claim slot every tick (k.aQ
+            // = the `i`-typed claim owner, NOT the Image aQ at k.java:79
+            // — JADX letter collision).
+            47 -> { w.kAQ = null; return }                         // L219
+            // S48 = L166: when the player's tight rect overlaps, copy
+            // `p` (record f13 = "boss speed") onto the o-uid target's
+            // aG and remove. Debug print "Set Boss Speed=" omitted
+            // (proven-dead dev trace).
+            48 -> {
+                val t = w.findByAw(e.oId) ?: return
+                if (!rectsOverlap(player.Y, e.W)) return
+                t.aG = e.pv                                        // L19d
+                w.removeEntity(e); return                          // L1bb
+            }
+            // S49 = L1bc: overlap → linked entity `i(20)`, remove.
+            49 -> {
+                val t = w.findByAw(e.oId) ?: return
+                if (!rectsOverlap(player.Y, e.W)) return
+                t.setAnim(20)                                      // L1d8
+                w.removeEntity(e); return                          // L1e0
+            }
+            // S54 = L136: overlap + linked entity still at S29 →
+            // `i(30)`, remove. One-shot mission-step advance.
+            54 -> {
+                val t = w.findByAw(e.oId) ?: return                // L165
+                if (t.S != 29) return
+                if (!rectsOverlap(player.Y, e.W)) return
+                t.setAnim(30)
+                w.removeEntity(e); return
+            }
             // `aV()` S10 arm (i.java:9480-9772 L318-L5a8, proven) — the
             // scripted wall-climb/column sequence: while the player's top
             // sits inside the band `dy = aS.W[1]-W[3] ∈ [Z[0],Z[1]]` it
