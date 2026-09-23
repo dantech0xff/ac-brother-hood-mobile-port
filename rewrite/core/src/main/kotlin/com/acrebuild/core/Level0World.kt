@@ -70,6 +70,9 @@ class Level0World(
                           // unconverted index → null clip, matching the
                           // original's own clipless record path
             74 to 54,     // ax74 wisp (bi[74]=54, proven)
+            76 to 56,     // ax76 hazard volume — bi[76]=56 but pack-3 slot 56
+                          // is a zero-size entry (metadata, proven) → null
+                          // clip, invisible trigger
         )
     }
 
@@ -467,6 +470,7 @@ class Level0World(
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 64) npcFsm.initAx64(e, f.toList())
             else if (type == 74) npcFsm.initAx74(e, f.toList(), this)
+            else if (type == 76) npcFsm.initAx76(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type != 37)
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
@@ -1037,6 +1041,7 @@ class Level0World(
             else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
             else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
             else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
+            else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
             else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 

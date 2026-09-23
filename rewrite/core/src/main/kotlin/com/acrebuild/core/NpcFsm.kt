@@ -442,8 +442,7 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
-    // ==================================================================
-    // ax10 — `i.aV()` TriggerController (i.java:11800-13181; semantics
+    // ===========================================================    // ax10 — `i.aV()` TriggerController (i.java:11800-13181; semantics
     // reconstructed in docs/i-av-reconstruction.md). Level-0 carries 15
     // records using S ∈ {16,33,34,36,43,53}; this slice ports init L96
     // (i.java:2882) + the zone arms {33,34,36,43,53}. S16 (rope-attach,
@@ -2256,10 +2255,8 @@ class NpcFsm(val world: LevelCellSource) {
     }
 }
 
-// =========================================================================
-// ax21 — `bD()` mission director (i.java:18054-18629, proven)
-// =========================================================================
-
+// ==================================================================// ax21 — `bD()` mission director (i.java:18054-18629, proven)
+// ==================================================================
 /** `c` (c.java, proven): mission-waypoint node — `k`=id, `a`/`b`=target
  *  px, `c`=event-type, `d`=countdown nodes, `e`=per-node delay, `f`=arrive
  *  tolerance+flags (bit7 = consumed), `g`=next node id, `h`/`i` spare. */
@@ -2590,8 +2587,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
     }
     if (!tail) return
 
-    // ===== L237 tail — every non-returning tick =============================
-    // linked-entity anim watcher (r10 = 0..4 over Z[0..4])
+    // ===== L237 tail — every non-returning tick ======================    // linked-entity anim watcher (r10 = 0..4 over Z[0..4])
     for (r10 in 0 until 5) {
         val r016 = w.findByAw(e.Z[r10]) ?: continue
         if (!r016.animFinished()) continue
@@ -2779,10 +2775,8 @@ private fun NpcFsm.directorChase(e: Entity, flag: Boolean): Boolean {
     return false
 }
 
-// ============================================================================
-// Slice 34 — i.aP() ax29 boss duel FSM (i.java:10328-11076)
-// ============================================================================
-
+// =====================================================================// Slice 34 — i.aP() ax29 boss duel FSM (i.java:10328-11076)
+// =====================================================================
 /** `d.a` (d.java:9, proven): the `aQ()` attack-pick table —
  *  `{16,15,7,17,9,8,5,14,10,33}`; by3 remaps value 5→40, 6→39
  *  (i.java:11159-11169). */
@@ -3924,10 +3918,8 @@ fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
 }
 
 
+// =============================================================// slice 48 — ax9 `bM()` (i.java:21069-21196) + init arm L50 (:2781-2793)
 // ====================================================================
-// slice 48 — ax9 `bM()` (i.java:21069-21196) + init arm L50 (:2781-2793)
-// ===========================================================================
-
 /** `k.bn` (k.java:8447, proven): ax9 record field r8[8] → clip-index table —
  *  {47,72}; the record stores `bn[r8[8]]` in Z[2] verbatim (entity clip
  *  binding itself stays `bi[9]=47`). */
@@ -4024,14 +4016,12 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-// =====================================================================
-// ax15 — bu() (i.java:16693, proven): grapple/hang volume. bi[15]=25.
+// ==============================================================// ax15 — bu() (i.java:16693, proven): grapple/hang volume. bi[15]=25.
 // S6/S8 run the body: player pushed out horizontally, captured into a
 // hang (e(r1) → aS.i(108) + g.a claim), or claimed by the key arms.
 // S9 → P|=16 (passive marker). S10 → P|=16 + bt() falling sweep.
 // S7 → respawn-or-remove. Level-0 record aw=124 is the S9 marker.
-// =====================================================================
-
+// ==============================================================
 /** init arm — `case 15` (i.java:2669) → L362 (:3553, proven):
  *  `az = r8[7]`; r8[5] ∈ {9,10} → `Z = int[8], Z[4] = -1`;
  *  r8[5] ∈ {6,8} → `Z = int[4]`; both then `Z[0]=r8[8], Z[1]=ak,
@@ -4203,13 +4193,11 @@ private fun ax15Capture(e: Entity, w: Level0World, p: Entity) {
     }
 }
 
-// =====================================================================
-// ax46 — aZ() (i.java:13568-13726, proven): spring/trap prop. bi[46]=29
+// ==============================================================// ax46 — aZ() (i.java:13568-13726, proven): spring/trap prop. bi[46]=29
 // but the anim clip rebinds per-record: `aa = k.r(k.bl[r8[10]])` with
 // k.bl = {29, 0} — bl[1]=0 = the mega clip (clip0) whose 300-range
 // anims host the armed-trap states 327/328/329. Head pins palette Z[5].
-// =====================================================================
-
+// ==============================================================
 /** init arm — `case 46` (i.java:2700) → L206 (:3245, proven):
  *  `Z=int[8]`; `Z[4]=r8[5]` (armed marker); `Z[0]=r8[8]<<8`,
  *  `Z[1]=r8[9]<<8` (throw velocities); `Z[5]=r8[11]` (palette pin);
@@ -4315,12 +4303,10 @@ private fun ax46Pusher(e: Entity, p: Entity) {
     p.setAnim(242)
 }
 
-// =====================================================================
-// ax7 — ejection slot (i.java tick-dispatch case 7 → L88/L90/L94,
+// ==============================================================// ax7 — ejection slot (i.java tick-dispatch case 7 → L88/L90/L94,
 // :5110-5149, proven): the swallow-and-eject warp volume. Records carry
 // no Z — init is just `az = r8[7]` + shared `i(r8[5])+t()`.
-// =====================================================================
-
+// ==============================================================
 /** init arm — `case 7` (i.java:2661) → L112 (:3001): `az = r8[7]` then
  *  the shared `i(r8[5])` + `t()` tail. */
 fun NpcFsm.initAx7(e: Entity, f: List<Int>, w: Level0World) {
@@ -4637,11 +4623,9 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
 }
 
 
-// =====================================================================
-// ax72 + ax78 + ax79 — the counterweight pair + palette prop
+// ==============================================================// ax72 + ax78 + ax79 — the counterweight pair + palette prop
 // (i.java init L384/L153/L386; ax78 tick `bA()` :17525, proven).
-// =====================================================================
-
+// ==============================================================
 /** ax72 init (L384 :3605, proven): `az=r8[7]` + `Z=int[5]` —
  *  `Z[0]=r8[8]`, `Z[1]=r8[9]<<8` (fixed-point drop offset),
  *  `Z[2]=r8[10]`, `Z[3]=r8[11]`, `Z[4]=r8[12]` (linked ax78's `aw`).
@@ -5483,10 +5467,8 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
     e.integrate()
 }
 
-// =========================================================================
-// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
-// =========================================================================
-
+// ==================================================================// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
+// ==================================================================
 /**
  * `i.be()` (i.java:14585, proven): "someone standing on the lever zone" —
  * `W ∩ aS.W` short-circuits true; otherwise scans `k.bd[]` for ax∈{11,15}
@@ -5556,7 +5538,7 @@ fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
     }
 }
 
-// ===================================================================
+// ============================================================ ax60 = bj()
 /**
  * `i.bj()` (proven transcription). S9/16 = vertical lifts, S10/17 =
  * vertical travel, S11/14 = horizontal pair member (parked), S13/15 =
@@ -5853,8 +5835,7 @@ fun NpcFsm.initAx60(e: Entity, f: List<Int>, w: Level0World) {
     e.setAnim(rf(5))                                       // L392 tail
     e.refreshBoxes()                                       // t()
 }
-// =========================================================================
-// ax43 = bw() — ride/swing carrier (dispatch i.java:5081; bw():17086-17187,
+// ==================================================================// ax43 = bw() — ride/swing carrier (dispatch i.java:5081; bw():17086-17187,
 // all proven). Bound by the grapple-offer `o(i)` (:17038-17085) — the ax15
 // arm's r6 == 43 check: `g.a=r6, i(1), k.ae=r6, A(19), ag=Z[1]<<8, G(),
 // g.C=true`. While bound (`g.a==this`, S∈{1,4}): pins the player at its
@@ -5864,8 +5845,7 @@ fun NpcFsm.initAx60(e: Entity, f: List<Int>, w: Level0World) {
 // `cv` (i.cv): the ax10-S51 rail zone under k.ac — full containment of
 // own Y inside cv.W → detach + aS.a(0) + k.c(this). S7 = cut → vel0 +
 // unlink ae/ga + o(this) re-offer. L75 (unbound): k.ae=aS + o(this).
-// =========================================================================
-
+// ==================================================================
 /**
  * `i.o(i)` (i.java:17038-17085, proven): the ax43 grapple-attach offer —
  * non-43 callsites no-op (ax40's `o(this)` at :17185 is dead). `t()` then:
@@ -6105,8 +6085,7 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
     corpseDrop(e)                                            // au() L849
 }
 
-// =========================================================================
-// ax69 = bC() — air-assassination target zone (dispatch i.java:5096;
+// ==================================================================// ax69 = bC() — air-assassination target zone (dispatch i.java:5096;
 // bC():17721-18000; init arm :3191 (L194) + shared tail :3680 (L392);
 // all proven). bi[69]=38 → clip38.
 //
@@ -6134,8 +6113,7 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
 //  `aS.i(0), P&=-65, E(), af=null`, else park on overlap or
 //  `aS.az=100; G(); P|=32|64`; Z[0]==1 →r()→ `i(7)`.
 //  S5/S12: Z[0]==0 && r() → bK?4:11, then same park/release tail.
-// =========================================================================
-
+// ==================================================================
 /**
  * `i.bC()` (proven transcription). `Z[0]` = zone flavor from r8[4]:
  * 0 = armed-scan (records: all three spawns), 1 = auto-eligible,
@@ -6977,8 +6955,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     e.pushContact(w)
 }
 
-// ============================================================================
-// Slice 64 — ax47 `aK()` ledge sentinel + ax50 `aL()` pouncer + the shared
+// =====================================================================// Slice 64 — ax47 `aK()` ledge sentinel + ax50 `aL()` pouncer + the shared
 // stealth-kill driver `i.k()` (i.java:2057-2255) both FSM tails funnel into.
 //
 //  aK() i.java:9910-10007 — S120 perch (ceiling-grab on the player drop-kill
@@ -7006,8 +6983,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
 //      L77 `bn→false; b(W,k.ac)` W⊆cam rect; shared L88-L101 tail
 //      (LOS clear + player ∉ {284,285}).
 //  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
-// ============================================================================
-
+// =====================================================================
 private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
 private val DROP_KILL = intArrayOf(24, 22, 43, 150, 35, 157)
 private val KILL_EXIT = intArrayOf(268, 267, 271, 270, 291)
@@ -7351,8 +7327,7 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-// ===========================================================================
-// Slice 65 — ax64 `bl()` grabber/harrier NPC (i.java:15391-15897, proven
+// ====================================================================// Slice 65 — ax64 `bl()` grabber/harrier NPC (i.java:15391-15897, proven
 // transcription; marker-clip / pool-visual paths labeled `inferred`).
 //
 // Record (L321, i.java:3474): Z[0..9] = r8[7..16]; Z[1] = r8[8] + 7;
@@ -7365,8 +7340,7 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
 // Z[2..5] = waypoint uids (patrol chain), Z[6] = death-anim pick (S4/S5),
 // Z[7] = post-arrival hop (S6) vs drop (S3), Z[8] = stalk budget (S7),
 // Z[9] = barrage interval.
-// ===========================================================================
-
+// ====================================================================
 /** (proven i.java:15400-15436) — `p.S` states the S7 stalk may latch onto:
  *  switch arms send {0,4,5,17,18,30,31,32,33} → r04=true, else false. */
 private val AX64_VULN = intArrayOf(0, 4, 5, 17, 18, 30, 31, 32, 33)
@@ -7830,5 +7804,78 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
             return
         }
         else -> return                             // L65
+    }
+}
+
+// ============================================================ ax76 = bO()
+// Damage/hazard volume (i.java:21407, proven). `bi[76]=56` — pack-3 slot 56
+// is a zero-size entry (pack-3 metadata, proven) → `aa==null` clipless,
+// invisible trigger. S0 idle→arm on player overlap while `aZ` standing and
+// no interact target (`g.g`); binds via `k.aS.aA|=8` + z-order push
+// (`az=this.az-1`) + `g.e` owner slot when `Z[1]==1`. S1 disarm on exit.
+// S2 damage cycle: `aC` sibling-chain countdown (`k.q(o)` → `i(2)` chain),
+// per-tick `g.d(g.u[k.au])` while overlapping. S3/S5 → i(S+1) once the
+// player hitbox leaves `X`; S4/S6 end anims → `k.c`.
+
+/** Record init (L361 at i.java:3546, proven): `az=r8[7]`, `aC=r8[8]`
+ *  (chain countdown), `o=r8[9]` (sibling aw link), `Z=new int[2]` +
+ *  `Z[1]=r8[4]` (trap-type flag) — the Z re-alloc to 2 slots is folded
+ *  into the shared 22-slot ctor array (bO never reads Z[2+]). */
+fun NpcFsm.initAx76(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.aC = rf(8)
+    e.oId = rf(9)                                  // `o` → oId (O clash)
+    e.Z[1] = rf(4)
+    e.setAnim(rf(5))                               // L392 tail
+    e.refreshBoxes()                               // t()
+}
+
+/** `g.e` release arm shared by the L15/L17 + L25 tails (i.java:21421): only
+ *  fires while this trap still owns the slot, and only for `Z[1]==1`. */
+private fun ax76Release(e: Entity, p: Entity) {
+    if (p.ge !== e) return
+    if (e.Z[1] != 1) return
+    p.aA = p.aA and -9                             // aA &= ~8
+    p.az = 100
+    p.ge = null
+}
+
+fun NpcFsm.tickAx76(e: Entity, w: LevelCellSource, p: Entity) {
+    when (e.S) {
+        0 -> {                                     // L5 arm / L15 release
+            if (Entity.overlapStrict(e.W, p.W) && p.aZ && p.g == null) {
+                e.setAnim(1)
+                if (e.Z[1] == 1) {                 // L55 arm
+                    p.aA = p.aA or 8
+                    p.az = e.az - 1
+                    p.ge = e
+                }
+            } else ax76Release(e, p)
+        }
+        1 -> {                                     // L21 disarm on exit
+            if (!Entity.overlapStrict(e.W, p.W)) {
+                e.setAnim(0)
+                ax76Release(e, p)                  // L25
+            }
+        }
+        3, 5 -> {                                  // L29: left hitbox → next
+            if (Entity.overlapStrict(e.W, p.X)) e.setAnim(e.S + 1)
+        }
+        4, 6 -> {                                  // L33: end → despawn
+            if (e.animFinished()) w.removeEntity(e)
+        }
+        2 -> {                                     // L37: damage cycle
+            if (e.aC > 0) e.aC--
+            if (e.aC == 0 && e.oId != -1) {        // L40: sibling chain
+                val r0 = w.findByAw(e.oId)
+                if (r0 != null && r0.ax == 76 && r0.S != 2) r0.setAnim(2)
+            }
+            // L51: damage every tick while overlapping (verbatim — no aC
+            // gate on the damage arm).
+            if (Entity.overlapStrict(e.W, p.W))
+                p.gDrain(w.GU[w.weaponSlot], w)    // g.d(g.u[k.au])
+        }
+        else -> {}
     }
 }
