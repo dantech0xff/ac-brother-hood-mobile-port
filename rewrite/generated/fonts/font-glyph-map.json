@@ -1,0 +1,1498 @@
+{
+  "format": "Gameloft ordered Unicode-to-glyph hash table",
+  "typed_header": 25,
+  "value_count": 609,
+  "bucket_count": 228,
+  "base_buckets": [
+    {
+      "bucket": 0,
+      "codepoint": 228,
+      "glyph_id": 101
+    },
+    {
+      "bucket": 1,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 2,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 3,
+      "codepoint": 231,
+      "glyph_id": 106
+    },
+    {
+      "bucket": 4,
+      "codepoint": 232,
+      "glyph_id": 115
+    },
+    {
+      "bucket": 5,
+      "codepoint": 233,
+      "glyph_id": 114
+    },
+    {
+      "bucket": 6,
+      "codepoint": 234,
+      "glyph_id": 116
+    },
+    {
+      "bucket": 7,
+      "codepoint": 235,
+      "glyph_id": 117
+    },
+    {
+      "bucket": 8,
+      "codepoint": 236,
+      "glyph_id": 130
+    },
+    {
+      "bucket": 9,
+      "codepoint": 237,
+      "glyph_id": 133
+    },
+    {
+      "bucket": 10,
+      "codepoint": 238,
+      "glyph_id": 131
+    },
+    {
+      "bucket": 11,
+      "codepoint": 239,
+      "glyph_id": 132
+    },
+    {
+      "bucket": 12,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 13,
+      "codepoint": 241,
+      "glyph_id": 143
+    },
+    {
+      "bucket": 14,
+      "codepoint": 242,
+      "glyph_id": 124
+    },
+    {
+      "bucket": 15,
+      "codepoint": 243,
+      "glyph_id": 127
+    },
+    {
+      "bucket": 16,
+      "codepoint": 244,
+      "glyph_id": 125
+    },
+    {
+      "bucket": 17,
+      "codepoint": 245,
+      "glyph_id": 123
+    },
+    {
+      "bucket": 18,
+      "codepoint": 246,
+      "glyph_id": 126
+    },
+    {
+      "bucket": 19,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 20,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 21,
+      "codepoint": 249,
+      "glyph_id": 140
+    },
+    {
+      "bucket": 22,
+      "codepoint": 250,
+      "glyph_id": 139
+    },
+    {
+      "bucket": 23,
+      "codepoint": 251,
+      "glyph_id": 141
+    },
+    {
+      "bucket": 24,
+      "codepoint": 252,
+      "glyph_id": 138
+    },
+    {
+      "bucket": 25,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 26,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 27,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 28,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 29,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 30,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 31,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 32,
+      "codepoint": 32,
+      "glyph_id": 1
+    },
+    {
+      "bucket": 33,
+      "codepoint": 33,
+      "glyph_id": 12
+    },
+    {
+      "bucket": 34,
+      "codepoint": 262,
+      "glyph_id": 107
+    },
+    {
+      "bucket": 35,
+      "codepoint": 35,
+      "glyph_id": 13
+    },
+    {
+      "bucket": 36,
+      "codepoint": 36,
+      "glyph_id": 14
+    },
+    {
+      "bucket": 37,
+      "codepoint": 37,
+      "glyph_id": 15
+    },
+    {
+      "bucket": 38,
+      "codepoint": 38,
+      "glyph_id": 16
+    },
+    {
+      "bucket": 39,
+      "codepoint": 39,
+      "glyph_id": 17
+    },
+    {
+      "bucket": 40,
+      "codepoint": 40,
+      "glyph_id": 18
+    },
+    {
+      "bucket": 41,
+      "codepoint": 41,
+      "glyph_id": 19
+    },
+    {
+      "bucket": 42,
+      "codepoint": 42,
+      "glyph_id": 26
+    },
+    {
+      "bucket": 43,
+      "codepoint": 43,
+      "glyph_id": 27
+    },
+    {
+      "bucket": 44,
+      "codepoint": 44,
+      "glyph_id": 28
+    },
+    {
+      "bucket": 45,
+      "codepoint": 45,
+      "glyph_id": 29
+    },
+    {
+      "bucket": 46,
+      "codepoint": 46,
+      "glyph_id": 30
+    },
+    {
+      "bucket": 47,
+      "codepoint": 47,
+      "glyph_id": 31
+    },
+    {
+      "bucket": 48,
+      "codepoint": 48,
+      "glyph_id": 2
+    },
+    {
+      "bucket": 49,
+      "codepoint": 49,
+      "glyph_id": 3
+    },
+    {
+      "bucket": 50,
+      "codepoint": 50,
+      "glyph_id": 4
+    },
+    {
+      "bucket": 51,
+      "codepoint": 51,
+      "glyph_id": 5
+    },
+    {
+      "bucket": 52,
+      "codepoint": 52,
+      "glyph_id": 6
+    },
+    {
+      "bucket": 53,
+      "codepoint": 53,
+      "glyph_id": 7
+    },
+    {
+      "bucket": 54,
+      "codepoint": 54,
+      "glyph_id": 8
+    },
+    {
+      "bucket": 55,
+      "codepoint": 55,
+      "glyph_id": 9
+    },
+    {
+      "bucket": 56,
+      "codepoint": 56,
+      "glyph_id": 10
+    },
+    {
+      "bucket": 57,
+      "codepoint": 57,
+      "glyph_id": 11
+    },
+    {
+      "bucket": 58,
+      "codepoint": 58,
+      "glyph_id": 34
+    },
+    {
+      "bucket": 59,
+      "codepoint": 59,
+      "glyph_id": 35
+    },
+    {
+      "bucket": 60,
+      "codepoint": 60,
+      "glyph_id": 24
+    },
+    {
+      "bucket": 61,
+      "codepoint": 61,
+      "glyph_id": 36
+    },
+    {
+      "bucket": 62,
+      "codepoint": 62,
+      "glyph_id": 25
+    },
+    {
+      "bucket": 63,
+      "codepoint": 63,
+      "glyph_id": 37
+    },
+    {
+      "bucket": 64,
+      "codepoint": 64,
+      "glyph_id": 38
+    },
+    {
+      "bucket": 65,
+      "codepoint": 65,
+      "glyph_id": 39
+    },
+    {
+      "bucket": 66,
+      "codepoint": 66,
+      "glyph_id": 40
+    },
+    {
+      "bucket": 67,
+      "codepoint": 67,
+      "glyph_id": 41
+    },
+    {
+      "bucket": 68,
+      "codepoint": 68,
+      "glyph_id": 42
+    },
+    {
+      "bucket": 69,
+      "codepoint": 69,
+      "glyph_id": 43
+    },
+    {
+      "bucket": 70,
+      "codepoint": 70,
+      "glyph_id": 44
+    },
+    {
+      "bucket": 71,
+      "codepoint": 71,
+      "glyph_id": 45
+    },
+    {
+      "bucket": 72,
+      "codepoint": 72,
+      "glyph_id": 46
+    },
+    {
+      "bucket": 73,
+      "codepoint": 73,
+      "glyph_id": 47
+    },
+    {
+      "bucket": 74,
+      "codepoint": 74,
+      "glyph_id": 48
+    },
+    {
+      "bucket": 75,
+      "codepoint": 75,
+      "glyph_id": 49
+    },
+    {
+      "bucket": 76,
+      "codepoint": 76,
+      "glyph_id": 50
+    },
+    {
+      "bucket": 77,
+      "codepoint": 77,
+      "glyph_id": 51
+    },
+    {
+      "bucket": 78,
+      "codepoint": 78,
+      "glyph_id": 52
+    },
+    {
+      "bucket": 79,
+      "codepoint": 79,
+      "glyph_id": 53
+    },
+    {
+      "bucket": 80,
+      "codepoint": 80,
+      "glyph_id": 54
+    },
+    {
+      "bucket": 81,
+      "codepoint": 81,
+      "glyph_id": 55
+    },
+    {
+      "bucket": 82,
+      "codepoint": 82,
+      "glyph_id": 56
+    },
+    {
+      "bucket": 83,
+      "codepoint": 83,
+      "glyph_id": 57
+    },
+    {
+      "bucket": 84,
+      "codepoint": 84,
+      "glyph_id": 58
+    },
+    {
+      "bucket": 85,
+      "codepoint": 85,
+      "glyph_id": 59
+    },
+    {
+      "bucket": 86,
+      "codepoint": 86,
+      "glyph_id": 60
+    },
+    {
+      "bucket": 87,
+      "codepoint": 87,
+      "glyph_id": 61
+    },
+    {
+      "bucket": 88,
+      "codepoint": 88,
+      "glyph_id": 62
+    },
+    {
+      "bucket": 89,
+      "codepoint": 89,
+      "glyph_id": 63
+    },
+    {
+      "bucket": 90,
+      "codepoint": 90,
+      "glyph_id": 64
+    },
+    {
+      "bucket": 91,
+      "codepoint": 91,
+      "glyph_id": 22
+    },
+    {
+      "bucket": 92,
+      "codepoint": 92,
+      "glyph_id": 32
+    },
+    {
+      "bucket": 93,
+      "codepoint": 93,
+      "glyph_id": 23
+    },
+    {
+      "bucket": 94,
+      "codepoint": 322,
+      "glyph_id": 220
+    },
+    {
+      "bucket": 95,
+      "codepoint": 95,
+      "glyph_id": 91
+    },
+    {
+      "bucket": 96,
+      "codepoint": 324,
+      "glyph_id": 222
+    },
+    {
+      "bucket": 97,
+      "codepoint": 97,
+      "glyph_id": 65
+    },
+    {
+      "bucket": 98,
+      "codepoint": 98,
+      "glyph_id": 66
+    },
+    {
+      "bucket": 99,
+      "codepoint": 99,
+      "glyph_id": 67
+    },
+    {
+      "bucket": 100,
+      "codepoint": 100,
+      "glyph_id": 68
+    },
+    {
+      "bucket": 101,
+      "codepoint": 101,
+      "glyph_id": 69
+    },
+    {
+      "bucket": 102,
+      "codepoint": 102,
+      "glyph_id": 70
+    },
+    {
+      "bucket": 103,
+      "codepoint": 103,
+      "glyph_id": 71
+    },
+    {
+      "bucket": 104,
+      "codepoint": 104,
+      "glyph_id": 72
+    },
+    {
+      "bucket": 105,
+      "codepoint": 105,
+      "glyph_id": 73
+    },
+    {
+      "bucket": 106,
+      "codepoint": 106,
+      "glyph_id": 74
+    },
+    {
+      "bucket": 107,
+      "codepoint": 107,
+      "glyph_id": 75
+    },
+    {
+      "bucket": 108,
+      "codepoint": 108,
+      "glyph_id": 76
+    },
+    {
+      "bucket": 109,
+      "codepoint": 109,
+      "glyph_id": 77
+    },
+    {
+      "bucket": 110,
+      "codepoint": 110,
+      "glyph_id": 78
+    },
+    {
+      "bucket": 111,
+      "codepoint": 111,
+      "glyph_id": 79
+    },
+    {
+      "bucket": 112,
+      "codepoint": 112,
+      "glyph_id": 80
+    },
+    {
+      "bucket": 113,
+      "codepoint": 113,
+      "glyph_id": 81
+    },
+    {
+      "bucket": 114,
+      "codepoint": 114,
+      "glyph_id": 82
+    },
+    {
+      "bucket": 115,
+      "codepoint": 115,
+      "glyph_id": 83
+    },
+    {
+      "bucket": 116,
+      "codepoint": 116,
+      "glyph_id": 84
+    },
+    {
+      "bucket": 117,
+      "codepoint": 117,
+      "glyph_id": 85
+    },
+    {
+      "bucket": 118,
+      "codepoint": 118,
+      "glyph_id": 86
+    },
+    {
+      "bucket": 119,
+      "codepoint": 119,
+      "glyph_id": 87
+    },
+    {
+      "bucket": 120,
+      "codepoint": 120,
+      "glyph_id": 88
+    },
+    {
+      "bucket": 121,
+      "codepoint": 121,
+      "glyph_id": 89
+    },
+    {
+      "bucket": 122,
+      "codepoint": 122,
+      "glyph_id": 90
+    },
+    {
+      "bucket": 123,
+      "codepoint": 123,
+      "glyph_id": 20
+    },
+    {
+      "bucket": 124,
+      "codepoint": 124,
+      "glyph_id": 33
+    },
+    {
+      "bucket": 125,
+      "codepoint": 125,
+      "glyph_id": 21
+    },
+    {
+      "bucket": 126,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 127,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 128,
+      "codepoint": 1040,
+      "glyph_id": 149
+    },
+    {
+      "bucket": 129,
+      "codepoint": 1041,
+      "glyph_id": 151
+    },
+    {
+      "bucket": 130,
+      "codepoint": 1042,
+      "glyph_id": 153
+    },
+    {
+      "bucket": 131,
+      "codepoint": 1043,
+      "glyph_id": 155
+    },
+    {
+      "bucket": 132,
+      "codepoint": 1044,
+      "glyph_id": 157
+    },
+    {
+      "bucket": 133,
+      "codepoint": 1045,
+      "glyph_id": 159
+    },
+    {
+      "bucket": 134,
+      "codepoint": 1046,
+      "glyph_id": 163
+    },
+    {
+      "bucket": 135,
+      "codepoint": 1047,
+      "glyph_id": 165
+    },
+    {
+      "bucket": 136,
+      "codepoint": 1048,
+      "glyph_id": 167
+    },
+    {
+      "bucket": 137,
+      "codepoint": 1049,
+      "glyph_id": 169
+    },
+    {
+      "bucket": 138,
+      "codepoint": 1050,
+      "glyph_id": 171
+    },
+    {
+      "bucket": 139,
+      "codepoint": 1051,
+      "glyph_id": 173
+    },
+    {
+      "bucket": 140,
+      "codepoint": 1052,
+      "glyph_id": 175
+    },
+    {
+      "bucket": 141,
+      "codepoint": 1053,
+      "glyph_id": 227
+    },
+    {
+      "bucket": 142,
+      "codepoint": 1054,
+      "glyph_id": 177
+    },
+    {
+      "bucket": 143,
+      "codepoint": 1055,
+      "glyph_id": 179
+    },
+    {
+      "bucket": 144,
+      "codepoint": 1056,
+      "glyph_id": 181
+    },
+    {
+      "bucket": 145,
+      "codepoint": 1057,
+      "glyph_id": 183
+    },
+    {
+      "bucket": 146,
+      "codepoint": 1058,
+      "glyph_id": 185
+    },
+    {
+      "bucket": 147,
+      "codepoint": 1059,
+      "glyph_id": 187
+    },
+    {
+      "bucket": 148,
+      "codepoint": 1060,
+      "glyph_id": 189
+    },
+    {
+      "bucket": 149,
+      "codepoint": 1061,
+      "glyph_id": 193
+    },
+    {
+      "bucket": 150,
+      "codepoint": 1062,
+      "glyph_id": 191
+    },
+    {
+      "bucket": 151,
+      "codepoint": 1063,
+      "glyph_id": 195
+    },
+    {
+      "bucket": 152,
+      "codepoint": 1064,
+      "glyph_id": 199
+    },
+    {
+      "bucket": 153,
+      "codepoint": 1065,
+      "glyph_id": 197
+    },
+    {
+      "bucket": 154,
+      "codepoint": 1066,
+      "glyph_id": 201
+    },
+    {
+      "bucket": 155,
+      "codepoint": 1067,
+      "glyph_id": 203
+    },
+    {
+      "bucket": 156,
+      "codepoint": 1068,
+      "glyph_id": 205
+    },
+    {
+      "bucket": 157,
+      "codepoint": 1069,
+      "glyph_id": 207
+    },
+    {
+      "bucket": 158,
+      "codepoint": 1070,
+      "glyph_id": 209
+    },
+    {
+      "bucket": 159,
+      "codepoint": 1071,
+      "glyph_id": 211
+    },
+    {
+      "bucket": 160,
+      "codepoint": 1072,
+      "glyph_id": 150
+    },
+    {
+      "bucket": 161,
+      "codepoint": 161,
+      "glyph_id": 146
+    },
+    {
+      "bucket": 162,
+      "codepoint": 1074,
+      "glyph_id": 154
+    },
+    {
+      "bucket": 163,
+      "codepoint": 1075,
+      "glyph_id": 156
+    },
+    {
+      "bucket": 164,
+      "codepoint": 1076,
+      "glyph_id": 158
+    },
+    {
+      "bucket": 165,
+      "codepoint": 1077,
+      "glyph_id": 160
+    },
+    {
+      "bucket": 166,
+      "codepoint": 1078,
+      "glyph_id": 164
+    },
+    {
+      "bucket": 167,
+      "codepoint": 1079,
+      "glyph_id": 166
+    },
+    {
+      "bucket": 168,
+      "codepoint": 1080,
+      "glyph_id": 168
+    },
+    {
+      "bucket": 169,
+      "codepoint": 1081,
+      "glyph_id": 170
+    },
+    {
+      "bucket": 170,
+      "codepoint": 170,
+      "glyph_id": 147
+    },
+    {
+      "bucket": 171,
+      "codepoint": 1083,
+      "glyph_id": 174
+    },
+    {
+      "bucket": 172,
+      "codepoint": 1084,
+      "glyph_id": 176
+    },
+    {
+      "bucket": 173,
+      "codepoint": 1085,
+      "glyph_id": 228
+    },
+    {
+      "bucket": 174,
+      "codepoint": 1086,
+      "glyph_id": 178
+    },
+    {
+      "bucket": 175,
+      "codepoint": 1087,
+      "glyph_id": 180
+    },
+    {
+      "bucket": 176,
+      "codepoint": 1088,
+      "glyph_id": 182
+    },
+    {
+      "bucket": 177,
+      "codepoint": 1089,
+      "glyph_id": 184
+    },
+    {
+      "bucket": 178,
+      "codepoint": 1090,
+      "glyph_id": 186
+    },
+    {
+      "bucket": 179,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 180,
+      "codepoint": 1092,
+      "glyph_id": 190
+    },
+    {
+      "bucket": 181,
+      "codepoint": 1093,
+      "glyph_id": 194
+    },
+    {
+      "bucket": 182,
+      "codepoint": 1094,
+      "glyph_id": 192
+    },
+    {
+      "bucket": 183,
+      "codepoint": 1095,
+      "glyph_id": 196
+    },
+    {
+      "bucket": 184,
+      "codepoint": 1096,
+      "glyph_id": 200
+    },
+    {
+      "bucket": 185,
+      "codepoint": 1097,
+      "glyph_id": 198
+    },
+    {
+      "bucket": 186,
+      "codepoint": 186,
+      "glyph_id": 145
+    },
+    {
+      "bucket": 187,
+      "codepoint": 1099,
+      "glyph_id": 204
+    },
+    {
+      "bucket": 188,
+      "codepoint": 1100,
+      "glyph_id": 206
+    },
+    {
+      "bucket": 189,
+      "codepoint": 1101,
+      "glyph_id": 208
+    },
+    {
+      "bucket": 190,
+      "codepoint": 1102,
+      "glyph_id": 210
+    },
+    {
+      "bucket": 191,
+      "codepoint": 191,
+      "glyph_id": 144
+    },
+    {
+      "bucket": 192,
+      "codepoint": 192,
+      "glyph_id": 93
+    },
+    {
+      "bucket": 193,
+      "codepoint": 193,
+      "glyph_id": 94
+    },
+    {
+      "bucket": 194,
+      "codepoint": 194,
+      "glyph_id": 96
+    },
+    {
+      "bucket": 195,
+      "codepoint": 195,
+      "glyph_id": 95
+    },
+    {
+      "bucket": 196,
+      "codepoint": 196,
+      "glyph_id": 92
+    },
+    {
+      "bucket": 197,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 198,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 199,
+      "codepoint": 199,
+      "glyph_id": 105
+    },
+    {
+      "bucket": 200,
+      "codepoint": 200,
+      "glyph_id": 109
+    },
+    {
+      "bucket": 201,
+      "codepoint": 201,
+      "glyph_id": 110
+    },
+    {
+      "bucket": 202,
+      "codepoint": 202,
+      "glyph_id": 111
+    },
+    {
+      "bucket": 203,
+      "codepoint": 203,
+      "glyph_id": 242
+    },
+    {
+      "bucket": 204,
+      "codepoint": 204,
+      "glyph_id": 128
+    },
+    {
+      "bucket": 205,
+      "codepoint": 205,
+      "glyph_id": 129
+    },
+    {
+      "bucket": 206,
+      "codepoint": 206,
+      "glyph_id": 243
+    },
+    {
+      "bucket": 207,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 208,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 209,
+      "codepoint": 209,
+      "glyph_id": 142
+    },
+    {
+      "bucket": 210,
+      "codepoint": 210,
+      "glyph_id": 118
+    },
+    {
+      "bucket": 211,
+      "codepoint": 211,
+      "glyph_id": 120
+    },
+    {
+      "bucket": 212,
+      "codepoint": 212,
+      "glyph_id": 122
+    },
+    {
+      "bucket": 213,
+      "codepoint": 213,
+      "glyph_id": 121
+    },
+    {
+      "bucket": 214,
+      "codepoint": 214,
+      "glyph_id": 119
+    },
+    {
+      "bucket": 215,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 216,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 217,
+      "codepoint": 217,
+      "glyph_id": 135
+    },
+    {
+      "bucket": 218,
+      "codepoint": 218,
+      "glyph_id": 136
+    },
+    {
+      "bucket": 219,
+      "codepoint": 219,
+      "glyph_id": 137
+    },
+    {
+      "bucket": 220,
+      "codepoint": 220,
+      "glyph_id": 134
+    },
+    {
+      "bucket": 221,
+      "codepoint": 221,
+      "glyph_id": 238
+    },
+    {
+      "bucket": 222,
+      "codepoint": 0,
+      "glyph_id": 0
+    },
+    {
+      "bucket": 223,
+      "codepoint": 223,
+      "glyph_id": 104
+    },
+    {
+      "bucket": 224,
+      "codepoint": 224,
+      "glyph_id": 100
+    },
+    {
+      "bucket": 225,
+      "codepoint": 225,
+      "glyph_id": 102
+    },
+    {
+      "bucket": 226,
+      "codepoint": 226,
+      "glyph_id": 99
+    },
+    {
+      "bucket": 227,
+      "codepoint": 227,
+      "glyph_id": 103
+    }
+  ],
+  "overflow_groups": [
+    {
+      "bucket": 32,
+      "mappings": [
+        {
+          "codepoint": 260,
+          "glyph_id": 97
+        },
+        {
+          "codepoint": 32,
+          "glyph_id": 107
+        },
+        {
+          "codepoint": 32,
+          "glyph_id": 128
+        },
+        {
+          "codepoint": 32,
+          "glyph_id": 130
+        }
+      ]
+    },
+    {
+      "bucket": 33,
+      "mappings": [
+        {
+          "codepoint": 261,
+          "glyph_id": 98
+        }
+      ]
+    },
+    {
+      "bucket": 35,
+      "mappings": [
+        {
+          "codepoint": 263,
+          "glyph_id": 108
+        }
+      ]
+    },
+    {
+      "bucket": 40,
+      "mappings": [
+        {
+          "codepoint": 268,
+          "glyph_id": 236
+        }
+      ]
+    },
+    {
+      "bucket": 42,
+      "mappings": [
+        {
+          "codepoint": 270,
+          "glyph_id": 241
+        }
+      ]
+    },
+    {
+      "bucket": 52,
+      "mappings": [
+        {
+          "codepoint": 280,
+          "glyph_id": 112
+        }
+      ]
+    },
+    {
+      "bucket": 53,
+      "mappings": [
+        {
+          "codepoint": 281,
+          "glyph_id": 113
+        }
+      ]
+    },
+    {
+      "bucket": 54,
+      "mappings": [
+        {
+          "codepoint": 282,
+          "glyph_id": 234
+        }
+      ]
+    },
+    {
+      "bucket": 58,
+      "mappings": [
+        {
+          "codepoint": 286,
+          "glyph_id": 213
+        }
+      ]
+    },
+    {
+      "bucket": 59,
+      "mappings": [
+        {
+          "codepoint": 287,
+          "glyph_id": 214
+        }
+      ]
+    },
+    {
+      "bucket": 76,
+      "mappings": [
+        {
+          "codepoint": 304,
+          "glyph_id": 230
+        }
+      ]
+    },
+    {
+      "bucket": 93,
+      "mappings": [
+        {
+          "codepoint": 321,
+          "glyph_id": 219
+        }
+      ]
+    },
+    {
+      "bucket": 95,
+      "mappings": [
+        {
+          "codepoint": 323,
+          "glyph_id": 221
+        }
+      ]
+    },
+    {
+      "bucket": 99,
+      "mappings": [
+        {
+          "codepoint": 327,
+          "glyph_id": 231
+        }
+      ]
+    },
+    {
+      "bucket": 113,
+      "mappings": [
+        {
+          "codepoint": 1025,
+          "glyph_id": 161
+        }
+      ]
+    },
+    {
+      "bucket": 116,
+      "mappings": [
+        {
+          "codepoint": 344,
+          "glyph_id": 235
+        }
+      ]
+    },
+    {
+      "bucket": 118,
+      "mappings": [
+        {
+          "codepoint": 346,
+          "glyph_id": 216
+        }
+      ]
+    },
+    {
+      "bucket": 119,
+      "mappings": [
+        {
+          "codepoint": 347,
+          "glyph_id": 217
+        }
+      ]
+    },
+    {
+      "bucket": 122,
+      "mappings": [
+        {
+          "codepoint": 350,
+          "glyph_id": 215
+        }
+      ]
+    },
+    {
+      "bucket": 123,
+      "mappings": [
+        {
+          "codepoint": 351,
+          "glyph_id": 218
+        }
+      ]
+    },
+    {
+      "bucket": 124,
+      "mappings": [
+        {
+          "codepoint": 352,
+          "glyph_id": 233
+        }
+      ]
+    },
+    {
+      "bucket": 128,
+      "mappings": [
+        {
+          "codepoint": 356,
+          "glyph_id": 240
+        }
+      ]
+    },
+    {
+      "bucket": 138,
+      "mappings": [
+        {
+          "codepoint": 366,
+          "glyph_id": 239
+        }
+      ]
+    },
+    {
+      "bucket": 147,
+      "mappings": [
+        {
+          "codepoint": 1059,
+          "glyph_id": 188
+        }
+      ]
+    },
+    {
+      "bucket": 149,
+      "mappings": [
+        {
+          "codepoint": 377,
+          "glyph_id": 223
+        }
+      ]
+    },
+    {
+      "bucket": 150,
+      "mappings": [
+        {
+          "codepoint": 378,
+          "glyph_id": 224
+        }
+      ]
+    },
+    {
+      "bucket": 151,
+      "mappings": [
+        {
+          "codepoint": 379,
+          "glyph_id": 225
+        }
+      ]
+    },
+    {
+      "bucket": 152,
+      "mappings": [
+        {
+          "codepoint": 380,
+          "glyph_id": 226
+        }
+      ]
+    },
+    {
+      "bucket": 153,
+      "mappings": [
+        {
+          "codepoint": 381,
+          "glyph_id": 232
+        }
+      ]
+    },
+    {
+      "bucket": 161,
+      "mappings": [
+        {
+          "codepoint": 1073,
+          "glyph_id": 152
+        }
+      ]
+    },
+    {
+      "bucket": 169,
+      "mappings": [
+        {
+          "codepoint": 169,
+          "glyph_id": 229
+        }
+      ]
+    },
+    {
+      "bucket": 170,
+      "mappings": [
+        {
+          "codepoint": 1082,
+          "glyph_id": 172
+        }
+      ]
+    },
+    {
+      "bucket": 174,
+      "mappings": [
+        {
+          "codepoint": 174,
+          "glyph_id": 237
+        }
+      ]
+    },
+    {
+      "bucket": 186,
+      "mappings": [
+        {
+          "codepoint": 186,
+          "glyph_id": 148
+        },
+        {
+          "codepoint": 1098,
+          "glyph_id": 202
+        }
+      ]
+    },
+    {
+      "bucket": 191,
+      "mappings": [
+        {
+          "codepoint": 1103,
+          "glyph_id": 212
+        }
+      ]
+    },
+    {
+      "bucket": 193,
+      "mappings": [
+        {
+          "codepoint": 1105,
+          "glyph_id": 162
+        }
+      ]
+    }
+  ],
+  "mapping_count": 246,
+  "unique_codepoints": 241,
+  "duplicate_codepoints": [
+    32,
+    186,
+    1059
+  ],
+  "lookup_rule": "ordered first-match; base bucket is codepoint % bucket_count"
+}
