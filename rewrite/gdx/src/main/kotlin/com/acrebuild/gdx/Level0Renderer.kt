@@ -2,6 +2,7 @@ package com.acrebuild.gdx
 
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
+import com.acrebuild.core.ScriptPrompt
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Trig
@@ -79,7 +80,11 @@ class Level0Renderer {
             for (i in clip.moduleNames.indices) {
                 // aU==2 non-pixel modules are empty-name slots in the blob.
                 if (clip.moduleNames[i].isEmpty()) continue
-                val t = Texture(Gdx.files.internal("$base/${clip.moduleNames[i]}"))
+                val file = Gdx.files.internal("$base/${clip.moduleNames[i]}")
+                // aliased pack ids (e.g. clips[12]=clips[94]) share module
+                // metadata but resolve a pack dir that may not be converted.
+                if (!file.exists()) continue
+                val t = Texture(file)
                 t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
                 regs[i] = TextureRegion(t)
             }
@@ -199,6 +204,16 @@ class Level0Renderer {
         val fd = clip.frameDraw(anim, frame, flags)
         drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
                    fd.transform, palette)
+    }
+
+    /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
+     *  tick the anim by the frame ms, then draw `d.a(g, e, f, a, b, c,
+     *  0,0)` — anim e frame f at (a,b), flags c. Palette slot `k` stays
+     *  -1 in every op we ported (no producer), so palette 0. */
+    private fun drawPrompt(pr: ScriptPrompt, ms: Int) {
+        pr.anim.tick(ms)
+        drawFrame(pr.clipIdx, pr.anim.e, pr.anim.currentFrame,
+                  pr.anim.a, pr.anim.b, pr.anim.c)
     }
 
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
@@ -621,7 +636,40 @@ class Level0Renderer {
 
         val camX = world.camX
         val camY = world.camY
-        // draw order: eu backdrop (skipped v1), ep, er — same as original
+        // `eu` backdrop (k.java:2680-2771 composite + :4372-4409 `h()`
+        // painter + :4504-4519 `a()` cell, proven): painted into the
+        // 420×260 `dJ` offscreen buffer — cell (cx,cy) → buffer anchor
+        // (cx*20, cy*20-20) — then `d()` blits the 400×240 view
+        // toroidally from (i12,i13) = (euX%420, euY%260).
+        // euX = camX*(euCols<21 ? 0 : euCols-21)/(lvlCols-21),
+        // euY = camY*(euRows-13)/(lvlRows-13) — level-0: eu=21×13 ⇒
+        // euX=euY=0, a fully static backdrop. `h()`'s aR/dT vertical-
+        // parallax arm is bh3-flying-only (aR=-1 → i5=i6, dead here);
+        // `ef[aj]` z[58] drift overlay static-init all-false (dead arm).
+        val eu = world.level.layers.firstOrNull { it.id == 2 }
+        if (eu != null) {
+            val euX = camX * (if (eu.cols < 21) 0 else eu.cols - 21) /
+                      (world.level.cols - 21)
+            val euY = camY * (eu.rows - 13) / (world.level.rows - 13)
+            val sx = euX % 420; val sy = euY % 260
+            for (cy in 0 until eu.rows) {
+                for (cx in 0 until eu.cols) {
+                    val cell = eu.cell(cx, cy)
+                    if (cell < 0 || cell == 255) continue
+                    val flag = eu.flag(cx, cy)
+                    var wx = (cx * 20 - sx) % 420; if (wx < 0) wx += 420
+                    var wy = (cy * 20 - 20 - sy) % 260; if (wy < 0) wy += 260
+                    // toroidal blit: a cell crossing a wrap edge splits
+                    for (dx in intArrayOf(wx, wx - 420)) {
+                        for (dy in intArrayOf(wy, wy - 260)) {
+                            if (dx < 400 && dx > -20 && dy < 240 && dy > -20)
+                                drawTileCell(eu.tilesetClip, cell, dx, dy, flag)
+                        }
+                    }
+                }
+            }
+        }
+        // draw order (k.java:2800-2819): eu → ep → er (bh4/bh3) → entities
         for (layer in world.level.layers) {
             if (layer.id == 0 || layer.id == 2) continue
             val pack = layer.tilesetClip
@@ -702,15 +750,90 @@ class Level0Renderer {
         batch.setColor(1f, 1f, 1f, 1f)
         drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
 
-        // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
-        // hudStep; `n/d` progress toward the next dE threshold (or raw
-        // remainder at the top tier) at (200,-1) align 17, plus the
-        // z[12] anim7 icon that bobbles 1px every 3 frames.
-        world.hudScoreText()?.let { score ->
-            drawText(score, 200, -1, 17)
-            val tw = fontY.measure(score).first()
-            drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
-                      13 + ((world.jG / 3) % 2).toInt(), 0)
+        // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
+        // claim-script entity (`kC`) is active (`ab()`), its cb/cc state
+        // selects — `cb[1] ∈ {0,1,2}` → the single YES/NO card at
+        // (200,160); else `cc != null` → the choice-list fan
+        // (cc[0]==3 → 200±50, cc[0]==2 → 200±50, else 200; y=160). Each
+        // card ticks `b(j.f)` then `c()` draws anim e frame f at (a,b)
+        // flags c — palette slot k when set. The trailing
+        // `cd[8] && cb[3]>0` arm pulses bW palette 3 while counting down.
+        // `j.f` = the fixed 62ms tick delta for card ticks.
+        val cEnt2 = world.kC
+        if (cEnt2 != null && cEnt2.claimActive()) {
+            val cb = cEnt2.cb
+            val cc = cEnt2.cc
+            if (cb != null && (cb[1] == 0 || cb[1] == 1 || cb[1] == 2 ||
+                cc != null)) {
+                if (cb[1] == 0 || cb[1] == 1 || cb[1] == 2) {
+                    Entity.scriptPrompts[0]?.let { pr ->
+                        pr.a = 200; pr.b = 160
+                        drawPrompt(pr, 62)
+                    }
+                } else if (cc != null) {
+                    for (i54 in 0 until cc[0]) {
+                        val pr = Entity.scriptPrompts[i54] ?: continue
+                        pr.a = when {
+                            cc[0] == 3 -> 200 + 50 * (i54 - 1)
+                            cc[0] == 2 -> 200 + 50 * (if (i54 == 1) 1 else -1)
+                            else -> 200
+                        }
+                        pr.b = 160
+                        drawPrompt(pr, 62)
+                    }
+                }
+            }
+            if (cEnt2.cd[8] && cEnt2.cb != null && cEnt2.cb!![3] > 0) {
+                fontW.l(3); cEnt2.cb!![3]--
+            }
+        }
+
+        if (world.bh3) {
+            // bh3 arm (k.java:4187-4245, proven)
+            // i.bT && B!=null → boss HP column: black 6x100 at (389,60)
+            // + red fill (100*aB)/bU climbing from the bottom (1px stub
+            // at y159 when the fill rounds to 0 but aB>0).
+            val b = world.kB
+            if (world.iBT && b != null && world.iBU > 0) {
+                fillAr(389, 60, 6, 100, -16777216)
+                val h = (100 * b.aB) / world.iBU
+                if (b.aB <= 0 || h != 0)
+                    fillAr(389, 160 - h, 6, h, -65536)      // 0xFFFF0000
+                else
+                    fillAr(389, 159, 6, 1, -65536)
+            }
+            clips[54]?.let { c ->
+                drawFrame(54, 0, ((world.jG % c.frameCount(0))).toInt(),
+                          300, 8, 0)
+            }
+            drawText("${world.kAp[4]}/${world.kAq}", 312, 5, 20)
+            // aE alert meter (k.java:4208-4244): aH countdown slides the
+            // icon column out over 30 frames (i3 = 30-aH), aF trickles
+            // +3/tick into aE (i4 = min(aE,100)); aE<25 → animated anim5
+            // else anim3; anim4 marker rides the fill height.
+            if (world.kAE > 0) {
+                val i3 = world.alertSlide; val i4 = world.alertFill
+                clips[12]?.let { c ->
+                    if (world.kAE < 25)
+                        drawFrame(12, 5, ((world.jG % c.frameCount(5))).toInt(),
+                                  15 - i3, 165, 0)
+                    else
+                        drawFrame(12, 3, 0, 15 - i3, 165, 0)
+                }
+                drawFrame(12, 4, 0, 10 - i3,
+                          49 + (116 * (100 - i4)) / 100, 0)
+            }
+        } else {
+            // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
+            // hudStep; `n/d` progress toward the next dE threshold (or raw
+            // remainder at the top tier) at (200,-1) align 17, plus the
+            // z[12] anim7 icon that bobbles 1px every 3 frames.
+            world.hudScoreText()?.let { score ->
+                drawText(score, 200, -1, 17)
+                val tw = fontY.measure(score).first()
+                drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
+                          13 + ((world.jG / 3) % 2).toInt(), 0)
+            }
         }
 
         // weapon corner (k.java:4273-4287, proven): armed gate in
@@ -742,6 +865,33 @@ class Level0Renderer {
         // aO/aP timed line (k.java:4337-4343, proven)
         world.kAP?.let { drawText(it, 200, 23, 17) }
 
+        // k.aD capture/fuse bar (k.java:3133-3139, proven): under the
+        // C-claim gate `(C!=null && (!C.cd[6] || !C.ab())) || C==null`,
+        // when the HUD-bar entity sits in S6 with Z[1]>0 → z[12] f18
+        // outline at (110,215), then f19 fill clipped to
+        // (125,0,120*(Z[1]-Z[2])/Z[1],240) — progress fill = elapsed
+        // share of the Z[1] total.
+        val cEnt = world.kC
+        val cGate = cEnt == null || !cEnt.cd[6] || !cEnt.claimActive()
+        val barEnt = world.kAD
+        if (cGate && !world.gG() && barEnt != null && barEnt.Z != null &&
+            barEnt.S == 6 && barEnt.Z[1] > 0) {
+            drawFrame(12, 18, 0, 110, 215, 0)
+            clipScissor(125, 0, (120 * (barEnt.Z[1] - barEnt.Z[2])) /
+                        barEnt.Z[1], 240)
+            drawFrame(12, 19, 0, 110, 215, 0)
+            clipReset()
+        }
+
+        // g.g overhead icon (k.java:4344-4350, proven): while the player
+        // rides the grab-QTE states with a focus entity, z[10] anim 41
+        // (S303) or 29 (S295) frame `aS.K` sits at (aS.L-O, aS.M-P).
+        val pg = world.player
+        if (pg.g != null && (pg.S == 303 || pg.S == 295)) {
+            drawFrame(10, if (pg.S == 295) 29 else 41, pg.K,
+                      pg.gQL - world.camX, pg.gQM - world.camY, 0)
+        }
+
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
         // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at
         // (cn,134) with pressed-sector art `i55`, plus the two radial
@@ -763,6 +913,70 @@ class Level0Renderer {
         val kC = world.kC
         if (kC != null && (kC.claimActive() || world.subU == 9) && kC.cd[2]) {
             footer(world, "", world.d0(18))
+        }
+
+        // -- b(z2) overlay tail (k.java:3166-3253) -------------------------
+
+        // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
+        // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
+        // surface. `volPaintRect` records the painted rect, not pixels —
+        // drawn as a bordered mini-rect.
+        world.volPaintRect?.let { r ->
+            outlineAr(198 - r[2], 5, r[2], r[3], -256)   // 0xFFFFFF00 (compositor's border :20159)
+        }
+
+        // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
+        // stripe letterbox — `an` grows `fn` stripes (top `fm*fn`, bottom
+        // mirrored), the finishing frame is one solid black fill; `ao`
+        // shrinks to the `120-((fl-fn)*fm)` / `120-((fl-fn-1)*fm)` bars.
+        if (world.kAn) {
+            val h = world.kFn * world.kFm
+            fillAr(0, 0, 400, h, -16777216)
+            fillAr(0, 240 - h, 400, h, -16777216)
+        }
+        if (world.fadeSolidFrame) {
+            fillAr(0, 0, 400, 240, -16777216)
+            world.fadeSolidFrame = false
+        }
+        if (world.kAo && world.kFn >= 0) {
+            val h1 = 120 - ((world.kFl - world.kFn) * world.kFm)
+            val h2 = 120 - ((world.kFl - world.kFn - 1) * world.kFm)
+            fillAr(0, 0, 400, h1, -16777216)
+            fillAr(0, 120 + ((world.kFl - world.kFn - 1) * world.kFm),
+                   400, h2, -16777216)
+        }
+
+        // `i.bh` damage vignette (k.java:3190-3202, proven): red edges
+        // alpha `(255*fs)/100` while the hit-lock holds in play.
+        if (world.iBh > 0 && world.jC == 8) {
+            val argb = (((255 * world.kFs) / 100) shl 24) or 0xff0000
+            fillAr(5, 0, 390, 5, argb); fillAr(5, 235, 390, 5, argb)
+            fillAr(0, 0, 5, 240, argb); fillAr(395, 0, 5, 240, argb)
+        }
+
+        // `av`/`aw`/`dz` cinematic letterbox (k.java:3203-3218, proven):
+        // black bars of height dz, top + mirrored bottom.
+        if (world.jC != 14 && world.kDz > 0) {
+            fillAr(0, 0, 400, world.kDz, -16777216)
+            fillAr(0, 240 - world.kDz, 400, world.kDz, -16777216)
+        }
+
+        // `i.bJ` flicker line (k.java:3239, inferred): `y.l(0)` +
+        // `y.a(cd, null, wrap(y,null,320), 200,50, 0,4,17,-1)` — a null-
+        // string wrapped draw; no visible glyph body. Early-return on the
+        // zeroing frame (`tailSkipFrame`) skips the aU bar.
+
+        // `aU` grab-QTE meter (k.java:3241-3253, proven): white outline
+        // (120,215,125,11) + fill `(125*aU.aB)/800 - 1` px — red when
+        // `aB>300 || j.g%3==0` else amber 0xFFBF00.
+        val aU = world.kAU
+        if (aU != null && (aU.P and 32) == 0 && world.iBy > 0 &&
+            !world.tailSkipFrame) {
+            outlineAr(120, 215, 125, 11, -1)
+            val fw = (125 * aU.aB) / 800
+            fillAr(121, 215, fw - 1, 10,
+                   if (aU.aB > 300 || world.jG % 3L == 0L) -65536
+                   else -16512)                                  // 0xFFBF00
         }
 
         // k.l(21) modal dialog — the original suspends the sim behind a

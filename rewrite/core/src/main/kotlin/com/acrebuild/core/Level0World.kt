@@ -810,7 +810,7 @@ class Level0World(
     val kBA = IntArray(160)
     var kAu = 0                        // k.au — medal-condition field
     var kDx = false                    // k.dx — cheat-enabled flag
-    var kAo = false                    // k.ao — fade-side flag
+    override var kAo = false           // k.ao — fade-side flag
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
     var kFb: Any? = null               // k.fb — font measurer (unported)
@@ -945,6 +945,8 @@ class Level0World(
     var kAC = 0                                // k.aC — banner TTL
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
+    var alertSlide = 0                         // derived `i3` = 30-aH slide
+    var alertFill = 0                          // derived `i4` = min(aE,100)
     /** `dn[]` (k.java:207) — z[12] weapon-icon anim per weapon index. */
     private val kDn = intArrayOf(10, 12, 9, 11)
     /** `p(int)` (k.java:3542): bit-index scan — weapon mask → dn slot. */
@@ -966,6 +968,28 @@ class Level0World(
     override var kJ: Int get() = lastMoveX; set(v) { lastMoveX = v }
     override var kK: Int get() = lastMoveY; set(v) { lastMoveY = v }
     override var kAn = false                   // k.an fade flag
+    override var iBJ = 0                       // i.bJ flicker latch
+    override var iBH = 1                       // i.bH (init 1, i.java:195)
+    override var iBI = 2                       // i.bI (init 2, i.java:196)
+    override var iBL = 0                       // i.bL — vestigial no-op
+    /** `k.bI`/`k.fk` (k.java:313-314, proven): fade ramp timer + step.
+     *  `B(i)`/`C(i)` arms set fk=26 (:5738-5750); init 4. */
+    override var kBI = 0
+    var kFk = 4
+    /** `k.fn`/`k.fl`/`k.fm` (k.java:315-317, proven): stripe-letterbox
+     *  counter/limit/height — `aa()` ramps fn to fl=9 stripes of fm=13px. */
+    var kFn = 0
+    val kFl = 9
+    val kFm = 13
+    /** `k.fs` (k.java:323, proven): `i.bh` vignette alpha counter, init
+     *  80, counts down by 10 and wraps to 80. */
+    var kFs = 80
+    /** One-frame solid-black latch for the an-fade completion frame
+     *  (k.java:3171-3174 `setColor(0); j.b(0,0,400,240); an=false`). */
+    var fadeSolidFrame = false
+    /** The `i.bJ==i.bI && i.bL<=20` early-return in b(z2) (k.java:3231-
+     *  3238) — skips the aU-bar draw for the frame that zeroes i.bJ. */
+    var tailSkipFrame = false
     /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
      *  ported as the last-painted rect, `inferred`). */
     override var volPaintRect: IntArray? = null
@@ -2441,6 +2465,11 @@ class Level0World(
     /** `e.b()` (e.java:87, proven) — stop the current track. */
     fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
+
+    /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
+     *  synthetic kAh has no per-tick fn; the equivalent is the ax37
+     *  bounds refresh (inferred mapping). */
+    override fun refreshScrollBounds() = fireScrollTriggers()
     /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
      *  else `ee[aj]` when != -1. */
     private fun missionInit() {
@@ -2795,7 +2824,31 @@ class Level0World(
     private fun hudStep() {
         if (kAx == 0) kAx = 30                     // k.java:4177
         player.x1 = minOf(player.x1, kAx)          // g.f(ax) :4180
-        if (!bh3 && kAj < 8) {                     // score arm :4247
+        if (bh3) {
+            // bh3 arm mutations (k.java:4187-4245, proven)
+            val b = kB
+            if (iBT && b != null && b.aB > iBU) b.aB = iBU   // :4191
+            if (kAp[4] < 0) kAp[4] = 0                       // :4204
+            if (kAE > 0) {
+                if (kAH > 30) {
+                    kAH--
+                } else if (kAH >= 0) {
+                    val i2 = kAH - 1
+                    kAH = i2
+                    if (i2 < 0) {
+                        kAE = kAH                          // aE = -1 poisons
+                        kAH = 0                            // the meter (orig
+                        return                             // `return` skips the
+                    }                                      // rest of c())
+                }
+                if (kAF > 0) {
+                    if (kAF < 3) { kAE += kAF; kAF = 0 }
+                    else { kAE += 3; kAF -= 3 }
+                }
+                alertSlide = if (kAH in 0..30) 30 - kAH else 0
+                alertFill = minOf(kAE, 100)
+            }
+        } else if (kAj < 8) {                      // score arm :4247
             if (kAz < 0) kAz = 0
             if (kAz > 32767) kAz = 32767
         }
@@ -2823,7 +2876,75 @@ class Level0World(
         if (kAO < 0 || kAP == null) kAP = null
         // weapon-corner latch (k.java:4277): at==1 → 0 inside the gate
         if (weaponCornerArmed() && kAt == 1) kAt = 0
+        overlayTailStep()
     }
+
+    /** The `b(z2)` draw-tail counters (k.java:3166-3239, proven) — the
+     *  original mutates these inside the HUD draw, one step per frame;
+     *  the tick's 62ms cadence is the same clock. The renderer reads the
+     *  post-step values to draw (Level0Renderer overlay tail). */
+    private fun overlayTailStep() {
+        // `an` fade-in (k.java:3166-3174): ramp bI; each in-ramp step runs
+        // `aa()`'s `fn++` grow arm (:5724-5734) — the stripe letterbox IS
+        // the fade. Ramp done → one solid-black frame, `an=false`.
+        if (kAn) {
+            if (kBI < 0) kBI = 0
+            if (kBI <= 255 - kFk) {
+                kBI += kFk
+                kFn++
+                if (kFn > kFl) kFn = kFl
+            } else {
+                kAn = false
+                fadeSolidFrame = true
+            }
+        }
+        // `ao` fade-out (k.java:3175-3188): ramp bI down; `aa()`'s `!an`
+        // arm (:5716-5727) decrements fn — bars recede; fn may reach -1
+        // (nothing drawn) while bI still drains — verbatim.
+        if (kAo) {
+            if (kBI > 255) kBI = 255
+            if (kBI >= kFk) { kBI -= kFk; kFn-- } else kAo = false
+        }
+        // `i.bh` vignette counter (k.java:3190-3202): `fs` counts 80→0
+        // by -10 and wraps to 80 while the hit-lock holds in play.
+        if (iBh > 0 && jC == 8) {
+            kFs -= 10
+            if (kFs <= 0) kFs = 80
+        }
+        // `av`/`aw`/`dz` cinematic letterbox (k.java:3203-3218): `av`
+        // opens to 120 by +20; else dz chases aw by ±20 (snap inside 20).
+        if (jC != 14) {
+            if (kAv) {
+                if (kDz < 120) kDz += 20
+            } else if (kAw != kDz) {
+                val diff = kAw - kDz
+                if (diff <= -20 || diff >= 20) kDz += if (diff > 0) 20 else -20
+                else kDz = kAw
+            }
+        }
+        // `i.bJ` flicker (k.java:3219-3238 + k.javap.txt:16541-16599,
+        // proven — `i.bL` is a verbatim no-op `x=x`, not a counter):
+        // bJ==bH && bL>=0 → bJ=bI; bJ==bI && bL<=20 → bJ=0 + early return
+        // (skips the aU bar that frame — `tailSkipFrame` carries it).
+        tailSkipFrame = false
+        if (iBJ > 0) {
+            if (iBJ == iBH) {
+                if (iBL >= 0) iBJ = iBI
+            } else if (iBJ == iBI) {
+                if (iBL <= 20) { iBJ = 0; tailSkipFrame = true }
+            }
+        }
+    }
+
+    /** `k.B(i)` (k.java:5738-5743, proven): fade-IN arm — `an`, ramp
+     *  from 0, step 26 (i is ignored verbatim). Called by `i.bh()`'s
+     *  door-exit arm (i.java:14434). */
+    override fun fadeIn() { kAn = true; kAo = false; kBI = 0; kFk = 26 }
+
+    /** `k.C(i)` (k.java:5745-5750, proven): fade-OUT arm — `ao`, ramp
+     *  from 255, step 26 (i ignored). Called by `i.bi()`'s door-arrival
+     *  arm (i.java:14448). */
+    override fun fadeOut() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
 
     /** `i.o()` (i.java:5423): player alive-and-acting —
      *  S ∉ {2,20..29}. */
@@ -2996,7 +3117,7 @@ class Level0World(
 
         for (n in npcs) {
             if (n.ax == 44) npcFsm.tickDoor(n, player)
-            else if (n.ax == 10) npcFsm.tickTrigger(n, player)
+            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player)
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)

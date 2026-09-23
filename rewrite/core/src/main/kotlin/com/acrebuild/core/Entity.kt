@@ -227,6 +227,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cL = 0                    // mount-on counter (as() clears; au() oscillates)
     var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
     var K = 0                     // g.K — interact-gauge anim frame (aB())
+    var gQL = 0                   // g.L — grab-QTE display x (k.java:4348)
+    var gQM = 0                   // g.M — grab-QTE display y (k.java:4348)
     var z = false                 // g.z — cleared on grab (c() callers)
     /** `i.cU[5]` — the afterimage-trail ring (`a(true,0)`/`bP()`); each
      *  element is an (a,b) pos pair flattened to 10 ints. */
@@ -2067,8 +2069,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 }
                 c[2] = r16
                 val pr = ScriptPrompt()
-                if (w.mounted) { pr.clipIdx = 9; pr.setState(CT[r16], -1) }
-                else { pr.clipIdx = 74; pr.setState(0, -1) }
+                if (w.mounted) { pr.attach(9, w.clipFor(9)); pr.setState(CT[r16], -1) }
+                else { pr.attach(74, w.clipFor(74)); pr.setState(0, -1) }
                 scriptPrompts[0] = pr
                 c[1] = 0
             }
@@ -2168,8 +2170,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     var pr = scriptPrompts[r173]
                     if (pr == null) { pr = ScriptPrompt(); scriptPrompts[r173] = pr }
                     if (w.mounted) {
-                        pr.clipIdx = 9; pr.setState(CT[cArr[r173 + 1]], -1)
-                    } else { pr.clipIdx = 74; pr.setState(0, -1) }
+                        pr.attach(9, w.clipFor(9))
+                        pr.setState(CT[cArr[r173 + 1]], -1)
+                    } else { pr.attach(74, w.clipFor(74)); pr.setState(0, -1) }
                 }
                 cArr[4] = 0
                 cb?.let { it[1] = 0 }
@@ -2282,6 +2285,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun dropAeLink() {
         ae?.deactivate()
         ae = null
+    }
+
+    /** `i.a(iVar)` (i.java:231, proven): the `ac` bind/unbind — release
+     *  the current `ac` (`P &= ~256`) then bind `other` (`P |= 256`).
+     *  `bh()` binds the player to the destination door through this. */
+    fun bindAc(other: Entity?) {
+        ac?.let { it.P = it.P and -257 }
+        ac = other
+        other?.let { it.P = it.P or 256 }
     }
 
     /** `i.ac()` (i.java:20577, proven): ax ∈ {11,17,23,43,40,45,51} gets
@@ -3901,6 +3913,15 @@ interface LevelCellSource {
     /** `i.bh` STATIC (i.java:104) — global 8-tick hit-lock set by `d()`;
      *  decremented per tick in the `g.e()` tail (g.java:572). */
     var iBh: Int
+    /** `i.bJ`/`i.bH`/`i.bI`/`i.bL` (i.java:195-197 + :113, proven) —
+     *  the b(z2)-tail flicker latch pair + vestigial counter. `bJ` toggles
+     *  between `bH` (=1) and `bI` (=2) states each frame while >0; `bL`
+     *  is a verbatim no-op (k.javap.txt:16545-16548 — `getstatic; dup;
+     *  putstatic` with no arithmetic). Producer arm unported. */
+    var iBJ: Int get() = 0; set(_) {}
+    var iBH: Int get() = 1; set(_) {}
+    var iBI: Int get() = 2; set(_) {}
+    var iBL: Int get() = 0; set(_) {}
     /** `g.s` — godmode flag (g.java:24); default false. */
     val godMode: Boolean get() = false
     /** `g.h()` (g.java:3946, proven): invulnerable — `s` godmode or `t`
@@ -4143,6 +4164,19 @@ interface LevelCellSource {
     /** `k.an` (k.java, proven): fade-out flag set by `k.B()` — the ax35
      *  sweep skips the player-hit arm while a fade runs. */
     var kAn: Boolean get() = false; set(_) {}
+    /** `k.ao` (k.java, proven): fade-IN-side flag set by `k.C()`; the
+     *  ax10-S16 door-teleport arrival arm watches `ao && bI > 13`. */
+    var kAo: Boolean get() = false; set(_) {}
+    /** `k.bI` (k.java:313, proven): shared fade progress 0..255 ramped
+     *  by `k.fk` per `aa()` step — read by the door arms at `> 13`. */
+    var kBI: Int get() = 0; set(_) {}
+    /** `k.B(26)` (k.java:5738): arm the fade-IN ramp (`an`, `bI=0`). */
+    fun fadeIn() {}
+    /** `k.C(26)` (k.java:5745): arm the fade-OUT ramp (`ao`, `bI=255`). */
+    fun fadeOut() {}
+    /** `k.ah?.I()` (i.java:14444, proven): tick the scroll-wall holder
+     *  entity — ported as the ax37 bounds refresh (inferred mapping). */
+    fun refreshScrollBounds() {}
     /** `k.aQ` — the debug vol-paint surface the ax35 `a(x,y,w,h,bool)`
      *  rasterizer fills (i.java:22224). Debug-only: its sole reader is
      *  the HUD blit at (198-w,5); ported as a rect recorder (`inferred`). */
@@ -4269,20 +4303,32 @@ interface LevelCellSource {
 val INTERACTABLE_STATES = intArrayOf(0, 1, 7, 11, 12, 26, 79)
 
 /**
- * Class `a` (the prompt/hint sprite) — minimal port for the script-QTE
- * prompts ops 107/112 spawn into `Entity.scriptPrompts` (`i.bA`).
- * `clipIdx` = `a.a(k.z[n])` (74 = touch art, 9 = key art); `e` = state set
- * by the two-int `a.a(state, flag)` (-1 = hidden/dismissed); `a`/`b` = the
- * screen-space hit-test center (`inferred` — the original assigns it in
- * the render path, never in the ops we ported).
+ * Class `a` (the prompt/hint sprite) — the script-QTE prompt ops 107/112
+ * spawn into `Entity.scriptPrompts` (`i.bA`), now riding the full
+ * `UiAnimObject` port: `clipIdx` = `a.a(k.z[n])` (74 = touch art,
+ * 9 = key art); `a`/`b`/`c`/`e`/`f`/`h`/`i`/`k` live on `anim` — the
+ * original assigns `a`/`b`/`c` in the render path (k.java:3085-3113),
+ * never in the ops.
  */
 class ScriptPrompt {
     var clipIdx = -1
-    var e = -1
+    val anim = UiAnimObject()
     var flag = 0
-    var a = 0
-    var b = 0
-    fun setState(s: Int, f: Int) { e = s; flag = f }
+
+    /** `a.a(b)` (a.java:44) — bind the clip: records the pack index for
+     *  the render's `drawFrame` AND hands the Clip to `anim`. */
+    fun attach(idx: Int, clip: Clip?) { clipIdx = idx; anim.d = clip }
+    var a: Int
+        get() = anim.a
+        set(v) { anim.a = v }
+    var b: Int
+        get() = anim.b
+        set(v) { anim.b = v }
+    val e: Int get() = anim.e
+
+    /** `a.a(i,i2)` (a.java:53) — arm anim `s` for `f` loops
+     *  (`-1` = infinite; verbatim `h = i2 - 1` inside `arm`). */
+    fun setState(s: Int, f: Int) { flag = f; anim.arm(s, f) }
 }
 
 /**

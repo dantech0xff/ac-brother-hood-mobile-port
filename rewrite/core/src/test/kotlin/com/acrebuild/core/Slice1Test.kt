@@ -671,13 +671,13 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 36 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertSame(t, w.player.gd)
         assertEquals(t.W[0] + (t.W[2] - t.W[0]) / 2, w.player.gn)
         assertEquals(t.W[3], w.player.go)
         w.player.setPositionPx(0, 0)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertNull(w.player.gd)
         assertEquals(0, w.player.gn)
         assertEquals(-1, w.player.gk)
@@ -688,13 +688,13 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 33 && it.aG != 0 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertTrue(w.player.gA)
         assertEquals(((t.aG - w.player.ak) shl 8) / 11, w.player.gL)
         assertEquals(t.av, w.player.gB)
         w.player.setPositionPx(0, 0)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertFalse(w.player.gA)
     }
 
@@ -704,7 +704,7 @@ class Level0WorldTest {
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
         w.player.setAnim(60)              // wall-climb state per i.java:12946
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertEquals(203, w.player.S)
     }
 
@@ -715,12 +715,12 @@ class Level0WorldTest {
         w.player.refreshBoxes()
         // gD false (producer arm unported): stays inert
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertTrue(w.npcs.contains(t))
         // gD true + player S ∈ {0,1,5} → i(360), zero vel, k.c(this)
         w.player.gD = true
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player)
         assertEquals(360, w.player.S)
         assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
         w.tick(emptyList())               // npc loop drains pendingRemove
@@ -10713,5 +10713,336 @@ class Slice96Test {
         assertEquals(9, w.weaponIconAnim(), "dn[2] for bit 2")
         w.player.gI = 8
         assertEquals(11, w.weaponIconAnim())
+    }
+}
+
+class Slice97Test {
+    private fun bh3World(): Level0World {
+        val w = world(); w.npcs.clear(); w.kAj = 1         // bh[1]==3
+        w.stateL(8)                                      // pin play state
+        return w
+    }
+
+    @Test fun `bh3 boss column clamps aB to bU`() {
+        val w = bh3World()
+        val boss = Entity(29, w.clips[7]); w.kB = boss
+        w.iBT = true; w.iBU = 120
+        boss.aB = 300
+        w.tick(emptyList())
+        assertEquals(120, boss.aB, "B.aB > i.bU → clamp (k.java:4191)")
+    }
+
+    @Test fun `bh3 ap4 floor clamp`() {
+        val w = bh3World()
+        w.kAp[4] = -3
+        w.tick(emptyList())
+        assertEquals(0, w.kAp[4], "ap[4]<0 → 0 (k.java:4204)")
+    }
+
+    private fun tickClean(w: Level0World, n: Int) {
+        // keep hudStep ungated: no claim overlay, no script spawns, and
+        // the player inside the autoscroll camera (al > camY+240 → l(12)
+        // freezes the tick before hudStep runs)
+        repeat(n) {
+            w.kC = null; w.pendingInsert.clear()
+            w.player.al = w.camY + 100
+            w.tick(emptyList())
+        }
+    }
+
+    @Test fun `alert meter aH countdown slides then poisons`() {
+        val w = bh3World()
+        w.kAE = 50; w.kAH = 80; w.kAF = 0
+        tickClean(w, 50)                        // 80→30
+        assertEquals(30, w.kAH, "aH>30 → aH-- only")
+        assertEquals(0, w.alertSlide, "aH>30 → i3=0 (icon in place)")
+        tickClean(w, 30)                        // 30→0, slide grows
+        assertEquals(30, w.alertSlide)
+        tickClean(w, 1)                         // aH→-1 → aE=aH, return
+        assertEquals(-1, w.kAE, "aE = aH(-1) poisons the meter (k.java:4216)")
+        assertEquals(0, w.kAH)
+        tickClean(w, 1)
+        assertEquals(-1, w.kAE, "aE<0 → arm dead")
+    }
+
+    @Test fun `alert meter aF trickle`() {
+        val w = bh3World()
+        w.kAE = 50; w.kAH = -1; w.kAF = 7
+        tickClean(w, 1)
+        assertEquals(53, w.kAE, "+3/tick")
+        assertEquals(4, w.kAF)
+        tickClean(w, 1)
+        assertEquals(56, w.kAE)
+        tickClean(w, 1)
+        assertEquals(57, w.kAE, "remainder <3 → aE += aF")
+        assertEquals(0, w.kAF)
+        assertEquals(57, w.alertFill, "i4 = min(aE,100)")
+    }
+
+    @Test fun `alertFill caps at 100`() {
+        val w = bh3World()
+        w.kAE = 140; w.kAH = -1; w.kAF = 0
+        tickClean(w, 1)
+        assertEquals(100, w.alertFill)
+    }
+
+    @Test fun `g-g overhead gate`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        // no focus entity → arm skipped (renderer-side; here verify fields)
+        p.S = 303; p.K = 2; p.gQL = 150; p.gQM = 90
+        assertNull(p.g)
+        p.g = Entity(11, w.clips[7])
+        assertEquals(303, p.S)
+        assertEquals(2, p.K, "aS.K = anim frame (k.java:4347)")
+    }
+}
+
+class Slice98Test {
+    private fun tickClean(w: Level0World, n: Int) {
+        repeat(n) {
+            w.kC = null; w.pendingInsert.clear()
+            w.player.al = w.camY + 100
+            w.tick(emptyList())
+        }
+    }
+
+    @Test fun `fadeIn ramps nine stripes then one black frame`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.fadeIn()                                        // k.B(26)
+        assertTrue(w.kAn); assertFalse(w.kAo)
+        assertEquals(0, w.kBI); assertEquals(26, w.kFk)
+        tickClean(w, 9)
+        assertEquals(234, w.kBI, "bI += 26 x9 = 234")
+        assertEquals(9, w.kFn, "fn grows one stripe per in-ramp step")
+        assertTrue(w.kAn, "still fading — 234 <= 255-26 is false next tick")
+        tickClean(w, 1)
+        assertFalse(w.kAn, "bI>255-fk → an=false (k.java:3171)")
+        assertTrue(w.fadeSolidFrame, "single solid-black frame armed")
+    }
+
+    @Test fun `fadeOut drains bI and recedes stripes`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.kFn = 9
+        w.fadeOut()                                       // k.C(26)
+        assertTrue(w.kAo); assertFalse(w.kAn)
+        assertEquals(255, w.kBI)
+        tickClean(w, 1)
+        assertEquals(229, w.kBI); assertEquals(8, w.kFn)
+        tickClean(w, 8)
+        assertEquals(21, w.kBI); assertEquals(0, w.kFn)
+        tickClean(w, 1)
+        assertFalse(w.kAo, "bI<fk → ao=false (k.java:3185)")
+        assertEquals(0, w.kFn, "fn untouched once ao clears")
+    }
+
+    @Test fun `fadeIn during fadeOut swaps arms`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.fadeOut()
+        w.fadeIn()
+        assertTrue(w.kAn); assertFalse(w.kAo); assertEquals(0, w.kBI)
+    }
+
+    @Test fun `vignette fs wraps at zero`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.iBh = 20                            // outlasts fs's 8-tick cycle
+        tickClean(w, 1)
+        assertEquals(70, w.kFs, "fs -= 10 (k.java:3193)")
+        tickClean(w, 7)
+        assertEquals(80, w.kFs, "fs<=0 → wrap to 80 (:3196)")
+    }
+
+    @Test fun `vignette gated off play state`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.iBh = 8; w.stateL(12)
+        tickClean(w, 1)
+        assertEquals(80, w.kFs, "j.c!=8 → fs frozen")
+    }
+
+    @Test fun `letterbox dz opens via av and chases aw`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.kDz = 0; w.kAv = true
+        tickClean(w, 2)
+        assertEquals(40, w.kDz, "av → dz += 20/tick (:3207)")
+        w.kAv = false; w.kAw = 0
+        tickClean(w, 2)
+        assertEquals(0, w.kDz, "dz chases aw by -20")
+        w.kAw = 55; w.kDz = 60
+        tickClean(w, 1)
+        assertEquals(55, w.kDz, "|diff|<20 → snap dz=aw")
+        w.stateL(14)
+        w.kAw = 0; w.kDz = 55
+        tickClean(w, 1)
+        assertEquals(55, w.kDz, "j.c==14 → letterbox frozen")
+    }
+
+    @Test fun `i-bJ flicker toggles bH to bI then zeroes with skip`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.iBJ = 1                                          // == i.bH
+        tickClean(w, 1)
+        assertEquals(2, w.iBJ, "bJ==bH && bL>=0 → bJ=bI (k.java:3227)")
+        assertFalse(w.tailSkipFrame)
+        tickClean(w, 1)
+        assertEquals(0, w.iBJ, "bJ==bI && bL<=20 → bJ=0 (:3234)")
+        assertTrue(w.tailSkipFrame, "early-return frame skips aU bar")
+        tickClean(w, 1)
+        assertFalse(w.tailSkipFrame, "latch is per-frame")
+    }
+
+    @Test fun `i-bJ bL negative holds bH`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        w.iBJ = 1; w.iBL = -5
+        tickClean(w, 3)
+        assertEquals(1, w.iBJ, "bL<0 → bH arm not taken")
+    }
+
+    @Test fun `kAU meter gate fields`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val q = Entity(61, w.clips[7]); w.kAU = q; w.iBy = 1
+        q.P = q.P or 32
+        // renderer gate `(P&32)==0 && iBy>0 && !tailSkipFrame` — world side
+        assertEquals(32, q.P and 32, "P&32 clears the bar draw")
+        q.P = q.P and 32.inv()
+        assertEquals(0, q.P and 32)
+        assertEquals(1, w.iBy)
+    }
+}
+
+// ============================================================ slice 99
+// ax10-S16 door-teleport: S16 arm (i.java:12326-12431) + bh()/bi()
+// (i.java:14421/:14437) + i.a(iVar) bind (i.java:231). All proven.
+class Slice99Test {
+    /** Paired S16 doors: `door` W wraps the player, `dest` (aw=77) is
+     *  the oId/Z[0] link target. `door.aD=1` so bi() faces right. */
+    private fun doorPair(w: Level0World): Pair<Entity, Entity> {
+        val dest = Entity(10, null).apply {
+            aw = 77; S = 16
+            ak = 920; al = 730
+            W[0] = 900; W[1] = 700; W[2] = 940; W[3] = 760
+            aD = 1
+        }
+        val door = Entity(10, null).apply {
+            S = 16
+            ak = w.player.ak; al = w.player.al
+            W[0] = w.player.ak - 30; W[1] = w.player.al - 60
+            W[2] = w.player.ak + 30; W[3] = w.player.al + 4
+            oId = 77; Z[0] = 77
+        }
+        w.npcs.add(door); w.npcs.add(dest)
+        return door to dest
+    }
+
+    @Test fun `door overlap marks the player with the 105 prompt`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
+        val (door, _) = doorPair(w)
+        w.npcFsm.tickTrigger(door, w, p)
+        assertNotNull(p.ae, "aS.a(105,…) spawned into player ae")
+        assertEquals(105, p.ae!!.S, "marker anim 105")
+        assertEquals(300, door.az, "az=300 marker TTL (L1784)")
+        assertNull(p.ac, "no bind without the keypress")
+    }
+
+    @Test fun `door leave drops the door ae link`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.g = null; p.ga = null
+        val (door, _) = doorPair(w)
+        door.ae = Entity(14, null)                    // door-side ae link
+        p.ak = door.W[2] + 200; p.refreshBoxes()       // out of the zone
+        w.npcFsm.tickTrigger(door, w, p)
+        assertNull(door.ae, "L1850 G() on no-overlap")
+    }
+
+    @Test fun `door exit tap binds player to dest and fades in`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
+        val (door, dest) = doorPair(w)
+        w.pad.commit(16388)
+        w.npcFsm.tickTrigger(door, w, p)
+        assertSame(dest, p.ac, "bh() k.q(o) → aS.a(dest)")
+        assertTrue(dest.P and 256 != 0, "bind marks P|=256")
+        assertEquals((door.W[0] + door.W[2]) shr 1, p.ak,
+            "player centered on exit door (bh :14428)")
+        assertEquals(0, p.ag + p.ah + p.ai + p.aj, "velocity zeroed")
+        assertEquals(284, p.S, "aS.i(284)")
+        assertTrue(w.kAn && !w.kAo, "k.B(26) fade-in armed")
+        assertEquals(0, w.kBI, "bI=0 at fade-in start")
+    }
+
+    @Test fun `door exit blocked by live interact target g`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = true; p.ga = null
+        p.g = Entity(14, null)                          // g.g != null
+        val (door, _) = doorPair(w)
+        w.pad.commit(16388)
+        w.npcFsm.tickTrigger(door, w, p)
+        assertNull(p.ac, "L1850 → no bind while g.g lives")
+        assertFalse(w.kAn, "no fade")
+    }
+
+    @Test fun `door exit blocked while grapple link lives`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = true; p.g = null
+        p.ga = Entity(43, null)                          // g.a != null
+        val (door, _) = doorPair(w)
+        door.az = -5
+        w.npcFsm.tickTrigger(door, w, p)
+        assertEquals(-5, door.az, "L177d early return skips az=300")
+        assertNull(p.ae)
+    }
+
+    @Test fun `door arrival places player at dest and fades out`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        val (door, dest) = doorPair(w)
+        p.ac = dest                                       // bound to dest
+        w.kAn = false; w.kAo = false                      // fades idle
+        w.npcFsm.tickTrigger(dest, w, p)
+        assertEquals((dest.W[0] + dest.W[2]) shr 1, p.ak, "bottom-center x")
+        assertEquals(dest.W[3], p.al, "al = W[3]")
+        assertTrue(p.av, "av = (aD&1)!=0 → right")
+        assertEquals(285, p.S, "aS.i(285) arrive anim")
+        assertTrue(w.kAo && !w.kAn, "k.C(26) fade-out armed")
+        assertEquals(255, w.kBI, "bI=255 at fade-out start")
+        assertEquals(300, dest.az, "az=300 still armed each tick")
+    }
+
+    @Test fun `door bound mid-fade-out flings player and opens dest`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        val (door, dest) = doorPair(w)
+        p.ac = door                                       // bound to EXIT
+        w.kAo = true; w.kBI = 20                          // ao && bI>13
+        w.npcFsm.tickTrigger(door, w, p)
+        assertEquals(19, dest.S, "r8.i(19) dest open anim")
+        assertEquals(43, p.S, "aS.a(0) → enterStateMasked(43,32) fling")
+        assertEquals(1536, p.aj, "fling aj=1536")
+    }
+
+    @Test fun `door unbound mid-fade-in opens dest`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = false; p.g = null; p.ga = null
+        val (door, dest) = doorPair(w)
+        w.kAn = true; w.kBI = 20                          // an && bI>13
+        w.npcFsm.tickTrigger(door, w, p)
+        assertEquals(17, dest.S, "L1837 r8.i(17)")
+        assertNull(p.ac, "no bind without the keypress")
+    }
+
+    @Test fun `door without o link does nothing unbound`() {
+        val w = world(); w.npcs.clear(); w.stateL(8)
+        val p = w.player
+        p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
+        val (door, _) = doorPair(w)
+        door.oId = -1
+        w.pad.commit(16388)
+        w.npcFsm.tickTrigger(door, w, p)
+        assertNull(p.ae, "o==-1 → L17d0 early return")
     }
 }
