@@ -119,3 +119,30 @@ Screenshots taken at multiple beats (`atlas-*.png`): play-start (spawn + compani
 - ⚠️ gfxinfo GPU p50 still reads 4950 ms on the new build — that metric is saturated/unreliable for this GL app on swiftshader (measures end-to-end GPU pipeline latency, not display rate); ignore it in future comparisons. Use unique-frame counts + GLThread % instead.
 - ⚠️ Combat kill (S139 corpse) still not landed — `g` interact-lock didn't arm in my setup again; guards do alert/chase/strike. Same as v2, unrelated to the renderer change.
 - ⚠️ `adb shell screencap`/`compare` thresholds: encoder noise floor ≈ 8–11 k px-diff at 1200×540; sub-500 diffs = true duplicates.
+
+---
+
+# v4 — Showcase run on devin/land 8ccca05 (slices 170-173: atlas + ax42 win-fuse + ax35 + win-chain)
+
+**Build:** `android-debug.apk` @ 8ccca05, installed `-r`, cold boot via `pm clear`. emulator-5554, physical 1080×2400 + `user_rotation 1` + auto-rotate on + landscape accel → app surface 2400×1080, `renderer.scale=4, offset(400,60)` (jdb-verified).
+
+## ⚠️ Session-start environment bug (not a code issue — fixed live)
+`pm clear` reset `user_rotation`→0 and the app got a **portrait GL surface** (`sensorLandscape` resolves via the ACCELEROMETER, not user_rotation) → the level rendered in a ~200×210 box at bottom-left while menus stayed fine. Fixed: `accelerometer_rotation 1` + `emu sensor set acceleration 9.8:0:0` + `wm size/density reset` + relaunch → landscape surface, scale 4. Captured in SKILL.md.
+
+## Videos
+- **`showcase-part1-boot-to-fight.mp4`** (235 s, 2400×1080) — title → menu → ROME/COLOSSEUM/KILL WOLFMEN load card → u9 dialog → SKIP → play → run right → **crate smash (score 6100→10100)** → platforming to the x=779 plateau pin → teleport to the street patrol → guard standoff.
+- **`showcase-part2-fight-to-eastend.mp4`** (234 s) — fight continuation → **real KO → "DO YOU WANT TO RESTART?" → tap-reload → respawn at x8910 checkpoint** → long east-corridor run (x8910→12519, ~3.6 kpx continuous, camera tracking) → rope-bridge descent at the east end → second teleport-fall fail → reload → more guard standoff.
+- **`showcase-highlight.mp4`** (291 s condensed 1200×540) — all beats trimmed.
+
+## Verified working
+- ✅ Boot chain fully touch-driven end-to-end (jC23 prompt → title → jC2 menu → jC29 LEVEL → jC30 mission → jC20 story → jC9 load → jC21 u9 → jC8 play). SKIP strip dismissed the intro dialog on-screen.
+- ✅ Real gameplay: run/vault/platforming with camera tracking; golden ax4 crates smashed by sword taps (score jumped); score/checkpoints accumulate (16100).
+- ✅ Mission-fail loop ×3: KO'd in the fight AND two teleport-fall fails → banner → row-tap → checkpoint respawn (score preserved, deaths=2).
+- ✅ Frame rate: ~14.1 unique fps during gameplay (1 per 62 ms sim tick) — the atlas fix holds on this build; visibly smooth vs the old slideshow.
+- ✅ East traversal: x8910→12519 continuous street run + rope-bridge descent at the east end.
+
+## Limitations / findings
+1. ⚠️ **Player sword kills still not landable by touch** — guards (npc115/116, ax11 @7191-7194) stayed `aA=2` (never alerted even with the player adjacent — likely need a separate alert-trigger zone like the slice-72 x~7259 one); strikes they DID land staggered the player (S11) and drained x1 90→30 → real KO. My attack taps produced no S67-69 slash on guards (`aB` stayed 300) and crate npc100 S=9 didn't break at (8619,802). The `g`/`iBf` engage-lock never armed — same gap as every prior run.
+2. ⚠️ **Win screen unreachable by position alone** — the aw252 zone is `ax5 @12131,221 W[12131,221-12561,811]` at **S=0 dormant**; passing through (12519,599 inside the rect) did NOT fire jC=15. `tickMissionLogic` only calls `screenL(15)` in the S4 kill-zone arm — the zone arms via mission progression (objective: KILL WOLFMEN → claim script → S4). Verified: the trigger requires completing the mission objective first, not just reaching x12131.
+3. ⚠️ The x=779 plateau pin still holds (S12 wall-jump loop) — documented before.
+4. ⚠️ jC20 story: mid-screen taps don't advance it — exits are the NEXT (right-footer M_CYCLE) / SKIP (left-footer M_PAUSE) footers.
