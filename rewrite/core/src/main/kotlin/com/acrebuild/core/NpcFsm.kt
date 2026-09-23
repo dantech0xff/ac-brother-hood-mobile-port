@@ -492,8 +492,11 @@ class NpcFsm(val world: LevelCellSource) {
      * - S43 (L744): overlap && player.S ∈ {60,61} → `i(203)`.
      * - S53 (L886): `g.D && overlap && player.S ∈ {0,1,5}` → `i(360)`,
      *   `ag=ah=0`, `k.c(this)` remove. (g.D producer arm unported.)
+     * - S16 (L177d→L1850): door-teleport — `bh()` exit + `bi()` arrival
+     *   driving `k.B(26)`/`k.C(26)` fades. (The slice-20 "rope-attach"
+     *   stub label was wrong — this is the paired-door transition.)
      */
-    fun tickTrigger(e: Entity, player: Entity) {
+    fun tickTrigger(e: Entity, w: LevelCellSource, player: Entity) {
         when (e.S) {
             33 -> if (rectsOverlap(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
@@ -517,6 +520,44 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> if (rectsOverlap(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
+            // S16 door-teleport (i.java:12326-12431 = L177d→L1850,
+            // proven). `g.a != null` gate; `az=300`; `r8 = k.q(Z[0])`
+            // = the destination-door entity. Bound player (`aS.ac ==
+            // this`) → `bi()` arrival when fades idle, or the
+            // `ao && bI > 13` mid-fade-out arm `r8.i(19)` + `aS.a(0)`
+            // fling. Unbound: `o == -1` no-op; overlap + `g.g == null`
+            // → `aS.a(105,cx,al)` marker + `k.v(16388)` edge +
+            // `!g.b(aS.S)` + `aS.aZ` → `G()` + `bh()` + `i(284)`;
+            // fallthrough `an && bI > 13 → r8.i(17)`; no-overlap → `G()`.
+            16 -> {
+                if (player.ga != null) return                          // L177d
+                e.az = 300                                             // L1784
+                val r8 = w.findByAw(e.Z[0])                            // k.q(Z[0])
+                if (player.ac === e) {
+                    if (!w.kAn && !w.kAo) {                            // fades idle
+                        doorArriveBi(e, w, player); return             // bi()
+                    }
+                    if (w.kAo && w.kBI > 13) {                         // L17b0
+                        r8?.setAnim(19)
+                        player.flingAirborne(0, w)                     // aS.a(0)
+                    }
+                    return                                             // L17cf
+                }
+                if (e.oId == -1) return                                // L17d0
+                if (rectsOverlap(player.W, e.W) && player.g == null) { // L17d9
+                    player.spawnMarker(w, 105,
+                        (e.W[0] + e.W[2]) shr 1, e.al)                 // aS.a(105,…)
+                    if (w.padHeld(16388) && !w.playerAttacking() &&
+                        player.aZ) {
+                        e.dropAeLink()                                 // G()
+                        doorExitBh(e, w, player)                       // bh()
+                        player.setAnim(284)
+                    }
+                    if (w.kAn && w.kBI > 13) r8?.setAnim(17)           // L1837
+                } else {
+                    e.dropAeLink()                                     // L1850
+                }
+            }
             50 -> {                                             // L852 rope-dismount
                 val ga = player.ga
                 if (ga != null && ga.ax == 43 &&
@@ -549,8 +590,42 @@ class NpcFsm(val world: LevelCellSource) {
                 player.ag = 0; player.ah = 0
                 world.removeEntity(e)
             }
-            // S16 (L625 rope-attach) and every other aV() state: unported.
+            // Every other aV() state: unported.
         }
+    }
+
+    /**
+     * `i.bh()` (i.java:14421, proven) — the door-EXIT arm: zero player
+     *  velocity fields, re-center `ak` on the door's W, then bind the
+     *  player to the destination door via `k.q(this.o)` + `aS.a(iVar)`
+     *  (`P|=256`), and arm the fade-IN `k.B(26)`. The destination door's
+     *  own S16 tick sees `aS.ac == this` and runs `bi()`.
+     */
+    private fun doorExitBh(e: Entity, w: LevelCellSource, p: Entity) {
+        p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+        p.ak = (e.W[0] + e.W[2]) shr 1
+        val q = w.findByAw(e.oId)                        // k.q(this.o)
+        if (q != null) p.bindAc(q)                       // aS.a(iVarQ)
+        w.fadeIn()                                       // k.B(26)
+    }
+
+    /**
+     * `i.bi()` (i.java:14437, proven) — the door-ARRIVAL arm (runs on the
+     *  DESTINATION door once `aS.ac == this` and fades are idle): facing
+     *  `av = (aD&1)!=0`, player bottom-center at `(W0+W2)>>1, W[3]`,
+     *  `i(285)` + `t()`, then `k.ah?.I()` + `k.m(k.ad)` camera snap +
+     *  fade-OUT `k.C(26)`.
+     */
+    private fun doorArriveBi(e: Entity, w: LevelCellSource, p: Entity) {
+        if (p.ac !== e) return
+        p.av = (e.aD and 1) != 0
+        p.ak = (e.W[0] + e.W[2]) shr 1
+        p.al = e.W[3]
+        p.setAnim(285)
+        p.refreshBoxes()                                 // t()
+        w.refreshScrollBounds()                          // k.ah?.I()
+        w.kM(w.kAd)                                      // camera snap
+        w.fadeOut()                                      // k.C(26)
     }
 
     // ============================================================ ax4 = aj()

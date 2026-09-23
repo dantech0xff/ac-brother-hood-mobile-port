@@ -2286,6 +2286,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ae = null
     }
 
+    /** `i.a(iVar)` (i.java:231, proven): the `ac` bind/unbind — release
+     *  the current `ac` (`P &= ~256`) then bind `other` (`P |= 256`).
+     *  `bh()` binds the player to the destination door through this. */
+    fun bindAc(other: Entity?) {
+        ac?.let { it.P = it.P and -257 }
+        ac = other
+        other?.let { it.P = it.P or 256 }
+    }
+
     /** `i.ac()` (i.java:20577, proven): ax ∈ {11,17,23,43,40,45,51} gets
      *  the claim-position latch (i.cM/i.cN) written by `h()`. */
     fun claimPositionType(): Boolean =
@@ -4154,6 +4163,19 @@ interface LevelCellSource {
     /** `k.an` (k.java, proven): fade-out flag set by `k.B()` — the ax35
      *  sweep skips the player-hit arm while a fade runs. */
     var kAn: Boolean get() = false; set(_) {}
+    /** `k.ao` (k.java, proven): fade-IN-side flag set by `k.C()`; the
+     *  ax10-S16 door-teleport arrival arm watches `ao && bI > 13`. */
+    var kAo: Boolean get() = false; set(_) {}
+    /** `k.bI` (k.java:313, proven): shared fade progress 0..255 ramped
+     *  by `k.fk` per `aa()` step — read by the door arms at `> 13`. */
+    var kBI: Int get() = 0; set(_) {}
+    /** `k.B(26)` (k.java:5738): arm the fade-IN ramp (`an`, `bI=0`). */
+    fun fadeIn() {}
+    /** `k.C(26)` (k.java:5745): arm the fade-OUT ramp (`ao`, `bI=255`). */
+    fun fadeOut() {}
+    /** `k.ah?.I()` (i.java:14444, proven): tick the scroll-wall holder
+     *  entity — ported as the ax37 bounds refresh (inferred mapping). */
+    fun refreshScrollBounds() {}
     /** `k.aQ` — the debug vol-paint surface the ax35 `a(x,y,w,h,bool)`
      *  rasterizer fills (i.java:22224). Debug-only: its sole reader is
      *  the HUD blit at (198-w,5); ported as a rect recorder (`inferred`). */
