@@ -137,8 +137,28 @@ class Level0World(
     /** `k.ap[]` progress counters (k.java:4314/L() proven): `k.e(r5,uid)`
      *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
      *  verbatim — always slot 0). */
-    val kAp = IntArray(6)
+    override val kAp = IntArray(6)
     fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
+
+    var kDg = 0                           // k.dg — mission-frame counter (timer)
+    var kAy = 30                          // k.ay — sync byte (bA[46])
+    var kAN = 0                           // k.aN — misc stat (bA[48])
+    var kDj = 0                           // k.dj — typewriter index
+    var kDk = 0                           // k.dk — typewriter countdown
+    /** `k.eg[]` (k.java:265, proven) — all-true episode flags; drives
+     *  post-mission nav `eg[aj] ? l(30) : l(2)`. */
+    val kEgFlags = BooleanArray(9) { true }
+    /** `k.dh/k.di` (k.java:199-200, proven) — per-difficulty score
+     *  multipliers {100,200,300} for kills / collects. */
+    val kDH = intArrayOf(100, 200, 300)
+    val kDI = intArrayOf(100, 200, 300)
+    // -- M() win-stats surface (k.java:3280-3445, inferred render state)
+    var statsTitleY = 0
+    var statsScore = 0
+    var statsTimeSec = 0
+    var statsScoreVisible = false
+    var statsTypeNext = -1
+    var typewriterText = ""
     /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
      *  arming clears bit128 (`P &= -129`) marking the slot live again. */
     fun projectileAlloc(): Int {
@@ -206,7 +226,6 @@ class Level0World(
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
     override var aq = 0              // k.aq — global tally (ax4 S5 += m)
-    override val apStats = IntArray(16)  // k.ap — per-slot counters (k.o)
     override var shake = 0           // k.az side of k.s() (k.java:5338;
                                      // the dE threshold ladder is unported)
     override val sfxLog = mutableListOf<Int>()  // k.A(int) — audio unported
@@ -837,10 +856,10 @@ class Level0World(
     override var iCh: Entity? = null             // i.ch
     override var iZ = false                      // i.z static (sub-op 24/25)
     override fun kStat(n: Int) {                 // k.o(n) (k.java:4304)
-        if (n != 3 || kAj != 7) apStats[n]++
+        if (n != 3 || kAj != 7) kAp[n]++
     }
     override fun kStatE(gate: Int) {             // k.e(0,gate) (k.java:4314)
-        if (gate > 0 && kAj != 7) apStats[0]++
+        if (gate > 0 && kAj != 7) kAp[0]++
     }
     override fun spawnStatic(ax: Int, s: Int, x: Int, y: Int): Entity? {
         // i.a(ax,s,5,400) marker arm — arg mapping `inferred`; marker
@@ -1179,7 +1198,7 @@ class Level0World(
                                              // flag read by l(15)'s r82
                                              // (i.java:2077, proven)
         return Snapshot(aw, player.ak, player.al, player.av, player.x1,
-                        player.gJ, player.gI, apStats.copyOf())
+                        player.gJ, player.gI, kAp.copyOf())
     }
 
     /**
@@ -1347,7 +1366,7 @@ class Level0World(
                 i == 12 || i == 13 -> {              // L12 → L17 tail
                     scrollBounds()                   // b(true) — scroll refresh (unported)
                     kAD = null
-                    if (i == 12 && ex != 12) deaths++
+                    if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
                     kEc = 25; bannerK(3); kEb = 59   // L17 (simple decompile —
                                                      // structured omits; high-confidence)
@@ -1405,6 +1424,88 @@ class Level0World(
         // aggregate flag keyed on the ENTRY state — l(15) may redirect to
         // i=22/10 (medal screen / level select) before this tail runs.
         if (iArg == 15 || iArg == 31 || iArg == 13) missionWon = true
+    }
+
+    /** `M()` (k.java:3280-3445, proven) — the j.c==15 win-stats frame
+     *  proc. `j.g==1`: `W();ac();ad();E()` teardown + best-time persist.
+     *  Panel grows `eE→140` (`eF=37+eE`) then `j.g=1`. Rows reveal by
+     *  `j.g` gates; `i4` score = base(aj)+kills·dh[au]+collects·di[au]
+     *  −min(deaths,4)·300 +bonus·30 −overtime. `v(458784)` skips the
+     *  reveal then persists `dB..dD`+`bA` slots and routes onward. */
+    private fun winStatsM() {
+        if (jG == 1L) {                                   // first proc frame
+            teardown()                                    // W()
+            // ac(); ad(); E() — renderer teardowns (unported)
+            val bi = 52 + (kAj shl 1)
+            if (kAp[5] > kBA[bi]) kBA[bi] = kAp[5]        // best time
+        }
+        statsTitleY = 25 + ((177 - kEf) / 2)              // a(i2,d(0,60))
+        if (kEe < 140) {                                  // panel grow
+            kEe += 10; kEf = 37 + kEe
+            if (kEe >= 140) { kEe = 140; kEf = 37 + kEe; jG = 1 }
+            return
+        }
+        var i4 = 0
+        val i5 = kAp[0]
+        if (kAj == 7) i4 = 3000 else if (kAj >= 8) i4 = 5000
+        if (jG > 0) i4 += i5 * kDH[kAu]                   // kills
+        if (jG > 2) i4 += kAp[3] * kDI[kAu]               // collects
+        if (jG > 4) i4 -= minOf(kAp[1], 4) * 300          // deaths
+        if (jG > 6) {
+            var i = if (bh3) kAp[4] else kAp[5]           // bonus
+            if (i < 0) i = 0
+            i4 += i * 30
+        }
+        if (jG > 8) {
+            val i8 = kDg / 16
+            statsTimeSec = i8
+            if (i8 > 180) i4 -= minOf(1000, (i8 - 180) shl 1)
+        }
+        if (i4 < 0) i4 = 0
+        statsScore = i4
+        if (jG > 10) { statsScoreVisible = true; kCb = false }
+        // a(d(0,16), d(0,62)|"") — typewriter next-mission line
+        statsTypeNext = if (kAj < 7) 62 else -1
+        typewriterStep(if (kAj < 7) "next-mission" else "")
+        if (pad.v(458784)) {                              // fire/advance
+            z(23)
+            if (jG <= 10) { jG = 10; return }
+            // persist: best score + dB..dF stash + bA slots
+            val si = 81 + (kAu shl 4) + (kAj shl 1)
+            if (i4 > kBA[si]) kBA[si] = i4
+            kDB = kAx; kDC = kAy; kDF = kAN; kDD = kAz
+            kBA[32] = kAz; kBA[8] = kAu; kBA[44] = kAx
+            kBA[46] = kAy; kBA[48] = kAN; kBA[36] = 0
+            if (pad.v(327712)) {                          // confirm
+                if (kAj < 7) {
+                    kAj++
+                    if (kBA[14] < kAj) kBA[14] = kAj
+                    if (kEgFlags[kAj]) stateL(30) else stateL(2)
+                } else {                                  // finale
+                    kAj = 0; kBA[14] = 0; kBA[15] = 1
+                    kBw = 0; teardown(); kDz = 0; stateL(24)
+                }
+            } else if (pad.v(Pad.M_CYCLE) && kAj < 7) {   // skip
+                kAj++
+                if (kBA[14] < kAj) kBA[14] = kAj
+                stateL(2)
+            }
+            saveFlush()                                   // e(true) RMS
+            if (jC == 2) bannerK(0)
+        }
+    }
+
+    /** `a(b,str)` typewriter tail (k.java:3447-3470, proven shape):
+     *  `dk` counts down; while `dk<=0` either inserts one char at `dj`
+     *  (the \0\2 markers are font markup — unported) or resets
+     *  `dj=0;dk=15` once `dj` reaches the end — a looping retype. */
+    private fun typewriterStep(s: String) {
+        while (kDk <= 0) {
+            if (kDj < s.length) { typewriterText = s; kDj++; return }
+            kDj = 0; kDk = 15
+        }
+        kDk--
+        typewriterText = s
     }
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:
@@ -1871,7 +1972,17 @@ class Level0World(
         }
     }
 
+    /** `L()` (k.java:3270, proven) — `dg=0; ap[i]=0` — plus the `a(z2)`
+     *  else-arm stash restore `az=0;ax=dB;az=dD;ay=dC;aN=dF`
+     *  (:5207-5216; the verbatim `az` double-write kept). */
+    private fun statsReset() {
+        kDg = 0
+        for (i in kAp.indices) kAp[i] = 0
+        kAz = 0; kAx = kDB; kAz = kDD; kAy = kDC; kAN = kDF
+    }
+
     private fun reload() {
+        statsReset()                        // L() + a(z2) restore arm
         resetPlayerToSpawn()
         spawnEntities()
         jC = 8                                   // back to play (j.c==8)
@@ -2140,6 +2251,18 @@ class Level0World(
                 pad.edge = 0        // eat the dismiss edge — not a gameplay tap
             } else { tickIndex++; jG++; return }
         }
+
+        // mission timer + ap[2] frame counter (k.java:1652-1655,
+        // proven): ticks while unpaused and not dialog-suspended.
+        if ((player.P and 512) != 0 ||
+            (kC?.claimActive() != true && (jC != 21 || subU != 9))) {
+            kDg++; kAp[2]++
+        }
+
+        // case 15 → M() (k.java:1141) — the win-stats screen proc
+        // replaces the entity sim entirely while j.c==15. jG++ runs
+        // first (j.java:255 `g++` precedes each `a()` dispatch).
+        if (jC == 15) { jG++; winStatsM(); tickIndex++; return }
 
         player.collideSides(this, true)
         playerFsm.tick(player, pad)
