@@ -3914,6 +3914,9 @@ interface LevelCellSource {
     var iBT: Boolean
     /** `i.bj` — finale freeze flag (aA=7). */
     var iBj: Boolean
+    /** `i.be` — D() camera X-lock: when set the autoscroll keeps `cA` (the
+     *  `cN`-relative target write is skipped, k.java:2797). */
+    var iBe: Boolean get() = false; set(_) {}
     /** `i.q` — gauge-charge mode: bD L326 mirrors `aB` vs sums it. */
     var iQ: Boolean
     /** `i.cC` — waypoint-phase cursor (0-6). */

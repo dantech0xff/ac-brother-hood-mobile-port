@@ -512,7 +512,9 @@ class Level0WorldTest {
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
         assertEquals(cp.ak, w.player.ak, "reload must restore checkpoint pos")
-        assertEquals(cp.al, w.player.al)
+        // i.java:18634-18635: X() writes k.B.ak/al — the PLAYER's pos at
+        // write time (cp.al+5 where the player stood), not the cp's.
+        assertEquals(cp.al + 5, w.player.al)
     }
 
     @Test fun `checkpoint re-homes live npcs and keeps pre-checkpoint dead dead`() {
@@ -598,9 +600,13 @@ class Level0WorldTest {
         w.tick(emptyList())          // view-gate holds, trigger fires
         w.tick(emptyList())
         assertEquals(853, w.boundMaxY, "X[3]=al-50+300=853 → k.U")
-        w.player.setPositionPx(5000, 900)   // target camY 740 > ceiling
-        w.tick(emptyList())
         assertTrue(w.camY <= 613, "camY ceiling = U-240 = 613, got ${w.camY}")
+        // al() exit arm (i.java:7068/:7230): leaving the zone while holding
+        // k.ah releases the slot and the holder's L8 reset clears the bounds.
+        w.player.setPositionPx(5000, 900)
+        w.tick(emptyList())
+        assertEquals(0, w.boundMaxY, "k.n() release clears k.U on zone exit")
+        // (kAh may stay non-null — another zone's claim can succeed it.)
     }
 
     @Test fun `ax44 doors spawn banked and timed cycle runs i16927`() {
@@ -783,13 +789,29 @@ class Level0WorldTest {
         assertTrue(wisp.aD in 0 until 360); assertTrue(wisp.aE in 70 until 90)
         // radius grows 15/tick to aE, aC drains 2, then i(2) anchors
         val ticks = (wisp.aE / 15) + 4
-        repeat(ticks) { w.npcFsm.tickWisp(wisp, w.player) }
+        repeat(ticks) { w.npcFsm.tickAx74(wisp, w, w.player) }
         assertEquals(2, wisp.S)
         assertEquals(w.player.ak, wisp.ak)
         assertEquals(w.player.al - 30, wisp.al)
         // anim finish → removed (drive a few more ticks through full sim)
         repeat(30) { w.tick(emptyList()) }
         assertFalse(w.npcs.contains(wisp))
+    }
+
+    // Slice 75 regression: the tick dispatch had a stale ax74→tickWisp
+    // arm shadowing the full bN() port — the S0 collect scan was dead.
+    @Test fun `ax74 dispatches to bN collect arm through w tick`() {
+        val w = world()
+        val wisp = Entity(74, null)
+        wisp.setPositionPx(w.player.ak + 5, w.player.al)  // dist<20, W∩Y
+        wisp.setAnim(0)                                   // S0 collect scan
+        wisp.refreshBoxes()
+        w.npcs += wisp
+        val before = w.kAp[5]
+        w.tick(emptyList())
+        // S0 collect: overlap → kCount(5) + sfx15 + i(2) attach anim
+        assertEquals(2, wisp.S, "S0 collect arm must run via dispatch")
+        assertTrue(w.kAp[5] > before)
     }
 
     // ------------------------------------------------------------- ax67
@@ -8493,5 +8515,417 @@ class Slice70CamTest {
         w.kM(2)                                          // r5&ad arm
         assertTrue(w.kAe === w.player)                   // ae=aS restored
         assertEquals(0, w.kR); assertEquals(0, w.kSBound)
+    }
+}
+
+// =========================================================================
+// Slice 71 — k.l(13) win screen (k.java:2031 r6==13 → L12 → j.c=13).
+// =========================================================================
+class Slice71WinTest {
+    @Test fun `screenL(13) freezes world and context edge reloads`() {
+        val w = world()
+        w.tick(emptyList())
+        w.screenL(13)                                   // script op105 → k.l(13)
+        assertTrue(w.won, "k.l(13) must raise the win screen")
+        assertTrue(w.missionWon)
+        val pos = w.player.ak to w.player.al
+        repeat(5) { w.tick(emptyList()) }
+        assertEquals(pos, w.player.ak to w.player.al, "world frozen while won")
+        assertFalse(w.inPlay)
+        // v(65568) confirm edge → advance = reload() (only level so far)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertFalse(w.won, "context edge should advance the win screen")
+        assertEquals(90, w.player.x1, "reload refills the meter")
+    }
+
+    @Test fun `screenL(13) is idempotent`() {
+        val w = world()
+        w.screenL(13); w.screenL(13)
+        assertTrue(w.won); assertTrue(w.missionWon)
+    }
+}
+
+class Slice72ScrollReleaseTest {
+    /** i.java:7053-7159 al(): the k.ah holder clears R/S/T/U each tick and
+     *  releases the slot (k.n()) when its zone stops firing — camera must
+     *  not stay pinned after the player leaves the trigger. */
+    @Test fun `bound release on zone exit frees the camera`() {
+        val w = world()
+        w.tick(emptyList())
+        assertEquals(true, w.kAh != null)
+        assertTrue(w.boundMinX > 0 || w.boundMinY > 0 || w.boundMaxX > 0 || w.boundMaxY > 0)
+        val p = w.player
+        // Walk the player out of the spawn-strip zone (zone ends x≈249).
+        repeat(200) {
+            p.ak = 600
+            w.tick(emptyList())
+        }
+        assertEquals(null, w.kAh)
+        assertTrue(w.camX > 9)   // camera followed right instead of pinning at the 9px floor
+    }
+
+    /** Regression: spawn-trigger bound=[9,756,41,979] used to arm kAh.aF=1
+     *  with the bound rect, pinning camA between the wall ceiling (41-400)
+     *  and the kR floor (9). ax37 records carry aF=0 → wall clamp skips. */
+    @Test fun `spawn wall does not pin camera`() {
+        val w = world()
+        val p = w.player
+        p.ak = 3000   // teleport past the wall as the agent did
+        repeat(30) { w.tick(emptyList()) }
+        assertTrue(w.camX > 9)
+    }
+}
+
+// =========================================================================
+// Slice 73 — k.D() bh3 autoscroll camera (k.java:2721-2860) + i.X() at :3363.
+// =========================================================================
+class Slice73AutoCamTest {
+    @Test fun `bh3 tick runs D() autoscroll not m(1)`() {
+        val w = world()
+        w.kAj = 1                                   // MISSION_BH[1]==3
+        val p = w.player
+        p.setPositionPx(1500, 900); p.refreshBoxes()
+        val x0 = w.camX; val y0 = w.camY
+        repeat(40) { w.tick(emptyList()) }
+        // D() lerps camX toward the corridor target and camY +30/tick-cap —
+        // either axis must move (m() path is skipped entirely on bh3).
+        assertTrue(w.camX != x0 || w.camY != y0,
+            "bh3 camera should drive via D(), got cam=${w.camX},${w.camY}")
+    }
+
+    @Test fun `wind W drains into X once then stays`() {
+        val w = world()
+        w.kAj = 1
+        w.kW = 5
+        w.tick(emptyList())
+        assertEquals(5, w.kX)
+        assertEquals(0, w.kW)
+        w.tick(emptyList())
+        assertEquals(5, w.kX, "X is a sticky counter — no re-drain")
+    }
+
+    @Test fun `iBW phase write persists extended snapshot then clears`() {
+        val w = world()
+        w.kAj = 1
+        w.apStats[0] = 7; w.apStats[3] = 2
+        w.iBW = true
+        w.tick(emptyList())
+        assertFalse(w.iBW, "pending write consumed")
+        val s = w.checkpointSnap!!
+        assertEquals(w.player.ak, s.ak); assertEquals(w.player.al, s.al)
+        assertEquals(7, s.ap[0]); assertEquals(2, s.ap[3])
+    }
+
+    @Test fun `dialog modal snaps camera and returns early`() {
+        val w = world()
+        w.kAj = 1
+        w.autoDismissDialog = false   // keep the modal armed this tick
+        w.screenL(21)                 // j.c=21 → dialogModal armed
+        val x0 = w.camX; val y0 = w.camY
+        w.tick(emptyList())
+        assertEquals(x0, w.camX); assertEquals(y0, w.camY)
+    }
+}
+
+// =========================================================================
+// Slice 74 — k.I() L142 tail (k.java:3321-3358): goal-arm win check,
+// claimer fast-forward step, bh3 camera-target snap.
+// =========================================================================
+class Slice74L142Test {
+    @Test fun `armed goal past the camera band fires scripted win`() {
+        val w = world()
+        val goal = Entity(9, null)
+        goal.setPositionPx(w.camX + 700, w.camY)            // ak > ac2+200
+        goal.refreshBoxes()
+        goal.Z[0] = 1                                       // L146 script arm
+        w.kAV = goal
+        w.tick(emptyList())
+        // L159: w()==2 → bx=56; l(13); bw=0
+        assertTrue(w.won, "goal past cam-right+200 should fire l(13)")
+        assertEquals(56, w.kBx)
+        assertEquals(0, w.kBw)
+    }
+
+    @Test fun `goal inside the milestone band does not win`() {
+        val w = world()
+        val goal = Entity(9, null)
+        goal.setPositionPx(w.camX + 500, w.camY)            // ak in (ac2, ac2+200)
+        goal.refreshBoxes()
+        goal.Z[0] = 1
+        w.kAV = goal
+        w.tick(emptyList())
+        assertFalse(w.won, "w()==1 stamps the ticker, no win")
+    }
+
+    @Test fun `disarmed goal never fires`() {
+        val w = world()
+        val goal = Entity(9, null)
+        goal.setPositionPx(w.camX + 700, w.camY)
+        goal.refreshBoxes()
+        goal.Z[0] = 0                                       // L147 disarmed
+        w.kAV = goal
+        w.tick(emptyList())
+        assertFalse(w.won)
+    }
+
+    @Test fun `L142 steps a fast-forwarded claimer script once per tick`() {
+        val w = world()
+        w.npcs.clear()                            // no real claimer can rebind kC
+        val c = Entity(0, null).apply { ca = 0; scriptStep = 0 }
+        c.cd[1] = true; c.cd[2] = true                      // ff + claimed
+        w.kC = c
+        w.tick(emptyList())
+        // aa() ran: cd[5] latches on entry (L22); the consumed block's
+        // release tail then cleared cd[2]/kC and parked scriptStep at -2.
+        assertTrue(c.cd[5], "cd[2]&&cd[1]&&ab() → C.aa() ran a script step")
+    }
+
+    @Test fun `claimer without cd1 fast-forward is not stepped`() {
+        val w = world()
+        w.npcs.clear()
+        val c = Entity(0, null).apply { ca = 0; scriptStep = 0 }
+        c.cd[2] = true                                      // claimed, no ff
+        w.kC = c
+        w.tick(emptyList())
+        // the tail gate `cd[2] && cd[1] && ab()` is false → aa() never ran
+        assertFalse(c.cd[5], "no L142 step without cd[1]")
+    }
+}
+
+
+// =========================================================================
+// Slice 76 — k.l(int) screen-state machine (k.java:2031-2300 simple /
+//            :1637 structured): `al` freeze flag, 13→31 remap, cy/cz
+//            commit tail, medal stamps, mission redirects.
+// =========================================================================
+
+class Slice76Test {
+
+    @Test fun `l12 commits fail state and freeze flag`() {
+        val w = world()
+        w.screenL(12)
+        assertEquals(12, w.jC); assertTrue(w.failed)
+        assertTrue(w.kAl); assertFalse(w.inPlay)
+        assertEquals(10, w.kCy)                    // ex state
+        assertEquals(1, w.deaths)                  // first entry counts
+    }
+
+    @Test fun `l12 reentry does not recount deaths`() {
+        val w = world()
+        w.screenL(12); w.screenL(12)
+        assertEquals(1, w.deaths)                  // `i==12 && ex!=12` guard
+    }
+
+    @Test fun `l12 clears kAD and runs the banner tail`() {
+        val w = world()
+        w.kAD = w.player
+        w.screenL(12)
+        assertNull(w.kAD)
+        assertEquals(25, w.kEc); assertEquals(59, w.kEb)   // L17 (high-conf)
+        assertEquals(3, w.kBv); assertEquals(-1, w.kBw)    // K(3): bw=-1
+        assertEquals(0, w.kEy); assertEquals(0, w.kEd)     // eA[3].size/eD
+    }
+
+    @Test fun `l13 remaps to 31 when bx is set`() {
+        val w = world()
+        w.kBx = 56
+        w.screenL(13)
+        assertEquals(31, w.jC); assertTrue(w.won)
+        assertTrue(w.kAl); assertTrue(w.missionWon)
+    }
+
+    @Test fun `l13 keeps 13 when bx negative`() {
+        val w = world()
+        w.kBx = -1
+        w.screenL(13)
+        assertEquals(13, w.jC); assertTrue(w.won)
+    }
+
+    @Test fun `l15 commits complete state without freeze`() {
+        val w = world()
+        w.screenL(15)
+        assertEquals(15, w.jC); assertTrue(w.missionWon)
+        assertFalse(w.kAl)                         // 15 not in freeze set
+        assertEquals(10, w.kCy)
+        assertEquals(37, w.kEf)                    // eF=37 preamble
+    }
+
+    @Test fun `l15 medal stamp re-enters as 22`() {
+        val w = world()
+        w.kAp[0] = 7                               // L35 condition: >=7
+        w.screenL(15)
+        assertEquals(1, w.kCc[0])
+        assertEquals(1, w.kBA[130])                // stamp persisted
+        assertEquals(22, w.jC)                     // L56-64 → i=22 re-entry
+        assertFalse(w.kAl)                         // 22 not in freeze set —
+                                                 // medal screen runs live
+    }
+
+    @Test fun `l15 next-mission redirect needs unlocked and ex not 10`() {
+        val w = world()
+        w.screenL(17)                              // ex=17 when l(15) runs
+        w.screenL(15)
+        // ap[0]<7 → no stamp; kAj+1=1 in fP && bA[15]==0 && ex==17
+        assertEquals(10, w.jC)                     // L68-77 redirect → play
+    }
+
+    @Test fun `l15 checkpoint flag prevents redirect`() {
+        val w = world()
+        w.screenL(17)
+        w.kBA[15] = 1                              // bA[15]==1 → no redirect
+        w.screenL(15)
+        assertEquals(15, w.jC)
+    }
+
+    @Test fun `l21 arms dialog and freezes`() {
+        val w = world()
+        w.screenL(21)
+        assertEquals(21, w.jC); assertTrue(w.dialogModal)
+        assertTrue(w.kAl)                          // kMode=0 not in {8,9}
+    }
+
+    @Test fun `l21 with mode 8 stays unfrozen`() {
+        val w = world()
+        w.kMode = 8
+        w.screenL(21)
+        assertEquals(21, w.jC)
+        assertFalse(w.kAl)                         // u==8 dialogs run world
+    }
+
+    @Test fun `l8 with cy 17 redirects to 17`() {
+        val w = world()
+        w.screenL(17); w.screenL(16)               // cy now 17
+        w.screenL(8)
+        assertEquals(17, w.jC)
+    }
+
+    @Test fun `l6 timer honors dx cheat flag`() {
+        val w = world()
+        w.screenL(6); assertEquals(60, w.kFd)
+        w.kDx = true; w.screenL(6); assertEquals(240, w.kFd)
+    }
+
+    @Test fun `l23 writes its screen constants`() {
+        val w = world()
+        w.screenL(23)
+        assertEquals(19, w.kEc); assertEquals(70, w.kEb); assertEquals(-1, w.kBw)
+    }
+
+    @Test fun `l4 stashes au into cU`() {
+        val w = world()
+        w.kAu = 42; w.screenL(4); assertEquals(42, w.kCU)
+    }
+
+    @Test fun `l14 resets equip flags`() {
+        val w = world()
+        w.kAo = true; w.kAn = true
+        w.screenL(14)
+        assertFalse(w.kAo); assertFalse(w.kAn)
+        assertEquals(1, w.kBv); assertEquals(-1, w.kFi)
+    }
+
+    @Test fun `commit tail clears input edge`() {
+        val w = world()
+        w.pad.edge = 5
+        w.screenL(12)
+        assertEquals(0, w.pad.edge)                // v() input reset
+    }
+
+    @Test fun `context edge on fail screen reloads to play`() {
+        val w = world()
+        w.screenL(12)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
+        assertEquals(10, w.jC); assertFalse(w.kAl)
+        assertTrue(w.inPlay)
+    }
+
+    @Test fun `freeze states 16 17 31 all set kAl`() {
+        val w = world()
+        for (s in listOf(16, 17, 31)) {
+            w.screenL(s)
+            assertTrue(w.kAl, "state $s frozen")
+        }
+    }
+}
+
+// =========================================================================
+// Slice 77 — z()/e.b() audio port (e.java:50-87, k.java:7363): track
+//            queue, channel gates, ee[] mission music, j.g counter.
+// =========================================================================
+
+class Slice77Test {
+
+    @Test fun `l12 plays track 7 sting`() {
+        val w = world()
+        w.screenL(12)
+        val cmds = w.drainCommands()
+        assertEquals(7, w.audioTrack)
+        assertEquals(7, (cmds.single() as Command.PlaySfx).slot)
+        assertTrue(w.drainCommands().isEmpty())      // drain empties
+    }
+
+    @Test fun `l15 plays track 6 when entering from non-play`() {
+        val w = world()
+        w.screenL(17)
+        w.drainCommands()
+        w.screenL(15)
+        assertTrue(w.drainCommands().any { (it as? Command.PlaySfx)?.slot == 6 })
+    }
+
+    @Test fun `l15 from play is silent`() {
+        val w = world()                            // jC==10 → no e.b/z(6)
+        w.screenL(15)
+        assertTrue(w.drainCommands().isEmpty())
+        assertEquals(-1, w.audioTrack)
+    }
+
+    @Test fun `l2 plays track 0 on quit arm`() {
+        val w = world()
+        w.screenL(2)                               // jC=10 not exempt
+        assertTrue(w.drainCommands().any { (it as? Command.PlaySfx)?.slot == 0 })
+        assertEquals(0, w.audioTrack)
+    }
+
+    @Test fun `l8 from screen 9 plays mission music ee-aj`() {
+        val w = world()
+        w.screenL(9); w.drainCommands()
+        w.screenL(8)                               // B(): ee[0]=5
+        assertTrue(w.drainCommands().any { (it as? Command.PlaySfx)?.slot == 5 })
+    }
+
+    @Test fun `l8 with aJ 1 plays track 9 override`() {
+        val w = world()
+        w.kAJ = 1
+        w.screenL(9); w.drainCommands()
+        w.screenL(8)
+        assertTrue(w.drainCommands().any { (it as? Command.PlaySfx)?.slot == 9 })
+    }
+
+    @Test fun `channel gate bE blocks tracks under 10`() {
+        val w = world()
+        w.kBE = false
+        w.screenL(12)                              // z(7) gated out
+        assertTrue(w.drainCommands().isEmpty())
+        assertEquals(-1, w.audioTrack)
+    }
+
+    @Test fun `l27 stops audio`() {
+        val w = world()
+        w.screenL(12)                              // audioTrack=7
+        w.screenL(27)                              // e.b() only
+        assertEquals(-1, w.audioTrack)
+    }
+
+    @Test fun `jG is the render counter reset by l`() {
+        val w = world()
+        w.tick(emptyList())
+        assertEquals(1L, w.jG)                     // increments per tick
+        w.screenL(12)
+        assertEquals(0L, w.jG)                     // j.g=0 on state entry
+        w.tick(emptyList())
+        assertEquals(1L, w.jG)                     // frames count even frozen
+        assertTrue(w.tickIndex > 1L)               // tickIndex did not reset
     }
 }
