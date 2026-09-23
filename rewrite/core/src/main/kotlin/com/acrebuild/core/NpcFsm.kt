@@ -767,6 +767,46 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gq = false; player.gd = null
                 }
             }
+            // `aV()` S17 arm (i.java:12794-12951 L1b44-L1c92, proven;
+            // dispatch `case 17: goto L1b44` i.java:9182) — balance
+            // zone. `aA` phases: 0 → wait for overlap (claim-busy freezes
+            // while centered); on overlap center-pins the player
+            // (`i(297)`, `ak/al` = zone center, all velocities 0);
+            // 1 → while centered and player S∉{298,293} `v(2)`/`v(8)`
+            // side-leaps (`i(19)`, `ag=∓3328`, `ah=-3840`, `av`) or
+            // `v(33024)` jump-up (`a(2560)` airborne fling) → `aA=2`;
+            // leaving the rect also → `aA=2`; 2 → `aZ || g.a` (landed
+            // or grabbed) resets `aA=0`.
+            17 -> {
+                if (w.kC != null && w.kC!!.claimActive() && e.aA == 1)
+                    return                                          // L1b44
+                if (e.aA == 0) {
+                    if (rectsOverlap(player.W, e.W)) {              // entry
+                        e.aA = 1
+                        player.setAnim(297)
+                        player.ak = (e.W[0] + e.W[2]) shr 1         // pin x
+                        player.al = (e.W[1] + e.W[3]) shr 1         // pin y
+                        player.ah = 0; player.ag = 0
+                        player.aj = 0; player.ai = 0                // L1b9a
+                    }
+                } else if (e.aA == 1 && !rectsOverlap(player.W, e.W))
+                    e.aA = 2                                        // L1bca
+                if (e.aA == 1 && player.S != 298 && player.S != 293) {
+                    when {                                          // L1be7
+                        pad.v(2) -> { player.setAnim(19)
+                            player.ag = -3328; player.ah = -3840
+                            player.av = true; e.aA = 2; return }
+                        pad.v(8) -> { player.setAnim(19)
+                            player.ag = 3328; player.ah = -3840
+                            player.av = false; e.aA = 2; return }
+                        pad.v(33024) -> { player.flingAirborne(2560, w)
+                            e.aA = 2; return }
+                    }
+                }
+                if (e.aA == 2 && (player.aZ || player.ga != null))
+                    e.aA = 0                                        // L1c7b
+                return
+            }
             // `aV()` S24 arm (i.java:9361-9467 L21e-L313, proven;
             // dispatch `case 24: goto L21e` i.java:9193) — rope/grab
             // trigger zone. Eligible = overlap + player not already
