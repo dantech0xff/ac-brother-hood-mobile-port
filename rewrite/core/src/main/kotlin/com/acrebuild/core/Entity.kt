@@ -3953,6 +3953,9 @@ interface LevelCellSource {
     /** `k.E` — held/struggle-UI entity ref; `P|=128` arms at
      *  counter/stagger moments (producer unmined, `inferred`). */
     var kE: Entity? get() = null; set(_) {}
+    /** `k.D` (i.java:2750, proven): the ax34 player-follower overlay
+     *  spawned by the L43 player-init arm; `k.V()`/`D()` null it. */
+    var kD: Entity? get() = null; set(_) {}
     /** `k.C` — HUD-claimed entity (`i.N()`). */
     var kC: Entity? get() = null; set(_) {}
     /** `i.by` — boss phase tier static (0/1/3; 2 = dormant tick). */
