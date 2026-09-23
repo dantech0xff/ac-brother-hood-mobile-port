@@ -81,12 +81,15 @@ class Level0World(
 
     override val cellPx: Int get() = level.cellPx
     override fun collisionCell(cx: Int, cy: Int): Int = level.collisionCell(cx, cy)
+    override val kBp: Int get() = level.cols              // k.bp
+    override val kBq: Int get() = level.rows              // k.bq
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null
-    /** `k.ax` — meter-restore byte (k.java:159); save-load writes it,
-     *  default is the x1 init value (inferred — dB restore path unmined). */
-    override var kAx = 90
+    /** `k.ax` — meter-restore byte (k.java:223 `byte ax = 30`,
+     *  proven); `ax = dB` on load, `g.e(ax)` writes `x[1] = ax`,
+     *  `ax == 0 → 30` in the meter draw (:4176). */
+    override var kAx = 30
 
     val pad = Pad()
     val playerFsm = PlayerFsm(this, rng)
@@ -257,11 +260,8 @@ class Level0World(
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
     override var aq = 0              // k.aq — global tally (ax4 S5 += m)
-    override var shake = 0           // k.az side of k.s() (k.java:5338;
-                                     // the dE threshold ladder is unported)
     override val sfxLog = mutableListOf<Int>()  // k.A(int) — audio unported
     override fun sfx(id: Int) { sfxLog += id }
-    override fun shake() { shake++ } // k.s()
 
     /** `k.O` — camera left edge (the pickup pin anchor, i.java:9837;
      *  writable — op11/12 camera arms lerp it). */
@@ -273,7 +273,7 @@ class Level0World(
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
     /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
     /** `k.al == false` (i.I() entity gate): the real world-run condition
-     *  — false on states {12,13,16,17,31} and {21 when kMode∉{8,9}}. */
+     *  — false on states {12,13,16,17,31} and {21 when dlgU∉{8,9}}. */
     override val inPlay: Boolean get() = !kAl
     /** `k.cm` — the `k()` touch-controls flag (k.java:159 `cm = 1` +
      *  :549 `cm == 1`; cheat op 123 toggles `cm = 1 - cm`, k.java:3937).
@@ -319,7 +319,7 @@ class Level0World(
     val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
      *  `inferred` — orig's u is written by script ops). */
-    var subU = 0
+    var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
      *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
@@ -529,6 +529,10 @@ class Level0World(
         kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
         clearClaim()
+        // i.D() (i.java:1795-1821): g.* link sweep on entity-system reset —
+        // vehicle/contact/carry links must not survive into the respawned set
+        player.ga = null; player.ac = null; player.standingOn = null
+        gc = null
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
@@ -729,6 +733,19 @@ class Level0World(
     override val kBb: List<Entity> get() = npcs  // k.bb follower list
     override val kBc: Int get() = npcs.size      // k.bc
     override var kAd = 2                         // k.ad=2 (k.java:8348 static init)
+    override var kBg = -1                   // k.bG=-1 (:310) — one-shot music slot
+    override var kBH = -1                   // k.bH=-1 (:311) — saved music slot
+    var kAk = 0                             // k.ak (:66) — flying group marker
+    var kQ = 0                              // k.Q (:42) — flying scroll count
+    var kV = -7                             // k.V=-7 (:49) — camera watch
+    var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
+    var kDA: Entity? = null                 // k.dA — HUD indicator entity
+    /** `k.ef[]` (k.java:264, proven) — all-false trail-enable table:
+     *  `if (ef[aj]) ab()` at the jc9 exit is dead code in this build. */
+    val kEfArr = BooleanArray(9)
+    /** `k.f0do[]` (k.java:210, proven) — per-mission held-mask table,
+     *  all entries 5 → `g.g(5)` at every mission start. */
+    val kF0Do = intArrayOf(5, 5, 5, 5, 5, 5, 5, 5, 5)
     override var kAV: Entity? = null             // k.aV
     override var kAQ: Entity? = null             // k.aQ
     override var kAv = false                     // k.av
@@ -755,12 +772,11 @@ class Level0World(
     var kCy = 0                        // cy — previous j.c, written at commit
     private var kCz = false            // cz — u==8 dialog-tail flag
     /** `k.al` — world-freeze flag: set by l() for states
-     *  {12,13,16,17,31} and {21 when kMode∉{8,9}}; the entity gate
+     *  {12,13,16,17,31} and {21 when dlgU∉{8,9}}; the entity gate
      *  `k.al == false` in `i.I()` (k.java:4860-ish) is the real
      *  tick-suppress condition our `inPlay` derives from. */
     var kAl = false
         private set
-    var kMode = 0                      // k.u — screen mode 0-10 (NOT k.U)
     var kEg = 0                        // k.eG
     var kCZ = 0                        // k.cZ — win-stats row counter / G() total
     /** `cV[4]` (k.java:184) — G() help pages. */
@@ -810,7 +826,7 @@ class Level0World(
     val kFp = intArrayOf(0, 2, 5, 7)  // k.fP (k.java:344) — chapter thresholds
     /** `k.bA` — save/snapshot buffer: [15]=checkpoint-exists flag (set in
      *  writeIX), [130..132]=cc medal stamps (k.java:2055-2064 proven). */
-    val kBA = IntArray(160)
+    override val kBA = IntArray(160)
     var kAu = 0                        // k.au — medal-condition field
     var kDx = false                    // k.dx — cheat-enabled flag
     override var kAo = false           // k.ao — fade-side flag
@@ -838,8 +854,8 @@ class Level0World(
     var kFE = 0                        // k.fE — fade alpha
     var kDa = 0                        // k.da — menu param (l(19) arg)
     var kDt = false                    // k.dt — difficulty-locked flag
-    var kDB = 0                        // k.dB — lives byte (bA[44])
-    var kDC = 0                        // k.dC — sync byte (bA[46])
+    var kDB = 30                       // k.dB — lives byte (bA[44]; :225 init 30)
+    var kDC = 30                       // k.dC — sync byte (bA[46]; :226 init 30)
     var kDD = 0                        // k.dD — progress (bA[32]/az)
     var kDF = 0                        // k.dF — misc byte (bA[48])
     var kBG = 0                        // k.bG — score flag (Q case14)
@@ -879,8 +895,14 @@ class Level0World(
               "DOESN'T KNOW IS THAT SPYING EYES ARE FOLLOWING HIS " +
               "EVERY MOVEMENT...",
         66 to "DID YOU LIKE THIS GAME? CHECK OUT OTHER GAMELOFT GAMES!",
+        // `bU[77]` splice (:3988-3991, proven): `$VVV` → `GloftASBR.b`
+        // = MIDlet-Version JAD property = "1.2.7" (MANIFEST.MF, proven).
+        77 to ("\\0ASSASSIN'S CREED BROTHERHOOD\nV \$VVV\n\n© 2010 UBISOFT ENTERTAINMENT.\nALL RIGHTS RESERVED. ASSASSIN'S CREED, UBISOFT AND THE UBISOFT LOGO ARE TRADEMARKS OF UBISOFT ENTERTAINMENT IN THE U.S. AND/OR OTHER COUNTRIES. PUBLISHED AND DEVELOPED BY GAMELOFT UNDER LICENSE FROM UBISOFT ENTERTAINMENT.\nSOFTWARE © 2010 GAMELOFT.\nALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER COUNTRIES.\n\nINFO AND CUSTOMER CARE:\nWWW.GAMELOFT.COM\nSUPPORT@GAMELOFT.COM\n\n\\0EXECUTIVE PRODUCERS\n\\1CHARLOTTE LAVERGNE\nMARTIAL VALERY\n\n\\0PRODUCERS\n\\1LUO JUN JIE\nMA LIN\n\n\\0GAME DESIGN\n\\1CAI QIAN\nSHI YAO\nPAN XIN\nLI YI NAN\nJIANG WEI\nWANG JI\nZHANG3 LEI\n\n\\0GRAPHICS\n\\1LI MIN\nZOU XU BIN\nCHEN ZI GUANG\nYAN BO\nYANG CHAO\nDAI SI TONG\nLIU LU\nXU XIANG\nZENG XIN\nLI YU AN\nZHONG HONG YU\nLIANG XIAO BAI\n\n\\0PROGRAMMERS\n\\1WEN YAN BIN\nSHI FENG\nZHOU CHAO FENG\nZHAO YU\n\n\\0SOUND DIRECTOR\n\\1ARNAUD GALAND\n\n\\0SOUND DESIGNER\n\\1EMANUEL BURCEA\n\n\\0LOCALIZATION MANAGER\n\\1ALEXIS GREEN-PAINCHAUD\n\n\\0LOCALIZATION COORDINATORS\n\\1ALICJA BUFFA\nFRED LEUNG\n\n\\0LOCALIZATION\n\\1KASPER HARTMAN\nOWEN WEISS\nTIMOTHY LECLAIR\nMARIKO MCDONALD\n\n\\0QA MANAGER\n\\1DU JING\n\n\\0QA LEAD\n\\1HENG XIN\n\n\\0QUALITY ASSURANCE\n\\1HU YI WEI\nZHU JIAN\nDONG MIN YOU\nLIU HAI\nLIU XING\nMU RANG\nZHANG XIANG\nYUAN GUANG SHENG\nWANG YUE\nXU PEI\nJIANG HAN\nKAN LIANG\nHUANG PENG\nYANG YUE SHENG\nPENG HONG\nTANG JIAN WEI\nZENG WEI XUAN\nLI RUO FAN\nXIAO KAI JIE\nLI2 JIE\nHE JUN\nHUANG HAI TAO\nJIA YI\nTANG LI\nXIAO QIAN\n\n\\0SOUND QA MANAGER\\1\nULRICH FRANTZ\n\n\\0SOUND QA TESTERS\\1\nNICOLAS TROVATO\nMARIA COLONA\n\n\\0STUDIO MANAGERS\\1\nYU FEI\nLI KAI JUN\n").replace("\$VVV", "1.2.7"),
         98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
         99 to "CONGRATULATIONS!\n\nYOU UNLOCKED HARD MODE!",
+        // 51-54: city names for the mission-select sub-labels
+        // `eX` (k.java:300, proven) — `d(0, eX[eW[i13]])` (:6092).
+        51 to "VENICE", 52 to "FLORENCE", 53 to "ROME", 54 to "PANTHEON",
 
         38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
         41 to "SOULS", 42 to "TIME", 43 to "SCORE",
@@ -907,7 +929,8 @@ class Level0World(
               "COUNTRIES.",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
         106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
-        109 to "NOBLEMAN", 113 to "ACHIEVEMENTS", 117 to "NEW GAME",
+        109 to "NOBLEMAN", 111 to "CHECKPOINT", 113 to "ACHIEVEMENTS",
+        117 to "NEW GAME",
         121 to "THE GAME DATA HAS BEEN DELETED.", 123 to "CONTROL STYLE")
     /** `d(0,n)` = `bU[n]` (k.java:486, proven). */
     fun d0(n: Int): String? = bU[n]
@@ -1103,8 +1126,6 @@ class Level0World(
     override var bN0 = -1                              // k.bN[0] — dialog idx
 
     // ---- jC==21 dialog state (k.java:10-15,135-140, all proven) -------
-    /** `u` — dialog kind (k.java:10); level-0 op105 only emits u==9. */
-    var dlgU = 0
     /** `bM[15]` — wrapped dialog pages (k.java:135). */
     val dlgBM = arrayOfNulls<String>(15)
     /** `bN[15]` — per-page icon ids propagated from `bN[0]` (k.java:136,
@@ -1171,6 +1192,15 @@ class Level0World(
     }
     /** `z()` typewriter reset (k.java:441-443, proven). */
     private fun dlgZ() { dlgBS = 30; dlgBR = 0; dlgBT = 0 }
+    /** `x` — u==8 page auto-advance countdown (k.java:964-967); re-arms
+     *  at 48 each time it expires (the literal in the original). */
+    var kDlgX = 48
+    /** `fS` — `d(0,111)` tip-marquee counter (k.java:1027-1039); `<0` =
+     *  idle (armed ≥0 by claim ops), crawls one char per two frames. */
+    var kFS = -1
+    /** `tipStr` — the fS-clipped substring the `y.a(str,390,40,10)`
+     *  call draws (k.java:1032-1038). */
+    var tipStr = ""
 
     /** `k.bL` (already declared as the af() cursor — one shared static
      *  in the original): portrait variant — `4+bL`/`8+bL` pick the A[4]
@@ -1662,7 +1692,13 @@ class Level0World(
             if (i == 27) audioStop()                 // e.b() — audio stop (unported)
             when {
                 i == 9 -> {                          // L7: renderer teardown
-                    kFo = 0                          // ac(); ad(); e.b(); L() unported
+                    // `fO=0; ac(); ad(); e.b(); L()` (k.java:1685-1690
+                    // proven): ac/ad = the soft-unpack blit-bank reset
+                    // (fB/fz/fA + b.b/b.c frame-steal cache — no port
+                    // equivalent: clips decode once); e.b() = audio
+                    // stop; L() = `dg=0; ap[0..5]=0` (:3273).
+                    kFo = 0; audioStop()
+                    kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
                     scrollBounds()                   // b(true) — scroll refresh (unported)
@@ -1691,7 +1727,15 @@ class Level0World(
                 }
                 (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — unported
                 i == 8 && kCy == 17 -> i = 17
-                i == 29 -> bannerK(2)
+                i == 29 -> {
+                    bannerK(2)
+                    // `L(i13)` row cap (k.java:1440, proven): case 29
+                    // runs `L(i13)` with `i13 = bA[69]!=0 ? 3 : 2` — the
+                    // HARD row is neither drawn nor selectable until
+                    // the unlock byte is set. bA[69] can't change
+                    // mid-screen → transition-time cap ≡ per-frame.
+                    kEy = if (kBA[69] != 0) 3 else 2
+                }
                 i == 30 -> { bannerK(5); kFo = 0 }
                 i == 4 -> kCU = kAu
                 i == 28 -> bannerK(3)
@@ -1737,8 +1781,8 @@ class Level0World(
         // L151-L176 tail (proven): `al` freeze flag, u==8 dialog `cz`,
         // commit `cy=j.c; j.c=i`, `v()` input reset unless cz.
         kAl = i == 13 || i == 12 || i == 17 || i == 16 || i == 31 ||
-              (i == 21 && kMode != 8 && kMode != 9)
-        if (i == 21 && kMode == 8) kCz = true
+              (i == 21 && dlgU != 8 && dlgU != 9)
+        if (i == 21 && dlgU == 8) kCz = true
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
         if (!kCz) inputReset()
         kCz = false
@@ -1893,13 +1937,13 @@ class Level0World(
         if (i <= 0) return
         if (pad.v(Pad.M_UP)) {
             kBw--
-            if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1 }
+            if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1; menuFkArm = 21 }
             if (audioTrack >= 0) return
             z(23); return
         }
         if (pad.v(Pad.M_DOWN)) {
             kBw++
-            if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1 }
+            if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1; menuFkArm = 21 }
             if (audioTrack >= 0) return
             z(23)
         }
@@ -1940,7 +1984,7 @@ class Level0World(
     private fun posterAg(events: List<InputQueue.Event>) {
         var i = 1
         while (i < kFp.size && kAj + 1 != kFp[i]) i++
-        subU = 8
+        dlgU = 8
         cardOverlayY = 120
         posterVisible = true
         posterFrame = i + 4
@@ -2038,10 +2082,16 @@ class Level0World(
     private fun teardown() {
         npcs.clear(); pendingInsert.clear()
         kC = null                                   // claimer released
+        Entity.grabLatch = false                    // g.j=false (i.D(), i.java:1817)
     }
+    /** `k.x()`→`e.a()` (e.java:32, proven shape): a track is playing.
+     *  `inferred` mapping — our audio has no real-time expiry, so any
+     *  queued track counts. */
+    override fun musicActive() = audioTrack >= 0
     /** `a(z2)` (structured :5139) — level (re)load: `e.b(); V(); d(z2)`.
      *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
      *  Maps to our `reload()` (`inferred`). */
+    override fun resetLevel(full: Boolean) { reloadCheckpoint(full) }
     private fun reloadCheckpoint(full: Boolean) { reload() }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm
@@ -2211,6 +2261,9 @@ class Level0World(
         23, 28 -> if (kEc == 121) Pair("", d0(17))
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        // case 6 `if (!dx) a("",d(0,17))` (:851-853) — ABOUT's BACK
+        // footer shows only on the non-dx variant.
+        6 -> if (!kDx) Pair("", d0(17)) else Pair(null, null)
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
         5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
@@ -2407,7 +2460,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 24, 25, 28, 29, 30)
+    private val menuStates = intArrayOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 14, 18, 19, 20, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2567,6 +2620,51 @@ class Level0World(
      *  `str = fb` local per frame; cu2 `str = fa` :1251). */
     fun storyText(): String = when { kCu >= 3 -> kFb; kCu == 2 -> kFa; else -> "" }
 
+    /** `k.a()` case 1 (k.java:800-811, proven) — the one-time
+     *  "CONGRATULATIONS! YOU UNLOCKED HARD MODE!" toast after first-play
+     *  credits (scrollPanel tail `dx && bA[69]==0` → `bA[69]=1; e(true);
+     *  l(1)`). Draw arm `a(y,0,d(0,99),200,120,220,240,0,3)` + `y.l(1)` +
+     *  `j.g%10<5` blink `d(0,9)` at (200,220,3). `v(262144)||j()` →
+     *  `l(25); v(); z(23)` — the post-credits redirect. */
+    private fun menuJc1() {
+        scrollPanel(d0(99) ?: "", 120, 240, 220, true)
+        if (pad.v(Pad.M_PAUSE) || pointerStrip()) {
+            stateL(25); inputReset(); z(23)          // l(25); v(); z(23)
+        }
+        hintBlink = jG % 10L < 5L                    // `y.l(1)` palette + blink — renderer
+    }
+
+    /** `k.a()` case 19 (k.java:1178-1206, proven) — mission select.
+     *  `ey=da`; panel `d(14,47,180)`; footer `a(d(0,79),d(0,17))`.
+     *  Rows draw `d(0, eA[bv][m(bv,i13)])` — bv inherited from the
+     *  calling menu (canonical entry bv=0 → eA[0] = {2/117,1,3,32-34} —
+     *  the row text is verbatim-weird: main-menu strings, rows ≥3 clamp
+     *  onto the promo slot and get the padlock arm) PLUS the real
+     *  per-mission city sub-label `d(0, eX[eW[i13]])` (:6083-6100) —
+     *  eW={2,2,1,1,2,0,3,2,2} eX={51,52,53,54} → ROME/ROME/FLORENCE/
+     *  FLORENCE/ROME/VENICE/PANTHEON/ROME — the mined 8-mission order.
+     *  `v(327712)` confirm: `bw==-1→0; aj=bw; a(bA,16,0); eg[aj] →
+     *  fF=19;l(30);z(23)` — `eg[]` all-true, no writer (dead lock).
+     *  `v(131072)` → `l(2);z(30)`. `v(16388/33024)` → `L(da);aj=bw`. */
+    private fun menuJc19() {
+        kEy = kDa
+        footerQ()                                    // a(d(0,79),d(0,17)) — OK/BACK pills
+        if (pad.v(327712)) {                         // M_PAUSE|M_CONTEXT
+            if (kBw == -1) kBw = 0
+            kAj = kBw
+            kBA[16] = 0                              // a(bA,16,(short)0)
+            if (kEgFlags[kAj]) {
+                kFF = 19
+                stateL(30)
+                z(23)
+            }
+        } else if (pad.v(Pad.M_CYCLE)) {             // v(131072) — BACK
+            stateL(2); z(30)
+        } else if (pad.v(Pad.M_UP) || pad.v(Pad.M_DOWN)) {
+            menuL(kDa); kAj = kBw                    // L(da); aj=bw — both dirs
+        }
+    }
+
     /** `k.a()` case 20 (k.java:1208-1306, proven) — the story-typewriter
      *  intro: `cu` 0 init (cT=10) → 1 wait cT→255 (z[39] anim1 icon, pause
      *  skips → `eY=200,eZ=85,fc=0,fa=""`) → 2 typewriter one char/frame
@@ -2714,10 +2812,62 @@ class Level0World(
         scrollPanel(d0(66) ?: "", 80, 220, 400, false)
         scrollPanel(d0(9) ?: "", 160, 260, 400, false)
         if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
-            stateL(27)                                  // `f.a(d(0,24),0)` intent unported
+            enterIgp()                                  // `f.a(d(0,24),0)` (:1410)
+            stateL(27)
             if (!kEJ) { kEJ = true; kBA[10] = 1; saveFlush() }
             z(23)
         }
+    }
+
+    /** `k.cv` (k.java:1423-1432) — the IGP offscreen Image handle:
+     *  null-check → allocate once, `cv=cw=null` releases. Boolean
+     *  marker — the J2ME Graphics handles aren't modeled. */
+    private var kCvOn = false
+    /** `k.a()` case 27 (k.java:1422-1435, proven) — the IGP offscreen
+     *  canvas screen: `cv==null → Image.createImage(400,240) + cw`,
+     *  `cd = cw`, then `f.a(0)` pump — true → `l(2)` + `cv=cw=null`,
+     *  then `f.a(cd)` unconditionally (even on the exit tick).
+     *  `f.a(int)` (f.java:1185) returns true whenever IGP is absent
+     *  (`!aE`), so on this non-IGP target the screen exits on its
+     *  first tick — the same path the save-slot picks (menuItem
+     *  32/33/34, :3868) and the epilogue store prompt take. cv/cw/cd
+     *  are J2ME Graphics handles — modeled by the `kCvOn` marker. */
+    private fun menuJc27() {
+        if (!kCvOn) kCvOn = true              // cv = createImage(400,240); cw = cv.g
+        // `cd = cw` (:1428) — cd re-points at the offscreen graphics
+        // every tick, including the exiting one (verbatim order).
+        if (igpTick0()) { stateL(2); kCvOn = false }    // f.a(0) → l(2); cv=cw=null
+        igpBlit()                                       // f.a(cd)
+    }
+
+    /** `Z()` (k.java:5456, proven) — the IGP-capability check: switches
+     *  on `f.a()` (f.java:755 `aE&&g()>0 ? 0 : -1`); each reachable
+     *  case also stamps the promo label `eA[0][3] = 32/33/34` before
+     *  returning true. This port targets non-IGP devices — `f.a()`
+     *  is always -1 → const false → Z()-gated screens self-exit. */
+    private fun igpZ(): Boolean = false
+    /** `f.a(int)` (f.java:1185, proven) — the IGP frame pump;
+     *  `!aE` (IGP absent) returns true → the caller's exit arm. */
+    private fun igpTick0(): Boolean = true
+    /** `f.a(Graphics)` (f.java:1438, proven) — the IGP blit, gated
+     *  `(aE||bZ)&&!bZ` → no-op on this target. */
+    private fun igpBlit() { }
+    /** `f.a(String,int)` (f.java:759, proven) — `enterIGP(msg,lang)`,
+     *  the vendor store intent; no IGP layer on this target → no-op. */
+    private fun enterIgp() { }
+
+    /** `k.a()` case 6 (k.java:844-858, proven) — the ABOUT screen's
+     *  tick. `cb=true`; `f(false)`/`d(0,7)`/`bW.l(1)`/`j.a(cd,…)` are
+     *  draw-side (renderer); `b(y,1,d(0,77),200,50,390,155,0,1)` is the
+     *  scrollable credits roll on the `y` font → `scrollPanel`; the
+     *  exit arm is `v(131072) && !dx → l(3) + z(30)` — CYCLE-only, and
+     *  only on the non-dx variant (the `!dx → a("",d(0,17))` BACK
+     *  footer is `menuFooter()`'s `6 ->` arm). Reached via menuItem 7
+     *  (:3732 `case 7 → l(6)`) and `menuJc25`'s `!dx` arm (:1392). */
+    private fun menuJc6() {
+        kCb = true
+        scrollPanel(d0(77) ?: "", 50, 155, 390, true)
+        if (pad.v(Pad.M_CYCLE) && !kDx) { stateL(3); z(30) }
     }
 
     /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
@@ -2732,12 +2882,85 @@ class Level0World(
      *  state from the save bytes), `dz=120; aw=0`, `l(8)` + `z(23)` +
      *  `F(aj)` — `missionInit()` covers the `g.e(ax)`/music arm; bG/dl/
      *  A[]-release are script/render side (unported). */
+    /** `k.a()` case 9 (k.java:797-812, proven) — load screen tick:
+     *  `N()` draws the spinner (renderer); the `G(j.g)` gate (~164
+     *  frames) then `w(65568)||j()` runs the play-entry arm:
+     *  `bG=0; dl=null; A[5]=A[1]=null; a(bA,16,0); ax=dB; ay=dC;
+     *  aN=dF; g.e(ax); C(); T(); dz=120; aw=0; if(ef[aj]) ab();
+     *  l(8); z(23); F(aj)`. `dl`/`A[]` are resource-management
+     *  releases with no port equivalents (eager decode). */
     private fun menuJc9() {
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
-            kAx = kDB; kAy = kDC; kAN = kDF
+            kBg = 0                                  // bG = 0
+            kBA[16] = 0                              // a(bA,16,(short)0)
+            kAx = kDB; kAy = kDC; kAN = kDF          // ax=dB;ay=dC;aN=dF
+            player.x1 = kAx                          // g.e(ax) → x[1]=ax
+            camResetC()                              // C()
+            hudIndicatorT()                          // T()
             kDz = 120; kAw = 0
+            if (kAj < kEfArr.size && kEfArr[kAj]) trailAb()  // ef[aj]
             stateL(8); z(23)
+            missionF(kAj)                            // F(aj)
+            if (kBg >= 0) missionInit()              // bG>=0 → B()
         }
+    }
+
+    /** `C()` (k.java:1851-1875, proven) — camera/sim accumulator reset
+     *  at play entry: `P=O=cB=cA=cD=cC=Q=0; Z=false; ab=false`; then
+     *  `bh[aj]!=3 → aR=-1; ak=0; X=0; n(); m(ad)`, else the flying arm
+     *  `dU=0; dR=-1; ak=0; aR=-1; dS=-2; dT=(bu-20)-(20*aR); Q=230;
+     *  D(); cA=O=aS.ak-200; cB=P=aS.al-230; W=0; X=-7; V=-7; Y=X<<8`. */
+    private fun camResetC() {
+        camY = 0; camX = 0                         // P = 0; O = 0
+        camB = 0; camA = 0                         // cB = 0; cA = 0
+        camCD = 0; camCC = 0                       // cD = 0; cC = 0
+        kQ = 0; kZ = false; kAb = false            // Q=0; Z=false; ab=false
+        if (!bh3) {
+            kAR = -1; kAk = 0; kX = 0              // aR=-1; ak=0; X=0
+            kN()                                   // n() — bound release
+            kM(kAd)                                // m(ad) — mode-2 snap
+        } else {
+            kDU = 0; kDR = -1; kAk = 0; kAR = -1   // dU/dR/ak/aR
+            kDS = (-1) - 1                          // dS = (-1)-1 = -2
+            kDT = (kBu - 20) - (20 * kAR)           // dT=(bu-20)-(20*aR)
+            kQ = 230
+            kD()                                   // D()
+            camA = player.ak - 200; camX = camA    // cA=O=aS.ak-200
+            camB = player.al - 230; camY = camB    // cB=P=aS.al-230
+            kW = 0; kX = -7; kV = -7               // W=0; X=-7; V=-7
+            // Y = X << 8 — the kY derived getter
+        }
+    }
+
+    /** `T()` (k.java:4165-4173, proven) — spawn the HUD indicator
+     *  entity: `dA = new i(); dA.aa = z[12]; dA.i(0); dA.ak=al=0;
+     *  aA = 0`. `dA` is standalone (never enters `bb[]`). */
+    private fun hudIndicatorT() {
+        kDA = Entity(0, clips[12]).apply { S = 0; ak = 0; al = 0 }
+        kAA = 0
+    }
+
+    /** `ab()` (k.java:5752-5767, proven) — flying-level trail LUT:
+     *  reads `z[58]` frame rects (`d()/e()/f()`) into `ft[]`/`fu[]`
+     *  {x,255}/{x,255+fx} pairs. Unreachable in this build (`ef[]`
+     *  is all-false) — needs the clip frame-rect API; left as the
+     *  documented stub the gate guarantees never runs. */
+    private fun trailAb() {
+        // unreachable — kEfArr is all-false (verbatim dead code)
+    }
+
+    /** `F(int)` (k.java:3551-3558, proven) — per-mission play-entry
+     *  input setup: `i.bS=0` (dead flag), `i>0 → i.j(1)` (`bS|=1`,
+     *  still dead), `g.I=1; g.J=0; g.g(f0do[i])` — held-mask init
+     *  from the all-5 table (`gJ|=5` then `q()` equip rebuild). */
+    private fun missionF(i: Int) {
+        Entity.entBSLatch = 0                       // i.bS = 0
+        if (i > 0) Entity.entBSLatch =
+            Entity.entBSLatch or 1                // i.j(1) → bS |= 1
+        player.gI = 1                             // g.I = 1
+        player.gJ = 0                             // g.J = 0
+        player.gJ = player.gJ or kF0Do[i]         // g.g(f0do[i])
+        rebuildEquip()                            // k.q()
     }
 
     /** `k.a()` case 18 (k.java:1146-1175, proven) — the title screen
@@ -2820,8 +3043,19 @@ class Level0World(
             0 -> bootR()                             // case 0 = R() (:3949)
             20 -> menuJc20()                         // case 20 (:1208-1306)
             9 -> menuJc9()                           // case 9 (:1067-1088)
+            6 -> menuJc6()                           // case 6 (:844-858)
             24 -> menuJc24()                         // case 24 (:1326-1386)
             25 -> menuJc25()                         // case 25 (:1388-1420)
+            // `a()` has no `case 26` (:1388 → :1422, proven) — j.c==26
+            // is a dead screen that consumes ticks verbatim.
+            // `a()` has no cases for 7/16/26/32/33/34 either (:796-1450,
+            // proven) — all dead screens consuming ticks verbatim. `16`
+            // stays off this list: `l(16)` sets `al` → the frozen-state
+            // fallback (`kAl && M_CONTEXT → reload`) is its live behavior.
+            7, 26, 32, 33, 34 -> { }
+            27 -> menuJc27()                         // case 27 (:1422-1435)
+            11 -> jC = -1                            // case 11 (:1104, proven)
+            -1 -> { /* j.c==-1 — suspended/dead state; consumes ticks */ }
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
@@ -2833,6 +3067,8 @@ class Level0World(
                       stateL(18)
                   }
             28 -> menuAe(pressY)                     // ae() (:6204, proven)
+            1 -> menuJc1()                          // case 1 (:800-811, proven)
+            19 -> menuJc19()                        // case 19 (:1178-1206, proven)
             18 -> menuJc18()                         // case 18 (:1146, proven)
             30 -> menuAf()                           // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
@@ -2872,6 +3108,18 @@ class Level0World(
     private fun missionInit() {
         if (kAJ == 1) z(9) else if (kEE[kAj] != -1) z(kEE[kAj])
     }
+    /** `k`'s suspend/resume music arm (k.java:5817-5830, proven):
+     *  pause → `bG = !e.a()||fj>=10 ? -1 : bH` (our queue is always
+     *  available → `bG = kFi`, the pending-track slot); resume →
+     *  `bG >= 0` replays `z(bG)`, or stashes `fi = bG` while `j.c==14`.
+     *  (Verbatim quirk kept: the resume gate `bG==1 || bG!=-1` collapses
+     *  to `bG != -1`.) */
+    fun suspendAudio() { kBg = kFi }
+    fun resumeAudio() {
+        if (kBg < 0) return
+        if (jC != 14) z(kBg) else kFi = kBg
+        kBg = -1
+    }
     private fun inputReset() { pad.edge = 0 }        // v() — input reset (inferred)
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's
      *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
@@ -2902,6 +3150,7 @@ class Level0World(
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
     override var iBf = false                       // i.bf engage latch
+    override var iX = 0                            // i.x — every-3rd-hit static
     override var iBx: Entity? = null               // i.bx grab-QTE holder
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
@@ -2914,7 +3163,6 @@ class Level0World(
         return playerFsm.l(p, pad)
     }
     override var gc: Entity? = null                // g.c crate-top link
-    override var iBq = 0                           // i.bq floor-Y latch
     override var kN: Entity? = null                // k.N prompt marker
     override var kCq = -1                          // k.cq bound uid
     override var gP = 0                            // g.p kill-bonus flag
@@ -3078,6 +3326,40 @@ class Level0World(
         if (scrollHolder == null) kAh = null
     }
 
+    /** `i.f(i)` (i.java:5382-5430, proven): the player scroll-wall
+     *  clamp — while the ax37 scroll-holder is in overlap mode
+     *  (`k.ah.Z[3]==1`), the player's Y box may not cross the holder's
+     *  bound rect (`k.ah.X`): velocity at a crossing edge is zeroed and
+     *  position pinned to the bound. A top-bound hit while the player
+     *  plays a `g.b(int)` aerial/action anim drops it via `k.aS.a(0)`.
+     *  `k.ah.Z[0]` is the wall-side mask (1 left, 2 right, 4 top,
+     *  8 bottom). Player-only in the original — all 16 call sites sit
+     *  inside g's motion arms. */
+    override fun scrollWallClamp(e: Entity) {
+        val h = scrollHolder ?: return                          // k.ah == null
+        if (h.mode != 1) return                                 // k.ah.Z[3] != 1
+        if (e.ag == 0 && e.ah == 0) return
+        val X = h.bound                                         // k.ah.X
+        val m = h.mask                                          // k.ah.Z[0]
+        if (e.ag <= 0 && (e.Y[0] shl 8) + e.ag <= (X[0] shl 8) && (m and 1) != 0) {
+            e.ag = 0; e.ai = 0
+            e.ak = (e.ak - e.Y[0]) + X[0]
+        }
+        if (e.ag >= 0 && (e.Y[2] shl 8) + e.ag >= (X[2] shl 8) && (m and 2) != 0) {
+            e.ag = 0; e.ai = 0
+            e.ak = (e.ak - e.Y[2]) + X[2]
+        }
+        if (e.ah <= 0 && (e.Y[1] shl 8) + e.ah <= (X[1] shl 8) && (m and 4) != 0) {
+            e.ah = 0; e.aj = 0
+            e.al = (e.al - e.Y[1]) + X[1]
+            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall()
+        }
+        if (e.ah >= 0 && (e.Y[3] shl 8) + e.ah >= (X[3] shl 8) && (m and 8) != 0) {
+            e.ah = 0; e.aj = 0
+            e.al = (e.al - e.Y[3]) + X[3]
+        }
+    }
+
     private fun rectsOverlap(a: IntArray, b: IntArray) =
         a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
 
@@ -3143,7 +3425,7 @@ class Level0World(
      *  (j.c==8 or the u∈{8,10} arms of 21). Returns -1 when the tap is
      *  outside the wheel or hits a consumed zone. */
     fun resolvePadZone(x: Int, y: Int): Int {
-        if (!((jC == 21 && subU == 8) || jC == 8 || (jC == 21 && subU == 10)) ||
+        if (!((jC == 21 && dlgU == 8) || jC == 8 || (jC == 21 && dlgU == 10)) ||
             x == -1 || y == -1 || y >= 240) return -1
         // margins below the soft-key row + pause-icon rect are not wheel
         if (((x <= ce || x >= VIEW_W - cf) && y >= 207) ||
@@ -3206,7 +3488,7 @@ class Level0World(
      *  (j.c!=21||u!=9) && (C==null||C.cb==null||C.cb[1]>=0||aS.P&512)`. */
     fun touchPadVisible(): Boolean {
         if (!mounted || jC == 14 || jC == 5) return false
-        if (jC == 21 && subU == 9) return false
+        if (jC == 21 && dlgU == 9) return false
         val c = kC
         return c == null || c.cb == null || c.cb!![1] >= 0 || (player.P and 512) != 0
     }
@@ -3355,7 +3637,7 @@ class Level0World(
         if (bh3 || !playerAliveO()) return false
         val c = kC
         if (c != null && (player.P and 512) == 0) return false
-        return (jC == 21 && subU == 8) || jC == 8
+        return (jC == 21 && dlgU == 8) || jC == 8
     }
 
     /** `d(355,197,30,26)` (k.java:4278): live pointer in the weapon
@@ -3483,29 +3765,82 @@ class Level0World(
         if (dialogModal) {
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
-            } else if (sawPressPending(events) && dlgSuppressed()) {
-                pad.edge = 0        // C.cd[2] consumes the press (:946)
-            } else if (sawPressPending(events)) {
-                // case-21 u==9 press tail (k.java:945-1017, proven):
-                // `v(65568)` while typing → `bT=-1` reveal (:955-957);
-                // while revealed → the `v==w` dispatch — but u==9 has no
-                // `D(v+1)` page-advance arm at all, so v<w always holds
-                // and the press lands in the catch-all dismiss:
-                // `C.Z(); C.cd[1]=true; bh!=3 → m(ad); z(23); l(8); v=w`
-                // (:1003-1016). Verbatim quirk: `bM[1..]` pages are never
-                // shown for u==9 — no page advance exists for it.
-                if (dlgBT != -1) {
-                    dlgBT = -1                                // reveal (:955)
+            } else {
+                // case-21 u-machine (k.java:877-1019, proven). `j()` →
+                // `E(65568)` (:874-876): a screen tap feeds the context
+                // edge the arms read — consume() marks presses but the
+                // dialog's own `v(65568)` checks are the only consumers.
+                if (pointerStrip()) padE(Pad.M_CONTEXT)
+                if (dlgU == 0 || dlgU == 4 || dlgU == 5 || dlgU == 7) {
+                    // u∈{0,4,5,7} full-screen panels (:878-904): press →
+                    // u7→l(2), u5→l(15), else l(8); `z(23)` on all.
+                    if (pad.v(Pad.M_CONTEXT)) {
+                        when (dlgU) {
+                            7 -> stateL(2)
+                            5 -> stateL(15)
+                            else -> stateL(8)
+                        }
+                        z(23)
+                    }
                 } else {
-                    kC?.resumeScript()                        // C.Z()
-                    kC?.cd?.set(1, true)                      // C.cd[1]=true
-                    if (!bh3) kM(kAd)                         // bh!=3 → m(ad)
-                    z(23)
-                    dlgV = dlgW
-                    leaveDialog()                             // l(8)
+                    // u∈{1,2,3,6,8,9,10} line dialogs (:905-1019). The
+                    // skip gate (:944): `v(131072) && C!=null && u==9 &&
+                    // C.cd[2]` → `C.Z(); C.cd[1]=true; bh!=3 → m(ad);
+                    // z(23); l(8); v=w`.
+                    if (dlgSuppressed()) {
+                        kC?.resumeScript()                    // C.Z()
+                        kC?.cd?.set(1, true)                  // C.cd[1]=true
+                        if (!bh3) kM(kAd)
+                        z(23); dlgV = dlgW; stateL(8)         // l(8); v=w
+                    } else {
+                        if (dlgBQ && dlgBT != -1) {           // typing (:945)
+                            if (pad.v(Pad.M_CONTEXT)) dlgBT = -1   // reveal (:953)
+                        } else if (dlgU == 10) {
+                            if (pad.v(Pad.M_CONTEXT)) {       // :956-961
+                                dlgD(dlgV + 1); kCz = true; z(23)
+                            }
+                        } else if (!pad.v(Pad.M_CONTEXT) || dlgU == 8) {
+                            if (dlgU == 8) {                  // :962-973
+                                val x6 = kDlgX; kDlgX = x6 - 1
+                                if (x6 <= 0) {
+                                    kDlgX = 48
+                                    dlgD(dlgV + 1)
+                                    if (pad.v(Pad.M_CONTEXT)) z(23)
+                                }
+                            }
+                        }
+                        if (dlgV == dlgW) {                   // :975-1007
+                            when {
+                                dlgU == 9 -> { kC?.resumeScript(); stateL(8) }
+                                dlgU == 3 -> if (kAj != 7) stateL(15) else stateL(24)
+                                dlgU == 1 -> if (kAj != 8) stateL(8)
+                                             else { kAj = 0; teardown(); stateL(2) }
+                                else -> { if (dlgU == 8) kCz = true; stateL(8) }
+                            }
+                        }
+                    }
                 }
-                pad.edge = 0        // eat the dismiss edge — not a gameplay tap
-            } else { tickIndex++; jG++; return }
+            }
+            // `fS` tip marquee (k.java:1027-1039, proven): one char per
+            // two frames, `d(0,111)` clipped into `tipStr`, -1 = done.
+            if (kFS >= 0) {
+                val s = d0(111) ?: ""
+                if (jG % 2L == 0L) kFS++
+                tipStr = if (kFS < s.length) s.substring(0, kFS) else s
+                if (kFS >= s.length + 10) kFS = -1
+            }
+            // `J()` pause-icon arm (k.java:1040-1063, proven): the
+            // 354,0,46,37 rect-press → E(262144) is injected in consume()
+            // for jC∈{8,21}; `v(262144)` → `C.Y();bw=0;l(14)`.
+            if (jC != 12 && jC != 13) {                       // J() (:2653)
+                if (pad.v(Pad.M_PAUSE)) {
+                    kC?.pauseScript()                         // C.Y() (:1057)
+                    kBw = 0
+                    stateL(14)                                // l(14) (:1061)
+                }
+            }
+            tickIndex++; jG++
+            return
         }
 
         // case 15 → M() (k.java:1141) — the win-stats screen proc
@@ -3522,7 +3857,7 @@ class Level0World(
         // mission timer + ap[2] frame counter (k.java:1652-1655,
         // proven): ticks while unpaused and not dialog-suspended.
         if ((player.P and 512) != 0 ||
-            (kC?.claimActive() != true && (jC != 21 || subU != 9))) {
+            (kC?.claimActive() != true && (jC != 21 || dlgU != 9))) {
             kDg++; kAp[2]++
         }
 

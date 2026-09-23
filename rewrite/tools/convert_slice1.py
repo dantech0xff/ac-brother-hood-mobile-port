@@ -128,7 +128,49 @@ def u8(v):
     return v & 0xFF
 
 
-def pack_clip(pack, entry_dir, out_dir):
+def clip_remaps(clip_id, object_count):
+    """`az[]` module-remap tables (b.java:657/713, proven).
+
+    Sparse (u16 src, u16 dst) overlays on an identity ``short[ab]``.
+    Sources are the raw pack blobs under ``resources/archive/`` — the
+    same ``u16 count | u16 parts | u32 offsets`` pack format the
+    extractor parses, with ``marker>=127`` = LZMA-alone payload.
+
+    Only two clips ever receive tables (k.java:5044-5051):
+    clip-0 gets pack-4's entries 0-3 as az[0..3] (``k.eh={0}``,
+    ``k.ei={4}``); clip-52 gets pack-5's entry-0 as az[0] (clip-52 is
+    not in CLIPS yet — emits when converted). Every other
+    ``aa.a(n)`` selects an identity table — a no-op by construction.
+    """
+    import lzma
+    sources = {0: ("4", 4), 52: ("5", 1)}
+    if clip_id not in sources:
+        return []
+    pack_name, expected = sources[clip_id]
+    blob = (RES / "archive" / pack_name).read_bytes()
+    count = struct.unpack_from("<H", blob, 0)[0]
+    parts = struct.unpack_from("<H", blob, 2)[0]
+    offs = struct.unpack_from(f"<{count + 1}I", blob, 4 + parts * 2)
+    assert count == expected, f"pack-{pack_name} has {count} entries"
+    tables = []
+    for i in range(count):
+        chunk = blob[offs[i]:offs[i + 1]]
+        marker, payload = chunk[0], chunk[1:]
+        dec = lzma.decompress(payload, format=lzma.FORMAT_ALONE) \
+            if marker >= 127 else payload
+        pairs = [(struct.unpack_from("<H", dec, j)[0],
+                  struct.unpack_from("<H", dec, j + 2)[0])
+                 for j in range(0, len(dec) - len(dec) % 4, 4)]
+        for src, dst in pairs:
+            # az[ab] indexes the OBJECT space (b.java:926/1057 — the
+            # frame's resolved object index), not module space.
+            assert src < object_count and dst < object_count, \
+                f"pack-{pack_name}[{i}] remap {src}->{dst} out of range"
+        tables.append(pairs)
+    return tables
+
+
+def pack_clip(pack, entry_dir, out_dir, clip_id):
     meta_path = SPR / pack / entry_dir / "metadata.json"
     meta = json.loads(meta_path.read_text())
     secs = {s["id"]: s for s in meta["sections"]}
@@ -202,6 +244,18 @@ def pack_clip(pack, entry_dir, out_dir):
         as_ = p["as"].get("java_i16", p["as"].get("java_i8"))
         blob += struct.pack("<HBhh", p["ap"]["raw_u8"],
                             p["aq"]["raw_u8"], ar, as_)
+
+    # az[] module-remap tables (b.java:657/713, proven): sparse
+    # (u16 src, u16 dst) overlays on an identity short[ab]. Sources are
+    # raw pack blobs, `marker>=127` = LZMA-alone payload (the extractor's
+    # rule): clip-0 gets pack-4's 4 tables (k.eh={0},k.ei={4});
+    # clip-52 gets pack-5's entry-0 (k.java:5044).
+    remaps = clip_remaps(clip_id, len(rects_meta))
+    blob += struct.pack("<B", len(remaps))
+    for table in remaps:
+        blob += struct.pack("<H", len(table))
+        for src, dst in table:
+            blob += struct.pack("<HH", src, dst)
 
     (out_dir / "modules").mkdir(parents=True, exist_ok=True)
     for name in all_pngs:
@@ -291,14 +345,16 @@ def pack_level():
     for name, clip in TILESETS.items():
         src_dir = next((SPR / "pack-15").glob(f"entry-{clip:03d}-*"))
         # full clip pack (cells index the composite-object space)
-        pack_clip("pack-15", src_dir.name, out / f"tileset-{clip}")
+        pack_clip("pack-15", src_dir.name, out / f"tileset-{clip}",
+                    clip)
     print(f"level0: {cols}x{rows} cells, {len(entities)} entities, "
           f"tilesets {sorted(set(TILESETS.values()))}")
 
 
 def main():
     for name, (pack, entry) in CLIPS.items():
-        pack_clip(pack, entry, OUT / "clips" / name)
+        pack_clip(pack, entry, OUT / "clips" / name,
+                  int(name[4:]))
     pack_level()
     print("convert_slice1: ok")
 

@@ -31,6 +31,7 @@ class Clip private constructor(
     val rects: IntArray,        // x,y,w,h quads (am_or_an — W/X rects)
     val bounds: IntArray,       // x,y,w,h quads (ak_or_al — Y bounds)
     val placements: IntArray,   // module,flags,x,y quads
+    val remapTables: List<IntArray> = emptyList(), // az[] — aA object remap
 ) {
 
     /** `aa.a()` — anim count. */
@@ -104,6 +105,17 @@ class Clip private constructor(
                          dx, dy, (flags xor (frameFlags[fi] and 15)) and 15)
     }
 
+    /** `az[aA][i]` (b.java:926/1057, proven): when an `aa.a(table)`
+     *  remap slot is armed, drawable-object index `i` resolves through
+     *  table `aA`. Tables are sparse (key,value) overlays on an identity
+     *  `short[ab]`; `aa.a(n)` on a clip with no table n is the identity
+     *  no-op (b.java:714-720 fills `az[i]` with 0..ab-1 first). */
+    fun remap(table: Int, obj: Int): Int {
+        if (table < 0 || table >= remapTables.size) return obj
+        val t = remapTables[table]
+        return if (obj in t.indices) t[obj] else obj
+    }
+
     class FrameDraw(val module: Int, val dx: Int, val dy: Int, val transform: Int)
 
     /** Composite sprite draw list (`b.java:915`): one entry per placement. */
@@ -160,9 +172,23 @@ class Clip private constructor(
                 places[i * 4] = r.u16(); places[i * 4 + 1] = r.u8()
                 places[i * 4 + 2] = r.i16(); places[i * 4 + 3] = r.i16()
             }
+            val remaps = ArrayList<IntArray>()
+            if (r.pos < data.size) {
+                // ACPK tail (v1 extension): `u8 tableCount`, then per table
+                // `u16 pairCount` + (u16 src, u16 dst) sparse overrides on
+                // an identity [0..objectCount) table — az[ab] indexes the
+                // OBJECT space (b.java:926/1057), not module space.
+                val tableCount = r.u8()
+                repeat(tableCount) {
+                    val t = IntArray(oRs.size) { it }
+                    val pairs = r.u16()
+                    repeat(pairs) { t[r.u16()] = r.u16() }
+                    remaps += t
+                }
+            }
             require(r.pos == data.size) { "trailing bytes in ACPK" }
             return Clip(names, mw, mh, aStart, aCount, fMod, fDur, fDx, fDy,
-                        fFl, oRs, oRc, oPs, oPc, rects, bounds, places)
+                        fFl, oRs, oRc, oPs, oPc, rects, bounds, places, remaps)
         }
     }
 }

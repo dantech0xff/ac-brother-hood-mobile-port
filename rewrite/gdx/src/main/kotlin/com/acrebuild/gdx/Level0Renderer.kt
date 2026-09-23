@@ -222,6 +222,9 @@ class Level0Renderer {
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
     private var nDl: UiAnimObject? = null             // k.dl — N() icon
+    private var pauseFl: UiAnimObject? = null         // k.fL — pause icon
+    private var edgeCQ = -1                           // k.cQ — corner width
+    private var edgeCR = -1                           // k.cR — tile width
     private var nTipDj = 0                            // k.dj — tip type pos
     private var nTipDk = 0                            // k.dk — tip hold
 
@@ -241,7 +244,9 @@ class Level0Renderer {
     private fun dialogPanel(world: Level0World, i: Int, bP: Int) {
         drawFrame(98, 12, 0, 0, bP, 0)                // A[4].a(cd,12,0,0,i2)
         fillAr(0, bP, 400, 68, Int.MIN_VALUE)         // j.h(MIN_VALUE);j.d
-        if (world.dlgU in 8..10 && world.jG % 10L < 5L) {
+        // blink tail (k.java:418-429): u8 never blinks; every other u
+        // blinks `d(0,9)` while `j.g%10 < 5`.
+        if (world.dlgU != 8 && world.jG % 10L < 5L) {
             drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
         }
     }
@@ -298,6 +303,94 @@ class Level0Renderer {
             // a(y,2,str,x,135,360,240,0,20) — 9-arg drops i5/i6 → 20,-1
             dialogText(world, title, x, 135, 360, 20, -1)
         }
+    }
+
+    /** `i.a(int,int,int,int,boolean)` (i.java:20129-20166, proven) —
+     *  the ax35 eagle-view minimap composite, drawn at the `k.aQ`
+     *  blit site (198-w, 5) as a clipped direct draw (our compositor
+     *  skips the offscreen copy — same visible result). Parts:
+     *  eu stamp grid (`k.a(g,x,y,cell)` :4504, `bt` = eu cols);
+     *  `k.a()` (:4417) ep front-layer rect + `k.b()` (:4453) er
+     *  bottom-layer rect at (cx*20-x, cy*20-y+i7); enemy blips —
+     *  ax∈{11,73,35,79} `(P&128)==0` gated by `i.a(i,i2,i+i3,i2+i4,Y)`
+     *  rect-overlap (:520); `drawRect(0,0,h-1,w-1)` border — the
+     *  verbatim h/w swap. `z2` (`Z[4]==0`) is a dead param in the
+     *  composite body (verbatim). `i7 = -(h-240)` bottom-anchored
+     *  shift, verbatim. */
+    private fun minimap(world: Level0World, r: IntArray) {
+        val x = r[0]; val y = r[1]; val w = r[2]; val h = r[3]
+        val ox = 198 - w; val oy = 5
+        val i7 = -(h - 240)
+        clipScissor(ox, oy, w, h)
+        fillAr(ox, oy, w, h, -16777216)
+        // eu stamp grid (:20136-20141): (w/20+1)×(h/20+1) cells
+        val eu = world.level.layers.firstOrNull { it.id == 2 }
+        if (eu != null) {
+            for (i8 in 0 until h / 20 + 1) {
+                for (i9 in 0 until w / 20 + 1) {
+                    if (i9 >= eu.cols || i8 >= eu.rows) continue
+                    val cell = eu.cell(i9, i8)
+                    if (cell < 0 || cell == 255) continue
+                    drawTileCell(eu.tilesetClip, cell, ox + i9 * 20,
+                                 oy + i8 * 20 + i7, eu.flag(i9, i8))
+                }
+            }
+        }
+        minimapLayer(world, 1, x, y, w, h, ox, oy, i7)  // k.a() ep rect
+        minimapLayer(world, 3, x, y, w, h, ox, oy, i7)  // k.b() er rect
+        // enemy blips (:20145-20158): ax∈{11,73,35,79} in-rect
+        for (e in world.npcs) {
+            if (e == null) continue
+            if (e.ax != 11 && e.ax != 73 && e.ax != 35 && e.ax != 79) continue
+            if ((e.P and 128) != 0) continue
+            if (!minimapOverlap(x, y, x + w, y + h, e.Y)) continue
+            val pack = e.clip?.let { clipPackOf(it) } ?: continue
+            val bx = ox + e.ak - x; val by = oy + e.al - y + i7
+            val pal = if (e.ax == 79) e.Z.getOrElse(1) { 0 } else e.palette
+            if (e.U >= 0) drawFrame(pack, e.S, e.T, bx, by, e.P and 7, pal)
+            else if (e.S >= 0) drawObject(pack, e.S, bx, by, e.P and 7, 0, pal)
+            else if (e.T >= 0) drawObject(pack, e.T, bx, by, e.P and 7, 0, pal)
+        }
+        clipScissor(0, 0, 400, 240)
+        // graphics.drawRect(0,0,i4-1,i3-1) — verbatim h/w arg swap
+        outlineAr(ox, oy, h - 1, w - 1, -256)
+    }
+
+    /** `k.a()`/`k.b()` rect draw (k.java:4417-4449/4453-4498, proven):
+     *  world-rect (x,y,w,h) → cell range (x/20..(x+w-1)/20) ×
+     *  (y/20..(y+h-1)/20), each non-empty cell stamped at
+     *  (cx*20-x, cy*20-y+i7). The `i2<0 → i2-=20` negative-round
+     *  quirk is verbatim. bh3's `dL` arm is flying-only (dead here). */
+    private fun minimapLayer(world: Level0World, id: Int, x: Int, y: Int,
+                             w: Int, h: Int, ox: Int, oy: Int, i7: Int) {
+        val layer = world.level.layers.firstOrNull { it.id == id } ?: return
+        var yy = y
+        if (yy < 0) yy -= 20                                  // i2<0 quirk
+        val c0 = x / 20; val r0 = yy / 20
+        val c1 = (x + w - 1) / 20; val r1 = (y + h - 1) / 20
+        var dx = c0 * 20 - x
+        for (cx in c0..c1) {
+            var dy = r0 * 20 - y
+            for (cy in r0..r1) {
+                val cell = layer.cell(cx, cy)
+                if (cell >= 0 && cell != 255)
+                    drawTileCell(layer.tilesetClip, cell, ox + dx,
+                                 oy + dy + i7, layer.flag(cx, cy))
+                dy += 20
+            }
+            dx += 20
+        }
+    }
+
+    /** `i.a(int,int,int,int,int[])` (i.java:520-537, proven): minimap
+     *  blip's rect-vs-Y-bounds overlap — disjoint → false; degenerate
+     *  query → false; `Y[0]==Y[2]` → `Y[1] != Y[3]`; else true. */
+    private fun minimapOverlap(x0: Int, y0: Int, x1: Int, y1: Int,
+                               r: IntArray): Boolean {
+        if (x0 > r[2] || x1 < r[0] || y0 > r[3] || y1 < r[1]) return false
+        if (x0 == x1 && y0 == y1) return false
+        if (r[0] == r[2]) return r[1] != r[3]
+        return true
     }
 
     /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
@@ -784,6 +877,40 @@ class Level0Renderer {
         drawObject(pack, cell, anchorX, anchorY, dX)
     }
 
+    /** `b.e(b.d(anim,0))` (k.java:2254-2257, proven): the pixel width
+     *  of anim's frame-0 composite object — `d(i,j)` = the frame's
+     *  `r8[5]`-style object ref (module | flags<<2), `e()` = bounds w.
+     *  Cached into `edgeCQ`/`edgeCR` exactly like `cQ`/`cR` (-1 = unset). */
+    private fun animObjWidth(pack: Int, anim: Int): Int {
+        val clip = clips[pack] ?: return 0
+        if (anim < 0 || anim >= clip.animCount() ||
+            clip.frameCount(anim) == 0) return 0
+        val fi = clip.animFrameStart[anim]
+        val obj = clip.frameModule[fi] or ((clip.frameFlags[fi] and 0xC0) shl 2)
+        val q = obj * 4
+        return if (q + 3 < clip.bounds.size) clip.bounds[q + 2] else 0
+    }
+
+    /** `a(int,int,int,boolean)` (k.java:2242-2268, proven) — the
+     *  repeating edge-strip: left corner `i4` at x, `i5` tiles forward
+     *  while the next tile fits inside `x+w`, a last `i5` right-aligned
+     *  at `x+w-cQ-cR`, then `i4` again at `x+w` mirrored (flags=1).
+     *  `z2` selects the pair {41,42} pressed / {43,44} idle on `A[2]`. */
+    private fun edgeStrip(x: Int, y: Int, w: Int, pressed: Boolean) {
+        val i4 = if (pressed) 41 else 43
+        val i5 = if (pressed) 42 else 44
+        if (edgeCQ == -1) edgeCQ = animObjWidth(93, i4)
+        if (edgeCR == -1) edgeCR = animObjWidth(93, i5)
+        drawFrame(93, i4, 0, x, y, 0)
+        var i7 = x + edgeCQ
+        do {
+            drawFrame(93, i5, 0, i7, y, 0)
+            i7 += edgeCR
+        } while (i7 + edgeCR < x + w)
+        drawFrame(93, i5, 0, x + w - edgeCQ - edgeCR, y, 0)
+        drawFrame(93, i4, 0, x + w, y, 1)
+    }
+
     /** `G()` draw surface (:2412-2460) — help/instructions scroller:
      *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
      *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
@@ -830,6 +957,18 @@ class Level0Renderer {
         for (i2 in 0 until world.kBw) i += world.kCX[i2]
         fontY.l(0)
         drawText("${i + world.kCY}/${world.kCZ}", 200, 220, 33)
+    }
+
+    /** `case 6` draw surface (k.java:844-853, proven): `d(0,7)` "ABOUT"
+     *  title on `bW.l(1)` + `b(y,1,d(0,77),200,50,390,155,0,1)` — the
+     *  scrollable credits roll clipped to (0,50,400,155). */
+    private fun aboutScreen(world: Level0World) {
+        fontW.l(1)
+        world.d0(7)?.let { drawText(it, 200, 24, 3, pack = 91) }
+        clipScissor(0, 50, 400, 105)
+        fontY.l(1)
+        drawText(world.d0(77) ?: "", 200, world.kFd, 3, pack = 91)
+        clipScissor(0, 0, 400, 240)
     }
 
     /** `F()` draw surface (:2338-2371) — `a(30,d(0,5))` title bar,
@@ -923,26 +1062,26 @@ class Level0Renderer {
         world.buildDrawList()
         for (i32 in 0 until world.drawCount) {
             val e = world.drawList[i32]!!
-            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(e.ad!!, camX, camY)
+            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(world, e.ad!!, camX, camY)
             if (e.ax == 21 && e.S == 1 && e.ad != null) {
-                if (world.kC == null || world.subU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
+                if (world.kC == null || world.dlgU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
                 e.ad!!.advanceAnim()
             }
-            drawEntity(e, camX, camY)
+            drawEntity(world, e, camX, camY)
             if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
-                drawEntity(e.ad!!, camX, camY); e.ad!!.advanceAnim()
+                drawEntity(world, e.ad!!, camX, camY); e.ad!!.advanceAnim()
             }
             // ag()→ah() ghost-trail draw — `a` card producer unported
             // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
-                (world.jC == 8 || (world.jC == 21 && world.subU == 8))) {
-                drawEntity(kE, camX, camY); kE.advanceAnim()
+                (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
+                drawEntity(world, kE, camX, camY); kE.advanceAnim()
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
-                drawEntity(ab, camX, camY)
+                drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
 
@@ -1127,6 +1266,24 @@ class Level0Renderer {
                       pg.gQL - world.camX, pg.gQM - world.camY, 0)
         }
 
+        // pause button (k.java:1040-1056, proven — the jc8/21 tail):
+        // `J()` = !(jc==12||jc==13) — inside the case-8/21 arm so the
+        // button draws under both play and dialog-overlay states.
+        // `fL = new a(A[2],377,19)`; `d(354,0,46,37)` hold → pressed
+        // edge + `fL.a(30,1)` else idle edge + `fL.a(25,-1)`; then
+        // `fL.b(j.f)` tick + `fL.c()` draw. The `c(354,0,46,37)` →
+        // `E(262144)` → `v(262144)` → `l(14)` press chain is already
+        // wired in `consume`.
+        if (world.jC != 12 && world.jC != 13) {
+            val fl = pauseFl ?: UiAnimObject(clips[93], 377, 19)
+                             .also { pauseFl = it }
+            val held = world.pointerMoveIn(354, 0, 46, 37)
+            edgeStrip(359, 32, 36, held)
+            fl.arm(if (held) 30 else 25, if (held) 1 else -1)
+            fl.tick(62)                                       // fL.b(j.f)
+            drawFrame(93, fl.e, fl.currentFrame, fl.a, fl.b, fl.c)
+        }
+
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
         // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at
         // (cn,134) with pressed-sector art `i55`, plus the two radial
@@ -1146,7 +1303,7 @@ class Level0Renderer {
         // claim footer (k.java:3164, proven): `C!=null && (C.ab()||u==9)
         // && C.cd[2]` → `a("", d(0,18))` — right-pill "context" softkey.
         val kC = world.kC
-        if (kC != null && (kC.claimActive() || world.subU == 9) && kC.cd[2]) {
+        if (kC != null && (kC.claimActive() || world.dlgU == 9) && kC.cd[2]) {
             footer(world, "", world.d0(18))
         }
 
@@ -1154,11 +1311,9 @@ class Level0Renderer {
 
         // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
         // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
-        // surface. `volPaintRect` records the painted rect, not pixels —
-        // drawn as a bordered mini-rect.
-        world.volPaintRect?.let { r ->
-            outlineAr(198 - r[2], 5, r[2], r[3], -256)   // 0xFFFFFF00 (compositor's border :20159)
-        }
+        // surface. `volPaintRect` records the painted rect; the composite
+        // fills it (i.a(IIIIZ) — the ax35 eagle-view window).
+        world.volPaintRect?.let { r -> minimap(world, r) }
 
         // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
         // stripe letterbox — `an` grows `fn` stripes (top `fm*fn`, bottom
@@ -1220,34 +1375,56 @@ class Level0Renderer {
         // typewriter text. The world suspends behind it (i.java:20190);
         // the press tail lives in the tick.
         if (world.dialogModal) {
-            val v = world.dlgV
-            val page = world.dlgBM.getOrNull(v) ?: ""
-            var i3 = -1
-            var bP: Int
-            if (world.dlgBN[v] == 1) {                          // (:908-909)
-                bP = 137; i3 = 1
-            } else if (world.dlgBN[v] in 2..10) {               // (:910-912)
-                bP = 50; i3 = world.dlgBN[v]
-            } else if (world.player.al - world.kP < 120) {      // (:921)
-                bP = 137
-            } else {
-                bP = 50
-            }
-            if (world.bO == 0) bP = 50                          // u==9 (:922-924)
-            else if (world.bO == 1) bP = 137
-            dialogPanel(world, 0, bP)                           // i(0,bP) (:414-429)
-            val bT = if (world.dlgSuppressed()) world.dlgBT     // gate (:946)
-                     else world.dlgTypeTick(page.length)        // typewriter (:947-955)
-            if (i3 == -1) {
-                dialogText(world, page, 200, bP + 34, 380, 3, bT)  // centered (:935)
-            } else {
-                if (i3 == 1) {
-                    drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
-                } else {                                        // z[39] icon (:940)
-                    drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+            // `j.a(cd,0,0,400,240,true)` dim behind the modal (:869).
+            fillAr(0, 0, 400, 240, -16777216)
+            if (world.dlgU == 7)                              // (:870-873)
+                fillAr(0, 0, 400, 240, -16777216)
+            when (world.dlgU) {
+                0, 4, 5, 7 -> {                               // (:878-892)
+                    val bP = if (world.dlgU == 4 || world.dlgU == 5) 60 else 240
+                    dialogPanel(world, 0, bP)
+                    val ty = if (world.dlgU == 4 || world.dlgU == 5)
+                        bP + 120 else bP + 30
+                    dialogText(world, world.dlgBM[0] ?: "",
+                               200, ty, 400, 3, world.dlgBT)
                 }
-                dialogText(world, page, 10, bP + 4, 300, 20, bT)   // left (:942)
+                else -> {                                     // u∈{1,2,3,6,8,9,10}
+                    val v = world.dlgV
+                    val page = world.dlgBM.getOrNull(v) ?: ""
+                    var i3 = -1
+                    var bP: Int
+                    if (world.dlgU == 6) {                    // (:913-914)
+                        bP = 137
+                    } else if (world.dlgBN[v] == 1) {         // (:908-909)
+                        bP = 137; i3 = 1
+                    } else if (world.dlgBN[v] in 2..10) {     // (:910-912)
+                        bP = 50; i3 = world.dlgBN[v]
+                    } else if (world.player.al - world.kP < 120) {  // (:921)
+                        bP = 137
+                    } else {
+                        bP = 50
+                    }
+                    if (world.dlgU == 9) {                    // (:926-932)
+                        if (world.bO == 0) bP = 50
+                        else if (world.bO == 1) bP = 137
+                    }
+                    dialogPanel(world, 0, bP)                 // i(0,bP) (:414-429)
+                    val bT = if (world.dlgSuppressed()) world.dlgBT  // gate (:946)
+                             else world.dlgTypeTick(page.length)     // (:947-955)
+                    if (world.dlgU == 6 || i3 == -1) {        // (:934-935)
+                        dialogText(world, page, 200, bP + 34, 380, 3, bT)
+                    } else {
+                        if (i3 == 1) {
+                            drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
+                        } else {                              // z[39] icon (:940)
+                            drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
+                        }
+                        dialogText(world, page, 10, bP + 4, 300, 20, bT)
+                    }
+                }
             }
+            if (world.kFS >= 0)                               // fS tip (:1037)
+                drawText(world.tipStr, 390, 40, 10, pack = 92)
         }
 
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
@@ -1255,6 +1432,7 @@ class Level0Renderer {
         // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
         if (world.jC == 4) scoreScreen(world)
         if (world.jC == 5) helpScreen(world)
+        if (world.jC == 6) aboutScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],
@@ -1310,6 +1488,16 @@ class Level0Renderer {
 
         // jc24 ending credits (k.java:1326-1386, proven)
         if (world.jC == 24) creditsScreen(world)
+
+        // jc1 hard-mode unlock toast (k.java:800-811, proven): `f(false)`
+        // world behind; `a(y,0,d(0,99),200,120,220,240,0,3)` early-returns
+        // on the dx end-tail (fd=-1 post-l() → re-fires — the toast text
+        // never draws, verbatim quirk); `y.l(1)` + `d(0,9)` blink at
+        // (200,220,3) while `j.g%10<5` — unreachable in practice since
+        // j.c==1 self-skips to l(25) in one tick, kept verbatim.
+        if (world.jC == 1 && world.hintBlink) {
+            drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
+        }
 
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
@@ -1437,15 +1625,176 @@ class Level0Renderer {
     }
 
     /** `b.java:907` 8-arg path: draw the frame's module at anchor - offset. */
-    private fun drawEntity(e: Entity, camX: Int, camY: Int) {
+    /** `k.bo[bL]` (k.java:274, proven) — per-area clip-0
+     *  (palette, remapTable) pairs for ax0 entities. */
+    private val boArt = arrayOf(
+        intArrayOf(0, -1), intArrayOf(3, 1), intArrayOf(5, 2), intArrayOf(6, 3))
+
+    private fun drawEntity(world: Level0World, e: Entity, camX: Int, camY: Int) {
+        // `aU()` (i.java:3047 → :8989-9143, proven): ax10 early-outs of
+        // the blit path entirely — before the clip checks (zones carry
+        // no drawable clip). S34 draws its rail line(s); S31's prompt
+        // row is dormant on level 0 (no records); other S draw nothing.
+        if (e.ax == 10) {
+            if (e.S == 34) drawRailLine(world, e, camX, camY)
+            return
+        }
         val clip = e.clip ?: return
         if (e.S < 0 || e.S >= clip.animCount()) return
         val pack = clipPackOf(clip) ?: return
+
+        // i.a(Graphics) art-select preamble (i.java:3040-3180, proven):
+        // `aa.l(i)` palette select + `aa.a(i)` az-remap select + `aa.g`
+        // palette alpha, chosen per ax before the (P&128)==0 blit.
+        var palette = e.palette
+        var alpha = 255
+        val last = e.T >= clip.frameCount(e.S) - 1
+        // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
+        // draws the rope segments (object Z[7] of clip61) BEFORE the
+        // standard blit; the ax13 entity skips the art-select `when`
+        // entirely (it's the `else` branch in the original).
+        if (e.ax == 13) drawRopeSegments(e, pack, camX, camY)
+        when {
+            e.ax == 45 -> palette = e.Z.getOrElse(0) { 0 }
+            e.ax == 30 || e.ax == 32 -> {
+                palette = 0
+                if (e.cGCount > 0) {
+                    e.cGCount--
+                    if (e.cGCount % 2 != 0) palette = 1
+                }
+            }
+            e.ax == 11 -> palette =
+                if (e.Z.getOrElse(0) { 0 } == 1 || e.Z.getOrElse(0) { 0 } == 2) 1 else 0
+            e.ax == 47 || e.ax == 17 || e.ax == 73 -> palette = 0
+            e.ax == 68 -> palette = if (e.af != null && e.af!!.ax == 30) 1 else 0
+            (e.ax == 0 || e.ax == 9 || e.ax == 4 ||
+             (e.ax == 67 && e.Z.getOrElse(0) { 0 } == 11)) && !world.bh3 -> {
+                if (world.iCe) palette = 1
+                else if (e.ax == 9) {
+                    if (e.S == 21 || e.S == 22) e.ad = null
+                    palette = when (world.kAj) {
+                        2 -> 5; 3 -> 6; 5 -> 7; 6 -> 4; else -> 0
+                    }
+                } else palette = 0
+                if (e.ax == 9 && e.Z.getOrElse(2) { 0 } == 47) {
+                    // candle entity (i.java:3079-3115): S4/S5 need k.bK
+                    if (e.S == 4 || e.S == 5) {
+                        if (!world.kBK) return
+                        palette = 5
+                    }
+                    if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
+                    if (world.iCe && e.S == 2 && last) e.P = e.P or 64
+                    if (e.S == 5) {
+                        e.ak = camX; e.al = camY
+                        if (last) e.P = e.P or 64
+                        if (e.aC > 0 && (e.P and 64) != 0) {
+                            alpha = (e.aC * 255) / 10
+                            e.aC--
+                            if (e.aC <= 0) { world.removeEntity(e); return }
+                        }
+                    }
+                } else if (e.ax == 0 && world.kBL in boArt.indices) {
+                    palette = boArt[world.kBL][0]
+                    e.remapTable = boArt[world.kBL][1]
+                }
+            }
+            e.ax == 43 -> {
+                // vision-split (i.java:3132-3143): draw only OUTSIDE cv's
+                // x-span — left of W[0] when ak <= mid, right of W[2] else.
+                val cv = world.cv
+                if (cv != null) {
+                    if (e.ak <= (cv.W[0] + cv.W[2]) shr 1) {
+                        clipScissor(0, 0, cv.W[0] - camX, 240)
+                    } else {
+                        clipScissor(cv.W[2] - camX, 0, 400 - (cv.W[2] - camX), 240)
+                    }
+                }
+            }
+            e.ax == 79 -> { e.remapTable = e.Z.getOrElse(1) { 0 }
+                            palette = e.Z.getOrElse(0) { 0 } }
+            e.ax == 46 -> e.remapTable =
+                if (e.Z.getOrElse(6) { 0 } == 0) e.Z.getOrElse(7) { 0 } else -1
+            e.ax == 29 -> {
+                if (world.iBy == 2 || world.iBy == 3) {
+                    e.remapTable = 0
+                    // `aa.j[0] = j[1 or 4]` palette-row blink every 3rd
+                    // j.g → our -palette-NN slots (inferred mapping).
+                    if (e.S != 28 && e.S != 20 && e.S != 4 && e.S != 24 &&
+                        e.S != 25 && e.S != 26 && e.S != 22) {
+                        palette = if (world.jG % 3L == 0L) 1 else 4
+                    }
+                } else e.remapTable = -1
+            }
+            e.ax == 61 -> palette = 0
+            e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7
+        }
+
         val fd = clip.frameDraw(e.S, e.T, e.drawFlags())
-        // screenX = ak - camX - dx ; screenY = al - camY - dy (b.java:907
-        // i3-i10 / i4-i11); the object resolves through the composite path.
-        drawObject(pack, fd.module, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
-                   palette = e.palette)
+        val obj = clip.remap(e.remapTable, fd.module)      // az[aA][i11]
+        if (alpha != 255) batch.setColor(1f, 1f, 1f, alpha / 255f)
+        drawObject(pack, obj, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
+                   palette = palette)
+        if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
+        if (e.ax == 43 && world.cv != null) clipReset()
+    }
+
+    /** `i.a(Graphics)` ax13 rope draw (i.java:13391-13411, proven):
+     *  anchor object `Z[7]` at `(N>>8, O>>8)`, then `i4` middle
+     *  segments (`Z[1]-1`, or `bN-1` when `aG==4`) stepped 12px along
+     *  the pendulum angle `bP>>8` (angle-256), plus the end segment.
+     *  `iB = 3072·j.b(n-θ)>>8` = 12px·cos θ; `iB2 = 3072·j.b(θ)>>8` =
+     *  12px·sin θ. */
+    private fun drawRopeSegments(e: Entity, pack: Int, camX: Int, camY: Int) {
+        if (e.Z.size <= 7) return
+        val ax = (e.N shr 8) - camX
+        val ay = (e.O shr 8) - camY
+        val th = e.bP shr 8
+        val sx = (3072 * Trig.sin(Trig.N - th)) shr 8   // iB  = 12px·cos θ
+        val sy = (3072 * Trig.sin(th)) shr 8            // iB2 = 12px·sin θ
+        val segs = if (e.aG == 4) e.bN - 1 else e.Z[1] - 1
+        drawObject(pack, e.Z[7], ax, ay, e.P, palette = e.palette)  // anchor
+        var fx = ax shl 8
+        var fy = (ay shl 8) + 3072                                // i7 = i6+3072
+        for (s in 1..segs) {
+            drawObject(pack, e.Z[7], fx shr 8, fy shr 8, 0, palette = e.palette)
+            fx += sx; fy += sy
+        }
+        drawObject(pack, e.Z[7], fx shr 8, fy shr 8, 0, palette = e.palette)
+    }
+
+    /** `aU()` case-34 draw (i.java:9106-9143, proven): rail line(s) in
+     *  ROPE_COL — single span when the player isn't over the rail's
+     *  x-range, else two segments split at the player's screen x. */
+    private fun drawRailLine(world: Level0World, e: Entity, camX: Int, camY: Int) {
+        val wa = e.W
+        val fwd = e.Z[0] == 0
+        val p = world.player
+        val free = p.af == null || p.af === e
+        val near = p.S != 9 &&
+            ((p.af === e && p.ak > wa[0] && p.ak < wa[2]) ||
+             Entity.overlapI(p.W, wa))
+        var i10 = -1; var i3 = wa[1] - camY; var i11 = 0
+        if (near) {
+            if (p.ak >= wa[0] && p.ak <= wa[2]) i10 = p.ak - camX
+            val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])
+            val ry = wa[1] + (if (fwd)
+                (slope * (p.ak - wa[0])) shr 8
+            else
+                (slope * (wa[2] - p.ak)) shr 8)
+            i11 = ry - camY
+        }
+        val i9 = wa[3] - camY
+        val xa = (if (fwd) wa[0] else wa[2]) - camX
+        val xb = (if (fwd) wa[2] else wa[0]) - camX
+        if (i10 == -1) {
+            drawLine(xa, i3, xb, i9, ROPE_COL)
+            drawLine(xa + 1, i3 + 1, xb + 1, i9 + 1, ROPE_COL)
+        } else {
+            drawLine(xa, i3, i10, i11, ROPE_COL)
+            drawLine(i10, i11, xb, i9, ROPE_COL)
+            drawLine(xa + 1, i3 + 1, i10 + 1, i11 + 1, ROPE_COL)
+            drawLine(i10 + 1, i11 + 1, xb + 1, i9 + 1, ROPE_COL)
+        }
     }
 
     private fun clipPackOf(clip: Clip): Int? =

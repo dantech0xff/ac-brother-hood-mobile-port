@@ -309,53 +309,22 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.aA == 0 && e.animFinished()) e.setAnim(3)  // inferred
             }
         }
-        // `j()` player→NPC damage intake (subset): live NPC + player in an
-        // attack anim (`g.b()` set) + player X attackbox ∩ my W → Q() face +
-        // aB -= dmg (216 insta-kill+launch, {183,184,217} J=100, else bw=80),
-        // hit-react `i(85)`, aB<=0 → i(0) (death path goes through the L633
-        // dormant arm → i(139) corpse on anim end).
-        // lock claim (j() L7-L18, proven): a weakened ax11 (Z[0]==2)
-        // registers itself as i.aN when no live target holds the lock
-        // lock claim (j() L7-L18 uses Z[0]==2; level-0 soldiers carry
-        // Z0==0 — inferred equivalent: HP at/below the H[au]=50 counter line)
-        if (e.ax == 11 && e.aB > 0 && e.aB <= H0 &&
-            (world.lockTarget == null || world.lockTarget!!.S == 18)) {
-            world.lockTarget = e
+        // `h() → i()` counter-engage (i.java:1271 + :1278, proven; call
+        // sites :7629 in aJ() and :4184 in I() — `if (Z[0]!=3 && h()) i()`
+        // runs BEFORE `j()`): the NPC catches an in-flight attack —
+        // player forced to S8, companion `k.E` hidden, NPC → aC=16 +
+        // i(17) (ax73 i(167), verbatim `S!=17` guard). h() immunity:
+        // S216/217 finishers never engage; ax11-Z0==2 engages unless
+        // posed {11,12,6} (S68/69 heavy swings override); else only
+        // ax73 during S69. Side-effect precedes `g.b()` → the engage
+        // preempts this tick's j() damage exactly like the original.
+        if (e.ax == 11 && e.Z[0] != 3 && hGate(e, player)) {
+            iEngage(e, player, world)
         }
-        if (world.lockTarget === e && e.aB <= 0) world.lockTarget = null
+        // `j()` player→NPC damage intake — verbatim port at `jIntake`
+        // (i.java:1305-1403, proven).
         e.refreshBoxes(); player.refreshBoxes()
-        // S144 = block stance: immune to normal melee until the finisher
-        // (inferred — that's the purpose of the counter-offer state)
-        val blocking = e.S == 144
-        if (!blocking && e.aB > 0 && player.X[0] != player.X[2] &&
-            player.S in ATTACK_ANIMS && overlap(e.W, player.X)) {
-            facePlayer(e, player)
-            when (player.S) {
-                // {183,184,216,217} assassin/heavy path: 216 launches and
-                // zeroes HP; J[au]=100 damage otherwise (proven).
-                216 -> {
-                    e.aB = 0
-                    e.ag = if (e.av) 5120 else -5120
-                    e.ai = if (e.av) -2560 else 2560
-                }
-                183, 184, 217 -> {
-                    e.aB -= JD[0]
-                    if (e.ax == 11 && e.Z[0] == 0) e.aB = 30   // L83 survive
-                }
-                else -> e.aB -= BW[0]
-            }
-            // hit-react only for normal strikes; finisher anims (183/184/
-            // 216/217) keep the victim pinned in its own arm (106/107/launch)
-            if (player.S !in intArrayOf(183, 184, 216, 217)) e.setAnim(85)
-            if (e.aB <= 0) e.setAnim(0)                          // aB<=0 → i(0)
-            // C() weakened offer (proven shape, i.java:1955 — original
-            // gates on Z[0]==1; level-0 soldiers use 0 → inferred same
-            // transition for the low-HP weakened state)
-            else if (e.ax == 11 && e.aB <= H0) {
-                e.Z[0] = 2
-                e.setAnim(144)
-            }
-        }
+        jIntake(e, player, world)
         // `aB()` melee application (subset): non-degenerate attackbox X
         // overlapping the player's W → `k.aS.a(player-falling?20:4, l,0,this)`
         if (e.X[0] != e.X[2] && overlap(player.W, e.X)) {
@@ -520,6 +489,72 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> if (rectsOverlap(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
+            // `aU()` case-34 (i.java:9031-9139, proven): slope-rail ride.
+            // The original runs this inside i.a(Graphics) — per-frame,
+            // i.e. the same cadence as our tick — so the mutating part
+            // lives here; the rail LINE draws in the renderer. `aV()`'s
+            // own S34 tick arm is genuinely empty (the earlier comment
+            // was right) — aU() is where the S34 work happens.
+            34 -> {
+                e.P = e.P or 16
+                val wa = e.W
+                val fwd = e.Z[0] == 0
+                val free = player.af == null || player.af === e
+                val near = player.S != 9 &&
+                    ((player.af === e &&
+                      player.ak > wa[0] && player.ak < wa[2]) ||
+                     rectsOverlap(player.W, wa))
+                if (near) {
+                    val inside = player.ak >= wa[0] && player.ak <= wa[2]
+                    val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])
+                    val ry = wa[1] + (if (fwd)
+                        (slope * (player.ak - wa[0])) shr 8
+                    else
+                        (slope * (wa[2] - player.ak)) shr 8)
+                    if (free && inside &&
+                        player.W[1] >= ry - 20 && player.W[1] <= ry + 30) {
+                        player.af = e
+                        player.al = ry + 10 + 65          // i13+=10; al=i13+65
+                        player.ah = (slope * 1024) shr 8
+                        player.av = !fwd
+                        player.ag = if (fwd) 2560 else -2560
+                        if (player.S == 50 || player.gt != 0) player.al += 40
+                        else if (player.S != 164) player.setAnim(164)
+                        if (w.padHeld(33024)) {           // jump-off
+                            player.af = null; player.al += 40
+                            player.probeCells(world)      // aS.x()
+                            if (player.aR <= 20) player.setAnim(43)
+                            else { player.al -= 40
+                                   player.settleToGround(world) }
+                        } else if (w.padHeld(16388) ||
+                                   (fwd && w.padHeld(8)) ||
+                                   (!fwd && w.padHeld(2))) {  // attack-off
+                            player.af = null; player.al -= 40
+                            player.setAnim(157)
+                            player.ag = if (fwd) 8192 else -8192
+                            player.ah = -2560
+                            player.probeCells(world)
+                            if (player.aR <= 20) player.setAnim(157)
+                            else { player.ah = 0; player.ag = 0
+                                   player.settleToGround(world) }
+                        }
+                    } else if (player.af === e && player.S == 164) {
+                        player.af = null; player.setAnim(43)
+                        player.ag = 0; player.ah = 0
+                    }
+                } else if (free) {
+                    if (player.af === e && player.S == 164) {
+                        if (e.Z[1] == 1) {                // dismount-jump
+                            player.al -= 40; player.setAnim(157)
+                            player.ag = if (fwd) 8192 else -8192
+                            player.ah = -2560
+                        } else {
+                            player.setAnim(43); player.ag = 0; player.ah = 0
+                        }
+                    }
+                    player.af = null
+                }
+            }
             // S16 door-teleport (i.java:12326-12431 = L177d→L1850,
             // proven). `g.a != null` gate; `az=300`; `r8 = k.q(Z[0])`
             // = the destination-door entity. Bound player (`aS.ac ==
@@ -702,10 +737,10 @@ class NpcFsm(val world: LevelCellSource) {
                 if (!e.animFinished()) return
                 if (e.m > 0) {
                     world.spawnWisp(e); e.m--
-                    world.kAp[5]++; world.shake()
+                    world.kAp[5]++; world.kCollectStreak()
                     if (e.m > 0) {
                         world.spawnWisp(e)
-                        world.kAp[5]++; world.shake()
+                        world.kAp[5]++; world.kCollectStreak()
                         e.m--
                     }
                 }
@@ -1071,18 +1106,18 @@ class NpcFsm(val world: LevelCellSource) {
     // Pushable crate (i.java:16440, proven): land-mount arm, edge-input
     // grab (k.v — EDGE unlike bm()'s held k.u), carry clamps, S2 death.
 
-    /** `i.bo()` (i.java:16274, proven): `g.j` latch && overlap &&
+    /** `i.bo()` (i.java:15563, proven): `g.j` latch && overlap &&
      *  `g.a == null` — player pressed against the crate while j-set. */
     private fun crateContact(e: Entity, w: LevelCellSource,
                              p: Entity): Boolean =
         w.gj && Entity.overlapI(p.W, e.W) && p.ga == null
 
-    /** `i.bp()` (i.java:16288, proven): `g.j` && `aS.S∈{43,35}` &&
-     *  `ah>0` && `W[0] < aS.ak < W[2]` && `aS.al <= W[3]` — falling onto
-     *  the crate's top while j-set. */
+    /** `i.bp()` (i.java:15567, proven): `if (g.j) return false` — then
+     *  `aS.S∈{43,35}` && `ah>0` && `W[0] < aS.ak < W[2]` &&
+     *  `aS.al <= W[3]` — falling onto the crate's top while j-clear. */
     private fun crateLandSpot(e: Entity, w: LevelCellSource,
                               p: Entity): Boolean =
-        w.gj && (p.S == 43 || p.S == 35) && p.ah > 0 &&
+        !w.gj && (p.S == 43 || p.S == 35) && p.ah > 0 &&
         p.ak > e.W[0] && p.ak < e.W[2] && p.al <= e.W[3]
 
     fun tickPushable(e: Entity, w: LevelCellSource, p: Entity) {
@@ -1104,7 +1139,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (p.S == 16 || p.Q == 16 ||
                     ((e.al - p.gy) / 20) < 20 || w.gH()) {         // L62
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
-                    p.setAnim(0); w.iBq = 0; p.ga = e
+                    p.setAnim(0); Entity.entBq = 0; p.ga = e
                 } else {                                          // mount
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
                     p.al = e.W[1] + 4
@@ -6034,6 +6069,120 @@ private const val H0 = 50
 private val ATTACK_ANIMS = intArrayOf(
     67, 68, 69, 81, 112, 113, 114, 115,
     183, 184, 216, 217, 286, 287)
+/** `i.I` — ax73 damage vs knife swings {20,20,20} (i.java:169, proven). */
+private val II73 = intArrayOf(20, 20, 20)
+
+/** `i.h()` (i.java:1271-1276, proven): counter-engage immunity gate —
+ *  S216/217 finishers never engage; ax11-Z0==2 (weakened) engages unless
+ *  posed {11,12,6} (player S68/69 heavy swings override the immunity);
+ *  every other type engages only ax73 during S69. */
+private fun hGate(e: Entity, p: Entity): Boolean {
+    if (p.S == 216 || p.S == 217) return false
+    return if (e.ax == 11 && e.Z[0] == 2)
+        !(e.S == 11 || e.S == 12 || e.S == 6) || p.S == 68 || p.S == 69
+    else
+        e.ax == 73 && p.S == 69
+}
+
+/** `i.i()` (i.java:1278-1303, proven): the counter-engage — non-
+ *  degenerate player attackbox ∩ NPC body + player mid-attack (`g.b()`)
+ *  → player forced to S8, companion `k.E` hidden (`P|=128`), and the
+ *  NPC takes `aC=16` then `i(17)` (ax73 `i(167)` — the `S != 17` check
+ *  is verbatim, 167 for ax73). Always returns false like the original:
+ *  its value is the side-effect — leaving ATTACK_ANIMS preempts this
+ *  tick's `j()` damage exactly like the source. */
+private fun iEngage(e: Entity, p: Entity, w: LevelCellSource): Boolean {
+    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X) ||
+        p.S !in ATTACK_ANIMS) return false
+    if (p.S != 8) {
+        p.setAnim(8)
+        w.kE?.let { it.P = it.P or 128 }
+    }
+    when (e.ax) {
+        11 -> if (e.S != 17) { e.aC = 16; e.setAnim(17) }
+        73 -> if (e.S != 17) { e.aC = 16; e.setAnim(167) }
+    }
+    return false
+}
+
+/** `i.j()` for ax11 (i.java:1305-1403, proven): the player→NPC strike
+ *  resolution — `P()` dead gate (`G()` on the corpse), then:
+ *  Z0==2 weakened claims the `aN` finisher lock (`aN==null||aN.S!=18`)
+ *  and gates on `g.b()` alone; every other ax11 needs `g.b()` + the
+ *  ±160/±20 proximity + the `bf` first-swing latch (`aS.S==67` claims
+ *  `aN` when free-or-self). `aS.X` non-degenerate ∩ `W` then `Q()`:
+ *  {183,184,216,217} → `aB -= J[au]`, and ax11×{216,217} launches
+ *  (`aB=0`, `ag=±5120`, `ai=∓2560`, marker `a(8,50,…)` + `bK→a(8,59,…)`,
+ *  `c(85,157)` react, Z0==0 keeps `aB=30`, `g()` nudge, `k.A(13)`);
+ *  weakened Z0==2 → `aB -= bw[au]`; ax!=73 → the half-HP every-3rd-hit
+ *  engage (`x++ %3` on `aB==bu[au]/2` → aS.i(8) + `k.E.P|=128` +
+ *  `aC=16` + `i(17)` + `g()`, no damage) else `aB -= H[au]`; ax73 →
+ *  `{286,287} ? I[au] : bw[au]`. Tail: `ax!=11 || Z0!=0 || aB>H[au] ||
+ *  S==85` → `C()`; else the weaken-line marker + `c(85,157)` + `g()` +
+ *  `k.A(13)`. */
+private fun jIntake(e: Entity, p: Entity, w: LevelCellSource): Boolean {
+    if (e.aB <= 0) { e.releaseAe(); return false }              // P() → G()
+    if (e.ax == 11 && e.Z[0] == 2) {
+        if (w.lockTarget !== e && (w.lockTarget == null ||
+            w.lockTarget!!.S != 18)) w.lockTarget = e
+        if (p.S !in ATTACK_ANIMS) return false
+    } else {
+        if (p.S !in ATTACK_ANIMS) return false
+        if (kotlin.math.abs(e.ak - p.ak) > 160 ||
+            kotlin.math.abs(e.al - p.al) > 20) return false
+        if (!w.iBf && (w.lockTarget == null || w.lockTarget === e) &&
+            p.S == 67) {
+            if (w.lockTarget == null) w.lockTarget = e
+            w.iBf = true
+        }
+    }
+    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X)) return false
+    e.av = p.ak < e.ak                                          // Q()
+    val au = w.weaponSlot
+    if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217) {
+        e.aB -= JD[au]
+        if (e.ax == 11 && (p.S == 216 || p.S == 217)) {
+            e.aB = 0
+            e.ag = if (e.av) 5120 else -5120
+            e.ai = if (e.av) -2560 else 2560
+            if (e.S == 85) return true
+            e.spawnFx8(w, 50, 1, e.av, e.ak, e.al - 40, 300)
+            if (w.kBK) e.spawnFx8(w, 59, 1, e.av, e.ak, e.al - 40, 300)
+            e.hitAnimByType(85, 157)
+            if (e.Z[0] == 0) e.aB = 30
+            e.resolvePush(w)
+            w.sfx(13)
+            return true
+        }
+    } else if (e.ax == 11 && e.Z[0] == 2) {
+        e.aB -= BW73[au]
+    } else if (e.ax != 73) {
+        if (p.S == 67) e.av = p.ak < e.ak
+        if (e.ax == 11 && e.Z[0] == 0 && e.aB == BU73[au] / 2) {
+            w.iX++
+            if (w.iX % 3 == 0) {
+                if (p.S != 8) { p.setAnim(8); w.kE?.let { it.P = it.P or 128 } }
+                if (e.S == 17) return false
+                e.aC = 16; e.setAnim(17); e.resolvePush(w)
+                return false
+            }
+        }
+        e.aB -= H0                                              // H[au]
+    } else if (p.S == 286 || p.S == 287) {
+        e.aB -= II73[au]
+    } else {
+        e.aB -= BW73[au]
+    }
+    if (e.ax != 11 || e.Z[0] != 0 || e.aB > H0 || e.S == 85) {
+        return e.hitReact(w)                                    // C()
+    }
+    e.spawnFx8(w, 50, 1, e.av, e.ak, e.al - 40, 300)
+    if (w.kBK) e.spawnFx8(w, 59, 1, e.av, e.ak, e.al - 40, 300)
+    e.hitAnimByType(85, 157)
+    e.resolvePush(w)
+    w.sfx(13)
+    return true
+}
 
 // ============================================================ ax17 = aA()
 // The civilian (16 records across packs 8/9/11; shares clip-7 with the
@@ -7129,7 +7278,7 @@ private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
 /** `i.S()` (i.java:9253, proven): `repeat(3){ m(-1); k.o(5); k.s() }` —
  *  wisp burst + stat + shake, shared by every k() kill arm. */
 private fun wispBurst(e: Entity, w: LevelCellSource) {
-    repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.shake() }
+    repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.kCollectStreak() }
 }
 
 /** `i.k()` (i.java:2057-2255, proven): the shared stealth-kill driver.
