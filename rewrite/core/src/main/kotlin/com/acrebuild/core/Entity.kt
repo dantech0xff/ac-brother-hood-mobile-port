@@ -2676,6 +2676,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return true
     }
 
+    /** `i.at()` (i.java:6174, proven): "settled" — false only for a
+     *  live ax11 still at S 0/85/20/176; otherwise `P()` (dead check,
+     *  deactivating). Consumed by the ax10 S29 release-zone gate. */
+    fun atDone(): Boolean {
+        if (ax == 11 && (S == 0 || S == 85 || S == 20 || S == 176))
+            return false
+        return deadRelease()
+    }
+
     /**
      * `i.S()` (i.java:7276, proven): the victim-payoff tick inside the
      *  S183/184 assassination arm — three bursts of `m(-1)` wisp spawn,
@@ -4330,6 +4339,24 @@ interface LevelCellSource {
      *  ax9-S4 is the live producer (`aC=-1` while touching). */
     var kAB: String? get() = null; set(_) {}
     var kAC: Int get() = 0; set(_) {}
+    /** `k.aZ` (k.java:252 `boolean`, proven) — persisted flag byte 68
+     *  (`j.a(k.bA,68,aZ?1:0)` save at i.java:13494/17286; `aZ = bA[68]!=0`
+     *  restore at k.java:5197). Written by the ax10 S6/S7 zone arms. */
+    var kAZ: Boolean get() = false; set(_) {}
+    /** `k.b(int,int,int,int)` (k.java:350, proven) — checkpoint-map
+     *  marker: `u=slot` (8 = checkpoint kind), expands `d(level,row)`
+     *  entries into the `w` region; `i3==-1 → false` (no start row). */
+    fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean = false
+    /** `k.bQ` (k.java:140 `private static boolean`, proven) — the
+     *  checkpoint-map "region dirty" flag `k.b()` sets; consumed by the
+     *  map screen (unported there — flag tracked for parity). */
+    var kBQ: Boolean get() = false; set(_) {}
+    /** `e.b()` (e.java:87, proven) — stop the current audio track.
+     *  (`k.w()` 0-arg, k.java:5707.) */
+    fun audioStop() {}
+    /** `e.a(n,false)` (e.java:50-87, proven) — start audio track n
+     *  (`k.z(n)`/`k.A(n)`, k.java:5696-5705; `A` delegates to `z`). */
+    fun audioTrackPlay(n: Int) {}
     /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
     var kAR: Int
     /** `k.bu` — level pixel height used by the `aR` row formula. */
@@ -4393,9 +4420,11 @@ interface LevelCellSource {
     var iAJ: Int get() = 0; set(_) {}
     /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
     var kBj: Int get() = 0; set(_) {}
-    /** `k.X`/`k.W`/`k.aw` — time-scale statics touched by b(int)/O(). */
+    /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by
+     *  b(int)/O(). `k.V` is the camera-watch x (k.java:49 `-7`). */
     var kX: Int get() = 0; set(_) {}
     var kW: Int get() = 0; set(_) {}
+    var kV: Int get() = 0; set(_) {}
     var kAw: Int get() = 0; set(_) {}
     /** `k.ae` (k.java:97) — the player's current link entity: the bI ax5
      *  arm rebinds it to `aS` (or `g.a` when that entity's ax==43); `ai()`
