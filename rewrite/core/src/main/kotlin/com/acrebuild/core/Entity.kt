@@ -2978,6 +2978,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     companion object {
+        /** `i.j(i)` (i.java:5926, proven): static dead check — null →
+         *  true; ax ∈ {11,17,29,27} → the member's `P()` (side-effect
+         *  release); any other type → false. Consumed by the ax37 Z[2]
+         *  linked-entity gate. */
+        fun isDeadCheck(other: Entity?): Boolean {
+            if (other == null) return true
+            return when (other.ax) {
+                11, 17, 29, 27 -> other.deadRelease()
+                else -> false
+            }
+        }
+
         val ZERO_RECT = IntArray(4)
         /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
          *  (written by `o()`, read by `b(x,y)` :9829). */

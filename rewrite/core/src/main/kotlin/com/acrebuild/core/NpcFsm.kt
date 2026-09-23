@@ -1367,11 +1367,11 @@ class NpcFsm(val world: LevelCellSource) {
             32 -> {
                 if (rectsOverlap(player.W, e.W)) {
                     if (player.ac == null) {
-                        player.ac = e                                  // L18f0
+                        player.bindAc(e)                               // aS.a(r7) — bind + P|256
                         player.setAnim(38)                             // i(38)
                         w.clearLatches()                               // k.v()
                     }
-                } else if (player.ac === e) player.ac = null           // L1920
+                } else if (player.ac === e) player.bindAc(null)        // aS.a(null) — unbind + P&~256
                 if (player.ac === e) {
                     val dx = Math.abs(player.ak - ((e.W[0] + e.W[2]) shr 1))
                     val hw = (e.W[2] - e.W[0]) shr 1
