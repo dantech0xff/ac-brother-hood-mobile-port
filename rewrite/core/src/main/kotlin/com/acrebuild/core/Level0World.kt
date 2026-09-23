@@ -125,6 +125,10 @@ class Level0World(
 
     override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
+    /** `k.bd[]`/`k.be` (k.java:97/2492, proven): per-frame draw list —
+     *  entities sorted into draw order by `d(i)` each frame. */
+    val drawList = arrayOfNulls<Entity>(600)
+    var drawCount = 0
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
 
     // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
@@ -1263,6 +1267,69 @@ class Level0World(
      *  117..230px above camB, then `O+=l(cA-O,4); P+=l(cB-P,30)`.
      *  Dead code on level 0 (bh=4); reachable via tests.
      */
+    /** `k.b(z2)` draw-pass bubble arm (k.java:2927, proven): `(z2==0 &&
+     *  (ax!=11 && ax!=17 || aB>0)) → iVar2.ad()`. The ax!=11/17 half is
+     *  already ticked per-sim-tick; this call adds the `aB>0` soldier/
+     *  civilian increment during the draw pass. */
+    fun drawPassBubble(e: Entity) {
+        npcFsm.tickBubble(e, this)
+    }
+
+    /** `k.d(i)` (k.java:2492-2505, proven): insert `e` into `bd[]`
+     *  sorted by `az` ASCENDING (insert before first `bd[i].az >= e.az`;
+     *  ties keep `al` ASCENDING via the `iVar.al > bd[i].al` skip). */
+    private fun drawInsert(e: Entity) {
+        var i = 0
+        while (i < drawCount && drawList[i]!!.az < e.az) i++
+        while (i < drawCount && drawList[i]!!.az == e.az && e.al > drawList[i]!!.al) i++
+        var i2 = drawCount
+        while (i2 > i) { drawList[i2] = drawList[i2 - 1]; i2-- }
+        drawList[i] = e
+        drawCount++
+    }
+
+    /** `k.b(z2)` draw-list build (k.java:2861-2902, proven): `be=0` then
+     *  the visibility arms — `(P&128)==0 || ax==10 || ax==51` gate;
+     *  `aw==205 && S==34` force-draw; `v()`-in-play + `bh3||ay==-1` gate
+     *  (ax14 `S==38` → `az=301` + `ae` child when `(ae.P&128)==0` →
+     *  `d(ae)` + `ae.s()`); else `P&16` arms: ax15 `S==9||S==10`, ax9
+     *  `S==5`, ax14 `S==74`, ax66. Player appended last via the same
+     *  `aS` block. */
+    fun buildDrawList() {
+        drawCount = 0
+        for (i31 in npcs.indices) {
+            val e = npcs[i31]
+            if ((e.P and 128) == 0 || e.ax == 10 || e.ax == 51) {
+                if (e.aw == 205 && e.S == 34) {
+                    drawInsert(e)
+                } else if (e.inPlayV(this)) {
+                    if (missionBh() != 3 || e.ay == -1) {
+                        if (e.ax == 14 && e.S == 38) e.az = 301
+                        drawInsert(e)
+                        val ae = e.ae
+                        if (ae != null && (ae.P and 128) == 0) {
+                            drawInsert(ae); ae.advanceAnim()
+                        }
+                    }
+                } else if ((e.P and 16) != 0) {
+                    when {
+                        e.ax == 15 && (e.S == 9 || e.S == 10) -> drawInsert(e)
+                        e.ax == 9 && e.S == 5 -> drawInsert(e)
+                        e.ax == 14 && e.S == 74 -> drawInsert(e)
+                        e.ax == 66 -> drawInsert(e)
+                    }
+                }
+            }
+        }
+        if ((player.P and 128) == 0) {
+            drawInsert(player)
+            val ae = player.ae
+            if (ae != null && (ae.P and 128) == 0) {
+                drawInsert(ae); ae.advanceAnim()
+            }
+        }
+    }
+
     private fun kD() {
         val c = kC                                                       // L7-L12
         if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
