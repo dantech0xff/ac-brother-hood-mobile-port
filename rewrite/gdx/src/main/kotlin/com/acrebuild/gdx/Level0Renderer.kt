@@ -811,6 +811,70 @@ class Level0Renderer {
             footer(world, "", world.d0(18))
         }
 
+        // -- b(z2) overlay tail (k.java:3166-3253) -------------------------
+
+        // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
+        // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
+        // surface. `volPaintRect` records the painted rect, not pixels —
+        // drawn as a bordered mini-rect.
+        world.volPaintRect?.let { r ->
+            outlineAr(198 - r[2], 5, r[2], r[3], -256)   // 0xFFFFFF00 (compositor's border :20159)
+        }
+
+        // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
+        // stripe letterbox — `an` grows `fn` stripes (top `fm*fn`, bottom
+        // mirrored), the finishing frame is one solid black fill; `ao`
+        // shrinks to the `120-((fl-fn)*fm)` / `120-((fl-fn-1)*fm)` bars.
+        if (world.kAn) {
+            val h = world.kFn * world.kFm
+            fillAr(0, 0, 400, h, -16777216)
+            fillAr(0, 240 - h, 400, h, -16777216)
+        }
+        if (world.fadeSolidFrame) {
+            fillAr(0, 0, 400, 240, -16777216)
+            world.fadeSolidFrame = false
+        }
+        if (world.kAo && world.kFn >= 0) {
+            val h1 = 120 - ((world.kFl - world.kFn) * world.kFm)
+            val h2 = 120 - ((world.kFl - world.kFn - 1) * world.kFm)
+            fillAr(0, 0, 400, h1, -16777216)
+            fillAr(0, 120 + ((world.kFl - world.kFn - 1) * world.kFm),
+                   400, h2, -16777216)
+        }
+
+        // `i.bh` damage vignette (k.java:3190-3202, proven): red edges
+        // alpha `(255*fs)/100` while the hit-lock holds in play.
+        if (world.iBh > 0 && world.jC == 8) {
+            val argb = (((255 * world.kFs) / 100) shl 24) or 0xff0000
+            fillAr(5, 0, 390, 5, argb); fillAr(5, 235, 390, 5, argb)
+            fillAr(0, 0, 5, 240, argb); fillAr(395, 0, 5, 240, argb)
+        }
+
+        // `av`/`aw`/`dz` cinematic letterbox (k.java:3203-3218, proven):
+        // black bars of height dz, top + mirrored bottom.
+        if (world.jC != 14 && world.kDz > 0) {
+            fillAr(0, 0, 400, world.kDz, -16777216)
+            fillAr(0, 240 - world.kDz, 400, world.kDz, -16777216)
+        }
+
+        // `i.bJ` flicker line (k.java:3239, inferred): `y.l(0)` +
+        // `y.a(cd, null, wrap(y,null,320), 200,50, 0,4,17,-1)` — a null-
+        // string wrapped draw; no visible glyph body. Early-return on the
+        // zeroing frame (`tailSkipFrame`) skips the aU bar.
+
+        // `aU` grab-QTE meter (k.java:3241-3253, proven): white outline
+        // (120,215,125,11) + fill `(125*aU.aB)/800 - 1` px — red when
+        // `aB>300 || j.g%3==0` else amber 0xFFBF00.
+        val aU = world.kAU
+        if (aU != null && (aU.P and 32) == 0 && world.iBy > 0 &&
+            !world.tailSkipFrame) {
+            outlineAr(120, 215, 125, 11, -1)
+            val fw = (125 * aU.aB) / 800
+            fillAr(121, 215, fw - 1, 10,
+                   if (aU.aB > 300 || world.jG % 3L == 0L) -65536
+                   else -16512)                                  // 0xFFBF00
+        }
+
         // k.l(21) modal dialog — the original suspends the sim behind a
         // drawn dialog box (i.java:20190-20240, j.d text panel); port draws
         // a bottom dialog box so the freeze is visible (panel `inferred`,

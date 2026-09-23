@@ -968,6 +968,28 @@ class Level0World(
     override var kJ: Int get() = lastMoveX; set(v) { lastMoveX = v }
     override var kK: Int get() = lastMoveY; set(v) { lastMoveY = v }
     override var kAn = false                   // k.an fade flag
+    override var iBJ = 0                       // i.bJ flicker latch
+    override var iBH = 1                       // i.bH (init 1, i.java:195)
+    override var iBI = 2                       // i.bI (init 2, i.java:196)
+    override var iBL = 0                       // i.bL — vestigial no-op
+    /** `k.bI`/`k.fk` (k.java:313-314, proven): fade ramp timer + step.
+     *  `B(i)`/`C(i)` arms set fk=26 (:5738-5750); init 4. */
+    var kBI = 0
+    var kFk = 4
+    /** `k.fn`/`k.fl`/`k.fm` (k.java:315-317, proven): stripe-letterbox
+     *  counter/limit/height — `aa()` ramps fn to fl=9 stripes of fm=13px. */
+    var kFn = 0
+    val kFl = 9
+    val kFm = 13
+    /** `k.fs` (k.java:323, proven): `i.bh` vignette alpha counter, init
+     *  80, counts down by 10 and wraps to 80. */
+    var kFs = 80
+    /** One-frame solid-black latch for the an-fade completion frame
+     *  (k.java:3171-3174 `setColor(0); j.b(0,0,400,240); an=false`). */
+    var fadeSolidFrame = false
+    /** The `i.bJ==i.bI && i.bL<=20` early-return in b(z2) (k.java:3231-
+     *  3238) — skips the aU-bar draw for the frame that zeroes i.bJ. */
+    var tailSkipFrame = false
     /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
      *  ported as the last-painted rect, `inferred`). */
     override var volPaintRect: IntArray? = null
@@ -2849,7 +2871,75 @@ class Level0World(
         if (kAO < 0 || kAP == null) kAP = null
         // weapon-corner latch (k.java:4277): at==1 → 0 inside the gate
         if (weaponCornerArmed() && kAt == 1) kAt = 0
+        overlayTailStep()
     }
+
+    /** The `b(z2)` draw-tail counters (k.java:3166-3239, proven) — the
+     *  original mutates these inside the HUD draw, one step per frame;
+     *  the tick's 62ms cadence is the same clock. The renderer reads the
+     *  post-step values to draw (Level0Renderer overlay tail). */
+    private fun overlayTailStep() {
+        // `an` fade-in (k.java:3166-3174): ramp bI; each in-ramp step runs
+        // `aa()`'s `fn++` grow arm (:5724-5734) — the stripe letterbox IS
+        // the fade. Ramp done → one solid-black frame, `an=false`.
+        if (kAn) {
+            if (kBI < 0) kBI = 0
+            if (kBI <= 255 - kFk) {
+                kBI += kFk
+                kFn++
+                if (kFn > kFl) kFn = kFl
+            } else {
+                kAn = false
+                fadeSolidFrame = true
+            }
+        }
+        // `ao` fade-out (k.java:3175-3188): ramp bI down; `aa()`'s `!an`
+        // arm (:5716-5727) decrements fn — bars recede; fn may reach -1
+        // (nothing drawn) while bI still drains — verbatim.
+        if (kAo) {
+            if (kBI > 255) kBI = 255
+            if (kBI >= kFk) { kBI -= kFk; kFn-- } else kAo = false
+        }
+        // `i.bh` vignette counter (k.java:3190-3202): `fs` counts 80→0
+        // by -10 and wraps to 80 while the hit-lock holds in play.
+        if (iBh > 0 && jC == 8) {
+            kFs -= 10
+            if (kFs <= 0) kFs = 80
+        }
+        // `av`/`aw`/`dz` cinematic letterbox (k.java:3203-3218): `av`
+        // opens to 120 by +20; else dz chases aw by ±20 (snap inside 20).
+        if (jC != 14) {
+            if (kAv) {
+                if (kDz < 120) kDz += 20
+            } else if (kAw != kDz) {
+                val diff = kAw - kDz
+                if (diff <= -20 || diff >= 20) kDz += if (diff > 0) 20 else -20
+                else kDz = kAw
+            }
+        }
+        // `i.bJ` flicker (k.java:3219-3238 + k.javap.txt:16541-16599,
+        // proven — `i.bL` is a verbatim no-op `x=x`, not a counter):
+        // bJ==bH && bL>=0 → bJ=bI; bJ==bI && bL<=20 → bJ=0 + early return
+        // (skips the aU bar that frame — `tailSkipFrame` carries it).
+        tailSkipFrame = false
+        if (iBJ > 0) {
+            if (iBJ == iBH) {
+                if (iBL >= 0) iBJ = iBI
+            } else if (iBJ == iBI) {
+                if (iBL <= 20) { iBJ = 0; tailSkipFrame = true }
+            }
+        }
+    }
+
+    /** `k.B(i)` (k.java:5738-5743, proven): fade-IN arm — `an`, ramp
+     *  from 0, step 26 (i is ignored verbatim). Called by `i.bh()`'s
+     *  door-exit arm (i.java:14434). */
+    fun fadeIn() { kAn = true; kAo = false; kBI = 0; kFk = 26 }
+
+    /** `k.C(i)` (k.java:5745-5750, proven): fade-OUT arm — `ao`, ramp
+     *  from 255, step 26 (i ignored). Called by `i.bi()`'s door-arrival
+     *  arm (i.java:14448). */
+    fun fadeOut() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
 
     /** `i.o()` (i.java:5423): player alive-and-acting —
      *  S ∉ {2,20..29}. */
