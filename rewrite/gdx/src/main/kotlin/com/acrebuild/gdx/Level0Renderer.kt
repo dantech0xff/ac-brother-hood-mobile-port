@@ -37,6 +37,11 @@ class Level0Renderer {
     private lateinit var batch: SpriteBatch
     private lateinit var white: Texture
     private lateinit var font: BitmapFont
+    /** `bW`/`y` = pack-1 entries 1/3 (k.java:3966-3967) — the game's two
+     *  bitmap fonts. Glyph ids index each clip's OBJECT space (shared
+     *  charmap `j.f(2)` = pack-1 entry-2). `l()` → palette variant. */
+    private lateinit var fontW: com.acrebuild.core.FontClip
+    private lateinit var fontY: com.acrebuild.core.FontClip
 
     // (module index, palette slot) -> TextureRegion, per pack id.
     // palette-00 is canonical (clip.moduleNames); palette-NN siblings are
@@ -56,6 +61,10 @@ class Level0Renderer {
             white = Texture(this); dispose()
         }
         clips = world.clips
+        val charmap = com.acrebuild.core.FontClip.loadCharmap(
+            Gdx.files.internal("fonts/charmap.bin").readBytes())
+        fontW = com.acrebuild.core.FontClip(clips[91]!!, charmap, 4)
+        fontY = com.acrebuild.core.FontClip(clips[92]!!, charmap, 4)
         for ((packId, clip) in clips) {
             val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
@@ -76,6 +85,18 @@ class Level0Renderer {
         }
     }
 
+    /** `y.a(cd, str, x, y, align)` / `bW.a(...)` — real glyph text:
+     *  glyph ids index the font clip's OBJECT space (composite draw
+     *  via the placement pool). `pack` 91 = bW (title), 92 = y (body). */
+    private fun drawText(str: String, x: Int, y: Int, align: Int,
+                         palette: Int = -1, pack: Int = 92) {
+        val f = if (pack == 91) fontW else fontY
+        if (palette >= 0) f.palette = palette
+        f.draw(str, x, y, align) { g, gx, gy, pal ->
+            drawObject(pack, g, gx, gy, 0, 0, pal)
+        }
+    }
+
     /**
      * Draw module `m` of clip `pack` with J2ME `Sprite.TRANS_*` `transform`
      * (`b` uses `aQ[i & 7]`). J2ME draws the *transformed* image's top-left
@@ -85,14 +106,16 @@ class Level0Renderer {
      * FBO space is y-up vs J2ME y-down: screen-CW rotations are CCW here.
      */
     private fun moduleRegion(pack: Int, m: Int, palette: Int): TextureRegion? {
-        val base = clipModules[pack]?.getOrNull(m) ?: return null
+        val base = (clipModules[pack] ?: clipModules[-pack])
+            ?.getOrNull(m) ?: return null
         if (palette <= 0) return base
         val pal = clipPalettes.getOrPut(pack) { HashMap() }
         return pal.getOrPut(m or (palette shl 16)) {
-            val clip = clips[-pack] ?: return base   // tilesets use neg keys
-            val dir = when (pack) {
-                else -> "level0/tileset-${-pack}/modules"    // negated keys
-            }
+            // clips map mixes positive entity keys + negative tileset
+            // keys — accept both conventions at the lookup.
+            val clip = clips[pack] ?: clips[-pack] ?: return base
+            val dir = if (pack >= 0) "clips/clip$pack/modules"
+                      else "level0/tileset-${-pack}/modules"
             val variant = clip.moduleNames[m]
                 .replace("-palette-00-", "-palette-%02d-".format(palette))
             val fh = Gdx.files.internal("$dir/$variant")
@@ -105,7 +128,7 @@ class Level0Renderer {
 
     private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
         val src = moduleRegion(pack, m, palette) ?: return
-        val (w, h) = clipDims[pack]!![m]
+        val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
         val t = transform and 7
         val region = TextureRegion(src)
         var rot = 0f
@@ -138,7 +161,7 @@ class Level0Renderer {
      * caller's flip word (2-bit on tiles, `P & 7` on entities).
      */
     private fun drawObject(pack: Int, obj: Int, x: Int, y: Int, flags: Int, depth: Int = 0, palette: Int = 0) {
-        val clip = clips[-pack] ?: return        // tilesets use neg keys
+        val clip = clips[pack] ?: clips[-pack] ?: return
         if (obj < 0 || obj >= clip.objPlaceStart.size || depth > 4) return
         val count = clip.objPlaceCount[obj]
         if (count == 0) {
@@ -166,7 +189,7 @@ class Level0Renderer {
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
-        val clip = clips[-pack] ?: return        // tilesets use neg keys
+        val clip = clips[pack] ?: clips[-pack] ?: return
         if (cell >= clip.objPlaceStart.size) return
         // tile cells sit on a 20px grid: +20 anchor compensation on the
         // mirrored axes (k.java:4476-4490)
@@ -303,38 +326,24 @@ class Level0Renderer {
             batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
             batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
             batch.setColor(1f, 1f, 1f, 1f)
-            world.d0(60)?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          (H - ty).toFloat())
-            }
-            // row labels + right-aligned values
-            font.setColor(1f, 1f, 1f, 1f)
+            world.d0(60)?.let { t -> drawText(t, 200, ty, 1) }
+            // row labels (x=95, align 20) + values right-aligned x=305 (24)
             for (i3 in 0..4) {
                 val v = world.statsRowText[i3]
                 if (v.isEmpty()) continue
-                world.d0(38 + i3)?.let { t ->
-                    font.draw(batch, t, 95f, (H - 55 - i3 * 20).toFloat())
-                }
-                font.draw(batch, v, 305f - v.length * 7f,
-                          (H - 55 - i3 * 20).toFloat())
+                world.d0(38 + i3)?.let { t -> drawText(t, 95, 55 + i3 * 20, 20) }
+                drawText(v, 305, 55 + i3 * 20, 24)
             }
             // total row (y=175, one-shot after jG>10)
             if (world.statsScoreVisible) {
-                world.d0(43)?.let { t ->
-                    font.draw(batch, t, 95f, (H - 175).toFloat())
-                }
-                val t = world.fmtJ(world.statsScore)
-                font.draw(batch, t, 305f - t.length * 7f,
-                          (H - 175).toFloat())
+                world.d0(43)?.let { t -> drawText(t, 95, 175, 20) }
+                drawText(world.fmtJ(world.statsScore), 305, 175, 24)
             }
             // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
             if (world.statsTypeNext >= 0) {
                 val t = (world.d0(16) ?: "NEXT") + " " +
                         world.typewriterText
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, t, 390f - t.length * 7f,
-                          (H - 222).toFloat())
-                font.setColor(1f, 1f, 1f, 1f)
+                drawText(t, 200, 222, 3)
             }
         }
 
@@ -353,15 +362,10 @@ class Level0Renderer {
             batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.posterBrief.isNotEmpty()) {
-                font.draw(batch, world.posterBrief, 20f, (H - 150).toFloat())
+                drawText(world.posterBrief, 200, 150, 3)
             }
             if (world.hintBlink) {
-                world.d0(9)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 200f - t.length * 3.5f,
-                              (H - 220).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }
         }
 
@@ -374,11 +378,7 @@ class Level0Renderer {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 0f, 0f, 400f, 240f)
             if (world.medalTitle.isNotEmpty()) {
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, world.medalTitle,
-                          210f - world.medalTitle.length * 3.5f,
-                          (H - 43).toFloat())
-                font.setColor(1f, 1f, 1f, 1f)
+                drawText(world.medalTitle, 210, 43, 17, pack = 91)
             }
             batch.setColor(0.08f, 0.07f, 0.1f, 0.95f)
             batch.draw(white, 114f, (H - 59 - 155).toFloat(), 172f, 155f)
@@ -396,11 +396,7 @@ class Level0Renderer {
                     batch.draw(white, 122f, ry + 12f, 16f, 16f)
                 }
                 val t = world.medalRowText[i]
-                if (t.isNotEmpty()) {
-                    batch.setColor(1f, 1f, 1f, 1f)
-                    font.setColor(1f, 1f, 1f, 1f)
-                    font.draw(batch, t, 146f, ry + 26f)
-                }
+                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6)
             }
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.screenFadeAlpha > 0) {
@@ -410,20 +406,10 @@ class Level0Renderer {
                 batch.setColor(1f, 1f, 1f, 1f)
             }
             if (world.hintBlink && !world.hintBack) {
-                world.d0(9)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 200f - t.length * 3.5f,
-                              (H - 220).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }
             if (world.hintBack) {
-                world.d0(17)?.let { t ->
-                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                    font.draw(batch, t, 390f - t.length * 7f,
-                              (H - 222).toFloat())
-                    font.setColor(1f, 1f, 1f, 1f)
-                }
+                world.d0(17)?.let { t -> drawText(t, 390, 222, 24) }
             }
         }
 

@@ -73,6 +73,8 @@ CLIPS = {
     "clip45": ("pack-3", "entry-045-marker-003"),  # ax40 zipline gondola (bi[40]=45)
     "clip62": ("pack-3", "entry-062-marker-003"),  # ax35 multi-tool (bi[35]=62)
     "clip3": ("pack-3", "entry-003-marker-003"),   # ax4 destructibles (bi[4]=3)
+    "clip91": ("pack-1", "entry-001-marker-130"),  # bW = J(1) font (k.java:3966)
+    "clip92": ("pack-1", "entry-003-marker-130"),  # y  = J(3) font (k.java:3967)
     "clip7": ("pack-3", "entry-007-marker-130"),   # shared NPC family
     "clip9": ("pack-3", "entry-009-marker-003"),   # k.c marker popup (ax14 S54)
     "clip32": ("pack-3", "entry-032-marker-003"),  # ax44 door/gate (bi[44]=32)
@@ -129,10 +131,9 @@ def pack_clip(pack, entry_dir, out_dir):
         pngs = sorted((SPR / pack / entry_dir).glob(
             f"module-{m['index']:04d}-palette-*-*.png"))
         if not pngs:
-            # aU==2 = non-pixel module (vector/marker group): the decoder
-            # emits no PNG by design. Keep an empty-name slot so module
-            # indexing stays aligned; renderers skip empty names.
-            assert m.get("runtime_type_aU") == 2, (
+            # aU 2/5 = non-pixel modules (vector/metric carriers): no PNG
+            # by design — keep an empty-name slot so indexing stays aligned.
+            assert m.get("runtime_type_aU") in (2, 5), (
                 f"missing pngs for module {m['index']} in {entry_dir}")
             module_pngs.append(("", m["ae_width"], m["af_height"]))
             continue
