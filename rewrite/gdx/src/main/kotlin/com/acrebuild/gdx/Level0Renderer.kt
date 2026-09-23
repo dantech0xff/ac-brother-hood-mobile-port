@@ -668,6 +668,20 @@ class Level0Renderer {
             drawOverlayTail(world, e, camX, camY)
         }
 
+        // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
+        // scissor + full-screen fill `df` (the damage flash; sim side
+        // ticks `bJ--` + recomputes the ARGB ramp — k.java:2522-2526).
+        if (world.kBJ > 0 && world.kDe) {
+            val df = world.kDf
+            batch.setColor(((df ushr 16) and 0xFF) / 255f,
+                           ((df ushr 8) and 0xFF) / 255f,
+                           (df and 0xFF) / 255f,
+                           ((df ushr 24) and 0xFF) / 255f)
+            batch.draw(white, 0f, 0f, Level0World.VIEW_W.toFloat(),
+                       Level0World.VIEW_H.toFloat())
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
+
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
         // color) + thin track. FBO is y-up: y6-top bar → VIEW_H-6-20.
@@ -678,6 +692,29 @@ class Level0Renderer {
         batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
+
+        // z[74] touch-controls overlay (k.java:3142-3161, proven):
+        // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at
+        // (cn,134) with pressed-sector art `i55`, plus the two radial
+        // action buttons (270,165)=9/10 and (320,110)=11/12 when !bh3.
+        if (world.touchPadVisible()) {
+            val cn = world.padCn
+            val iC = if (world.padPressed()) world.padZone() else -1
+            drawObject(74, world.padZoneFrame(iC), cn, 134, 0)
+            if (!world.bh3) {
+                drawObject(74, if (world.padButton(270, 165)) 10 else 9,
+                           270, 165, 0)
+                drawObject(74, if (world.padButton(320, 110)) 12 else 11,
+                           320, 110, 0)
+            }
+        }
+
+        // claim footer (k.java:3164, proven): `C!=null && (C.ab()||u==9)
+        // && C.cd[2]` → `a("", d(0,18))` — right-pill "context" softkey.
+        val kC = world.kC
+        if (kC != null && (kC.claimActive() || world.subU == 9) && kC.cd[2]) {
+            footer(world, "", world.d0(18))
+        }
 
         // k.l(21) modal dialog — the original suspends the sim behind a
         // drawn dialog box (i.java:20190-20240, j.d text panel); port draws

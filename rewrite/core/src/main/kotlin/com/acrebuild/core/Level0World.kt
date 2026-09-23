@@ -275,9 +275,20 @@ class Level0World(
     /** `k.al == false` (i.I() entity gate): the real world-run condition
      *  — false on states {12,13,16,17,31} and {21 when kMode∉{8,9}}. */
     override val inPlay: Boolean get() = !kAl
-    /** `k.cm` — mounted flag (k.k() at k.java:638; `cm=true` writes 1 at
-     *  g.java:3564). */
-    var cm = 0
+    /** `k.cm` — the `k()` touch-controls flag (k.java:159 `cm = 1` +
+     *  :549 `cm == 1`; cheat op 123 toggles `cm = 1 - cm`, k.java:3937).
+     *  When set, `j()`/the `z[74]` overlay drive the on-screen D-pad +
+     *  action buttons; cleared = the player-relative invisible wheel.
+     *  (The `mounted` accessor name is historical — it IS `k()`.) */
+    var cm = 1
+    /** `k.bJ`/`k.de`/`k.df` (k.java:194-195/318, proven) — the full-screen
+     *  damage flash: `I()` ticks `bJ--` and recomputes `df` as an ARGB
+     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the only
+     *  producer so far is the boss-grab `k.bJ = 6` (i.java:8869, arm
+     *  unported). `de` clears in `f()` reload (k.java:5131). */
+    var kBJ = 0
+    var kDe = false
+    var kDf = -1
     override val mounted: Boolean get() = cm == 1
     override fun setMounted() { cm = 1 }
     /** `k.H`/`k.I` — the pointer-RELEASE point in view px (-1 = none).
@@ -2562,6 +2573,7 @@ class Level0World(
         spawnEntities()
         jC = 8                                   // back to play (j.c==8)
         kAl = false
+        kDe = false                               // f() `de=false` (:5131)
         kM(kAd)                                   // C()/f() `m(ad)` snap
     }
 
@@ -2675,7 +2687,7 @@ class Level0World(
     /** `c(x,y,x1,x2,y1,y2)` (k.java:623, proven): the wheel cell index
      *  0..8 — 3×3 split at the rect bounds; mounted widens the inner
      *  column split (inner halves → 3/5). */
-    private fun wheelCell(x: Int, y: Int, x1: Int, x2: Int, y1: Int, y2: Int): Int {
+    fun wheelCell(x: Int, y: Int, x1: Int, x2: Int, y1: Int, y2: Int): Int {
         if (x == -1 && y == -1) return -1
         val i7 = if (y < y1) 0 else if (y > y2) 2 else 1
         val i8 = if (x < x1) 0 else if (x > x2) 2 else 1
@@ -2700,8 +2712,9 @@ class Level0World(
         val p = player
         if (mounted) {                                          // k()
             if (!bh3) {
-                if (insideRadial(x, y, 270, 165, 70)) return 4
-                if (insideRadial(x, y, 320, 110, 70)) return 1
+                // b(x,y,cx,cy,70) = a(x,y,cx+35,cy+35,35) — r35 at box center
+                if (insideRadial(x, y, 270 + 35, 165 + 35, 35)) return 4
+                if (insideRadial(x, y, 320 + 35, 110 + 35, 35)) return 1
             }
             val cn = if (bh3) 50 else 5                          // k.java:3146
             if (!insideRect(x, y, cn - 10, 124, 116, 116)) return -1
@@ -2728,9 +2741,42 @@ class Level0World(
         return wheelCell(x, y, i6, i6 + 50, (p.W[1] - camY) - 10, (p.W[3] - camY) + 10)
     }
 
+    // -- z[74] touch-controls overlay (k.java:3142-3161, proven) ----------
+    /** `cn` — pad x-offset: 50 under `bh[aj]==3`, else 5 (k.java:3146). */
+    val padCn: Int get() = if (bh3) 50 else 5
+    /** `b(J,K,cn-10,124,116,116)` — live pointer inside the pad box;
+     *  `!(x==-1 && y==-1)` guard (k.java:537). */
+    fun padPressed(): Boolean =
+        !(lastMoveX == -1 && lastMoveY == -1) &&
+            lastMoveX >= padCn - 10 && lastMoveX <= padCn - 10 + 116 &&
+            lastMoveY >= 124 && lastMoveY <= 124 + 116
+    /** `c(J,K, cn+28, cn+67, 162, 201)` — the 9-zone inner split. */
+    fun padZone(): Int = wheelCell(lastMoveX, lastMoveY,
+        (padCn - 10) + 38, (padCn - 10) + 77, 162, 201)
+    /** `i55` frame map (k.java:3148-3153, proven): zone ≠4 → `iC+1`,
+     *  `iC>4` one less; `-1`/`4` → 0. */
+    fun padZoneFrame(iC: Int): Int {
+        if (iC == -1 || iC == 4) return 0
+        return if (iC > 4) iC else iC + 1
+    }
+    /** `b(J,K,x,y,70)` 5-arg (k.java:544): `a(x,y,cx+35,cy+35,35)` —
+     *  radius-35 circle at the 70px box's center. */
+    fun padButton(cx: Int, cy: Int): Boolean =
+        lastMoveX >= 0 && insideRadial(lastMoveX, lastMoveY, cx + 35, cy + 35, 35)
+    /** The `b(z2)` gate (k.java:3142, proven): `k() && j.c∉{14,5} &&
+     *  (j.c!=21||u!=9) && (C==null||C.cb==null||C.cb[1]>=0||aS.P&512)`. */
+    fun touchPadVisible(): Boolean {
+        if (!mounted || jC == 14 || jC == 5) return false
+        if (jC == 21 && subU == 9) return false
+        val c = kC
+        return c == null || c.cb == null || c.cb!![1] >= 0 || (player.P and 512) != 0
+    }
+
     /** Canvas point guaranteed inside wheel `cell` for the current player
-     *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). */
+     *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). Forces
+     *  `cm = 0` since the player wheel is the `!k()` (touch-pad-off) arm. */
     fun cellPoint(cell: Int): Pair<Int, Int> {
+        cm = 0
         val p = player
         val x = when (cell % 3) { 0 -> (p.ak - camX) - 30; 1 -> p.ak - camX; else -> (p.ak - camX) + 30 }
         val y = when (cell / 3) { 0 -> (p.W[1] - camY) - 15; 1 -> (p.W[1] + p.W[3]) / 2 - camY; else -> (p.W[3] - camY) + 15 }
@@ -2933,6 +2979,15 @@ class Level0World(
             kD()
         }
         l142Tail()          // L142-L200 — runs on both camera arms
+
+        // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
+        // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
+        if (kBJ > 0) {
+            kBJ--
+            val c = (120 * kBJ) / 8
+            kDe = true
+            kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
+        }
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)

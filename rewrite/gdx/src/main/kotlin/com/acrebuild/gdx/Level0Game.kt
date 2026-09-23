@@ -58,6 +58,7 @@ class Level0Game : ApplicationAdapter() {
         clips[29] = Clip.load(Gdx.files.internal("clips/clip29/clip.acpk").readBytes())
         clips[60] = Clip.load(Gdx.files.internal("clips/clip60/clip.acpk").readBytes())
         clips[61] = Clip.load(Gdx.files.internal("clips/clip61/clip.acpk").readBytes())   // z[61] rope dots
+        clips[74] = Clip.load(Gdx.files.internal("clips/clip74/clip.acpk").readBytes())   // z[74] touch pad
         clips[51] = Clip.load(Gdx.files.internal("clips/clip51/clip.acpk").readBytes())
         clips[63] = Clip.load(Gdx.files.internal("clips/clip63/clip.acpk").readBytes())
         clips[20] = Clip.load(Gdx.files.internal("clips/clip20/clip.acpk").readBytes())

@@ -1386,6 +1386,7 @@ class Level0WorldTest {
 
     @Test fun `mount arm out-of-range Z3 keeps r98 out and never mounts`() {
         val w = world()
+        w.cm = 0                                             // observe the transition
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
@@ -1402,6 +1403,7 @@ class Level0WorldTest {
 
     @Test fun `mount arm spawns the clip74 hand at view center when armed`() {
         val w = world()
+        w.cm = 0                                             // !k() → hand spawns
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
@@ -1440,6 +1442,7 @@ class Level0WorldTest {
 
     @Test fun `no J bit4 means the whole arm stays inert`() {
         val w = world()
+        w.cm = 0
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0
@@ -4707,6 +4710,7 @@ class Slice43cTest {
     @Test fun `op107 normalizes the key mask and spawns the prompt`() {
         val w = scriptedWorld(
             scriptBlock(0, 0, scriptGroup(0, op107(32))))
+        w.cm = 0                                             // unmounted arm
         val e = claimer(w)
         e.runClaimScript(w)
         assertEquals(65568, e.cb!![0], "raw 32 → pad mask 65568")
@@ -9277,6 +9281,7 @@ class Slice79Test {
 
     @Test fun `marker zone eats the tap`() {
         val w = world()
+        w.cm = 0                                             // marker eat is !k() only
         val m = Entity(14, w.clips[9]).apply { setPositionPx(w.player.ak, w.player.al) }
         w.kN = m
         // tap inside the marker's 50x50 box around its position
@@ -9287,6 +9292,7 @@ class Slice79Test {
 
     @Test fun `interact anchor zone eats the tap`() {
         val w = world()
+        w.cm = 0                                             // anchor eat is !k() only
         w.setInteractAnchor(w.player.ak, w.player.al)          // i.o()
         assertEquals(-1, w.resolvePadZone(w.player.ak - w.camX, w.player.al - w.camY))
         w.clearInteractAnchor()                                // i.U()
@@ -9297,9 +9303,10 @@ class Slice79Test {
     @Test fun `mounted wheel uses 116x116 at cn-10 and radial offers`() {
         val w = world()
         w.cm = 1                                               // k() mounted
-        // !bh3 radial offer cells (k.java:589-595)
-        assertEquals(4, w.resolvePadZone(270, 165))
-        assertEquals(1, w.resolvePadZone(320, 110))
+        // !bh3 radial offer cells (k.java:589-595): b(x,y,cx,cy,70) is
+        // the r35 circle at the 70px box center (cx+35, cy+35)
+        assertEquals(4, w.resolvePadZone(305, 200))
+        assertEquals(1, w.resolvePadZone(355, 145))
         // outside the 116x116 wheel rect at (cn-10,124) → -1
         assertEquals(-1, w.resolvePadZone(300, 10))
         // inner band maps the split to 3/5 — cell4 is unreachable
@@ -9310,6 +9317,7 @@ class Slice79Test {
 
     @Test fun `bh3 remap rewrites wheel masks`() {
         val w = world()
+        w.cm = 0                                             // remap gated by !k()
         w.kAj = 1                                              // bh[1]==3 autoscroll
         assertTrue(w.bh3)
         w.pad.e(2, w.jC == 8 && w.bh3 && !w.mounted)
@@ -10470,5 +10478,125 @@ class Slice94Test {
     @Test fun `bu bv are the per-difficulty HP scales`() {
         assertTrue(Entity.WEAPON_DMG.contentEquals(intArrayOf(300, 400, 500)))
         assertTrue(Entity.NPC_HP_BV.contentEquals(intArrayOf(100, 140, 200)))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// slice 95 — b(z2) tail: z[74] touch overlay + k.bJ damage flash (k.java:3142-3161, 2516-2526)
+// ---------------------------------------------------------------------------
+class Slice95Test {
+
+    @Test fun `cm defaults to 1 - touch controls on (k java 159)`() {
+        val w = world()
+        assertEquals(1, w.cm)
+        assertTrue(w.mounted, "k() = cm==1")
+    }
+
+    @Test fun `padCn is 5 normally and 50 under bh3`() {
+        val w = world()
+        assertEquals(5, w.padCn)
+        w.kAj = 1
+        assertTrue(w.bh3)
+        assertEquals(50, w.padCn)
+        w.kAj = 0
+    }
+
+    @Test fun `padPressed mirrors b(J,K) rect hit with -1 guard`() {
+        val w = world()
+        w.lastMoveX = -1; w.lastMoveY = -1
+        assertFalse(w.padPressed(), "(-1,-1) is the no-touch sentinel")
+        w.lastMoveX = 60; w.lastMoveY = 182          // inside (-5..111, 124..240)
+        assertTrue(w.padPressed())
+        w.lastMoveX = 300
+        assertFalse(w.padPressed(), "x beyond cn-10+116")
+        w.lastMoveX = 60; w.lastMoveY = 100
+        assertFalse(w.padPressed(), "y above 124")
+    }
+
+    @Test fun `padZone classifies the 116x116 inner split mounted-style`() {
+        val w = world()
+        // top-left corner → cell0; center row split at x0/x1 halves → 3/5
+        w.lastMoveX = 0; w.lastMoveY = 130
+        assertEquals(0, w.padZone())
+        w.lastMoveX = 45; w.lastMoveY = 182          // (x0, mid] → 3
+        assertEquals(3, w.padZone())
+        w.lastMoveX = 75; w.lastMoveY = 182          // (mid, x1) → 5
+        assertEquals(5, w.padZone())
+        w.lastMoveX = 55; w.lastMoveY = 130          // top-middle → 1
+        assertEquals(1, w.padZone())
+        w.lastMoveX = 55; w.lastMoveY = 235          // bottom-middle → 7
+        assertEquals(7, w.padZone())
+        // mounted mid-row only yields 3/5 — cell4 is unreachable (the
+        // `iC==4 → i55=0` arm is dead in the original too, k.java:3148)
+        w.lastMoveX = 40; w.lastMoveY = 182
+        assertEquals(3, w.padZone())
+    }
+
+    @Test fun `padZoneFrame maps iC to the i55 object index`() {
+        val w = world()
+        assertEquals(0, w.padZoneFrame(-1))
+        assertEquals(0, w.padZoneFrame(4))
+        assertEquals(1, w.padZoneFrame(0))
+        assertEquals(4, w.padZoneFrame(3))
+        assertEquals(5, w.padZoneFrame(5))
+        assertEquals(8, w.padZoneFrame(8))
+    }
+
+    @Test fun `padButton is the r35 circle at box center not the corner`() {
+        val w = world()
+        w.lastMoveX = 305; w.lastMoveY = 200          // center of (270,165) box
+        assertTrue(w.padButton(270, 165))
+        w.lastMoveX = 270; w.lastMoveY = 165          // corner: (35,35)≈49 > 35
+        assertFalse(w.padButton(270, 165))
+        w.lastMoveX = -1; w.lastMoveY = -1
+        assertFalse(w.padButton(270, 165), "no-touch sentinel")
+    }
+
+    @Test fun `touchPadVisible honors k() and the screen gates`() {
+        val w = world()
+        assertTrue(w.touchPadVisible())
+        w.cm = 0
+        assertFalse(w.touchPadVisible(), "!k() hides the pad art")
+        w.cm = 1; w.stateL(14)
+        assertFalse(w.touchPadVisible(), "jc==14 hidden")
+        w.stateL(5)
+        assertFalse(w.touchPadVisible(), "jc==5 hidden")
+        w.stateL(21); w.subU = 9
+        assertFalse(w.touchPadVisible(), "jc21 u9 hidden")
+        w.stateL(8); w.subU = 0
+        assertTrue(w.touchPadVisible())
+    }
+
+    @Test fun `kBJ flash decrements and ramps df until zero`() {
+        val w = world()
+        w.kBJ = 6
+        w.tick(emptyList())
+        assertEquals(5, w.kBJ)
+        assertTrue(w.kDe)
+        val c = (120 * 5) / 8                          // fp·bJ/8 (k.java:2522)
+        assertEquals((255 shl 24) or (c shl 16) or (c shl 8) or c, w.kDf)
+        repeat(5) { w.tick(emptyList()) }
+        assertEquals(0, w.kBJ)
+        // f() reload clears de (k.java:5131) — driven via the fail path
+        w.kBJ = 6; w.kDe = true
+        repeat(20) {
+            w.player.applyHit(18, 0, null, w)
+            w.player.gt = 0; w.iBh = 0
+        }
+        w.tick(emptyList())
+        assertTrue(w.failed)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
+        assertFalse(w.kDe, "f() reload clears de (k.java:5131)")
+    }
+
+    @Test fun `resolvePadZone mounted arm - circles then pad box`() {
+        val w = world()
+        w.stateL(8)
+        assertEquals(4, w.resolvePadZone(305, 200))   // button A circle
+        assertEquals(1, w.resolvePadZone(355, 145))   // button B circle
+        assertEquals(3, w.resolvePadZone(45, 182))    // pad box left half
+        assertEquals(5, w.resolvePadZone(55, 182))    // mid-split → 5 (4 unreachable)
+        assertEquals(-1, w.resolvePadZone(250, 60))   // outside everything
     }
 }
