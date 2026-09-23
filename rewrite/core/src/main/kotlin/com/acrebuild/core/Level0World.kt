@@ -1564,7 +1564,7 @@ class Level0World(
     private fun menuHasSave() = kBA[15] == 1 || kBA[14] > 0
     /** `Z()` — save-slot picker (`f.a()` device call, unported); the
      *  original rewrites `eA[0][3]` ∈ {32,33,34}. Stubbed ready. */
-    private fun menuSlotReady() = true
+    private fun menuSlotReady() = hasSaveRecord
     /** `y.k(a(y,str,206)[0])` — font measure (`inferred` 18px rows). */
     private fun menuTextHeight(s: String?) = if (s == null) 0 else 18
 
@@ -1614,7 +1614,40 @@ class Level0World(
     }
 
     /** `e(true)` — RMS save flush; unported → stub (`inferred`). */
-    private fun saveFlush() { /* e(true): RecordStore commit — unported */ }
+    /** Whether the `/ASBR` RMS record exists (orig: `getNumRecords>0`).
+     *  Set on `saveLoad`/`saveFlush`; gates `Z()`/`menuSlotReady`. */
+    var hasSaveRecord = false
+
+    /** `e(true)` (k.java:5557, proven) — `setRecord(1,bA,0,512)` (or
+     *  `addRecord` when empty). Emitted as a deferred command like
+     *  every other backend effect; the record is `kBA` little-endian
+     *  shorts (orig stores shorts via `a(bA,i,s)` at byte offsets). */
+    fun saveFlush() {
+        val record = ByteArray(kBA.size * 2)
+        for (i in kBA.indices) {
+            record[i * 2] = (kBA[i] and 0xFF).toByte()
+            record[i * 2 + 1] = (kBA[i] ushr 8 and 0xFF).toByte()
+        }
+        hasSaveRecord = true
+        pendingCommands += Command.PersistBA(record)
+    }
+
+    /** `e(false)` (k.java:5557, proven) — `getRecord(1,bA,0)`; a nop
+     *  when the store is empty (null/short record → keep defaults).
+     *  Boot path also derives `eJ = bA[10]!=0`, `au = bA[8]%3`
+     *  (:4045-4052) — both already live in kBA slots here. */
+    fun saveLoad(record: ByteArray?) {
+        if (record == null || record.size < 2) return
+        val n = minOf(kBA.size, record.size / 2)
+        for (i in 0 until n) {
+            kBA[i] = (record[i * 2].toInt() and 0xFF) or
+                ((record[i * 2 + 1].toInt() and 0xFF) shl 8)
+        }
+        kEJ = kBA[10] != 0
+        kAu = kBA[8] % 3
+        if (kAu == 2 && kBA[69] == 0) kAu = 0
+        hasSaveRecord = true
+    }
     /** `f.a(str,0)` — "LOADING" overlay proc; unported → stub. */
     private fun loadingShow() { /* f.a(d(0,24),0) — unported */ }
     /** `W()` (structured :5093) — full game teardown on quit-to-menu:
