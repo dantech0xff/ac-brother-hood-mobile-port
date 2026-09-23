@@ -219,6 +219,16 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
+    private var nDl: UiAnimObject? = null             // k.dl — N() icon
+    private var nTipDj = 0                            // k.dj — tip type pos
+    private var nTipDk = 0                            // k.dk — tip hold
+
+    /** `eW[]` (k.java:299, proven) — per-mission tip index for `N()`. */
+    private val tipEW = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
+
+    /** `fP[]` (k.java:344, proven) — mission poster-boundary table for
+     *  `ag()`'s `A[4]` anim pick (`i+4`). */
+    private val posterFP = intArrayOf(0, 2, 5, 7)
     private val ROPE_COL = -3584205                    // k.b rope-line (k.java:2961)
     private val BAR_DEAD_S = intArrayOf(24, 21, 0, 139, 133, 134, 145, 135, 106, 107)
     private var menuEz = 0                            // k.ez fit-scroll
@@ -227,7 +237,7 @@ class Level0Renderer {
      *  + `j.h(MIN_VALUE); j.d` 400×68 half-dark fill + u∈{8,9,10}
      *  `y.a(d(0,9),200,220,3)` blink hint (`j.g%10<5`). */
     private fun dialogPanel(world: Level0World, i: Int, bP: Int) {
-        drawFrame(4, 12, 0, 0, bP, 0)                 // A[4].a(cd,12,0,0,i2)
+        drawFrame(98, 12, 0, 0, bP, 0)                // A[4].a(cd,12,0,0,i2)
         fillAr(0, bP, 400, 68, Int.MIN_VALUE)         // j.h(MIN_VALUE);j.d
         if (world.dlgU in 8..10 && world.jG % 10L < 5L) {
             drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
@@ -244,6 +254,86 @@ class Level0Renderer {
         fontY.l(0)
         fontY.drawWrapped(str, u, x, y, 8 * (world.kCY - 1), 8, align, limit)
         { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+    }
+
+    /** `N()` load screen (k.java:3472-3513, proven positions) —
+     *  **unreachable-labeled**: only the menu-flow `l(9)` picks it
+     *  (k.java:1303,3934,6273); our flow boots straight to jC8 and
+     *  fail→retry restores `j.c` without re-showing it.
+     *  Black fill; lazy A[5] → `dl` UiAnimObject(80,-40) arm(0,-1);
+     *  `j.g>=165` → dm=165 + `dl.a(dl.a()-3)` freeze-frame + `d(0,9)`
+     *  blink; else `dm=j.g` + `bW.l(0)` `d(0,24)`; bar `j.a(dm<<?/165
+     *  *300)` at (50,205) color 7644855; `j.g>1` → tip typewriter
+     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. */
+    private fun loadScreen(world: Level0World) {
+        val dl = nDl ?: UiAnimObject(clips[99], 80, -40)
+            .also { it.arm(0, -1); nDl = it }
+        fillAr(0, 0, 400, 240, -16777216)            // setColor(0);j.b
+        val dm: Int
+        if (world.jG >= 165L) {
+            dm = 165
+            dl.tick(62)
+            dl.seek(dl.len() - 3)                  // dl.a(dl.a()-3)
+            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            if (world.jG % 10L < 5L) {
+                drawText(world.d0(9) ?: "", 200, 220, 17, pack = 91)
+            }
+        } else {
+            dl.tick(62)
+            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dm = world.jG.toInt()
+            fontW.l(0)
+            drawText(world.d0(24) ?: "", 395, 230, 40, pack = 91)
+        }
+        // j.b(j.a,50,205, j.a(((dm<<8)/165)*300), 10) — fixed-round w
+        val w = ((((dm shl 8) / 165) * 300) + 128) shr 8
+        fillAr(50, 205, w, 10, 7644855)
+        if (world.jG > 1L) {
+            tipTypewriter(world.d0(51 + tipEW[world.kAj]) ?: "")
+            // y.a(str,null) → b.d measured width; x = max(20,(400-b.d)>>1)
+            val title = world.levelString(1, 0) ?: return
+            val x = ((400 - fontY.measure(title)[0]) shr 1).coerceAtLeast(20)
+            // a(y,2,str,x,135,360,240,0,20) — 9-arg drops i5/i6 → 20,-1
+            dialogText(world, title, x, 135, 360, 20, -1)
+        }
+    }
+
+    /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
+     *  `dj` chars; inserts `\\2`/palette-2 around the newest char;
+     *  after full string `dk=15` frame hold then `dj=0` restart.
+     *  `bVar.f=true` bold — our drawText maps `\\0`.. codes via the
+     *  font's own escape pass. */
+    private fun tipTypewriter(str: String) {
+        if (str.isEmpty()) return
+        if (nTipDk <= 0) {
+            if (nTipDj < str.length) {
+                // verbatim: \2<new char>\0 bracket inside the FULL string
+                // (untyped tail still draws — moving-highlight cursor)
+                val shown = "\\0" + str.substring(0, nTipDj) +
+                            "\\2" + str[nTipDj] + "\\0" +
+                            str.substring(nTipDj + 1)
+                drawText(shown, 200, 40, 17, pack = 91)
+                nTipDj++
+                return
+            }
+            nTipDj = 0
+            nTipDk = 15
+        }
+        nTipDk--
+        drawText("\\0" + str, 200, 40, 17, pack = 91)
+    }
+
+    /** jc18 title-screen arm (k.java:1146-1157, proven) —
+     *  **unreachable-labeled** (boot-flow only): `A[1].a(cd,1,0,0,0)` +
+     *  `A[0].a(cd,0,0,0,0)` + `A[1].a(cd,2,0,0,0)`; `!cS` → `d(0,9)`
+     *  blink at (200,205) `j.g%10>5`. */
+    private fun titleScreen(world: Level0World) {
+        drawFrame(97, 1, 0, 0, 0, 0)                 // A[1] anim 1
+        drawFrame(96, 0, 0, 0, 0, 0)                 // A[0] frame 0
+        drawFrame(97, 2, 0, 0, 0, 0)                 // A[1] anim 2
+        if (world.jG % 10L > 5L) {
+            drawText(world.d0(9) ?: "", 200, 205, 3)
+        }
     }
 
     /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
@@ -759,7 +849,7 @@ class Level0Renderer {
         // at (22,30), then the sync bar, then z[12] anim6 overlay.
         val tierFrame = world.kAx / 15 - 1
         drawFrame(12, 2, tierFrame, 2, 30, 0)
-        drawFrame(4, 8 + world.kBL, 0, 22, 30, 0)
+        drawFrame(98, 8 + world.kBL, 0, 22, 30, 0)
 
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
@@ -1030,7 +1120,7 @@ class Level0Renderer {
                 dialogText(world, page, 200, bP + 34, 380, 3, bT)  // centered (:935)
             } else {
                 if (i3 == 1) {
-                    drawFrame(4, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
+                    drawFrame(98, 4 + world.kBL, 0, 378, (bP + 68) - 4, 0)
                 } else {                                        // z[39] icon (:940)
                     drawFrame(39, i3, 0, 355, (bP + 68) - 2, 0)
                 }
@@ -1080,23 +1170,29 @@ class Level0Renderer {
             }
         }
 
+        // N() load screen (k.java:3472-3513) — unreachable-labeled.
+        if (world.jC == 9) loadScreen(world)
+
+        // jc18 title screen (k.java:1146-1157) — unreachable-labeled.
+        if (world.jC == 18) titleScreen(world)
+
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
         // (align 20), values right-aligned x=305 (align 24), rows
         // 55+20i; total row y=175; `a(d(0,16),str2)` bottom hint.
-        // Ribbon/panel sprites (A[3], fJ/fK corners) are unported —
-        // procedural stand-ins, `inferred` styling.
         if (world.jC == 15) {
             val H = Level0World.VIEW_H
             batch.setColor(0f, 0f, 0f, 0.8f)
             batch.draw(white, 0f, 0f, 400f, 240f)
-            // title ribbon — `a(i2,str)`: color box + centered text
-            // (A[3] clip sprites 1/2 unported → gold bar stand-in)
+            // `a(i2,str)` title-bar proc (k.java:2328-2336, proven):
+            // A[3] anim1 centered + anim2 left-cap + j.b(87,i+9,228,183)
+            // dark panel + bW title (matches scoreScreen's use).
             val ty = world.statsTitleY
-            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
-            batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
-            batch.setColor(1f, 1f, 1f, 1f)
-            world.d0(60)?.let { t -> drawText(t, 200, ty, 1) }
+            drawFrame(95, 1, 0, 200, ty, 0)
+            drawFrame(95, 2, 0, 120, ty, 0)
+            fillAr(87, ty + 9, 228, 183, -14274509)
+            fontW.l(0)
+            world.d0(60)?.let { t -> drawText(t, 200, ty, 3, pack = 91) }
             // row labels (x=95, align 20) + values right-aligned x=305 (24)
             for (i3 in 0..4) {
                 val v = world.statsRowText[i3]
@@ -1117,23 +1213,27 @@ class Level0Renderer {
             }
         }
 
-        // ag() mission poster card (k.java:6358, proven positions):
-        // `i(0,120)` card overlay (frame12 + fill — procedural stand-in),
-        // `A[4]` frame i+4 at (200,119), brief a(y,0,d(0,110),200,150,
-        // 380,240,0,3), `j.g%10<5` → d(0,9) blink at (200,220).
+        // ag() mission poster card (k.java:6358-6386, proven):
+        // `i(0,120)` dialog panel + `A[4].a(cd, i+4, 0, 200, 119)` where
+        // i = index of aj+1 in fP={0,2,5,7} (else 4) + brief
+        // a(y,0,d(0,110),200,150,380,240,0,3) + `y.l(1)` + `j.g%10<5`
+        // d(0,9) blink at (200,220).
         if (world.jC == 10) {
             val H = Level0World.VIEW_H
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 0f, 0f, 400f, 240f)
-            // card frame (A[4] clip unported → dark plate stand-in)
-            batch.setColor(0.12f, 0.1f, 0.16f, 1f)
-            batch.draw(white, 10f, (H - 200).toFloat(), 380f, 190f)
-            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
-            batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
-            batch.setColor(1f, 1f, 1f, 1f)
+            dialogPanel(world, 0, 120)               // i(0,120)
+            // i = 1; while (i<4 && aj+1 != fP[i]) i++  → 4 for level 0
+            var pi = 1
+            while (pi < 4 && world.kAj + 1 != posterFP[pi]) pi++
+            drawFrame(98, pi + 4, 0, 200, 119, 0)    // A[4] poster frame
             if (world.posterBrief.isNotEmpty()) {
-                drawText(world.posterBrief, 200, 150, 3)
+                // a(y,0,…,200,150,380,240,0,3) — 9-arg drops i5/i6 →
+                // effective a(y,0,str,200,150,380,align=3,limit=-1)
+                dialogText(world, world.posterBrief, 200, 150, 380, 3, -1)
             }
+            fontY.l(1)                                // y.l(1) after draw
+                                                    // (blink draws pal-1)
             if (world.hintBlink) {
                 world.d0(9)?.let { t -> drawText(t, 200, 220, 3) }
             }

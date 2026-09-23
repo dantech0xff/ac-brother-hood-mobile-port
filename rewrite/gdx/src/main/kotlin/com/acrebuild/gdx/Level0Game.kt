@@ -41,6 +41,12 @@ class Level0Game : ApplicationAdapter() {
         clips[94] = Clip.load(Gdx.files.internal("clips/clip94/clip.acpk").readBytes())
         clips[12] = clips[94]!!   // z[12] = entry-012 — alias under its z[] index
         clips[95] = Clip.load(Gdx.files.internal("clips/clip95/clip.acpk").readBytes())   // A[3]
+        // pack-2 A[] bank (j.a("/2"), k.java:4058-4075): A[0] bg, A[1] title
+        // art, A[4] dialog panel/portraits, A[5] N() load icon.
+        clips[96] = Clip.load(Gdx.files.internal("clips/clip96/clip.acpk").readBytes())   // A[0]
+        clips[97] = Clip.load(Gdx.files.internal("clips/clip97/clip.acpk").readBytes())   // A[1]
+        clips[98] = Clip.load(Gdx.files.internal("clips/clip98/clip.acpk").readBytes())   // A[4]
+        clips[99] = Clip.load(Gdx.files.internal("clips/clip99/clip.acpk").readBytes())   // A[5]
         clips[1] = Clip.load(Gdx.files.internal("clips/clip1/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
         clips[32] = Clip.load(Gdx.files.internal("clips/clip32/clip.acpk").readBytes())
