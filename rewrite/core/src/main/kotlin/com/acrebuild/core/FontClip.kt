@@ -28,7 +28,13 @@ class FontClip(
 
     /** `l(i)` (:1964) — palette/style variant select. */
     var palette = 0
-    private var savedPalette = 0                     // H/aH
+        private set
+    private var savedPalette = 0
+
+    /** `l(i)` (:1964, proven): palette slot — ignored when out of range. */
+    fun l(i: Int) {
+        if (i in 0 until paletteCap) palette = i
+    }                     // H/aH
     private var underline = false                    // O  (`\_`)
     private var bold = false                         // f  (`\^`)
 
@@ -150,7 +156,7 @@ class FontClip(
                 when (str[idx]) {
                     '_' -> underline = !underline
                     '^' -> bold = !bold
-                    else -> palette = (str[idx].code and 255) - 48   // l(digit)
+                    else -> l((str[idx].code and 255) - 48)   // l(digit) — clamps
                 }
             } else {
                 var i10: Int
