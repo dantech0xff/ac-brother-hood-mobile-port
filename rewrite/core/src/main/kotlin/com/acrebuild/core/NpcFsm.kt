@@ -1690,8 +1690,64 @@ class NpcFsm(val world: LevelCellSource) {
                 if (world.claimed === e) world.clearClaim()
                 world.removeEntity(e)
             }
-            // S29/30/33 and every other aj() state: unported — level-0's
-            // S9/S21 records fall to the same default no-op as upstream.
+            29 -> {
+                // L50 (i.java:5527-5568, proven): blast sweep — player
+                // body overlap → `aS.a(4,0,0,this)` damage; then the bd[]
+                // draw-list sweep over ax∈{4,11,17,73,15,23,29} ∩ X with
+                // per-type effects (ax4-S30→i(29) chain, ax29≠S20 → -50hp
+                // +i(20), melee set → `-bu[au]<<1`, ax15-S6 → i(7)+Z[3]=1).
+                if (rectsOverlap(player.W, e.X)) player.applyHit(4, 0, e, world)
+                for (o in world.npcs) {
+                    val hit = when (o.ax) {
+                        4, 11, 17, 73, 15, 23, 29 -> rectsOverlap(o.W, e.X)
+                        else -> false
+                    }
+                    if (!hit) continue
+                    if (o.ax == 4 && o.S == 30) o.setAnim(29)
+                    if (o.ax == 29 && o.S != 20) { o.aB -= 50; o.setAnim(20) }
+                    if (o.ax == 11 || o.ax == 17 || o.ax == 73 || o.ax == 23) {
+                        if (o.aB > 0) o.aB -= Entity.WEAPON_DMG[world.weaponSlot] shl 1
+                    } else if (o.ax == 15 && o.S == 6) {
+                        o.setAnim(7); o.Z[3] = 1
+                    }
+                }
+                if (e.T == 6 && e.U == 0) world.sfx(12)
+                if (e.animFinished()) world.removeEntity(e)
+            }
+            30 -> {
+                // L78 (i.java:5570-5581, proven): blast proximity re-arm —
+                // player hitbox ∩W or mid-S295 (body ∩W || grapple link
+                // ∩W) → i(29) restarts the sweep.
+                if (rectsOverlap(player.X, e.W)) e.setAnim(29)
+                if (player.S == 295 &&
+                    (rectsOverlap(player.W, e.W) ||
+                     (player.ga != null && rectsOverlap(player.ga!!.W, e.W)))) {
+                    e.setAnim(29)
+                }
+            }
+            33 -> {
+                // L91 (i.java:5583-5601, proven): fly-out prop — `b=true`;
+                // aA==1 off-camera exit → aA=2 + P&=-17|32|128; when the
+                // player is within ±20px and the previous spark is done
+                // (`af==null || af.S==36`), spawn the a(24,40,35,200)
+                // clip-40 child, latch af, k.b-insert.
+                e.b = true
+                if (e.aA == 1 &&
+                    ((e.ag > 0 && e.W[0] > world.camRect[2]) ||
+                     (e.ag < 0 && e.W[2] < world.camRect[0]))) {
+                    e.aA = 2; e.P = e.P and -17; e.P = e.P or 32; e.P = e.P or 128
+                }
+                if (Math.abs(player.ak - e.ak) <= 20 &&
+                    (e.af == null || e.af!!.S == 36)) {
+                    val aK = e.spawnChildFx(world, 24, 40, 35, 200)
+                    e.ai = 0; aK.ag = 0; aK.ah = 768; aK.aj = 1536
+                    aK.refreshBoxes()
+                    e.af = aK
+                    world.queueInsert(aK)
+                }
+            }
+            // Every other aj() state is a proven dead arm or a no-op
+            // (level-0's S9/S21 records hit the same default as upstream).
         }
     }
 

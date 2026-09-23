@@ -874,7 +874,8 @@ class Level0World(
     /** `k.bA` — save/snapshot buffer: [15]=checkpoint-exists flag (set in
      *  writeIX), [130..132]=cc medal stamps (k.java:2055-2064 proven). */
     override val kBA = IntArray(160)
-    var kAu = 0                        // k.au — medal-condition field
+    override var kAu = 0             // k.au — difficulty/medal-condition field
+    override val weaponSlot get() = kAu  // k.au IS difficulty — bu[]/bv[]/dh[] index
     var kDx = false                    // k.dx — cheat-enabled flag
     override var kAo = false           // k.ao — fade-side flag
     var kCU = 0                        // k.cU — l(4) stash
