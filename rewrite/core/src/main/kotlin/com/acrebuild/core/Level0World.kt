@@ -866,7 +866,8 @@ class Level0World(
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
         69 to "DO YOU WANT TO DELETE YOUR DATA?",
         71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
-        73 to "DO YOU WANT TO QUIT?",
+        73 to "DO YOU WANT TO QUIT?", 78 to "ESCAPE TIME",
+        122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
@@ -940,6 +941,18 @@ class Level0World(
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
     override var kAO = 0                       // k.aO — message countdown
     override var kAP: String? = null           // k.aP — HUD message text
+    var kAB: String? = null                    // k.aB — c(z2) center banner (k.java:4327)
+    var kAC = 0                                // k.aC — banner TTL
+    var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
+    var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
+    /** `dn[]` (k.java:207) — z[12] weapon-icon anim per weapon index. */
+    private val kDn = intArrayOf(10, 12, 9, 11)
+    /** `p(int)` (k.java:3542): bit-index scan — weapon mask → dn slot. */
+    fun weaponIconAnim(): Int {
+        var i2 = 0
+        while (i2 < 5) { if (((player.gI shr i2) and 1) != 0) return kDn[i2]; i2++ }
+        return kDn[0]
+    }
     override fun levelString(level: Int, idx: Int): String? =
         levelStrings.getOrNull(idx)
     override var kT: Int get() = boundMinY; set(v) { boundMinY = v }
@@ -2772,6 +2785,86 @@ class Level0World(
         return c == null || c.cb == null || c.cb!![1] >= 0 || (player.P and 512) != 0
     }
 
+    // -- c(z2) draw-side state step (k.java:4176-4350, proven) --------------
+    /** The mutations `c(z2)` performs inside the paint, hoisted into the
+     *  tick: lazy `ax` init + `g.f(ax)` meter cap, `az` clamp, the `aJ/aK/aL/aM`
+     *  stopwatch slide + remaining-ms, `aC--` banner TTL, `aO` expiry on the
+     *  `aP` line (the `aO-=62` itself lives in the tick already), and the
+     *  `at==1→0` weapon-corner latch. Only runs while no claim overlay holds
+     *  the screen — the orig call site gates identically. */
+    private fun hudStep() {
+        if (kAx == 0) kAx = 30                     // k.java:4177
+        player.x1 = minOf(player.x1, kAx)          // g.f(ax) :4180
+        if (!bh3 && kAj < 8) {                     // score arm :4247
+            if (kAz < 0) kAz = 0
+            if (kAz > 32767) kAz = 32767
+        }
+        // aJ stopwatch slide (k.java:4290-4320): 1 in → 2 run → 3 out
+        when (kAJ) {
+            1 -> {
+                kAK += 10
+                if (kAK > 80) { kAK = 80; kAJ = 2; kAM = 0 }
+                kTimerMs = kAL * 1000
+            }
+            3 -> {
+                kAK -= 20
+                if (kAK < -40) { kAK = -40; kAJ = 0; kAM = 0 }
+                kTimerMs = kAL * 1000 - kAM
+            }
+            2 -> kTimerMs = maxOf(0, kAL * 1000 - kAM)
+        }
+        // aB/aC center banner (k.java:4327-4335)
+        val ab = kAB
+        if (ab != null && kAC != 0) {
+            if (kAC > 0) kAC--
+            if (kAC == 0) kAB = null
+        }
+        // aO/aP timed line (k.java:4337-4343): expired or absent → null
+        if (kAO < 0 || kAP == null) kAP = null
+        // weapon-corner latch (k.java:4277): at==1 → 0 inside the gate
+        if (weaponCornerArmed() && kAt == 1) kAt = 0
+    }
+
+    /** `i.o()` (i.java:5423): player alive-and-acting —
+     *  S ∉ {2,20..29}. */
+    fun playerAliveO(): Boolean = player.S !in
+        intArrayOf(2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29)
+
+    /** The weapon-corner gate (k.java:4274-4276): `!z2 && !bh3 && aS.o()
+     *  && (C==null || (aS.P&512)!=0) && ((jc==21&&u==8)||jc==8) &&
+     *  z[12]!=null` (z12 is always loaded in the port). */
+    fun weaponCornerArmed(): Boolean {
+        if (bh3 || !playerAliveO()) return false
+        val c = kC
+        if (c != null && (player.P and 512) == 0) return false
+        return (jC == 21 && subU == 8) || jC == 8
+    }
+
+    /** `d(355,197,30,26)` (k.java:4278): live pointer in the weapon
+     *  corner rect → the pressed-state frame. */
+    fun weaponCornerPressed(): Boolean =
+        lastMoveX >= 355 && lastMoveX <= 385 && lastMoveY >= 197 && lastMoveY <= 223
+
+    /** The `az`/`dE[]` progress text (k.java:4252-4261): remainder at top
+     *  tier, `n/d` to the next threshold otherwise. null when gated. */
+    fun hudScoreText(): String? {
+        if (bh3 || kAj >= 8) return null
+        val dE = intArrayOf(0, 100, 200, 400, 600, 800)
+        var length = dE.size - 1
+        while (length > 0 && kAz < dE[length]) length--
+        return if (length == dE.size - 1) (kAz - dE[dE.size - 1]).toString()
+        else "${kAz - dE[length]}/${dE[length + 1] - dE[length]}"
+    }
+
+    /** The stopwatch `mm:ss:cc` string of `i8` (k.java:4320-4324 —
+     *  bytecode :1428-1491 confirms `(i8/1000/60)%60:(i8/1000)%60:
+     *  (i8%1000)/10`; the structured decompile's `i%60` is scratch
+     *  reuse). */
+    fun stopwatchText(): String {
+        val t = kTimerMs
+        return "${(t / 1000 / 60) % 60}:${(t / 1000) % 60}:${(t % 1000) / 10}"
+    }
+
     /** Canvas point guaranteed inside wheel `cell` for the current player
      *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). Forces
      *  `cm = 0` since the player wheel is the `!k()` (touch-pad-off) arm. */
@@ -2988,6 +3081,11 @@ class Level0World(
             kDe = true
             kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
         }
+
+        // c(z2) draw-side mutations (k.java:4176+): orig runs them inside
+        // the paint under `(C==null||!C.cd[6]||!C.ab())` — same gate here.
+        val hc = kC
+        if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep()
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)

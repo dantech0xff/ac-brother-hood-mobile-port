@@ -682,6 +682,14 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
+        // c(z2) top bar (k.java:4178-4186, proven): `ax==0→ax=30` +
+        // `g.f(ax)` (applied in hudStep), z[12] anim2 emblem at (2,30)
+        // frame `(ax/15)-1` = the meter tier, `A[4]` card anim `8+bL`
+        // at (22,30), then the sync bar, then z[12] anim6 overlay.
+        val tierFrame = world.kAx / 15 - 1
+        drawFrame(12, 2, tierFrame, 2, 30, 0)
+        drawFrame(4, 8 + world.kBL, 0, 22, 30, 0)
+
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
         // color) + thin track. FBO is y-up: y6-top bar → VIEW_H-6-20.
@@ -692,6 +700,47 @@ class Level0Renderer {
         batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
+        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
+
+        // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
+        // hudStep; `n/d` progress toward the next dE threshold (or raw
+        // remainder at the top tier) at (200,-1) align 17, plus the
+        // z[12] anim7 icon that bobbles 1px every 3 frames.
+        world.hudScoreText()?.let { score ->
+            drawText(score, 200, -1, 17)
+            val tw = fontY.measure(score).first()
+            drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
+                      13 + ((world.jG / 3) % 2).toInt(), 0)
+        }
+
+        // weapon corner (k.java:4273-4287, proven): armed gate in
+        // world; `at==1→0` consumed in hudStep; d(355,197,30,26) press →
+        // anim22 else anim8 at (370,210), plus `dn[p(gI)]` weapon icon.
+        if (world.weaponCornerArmed()) {
+            drawFrame(12, if (world.weaponCornerPressed()) 22 else 8,
+                      0, 370, 210, 0)
+            drawFrame(12, world.weaponIconAnim(), 0, 370, 210, 0)
+        }
+
+        // aJ stopwatch (k.java:4289-4326, proven): slide-in label +
+        // mm:ss:cc of `i8` at (aK,40/60); aj==7 swaps d(0,78) for d(0,122).
+        if (world.kAJ >= 1) {
+            val lbl = if (world.kAj == 7) world.d0(122) else world.d0(78)
+            lbl?.let { drawText(it, world.kAK, 40, 0) }
+            drawText(world.stopwatchText(), world.kAK, 60, 0)
+        }
+
+        // aB/aC center banner (k.java:4327-4335, proven): 400x40 black
+        // bar at (0,200) + centered `aB` text; TTL steps in hudStep.
+        world.kAB?.let {
+            if (world.kAC != 0) {
+                fillAr(0, 200, 400, 40, -16777216)
+                drawText(it, 200, 202, 17)
+            }
+        }
+
+        // aO/aP timed line (k.java:4337-4343, proven)
+        world.kAP?.let { drawText(it, 200, 23, 17) }
 
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
         // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at
