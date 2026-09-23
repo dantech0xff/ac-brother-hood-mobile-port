@@ -34,6 +34,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
+        set(v) {
+            if (ax == 0 && field != 0 && v == 0) {
+                val st = Throwable().stackTrace
+                val hit = st.firstOrNull { it.className.contains("acrebuild") && !it.methodName.contains("ag\$") }
+                println("AG0 ax=$ax S=$S at ${hit?.className}.${hit?.methodName}:${hit?.lineNumber} | ${st.getOrNull(2)?.methodName}:${st.getOrNull(2)?.lineNumber}")
+            }
+            field = v
+        }
     var ah: Int = 0                  // vy
     var ai: Int = 0                  // axel x
     var aj: Int = 0                  // axel y
@@ -2728,7 +2736,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun contextDispatch(w: LevelCellSource, pad: Pad) {
         if (gI == 4 && aA < 2) requestH(1, w)
         if (!pad.v(Pad.M_CONTEXT)) return
-        if (ac?.ax == 10) return                       // L8-L12 zipline block
+        // L28-L33 (proven): blocked while riding a zipline OR while an
+        // attack anim plays — `b()` is the busy set {67-69,81,112-115,
+        // 183-184,216-217,286-287}; combo chaining runs inside the combo
+        // arms (`aj()`/`ay()`) instead of re-entering here.
+        if (ac?.ax == 10 || PlayerFsm.isAttackState(S)) return
         when (gI) {
             1 -> {
                 ag = 0; ah = 0; aj = 0
