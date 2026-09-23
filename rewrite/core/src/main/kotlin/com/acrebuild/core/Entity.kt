@@ -2845,6 +2845,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.E()` (i.java:2929, proven): settle-sink — each pass pins
+     * `ah=1`, sets `b`, rescans sides (`a(true)`), unpins `ah`; if
+     * `aR∈{3,5,12}` the entity has found footing and returns, else it
+     * sinks `al+=10` and loops. Used by the S54 dismount settle
+     * (g.java:2226).
+     */
+    fun eSettle(world: LevelCellSource) {
+        var guard = 0
+        while (guard++ < 400) {
+            ah = 1; b = true
+            probeSnapSides(true, world)
+            ah = 0
+            if (aR >= 12 || aR == 5 || aR == 3) return
+            al += 10
+        }
+    }
+
+    /**
      * `k.h(dx,dy)` (k.java:6839, proven): octagonal distance in px —
      * `(a+b) - (min>>1) - (min>>2) + (min>>3)`.
      */

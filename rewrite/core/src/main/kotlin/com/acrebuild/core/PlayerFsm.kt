@@ -373,11 +373,70 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     }
                 }
             }
+            // S54 dismount settle (g.java:2223, proven): anim end →
+            // `al-=20` then `E()` settle-sink then `i(0)`. No `i(54)`
+            // call sites — script/dismount-entered, like S317.
+            54 -> {
+                if (p.animFinished()) {
+                    p.al -= 20
+                    p.eSettle(world)
+                    p.setAnim(0)
+                }
+            }
             257 -> ledgeDropArm(p)            // L1770
             63 -> {                           // climb-up end — inferred arm
                 if (p.animFinished()) p.setAnim(0)
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
+            // S357 scripted leap (g.java:4154, proven): `ag=3328` but
+            // `av → ag=-1280` (asymmetric — verbatim); anim end →
+            // `ag=0;K=4;i(364);ar()`.
+            357 -> {
+                p.ag = 3328
+                if (p.av) p.ag = -1280
+                if (p.animFinished()) {
+                    p.ag = 0; p.K = 4
+                    p.setAnim(364)
+                    p.interactAction(world, pad)
+                }
+            }
+            // S360 perch (g.java:4167, proven): respawns the lead
+            // marker `a(i21,ak+i22,al-85)` each tick — (9,40) facing
+            // right, (106,-40) facing left; forward press → `G();i(357)`
+            // relaunch; anim end → `G();i(0)`. No `i(360)` call sites —
+            // script-entered like S317.
+            360 -> {
+                val i21 = if (p.av) 106 else 9
+                val i22 = if (p.av) -40 else 40
+                p.spawnMarker(world, i21, p.ak + i22, p.al - 85)
+                if ((!p.av && pad.v(Pad.M_RIGHT)) ||
+                    (p.av && pad.v(Pad.M_LEFT))) {
+                    p.releaseAe()
+                    p.setAnim(357)
+                }
+                if (p.animFinished()) {
+                    p.releaseAe()
+                    p.setAnim(0)
+                }
+            }
+            // S370 boss-grab windup (g.java:4185, proven): `r()` → i(371).
+            370 -> {
+                if (p.animFinished()) p.setAnim(371)
+            }
+            // S374 KO-settle (g.java:4211, proven): vel0; anim end →
+            // `x[1]>0` → vel0 + `i(376)` recovery, else `k.l(12)`
+            // mission-fail.
+            374 -> {
+                p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    if (p.x1 > 0) {
+                        p.ah = 0; p.ag = 0
+                        p.setAnim(376)
+                    } else {
+                        world.screenL(12)
+                    }
+                }
+            }
             // g.java:4245-4309 (proven) — ax61 aura knockback slide:
             // S375 skid ±1280 → S376 halt → S377 recover → a(0).
             375 -> {
