@@ -101,6 +101,8 @@ CLIPS = {
     "clip21": ("pack-3", "entry-021-marker-003"),  # ax60 lift/piston platform (bi[60]=21)
     "clip71": ("pack-3", "entry-071-marker-003"),  # ax61 Cesare multi-tool (bi[61]=71)
     "clip38": ("pack-3", "entry-038-marker-003"),  # ax69 assassination target (bi[69]=38)
+    "clip42": ("pack-3", "entry-042-marker-003"),  # ax34 k.D player follower (k.r(42), i.java:2754)
+    "clip46": ("pack-3", "entry-046-marker-003"),  # ax71 k.E struggle-QTE overlay (k.r(46), i.java:2771)
 }
 
 # pack-15 per-level tilesets are the same `b` clip format — cells index

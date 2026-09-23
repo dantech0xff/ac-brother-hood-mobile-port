@@ -1437,6 +1437,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
     fun claimActive(): Boolean = ca >= 0 && !cd[0] && scriptStep >= 0
 
+    /** `g.c()` (g.java:421, proven): player mid-combo anims
+     *  {112, 113, 114, 115} — `k.m` early-returns while true. */
+    fun aSC(): Boolean = S == 112 || S == 113 || S == 114 || S == 115
+
     /** `i.f(int,int)` (i.java:6852, proven): the alternating-mash QTE
      *  meter — `bm` latches the last-pressed mask; only the OTHER mask's
      *  edge adds +8 to `bl`, absence decays -1/tick; `bl>=10` wins and
@@ -2800,6 +2804,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
         var at: Entity? = null
+        /** `i.aL` (i.java:75) — the claim-script camera-focus entity;
+         *  `k.m`'s snap arm (`k.java:2354`) and `n()` clear it. */
+        var aL: Entity? = null
         /** `i.L`/`i.M` (i.java:9825 `o(x,y)`) — the static indicator
          *  point; -1 = unset (cleared by `U()`). */
         var L = -1
@@ -3953,6 +3960,19 @@ interface LevelCellSource {
     /** `k.E` — held/struggle-UI entity ref; `P|=128` arms at
      *  counter/stagger moments (producer unmined, `inferred`). */
     var kE: Entity? get() = null; set(_) {}
+    /** `k.D` (i.java:2750, proven): the ax34 player-follower overlay
+     *  spawned by the L43 player-init arm; `k.V()`/`D()` null it. */
+    var kD: Entity? get() = null; set(_) {}
+    /** `ad()` draw channel — the active speech-bubble descriptor this
+     *  frame (null when no bubble is presenting). */
+    var bubbleDraw: BubbleDraw? get() = null; set(_) {}
+    /** `k.a(k.y, text, widthPx)` — dialog text wrap; returns the line
+     *  table whose [0] is the wrapped line count (renderer-metric
+     *  dependent — `inferred` approximation by char width). */
+    fun wrapDialogText(text: String, widthPx: Int): IntArray = intArrayOf(1)
+    /** `k.y.k(lines)` — pixel height of `lines` dialog lines
+     *  (font metric; `inferred` fixed line height). */
+    fun dialogAdvance(lines: Int): Int = lines * 10
     /** `k.C` — HUD-claimed entity (`i.N()`). */
     var kC: Entity? get() = null; set(_) {}
     /** `i.by` — boss phase tier static (0/1/3; 2 = dormant tick). */
@@ -3997,7 +4017,7 @@ interface LevelCellSource {
     var kAb: Boolean get() = false; set(_) {}
     /** `k.aj` — level/mission index into `MISSION_BH` (bh[aj]==3 →
      *  missions 1/4 — the k.X time-scale missions). */
-    val kAj: Int get() = 0
+    var kAj: Int get() = 0; set(_) {}
     /** `k.T`/`k.U` — camera bounds (boundMinY/boundMaxY aliases). */
     var kT: Int get() = 0; set(_) {}
     var kU: Int get() = 0; set(_) {}
@@ -4131,6 +4151,21 @@ interface LevelCellSource {
      *  always false during gameplay; gates the ax64 S1 grab check at
      *  i.java:15773). */
     val gS: Boolean get() = false
+    // -- slice 66: ax74 `bN()` hooks ------------------------------------
+    /** `k.o(int)` (k.java:4304, proven): `ap[r5]++` progress slot; `r5==3`
+     *  is gated on `k.aj == 7` in the original. */
+    fun kCount(slot: Int) {}
+    /** `k.az` — collect-streak counter consumed by `k.s()` (k.java:5338,
+     *  proven). */
+    var kAz: Int get() = 0; set(_) {}
+    /** `k.aq` — level wisp/anim-0 record counter (`k.aq++` at
+     *  i.java:3033). */
+    var kAq: Int get() = 0; set(_) {}
+    /** `k.s()` (k.java:5338, proven): `az++` streak → meter floor
+     *  `30 + tier·15` via `dE = {0,100,200,400,600,800}` — `g.f(ax)` caps
+     *  `x[1]` at the tier then `g.e(ax)` raises it when the floor grew. */
+    fun kCollectStreak() {}
+
     /** `i.bi` — ax64 grab-hitlag flag (set by the S2 hold arm,
      *  i.java:15686). */
     var iBi: Boolean get() = false; set(_) {}
