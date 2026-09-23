@@ -54,11 +54,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var bd = false; var v = true     // x() status flags
     var bb = false; var bc = false   // wall flags left/right (a(boolean))
 
-    /** `y()` (i.java:918-927, proven): wall-contact flag on the travel
-     *  side — `ag<0` (moving left) or `ag<=0 && av` (stopped, facing
-     *  left) reads `bb`; otherwise `bc`. */
-    fun wallOnFacingSide(): Boolean =
-        if (ag < 0) bb else if (ag <= 0 && av) bb else bc
     var ba = false                   // unused third flag, kept for parity
     val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
     val X = IntArray(4)              // attackbox (t())
@@ -970,7 +965,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * ±r13/r14 mirror fixup inside quad space, again as the ±av anchor —
      * transcribed verbatim even though it reads like a double shift.
      */
-    var centerX = 0; var centerY = 0    // i.t/i.u — W-box center
     fun refreshBoxes() {
         if (ax == 14 || ax == 37 || ax == 10 || ax == 5 || ax == 42) return
         val c = clip
@@ -1119,57 +1113,57 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun collideSides(world: LevelCellSource, resolve: Boolean) {
         v = true
-        probeCells(world)
-        var r10 = W[0] - 1
-        var r11 = W[2] + 1
-        var r12 = W[1]
-        var r13 = W[3] - 10
+        val iX = probeCells(world)
+        var i = W[0] - 1; var i2 = W[2] + 1
+        var i3 = W[1]; var i4 = W[3] - 10
+        // L8: player crouch states extend the strip down another 10.
+        if (ax == 0 && (S == 12 || S == 7 || S == 32 || S == 199)) i4 -= 10
         bb = false; bc = false; ba = false; aT = 0; aU = 0
-        if (resolve && bd) {
-            // L16/L34: embedded — recompute then continue probes
-            refreshBoxes()
-            r10 = W[0] - 1; r11 = W[2] + 1; r12 = W[1]; r13 = W[3] - 10
+        if (resolve) {
+            if (bd) {
+                // L16-L28: ground-strip pre-adjust when embedded.
+                if (aR >= 10 || aR == 5) al -= iX
+                else if (aO >= 12 && aO != 23) { ba = true; al += (20 - (i3 % 20)) + 1 }
+                else if ((aQ >= 12 || aQ == 5) && aO != 23) { ba = true; al += (10 - (i3 % 20)) + 4 }
+            }
+            refreshBoxes()                                     // t()
+            i = W[0] - 1; i2 = W[2] + 1; i3 = W[1]; i4 = W[3] - 10
         }
-        val r02 = e(world, r10 / 20, r12 / 20 - 1)
-        val r03 = e(world, r11 / 20, r12 / 20 - 1)
-        var cy = r12 / 20
-        while (cy <= r13 / 20) {
-            val l = e(world, r10 / 20, cy)
-            if (l > aT) {
-                aT = l
+        val iE = e(world, i / 20, i3 / 20 - 1)
+        val iE2 = e(world, i2 / 20, i3 / 20 - 1)
+        var i5 = i3 / 20
+        while (i5 <= i4 / 20) {
+            val iE3 = e(world, i / 20, i5)
+            if (iE3 > aT) {
+                aT = iE3
                 if (aT >= 18) {
-                    aX = if (r02 < 18) (r13 / 20) - cy + 1
-                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    aX = if (iE >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
                     bb = true
                 }
             }
-            val r = e(world, r11 / 20, cy)
-            if (r > aU) {
-                aU = r
+            val iE4 = e(world, i2 / 20, i5)
+            if (iE4 > aU) {
+                aU = iE4
                 if (aU >= 18) {
-                    aY = if (r03 < 18) (r13 / 20) - cy + 1
-                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    aY = if (iE2 >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
                     bc = true
                 }
             }
             if (bb || bc) break
-            cy++
+            i5++
         }
         if (resolve && v) {
-            if (bb == bc) {
-                bc = false; bb = false
-            } else if (ag > 0) {
-                // L75/L77: moving right — push left out of a right wall,
-                // else right out of a left wall (fallback).
-                if (bc) ak -= r11 % 20 else ak += (20 - ((r10 + 20) % 20)) - 1
-                probeCells(world)
+            if (bb == bc) { bc = false; bb = false }
+            else if (ag <= 0) {
+                if (bb) { ak += (20 - ((i + 20) % 20)) - 1; probeCells(world) }
+                else { ak -= i2 % 20; probeCells(world) }
+            } else if (bc) {
+                ak -= i2 % 20; probeCells(world)
             } else {
-                // L69/L73: mirrored for leftward/still.
-                if (bb) ak += (20 - ((r10 + 20) % 20)) - 1 else ak -= r11 % 20
-                probeCells(world)
+                ak += (20 - ((i + 20) % 20)) - 1; probeCells(world)
             }
         }
-        refreshBoxes()
+        refreshBoxes()                                         // t()
         tc = (W[0] + W[2]) shr 1
         uc = (W[1] + W[3]) shr 1
     }
@@ -1541,74 +1535,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * (ladder) → bare `true` and no state change (the caller's mount
      * stays deferred); otherwise `k.v()` + `i(61)` hang + `aC=40`.
      */
-    /**
-     * `i.a(boolean)` (i.java:829-915, proven): the side-strip rescan —
-     * `v=true`, `x()` probe, clears `bb/bc/ba`/`aT`/`aU`, then scans the
-     * left/right columns from head-row to `W[3]-10` (player crouch
-     * states 12/7/32/199 extend it another 10), recording the worst
-     * cell per side in `aT`/`aU` and the clearance in `aX`/`aY`,
-     * flagging `bb`/`bc` at ≥18 with early exit. When `z2 && v` it
-     * snaps `ak` off the flagged wall (`ag<=0` picks the side:
-     * `bb` → push right of cell, else `bc` → pull left; `ag>0`
-     * mirrors), re-probing after each snap; `z2` also pre-adjusts `al`
-     * by the ground strip (`aR>=10|5 → al-=x()`, `aO>=12&&!23 → +cell`,
-     * `aQ>=12|5&&!23 → +half`). Ends with `t()` + the `t/u` center.
-     */
-    fun probeSnapSides(z2: Boolean, w: LevelCellSource) {
-        v = true
-        val iX = probeCells(w)
-        var i = W[0] - 1; var i2 = W[2] + 1
-        var i3 = W[1]; var i4 = W[3] - 10
-        if (ax == 0 && (S == 12 || S == 7 || S == 32 || S == 199)) i4 -= 10
-        bb = false; bc = false; ba = false; aT = 0; aU = 0
-        if (z2) {
-            if (bd) {
-                if (aR >= 10 || aR == 5) al -= iX
-                else if (aO >= 12 && aO != 23) { ba = true; al += (20 - (i3 % 20)) + 1 }
-                else if ((aQ >= 12 || aQ == 5) && aO != 23) { ba = true; al += (10 - (i3 % 20)) + 4 }
-            }
-            refreshBoxes()
-            i = W[0] - 1; i2 = W[2] + 1; i3 = W[1]; i4 = W[3] - 10
-        }
-        val iE = e(w, i / 20, i3 / 20 - 1)
-        val iE2 = e(w, i2 / 20, i3 / 20 - 1)
-        var i5 = i3 / 20
-        while (i5 <= i4 / 20) {
-            val iE3 = e(w, i / 20, i5)
-            if (iE3 > aT) {
-                aT = iE3
-                if (aT >= 18) {
-                    aX = if (iE >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
-                    bb = true
-                }
-            }
-            val iE4 = e(w, i2 / 20, i5)
-            if (iE4 > aU) {
-                aU = iE4
-                if (aU >= 18) {
-                    aY = if (iE2 >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
-                    bc = true
-                }
-            }
-            if (bb || bc) break
-            i5++
-        }
-        if (z2 && v) {
-            if (bb == bc) { bc = false; bb = false }
-            else if (ag <= 0) {
-                if (bb) { ak += (20 - ((i + 20) % 20)) - 1; probeCells(w) }
-                else { ak -= i2 % 20; probeCells(w) }
-            } else if (bc) {
-                ak -= i2 % 20; probeCells(w)
-            } else {
-                ak += (20 - ((i + 20) % 20)) - 1; probeCells(w)
-            }
-        }
-        refreshBoxes()
-        centerX = (W[0] + W[2]) shr 1
-        centerY = (W[1] + W[3]) shr 1
-    }
-
     /** `i.M()` (i.java:5849, proven): feet-level cell one column into
      *  the facing direction is solid (≥12) or "≥5" (verbatim — the
      *  second conjunct subsumes the first). */
@@ -2897,7 +2823,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         var guard = 0
         while (guard++ < 400) {
             ah = 1; b = true
-            probeSnapSides(true, world)
+            collideSides(world, true)
             ah = 0
             if (aR >= 12 || aR == 5 || aR == 3) return
             al += 10

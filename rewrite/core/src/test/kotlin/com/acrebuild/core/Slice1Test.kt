@@ -12793,31 +12793,31 @@ class Slice133Test {
         return p
     }
 
-    @Test fun `probeSnapSides clears flags and rescans both columns i829`() {
+    @Test fun `a() clears flags and rescans both columns i829`() {
         val w = Slice128Test.MarkerWorld(cell = 0)
         val p = playerAt(200, 100)
         p.bb = true; p.bc = true; p.ba = true; p.aT = 30; p.aU = 30
-        p.probeSnapSides(false, w)
+        p.collideSides(w, false)
         assertFalse(p.bb); assertFalse(p.bc); assertFalse(p.ba)
         assertEquals(0, p.aT); assertEquals(0, p.aU)
-        assertEquals((p.W[0] + p.W[2]) shr 1, p.centerX)
-        assertEquals((p.W[1] + p.W[3]) shr 1, p.centerY)
+        assertEquals((p.W[0] + p.W[2]) shr 1, p.tc)
+        assertEquals((p.W[1] + p.W[3]) shr 1, p.uc)
     }
 
-    @Test fun `probeSnapSides wall column flags bb i862`() {
+    @Test fun `a() wall column flags bb i862`() {
         // column left of the box (i=W[0]-1) is solid 19 → bb + aT>=18
         val w = Slice128Test.MarkerWorld { cx, cy -> if (cx <= 9) 19 else 0 }
         val p = playerAt(200, 100)          // i = 189 → col 9
-        p.probeSnapSides(false, w)
+        p.collideSides(w, false)
         assertTrue(p.bb)
         assertTrue(p.aT >= 18)
     }
 
-    @Test fun `probeSnapSides both walls clears both flags i894`() {
+    @Test fun `a() both walls clears both flags i894`() {
         val w = Slice128Test.MarkerWorld(cell = 19)
         val p = playerAt(200, 100)
         p.clip = clip                         // keep W across t()
-        p.probeSnapSides(true, w)
+        p.collideSides(w, true)
         assertFalse(p.bb); assertFalse(p.bc)   // bb == bc → both cleared
     }
 
@@ -15133,15 +15133,15 @@ class Slice156Test {
         val e = Entity(41, null)
         e.bb = true; e.bc = false
         e.ag = -3                                        // moving left
-        assertTrue(e.wallOnFacingSide())
+        assertTrue(e.hitWall())
         e.ag = 0; e.av = true                            // stopped facing left
-        assertTrue(e.wallOnFacingSide())
+        assertTrue(e.hitWall())
         e.ag = 0; e.av = false                           // stopped facing right
-        assertFalse(e.wallOnFacingSide())
+        assertFalse(e.hitWall())
         e.ag = 4
-        assertFalse(e.wallOnFacingSide())
+        assertFalse(e.hitWall())
         e.bc = true
-        assertTrue(e.wallOnFacingSide())                 // bc read for right
+        assertTrue(e.hitWall())                 // bc read for right
     }
 
     private fun propAt(w: Level0World, x: Int, y: Int): Entity {

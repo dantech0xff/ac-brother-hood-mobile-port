@@ -284,14 +284,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     p.releaseAe()                        // G()
                     p.dropHeld()                         // H()
                     p.setAnim(1)
-                    p.probeSnapSides(false, world)       // a(false)
+                    p.collideSides(world, false)       // a(false)
                     if (!p.floorAhead(world) && p.standingOn == null) {
                         p.flingAirborne(0, world)        // g.a(0)
                     }
                 }
                 if (p.Q == 0 || p.Q == 54) {
                     p.ah = 1
-                    p.probeSnapSides(true, world)        // a(true)
+                    p.collideSides(world, true)        // a(true)
                     p.ah = 0
                 }
                 world.scrollWallClamp(p)                 // i.f(this)
