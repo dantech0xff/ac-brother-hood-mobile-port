@@ -3903,6 +3903,15 @@ interface LevelCellSource {
     /** `i.bh` STATIC (i.java:104) — global 8-tick hit-lock set by `d()`;
      *  decremented per tick in the `g.e()` tail (g.java:572). */
     var iBh: Int
+    /** `i.bJ`/`i.bH`/`i.bI`/`i.bL` (i.java:195-197 + :113, proven) —
+     *  the b(z2)-tail flicker latch pair + vestigial counter. `bJ` toggles
+     *  between `bH` (=1) and `bI` (=2) states each frame while >0; `bL`
+     *  is a verbatim no-op (k.javap.txt:16545-16548 — `getstatic; dup;
+     *  putstatic` with no arithmetic). Producer arm unported. */
+    var iBJ: Int get() = 0; set(_) {}
+    var iBH: Int get() = 1; set(_) {}
+    var iBI: Int get() = 2; set(_) {}
+    var iBL: Int get() = 0; set(_) {}
     /** `g.s` — godmode flag (g.java:24); default false. */
     val godMode: Boolean get() = false
     /** `g.h()` (g.java:3946, proven): invulnerable — `s` godmode or `t`
