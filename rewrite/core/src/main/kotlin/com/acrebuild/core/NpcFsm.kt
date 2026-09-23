@@ -1715,9 +1715,9 @@ class NpcFsm(val world: LevelCellSource) {
         val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
         // i.java:749-758 (proven): the push only fires when the player is
         // NOT wall-blocked on the travel side — `!aS.y()`.
-        if (p.ak <= e.ak && p.ag >= 0 && !p.wallOnFacingSide()) {
+        if (p.ak <= e.ak && p.ag >= 0 && !p.hitWall()) {
             p.ak = e.ak - pw / 2 - ew / 2; p.ai = 0; p.ag = -1
-        } else if (p.ak > e.ak && p.ag <= 0 && !p.wallOnFacingSide()) {
+        } else if (p.ak > e.ak && p.ag <= 0 && !p.hitWall()) {
             p.ak = e.ak + pw / 2 + ew / 2; p.ai = 0; p.ag = 1
         }
         p.collideSides(w, true)      // a(true) side-strip rescan + snap
