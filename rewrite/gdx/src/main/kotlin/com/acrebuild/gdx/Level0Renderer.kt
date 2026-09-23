@@ -387,6 +387,36 @@ class Level0Renderer {
         }
     }
 
+    /** jc24 credits (k.java:1326-1386, proven): dz<120 letterbox iris;
+     *  black field + `d(0,28)` title slide (dw 1-10 → y 220→120, 11-20
+     *  hold); dw>=21 the wrapped credits at fd clipped (0,33,400,205);
+     *  dw>=160 gray ramp `i11=dw-160` (alpha+rgb channels) white-out. */
+    private fun creditsScreen(world: Level0World) {
+        if (world.kDz < 120) {
+            fillAr(0, 0, 400, world.kDz, -0x1000000)
+            fillAr(0, 240 - world.kDz, 400, world.kDz, -0x1000000)
+            return
+        }
+        val fade = if (world.kDw >= 160) {
+            (world.kDw - 160).coerceAtMost(255)
+        } else 0
+        fillAr(0, 0, 400, 240,
+               if (world.kDw >= 160)
+                   (fade shl 24) or (fade shl 16) or (fade shl 8) or fade
+               else -0x1000000)
+        val title = world.d0(28) ?: ""
+        if (world.kDw in 1..10) {
+            drawText(title, 200, 120 + (100 * (10 - world.kDw)) / 10, 3, pack = 91)
+        } else if (world.kDw in 11..20) {
+            drawText(title, 200, 120, 3, pack = 91)
+        }
+        if (world.kDw >= 21) {
+            clipScissor(0, 33, 400, 205)
+            drawText(world.kDy ?: "", 200, world.kFd, 3, pack = 91)
+            clipScissor(0, 0, 400, 240)
+        }
+    }
+
     private fun titleScreen(world: Level0World) {
         drawFrame(97, 1, 0, 0, 0, 0)                 // A[1] anim 1
         drawFrame(96, 0, 0, 0, 0, 0)                 // A[0] frame 0
@@ -1277,6 +1307,9 @@ class Level0Renderer {
         // cu 4/5 also `z[39].a(cd,10,0,300,80)` spinner. footerQ() arms
         // the NEXT/SKIP footer in world.menuFooter().
         if (world.jC == 20) storyScreen(world)
+
+        // jc24 ending credits (k.java:1326-1386, proven)
+        if (world.jC == 24) creditsScreen(world)
 
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
