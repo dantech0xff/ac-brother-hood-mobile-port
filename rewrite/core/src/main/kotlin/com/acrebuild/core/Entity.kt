@@ -1012,10 +1012,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `e(cx, cy)` = `k.g` — collision cell at grid coords (OOB -> 20).
-     * Delegated to the level via [world].
+     * `e(cx, cy)` = `i.e(int,int)` (i.java:14828, proven): OOB
+     * `cx<0 || cx>=k.bp || cy>=k.bq → 20`; ax0 (player) override arms:
+     * `k.aS.m()` (standing on an ax51 crate or `i.bq` crate-top level
+     * set) → rows outside the feet-band `{i3-1,i3,i3+1}` read empty;
+     * `S∈{37,257}` (vault/climb) → solid-20 cells read empty so the
+     * player passes through mid-move. Else `k.g`.
      */
-    fun e(world: LevelCellSource, cx: Int, cy: Int): Int = world.collisionCell(cx, cy)
+    fun e(world: LevelCellSource, cx: Int, cy: Int): Int {
+        val i3 = (W[3] + 1) / 20
+        if (cx < 0 || cx >= world.kBp || cy >= world.kBq) return 20
+        if (ax == 0) {
+            if ((standingOn?.ax == 51 || entBq != 0) &&
+                cy != i3 && cy != i3 - 1 && cy != i3 + 1) return 0
+            if ((S == 37 || S == 257) && world.collisionCell(cx, cy) == 20) return 0
+        }
+        return world.collisionCell(cx, cy)
+    }
 
     /**
      * `x()` — i.java `public final int x()` (proven). Probes the cell column
@@ -2795,6 +2808,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  ORs bit 0, `k.F()` clears it, and nothing in this build ever
          *  reads it — a dead write-only flag kept verbatim. */
         var entBSLatch = 0
+        /** `i.bq` (i.java:163, proven) — crate-top level static: set on
+         *  the `i(233)` landing while grounded on an ax51 crate
+         *  (`i.bq = al + 20`, g.java:805), cleared when the player drops
+         *  past it or enters a `c(S)` grounded state {0,1,7,11,12,26,79}
+         *  (g.java:594). Read by `g.m()` (crate/crate-top flag → `e()`
+         *  cell-override) and the crate-dismount/fall gates
+         *  (g.java:1422/:4991). */
+        var entBq = 0
         /** `i.bv[]` (i.java:167, proven) — civilian max-HP by
          *  difficulty `k.au` (spawn init i.java:2340/2399 + the
          *  ax17 HP-bar scale k.java:2947). */
@@ -3797,6 +3818,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
 interface LevelCellSource {
     val cellPx: Int
     fun collisionCell(cx: Int, cy: Int): Int
+    /** `k.bp`/`k.bq` (k.java:99-100, proven) — grid dims in 20px cells
+     *  (the `e()` OOB check's upper bounds). */
+    val kBp: Int get() = Int.MAX_VALUE
+    val kBq: Int get() = Int.MAX_VALUE
     fun isSolid(v: Int): Boolean
     fun isOneWay(v: Int): Boolean
     /** `i.aN` — the single weakened-target lock (static field in the

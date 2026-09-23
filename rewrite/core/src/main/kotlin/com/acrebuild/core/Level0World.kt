@@ -81,6 +81,8 @@ class Level0World(
 
     override val cellPx: Int get() = level.cellPx
     override fun collisionCell(cx: Int, cy: Int): Int = level.collisionCell(cx, cy)
+    override val kBp: Int get() = level.cols              // k.bp
+    override val kBq: Int get() = level.rows              // k.bq
     override fun isSolid(v: Int): Boolean = level.isSolid(v)
     override fun isOneWay(v: Int): Boolean = level.isOneWay(v)
     override var lockTarget: Entity? = null

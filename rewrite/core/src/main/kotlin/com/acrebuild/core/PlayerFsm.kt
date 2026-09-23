@@ -64,6 +64,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.gt > 0) p.gt--
         if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
         if (p.bh > 0) p.bh--
+        // g.java:594 (proven): `i.bq` crate-top level clears when the
+        // player drops below it, or enters a `c(S)` grounded state.
+        if ((Entity.entBq != 0 && p.al > Entity.entBq) || p.S in GROUNDED_C)
+            Entity.entBq = 0
         dispatch(p, pad)
         postTail(p, pad)
         // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =
@@ -561,6 +565,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                             p.W[1] / 20 - 1) <= 12) p.setAnim(21)
                 } else if (p.aZ || p.standingOn != null) {
                     p.setAnim(233)
+                    // g.java:805 (proven): landing on an ax51 crate
+                    // records the crate-top level `i.bq = al + 20`.
+                    if (p.standingOn?.ax == 51) Entity.entBq = p.al + 20
                 } else if (pad.v(Pad.M_UP)) {
                     p.setAnim(233)
                 } else {
@@ -771,6 +778,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     }
 
     companion object {
+        /** `g.c(int)` (g.java:316, proven) — the grounded-state set the
+         *  `i.bq` clear arm tests: {0,1,7,11,12,26,79}. */
+        private val GROUNDED_C = setOf(0, 1, 7, 11, 12, 26, 79)
         /** `g.b()` no-arg attack table (proven, L9→L10 in g.java). */
         private val ATTACK = intArrayOf(67, 68, 69, 81, 112, 113, 114, 115, 183, 184, 216, 217, 286, 287)
         fun isAttackState(s: Int): Boolean = s in ATTACK
