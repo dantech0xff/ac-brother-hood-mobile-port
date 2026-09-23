@@ -1492,6 +1492,42 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  {112, 113, 114, 115} — `k.m` early-returns while true. */
     fun aSC(): Boolean = S == 112 || S == 113 || S == 114 || S == 115
 
+    /** `i.A()` (i.java:940, proven): the facing-side column holds a
+     *  cell ==21 (ladder/vine) anywhere in the box's row span — the
+     *  S12/S33 arms snap into `i(74)` when this fires. */
+    fun ladderCell(w: LevelCellSource): Boolean {
+        val i = if (av) W[0] / 20 - 1 else W[2] / 20 + 1
+        for (r in W[1] / 20..W[3] / 20) if (e(w, i, r) == 21) return true
+        return false
+    }
+
+    /** `i.z()` (i.java:928, proven): every cell in the push-direction
+     *  side column (`ag<0` left, else right) is ≥19 — a wall face. */
+    fun pushColumnBlocked(w: LevelCellSource): Boolean {
+        val i = if (ag < 0) W[0] / 20 - 1 else W[2] / 20 + 1
+        for (r in W[1] / 20..W[3] / 20) if (e(w, i, r) < 19) return false
+        return true
+    }
+
+    /** `g.ak()` (g.java:187, proven): wall-ledge lip grab — the facing
+     *  column's cell at hand-row `(W[1]+10)/20` is ≥19 AND the 5-cell
+     *  pocket beyond it (i3 column, rows i4-1..i4+2 plus i2/i4-1) is
+     *  empty → snap onto the lip and enter `i(60)` hang. `Q==61`
+     *  blocks outright. */
+    fun ledgeLipGrab(w: LevelCellSource): Boolean {
+        val i4 = (W[1] + 10) / 20
+        val i2: Int; val i3: Int
+        if (av) { i2 = (W[0] - 5) / 20; i3 = i2 + 1 }
+        else { i2 = (W[2] + 5) / 20; i3 = i2 - 1 }
+        if (e(w, i2, i4) < 19 || Q == 61 || e(w, i2, i4 - 1) > 0 ||
+            e(w, i3, i4) > 0 || e(w, i3, i4 - 1) > 0 ||
+            e(w, i3, i4 + 1) > 0 || e(w, i3, i4 + 2) > 0) return false
+        ak = if (av) i2 * 20 + 20 else i2 * 20
+        al = i4 * 20 - 1
+        setAnim(60)
+        return true
+    }
+
     /** `i.f(int,int)` (i.java:6852, proven): the alternating-mash QTE
      *  meter — `bm` latches the last-pressed mask; only the OTHER mask's
      *  edge adds +8 to `bl`, absence decays -1/tick; `bl>=10` wins and
