@@ -529,6 +529,10 @@ class Level0World(
         kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
         clearClaim()
+        // i.D() (i.java:1795-1821): g.* link sweep on entity-system reset —
+        // vehicle/contact/carry links must not survive into the respawned set
+        player.ga = null; player.ac = null; player.standingOn = null
+        gc = null
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
@@ -3152,7 +3156,6 @@ class Level0World(
         return playerFsm.l(p, pad)
     }
     override var gc: Entity? = null                // g.c crate-top link
-    override var iBq = 0                           // i.bq floor-Y latch
     override var kN: Entity? = null                // k.N prompt marker
     override var kCq = -1                          // k.cq bound uid
     override var gP = 0                            // g.p kill-bonus flag
