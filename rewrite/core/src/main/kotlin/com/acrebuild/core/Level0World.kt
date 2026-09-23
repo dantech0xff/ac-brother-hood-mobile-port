@@ -594,11 +594,15 @@ class Level0World(
                 else -> f[0]
             }
             // ax67: per-record clip from bk[kind] (i.java:2633); others use
-            // the bi[] table. decorClip(-1)/missing clip → record skipped.
+            // the bi[] table. Clipless records still spawn in the
+            // original — bi[42]=-1 is a clipless spawn (the win fuse
+            // ticks invisibly until a claim-script i(0) arms it). Entity
+            // handles clip=null defensively. Other clipless/unmapped
+            // types join as their clips + init arms get verified.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
                           else ENTITY_CLIP[type]
-            if (clipIdx == null || clipIdx < 0) continue
-            val e = Entity(type, clips[clipIdx]).apply {
+            if (clipIdx == null && type != 42) continue
+            val e = Entity(type, if (clipIdx == null) null else clips[clipIdx]).apply {
                 aw = f[1]
                 setPositionPx(f[2], f[3])
                 homeX = f[2]; homeY = f[3]
