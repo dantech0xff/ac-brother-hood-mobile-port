@@ -55,11 +55,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     fun tick(p: Entity, pad: Pad) {
         p.cp = true; p.cq = true; p.ct = true; p.cw = true; p.zz = true
-        // g.z is per-arm state: locomotion arms set it (groundedTail), the
-        // combo/mount/QTE arms leave it false so the L2057 ap() arm only
-        // fires from grounded control — same role as the original clears
-        // (g.java:591/2126/4984/5126).
-        p.z = false
+        // g.z is a STICKY latch, not per-arm state (proven): `l()`'s head
+        // arms `cp=1; cq=1; z=1` unconditionally (g.java L-l head), and the
+        // latch persists across states until a `cq=0; z=0` airborne arm or
+        // a grab/knockdown clears it (g.java grab sites + i.java ax-zone
+        // `aA|=8; z=0` pairs). A per-tick clear here starved ap() in every
+        // non-grounded state — e.g. S12 pinned at an ax4 crate, where the
+        // original still lets the player slash out of the pin.
+        // (no clear — armed in groundedTail, cleared at the cq=0 sites)
         // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
         if (p.gt > 0) p.gt--
         if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
@@ -112,6 +115,21 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
                 // (the case `break`s to the shared post-switch code —
                 //  the l() input handler does NOT run for S12)
+            }
+            // g.java L12de (proven, fallback decompile): the 107/108/109
+            // directional edge-vault anims — on `r()` (anim end) the player
+            // steps onto the edge: `al -= (S - 107 + 1) * 20` (vault up
+            // 1/2/3 cells by tier), `ak += ±20` (one cell into the wall by
+            // facing `av`), then `a(0, 9)` — `i.a(int,int)` bit0+bit8 =
+            // snap `ak` to the cell center with no anim change. Without
+            // this arm S107-109 fell to the default fling and the player
+            // re-armed the vault forever at a wall edge.
+            107, 108, 109 -> {
+                if (p.animFinished()) {                          // r()
+                    p.al -= (p.S - 107 + 1) * 20
+                    p.ak += if (p.av) -20 else 20
+                    p.enterStateMasked(0, 9, world)              // a(0, 9)
+                }
             }
             // g.java:2641-2660 (proven) — kill-QTE big launch: per tick
             // `ae=null` + `ah=0` + `G()` (releaseAe) + `v()` input flush +
@@ -723,7 +741,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // of the equip/context dispatcher (L2057 arm, g.java:3817).
             if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
             if (!l(p, pad)) {
-                p.cq = false
+                p.cq = false; p.z = false      // `cq=0; z=0` airborne arm
                 p.enterFall(0, world)
             }
             // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
@@ -858,7 +876,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     // -- ax() sustained run (proven) ------------------------------------------
     private fun ax(p: Entity): Boolean {
         p.ah = 0
-        if (!p.aZ && p.standingOn == null) { p.cq = false; p.zz = false; return false }
+        if (!p.aZ && p.standingOn == null) { p.cq = false; p.z = false; p.zz = false; return false }
         if (p.aR > 18) {
             // edge walk: open space beside the feet cell and no wall
             if (p.av && p.aV < 12 && !p.bb) { p.setAnim(26); p.ag = -1280 }
@@ -888,7 +906,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun aw(p: Entity, pad: Pad): Boolean {
         p.ag = 0; p.ah = 0
         if (!p.aZ && p.standingOn == null) {
-            p.cq = false; p.zz = false
+            p.cq = false; p.z = false; p.zz = false
             p.enterFall(0, world)
             return true
         }
@@ -928,7 +946,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.ag = 0; p.setAnim(79)
             }
         } else {
-            p.cq = false
+            p.cq = false; p.z = false
             p.enterFall(0, world)
         }
     }
