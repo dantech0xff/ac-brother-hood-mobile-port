@@ -397,6 +397,9 @@ class Level0Renderer {
                 drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
                 val fk = menuFk
                 if (fk != null) {
+                    if (world.menuFkArm >= 0) {          // af() `fK.a(21,1)`
+                        fk.arm(world.menuFkArm, 1); world.menuFkArm = -1
+                    }
                     fk.tick(frameMs)
                     if (fk.stopped()) fk.arm(20, -1)
                     fk.a = i; fk.b = i9 + (i4 shr 1)
