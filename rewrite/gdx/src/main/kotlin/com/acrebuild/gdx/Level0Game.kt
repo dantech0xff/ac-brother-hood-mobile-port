@@ -80,7 +80,8 @@ class Level0Game : ApplicationAdapter() {
         val scripts = ScriptTables.load(
             Gdx.files.internal("level0/scripts.bin").readBytes())
         world = Level0World(level, clips, DeterministicRandom(SEED),
-            levelStrings = levelStrings, scripts = scripts)
+            levelStrings = levelStrings, scripts = scripts,
+            charmap = Gdx.files.internal("fonts/charmap.bin").readBytes())
         // e(false) (k.java:4045): load the /ASBR record at boot — nop
         // when no record exists (orig swallows the same path).
         save.read()?.let { world.saveLoad(it) }

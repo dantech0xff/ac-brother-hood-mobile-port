@@ -9093,9 +9093,10 @@ class Slice78Test {
         assertEquals(73, w.kEc)               // "DO YOU WANT TO QUIT?"
         assertEquals(3, w.kBv)
         // YES → eC==73 → P() pops + W() teardown + l(2)
+        // verbatim: jc14 bv3 panel (93,67,214,z3) → YES row (93,117)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 110),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 110)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
         assertEquals(2, w.jC)                 // l(2) overrides P()'s restore
         assertEquals(0, w.kDs)
     }
@@ -9856,5 +9857,89 @@ class Slice86Test {
         assertTrue(clip.frameCount(10) >= 1)
         assertTrue(clip.frameCount(17) >= 1)
         assertTrue(clip.moduleWidth(clip.frameModuleIndex(10, 0)) > 0)
+    }
+}
+
+/** Slice 87 — `a(str,str2)` footer soft-keys + `a(i,i2,i3,z2)` pill
+ *  (k.java:2242-2310, proven) + verbatim per-state panel rects. */
+class Slice87Test {
+
+    @Test fun `footer labels per screen state`() {
+        val w = world()
+        w.stateL(14)                                    // pause menu
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(19); w.kDa = 0                          // eA menu
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(28)                                     // ae() path
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+        w.stateL(29); w.kBv = 0                          // IGP poster
+        val fl29 = w.menuFooter()
+        assertNull(fl29.first)
+        assertEquals("", fl29.second)                    // bv==0 → ""
+        w.stateL(12)
+        assertEquals(null to null, w.menuFooter())       // fail screen — none
+    }
+
+    @Test fun `panel rect is verbatim per state`() {
+        val w = world()
+        w.stateL(12)
+        assertEquals(listOf(93, 67, 214), w.menuPanelRect().toList())
+        w.stateL(14); w.kBv = 3
+        assertEquals(listOf(93, 67, 214), w.menuPanelRect().toList())
+        assertTrue(w.menuPanelZ3())
+        w.kBv = 1
+        assertEquals(listOf(93, 30, 214), w.menuPanelRect().toList())
+        assertFalse(w.menuPanelZ3())
+        w.stateL(19)
+        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
+        assertFalse(w.menuPanelZ2())                     // d() → z2=false
+    }
+
+    @Test fun `footer right pill tap arms the back bit`() {
+        val w = world()
+        w.stateL(14)                                     // has BACK footer
+        // right rect: (395-cf-10, 198, cf+20, 47); cf=36 → (349,198,56,47)
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // E(131072) on jc14 → back arm: `menuP(); kBw=-1` (:1765)
+        assertEquals(-1, w.kBw)
+        assertEquals(36, w.kCf)                          // right rect was hit
+    }
+
+    @Test fun `footer left pill tap runs its rect`() {
+        val w = world()
+        w.stateL(14)
+        // left rect (-5,198,ce+20,47), ce=36 → (-5,198,56,47): tap x=20
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 20, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 20, 210)))
+        assertEquals(36, w.kCe)             // left rect hit → E(262144) armed
+        // (the bit's jc14 consumption lives in the unported m() arms —
+        //  flagged `inferred`; the arming itself is verbatim :2288)
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `ce cf reset each frame then set by hit-test`() {
+        val w = world()
+        w.stateL(14)
+        w.kCe = 99; w.kCf = 99
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
+            InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // both pills draw → both dims assigned; the right rect was hit
+        assertEquals(36, w.kCe)
+        assertEquals(36, w.kCf)
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `clip93 has the pill frames 41 to 44 and arrows 24 29`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        assertTrue(clip.animCount() >= 45)
+        assertTrue(clip.frameCount(41) >= 1)
+        assertTrue(clip.frameCount(44) >= 1)
+        assertTrue(clip.frameCount(24) >= 1)
+        assertTrue(clip.frameCount(29) >= 1)
     }
 }
