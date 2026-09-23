@@ -732,8 +732,9 @@ class Level0World(
     override var kAH = 0                       // k.aH
     override var kAR = 0                       // k.aR — chase row
     override val kBu: Int get() = level.worldH // k.bu — level height px
-    /** `k.bk[]` record-type table — unmined (inferred, default 0). */
-    override fun kBk(i: Int): Int = 0
+    /** `k.bk[]` ax67 per-kind clip table (k.java:268 proven,
+     *  i.java:1945 `aa = k.r(bk[r8[7]])`) — same table as `decorClip`. */
+    override fun kBk(i: Int): Int = NpcFsm.decorClip(i)
     override fun jNextInt(): Int = rng.nextInt()
     override fun queueInsert(e: Entity) { pendingInsert += e }
 
