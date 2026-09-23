@@ -880,6 +880,9 @@ class Level0World(
         66 to "DID YOU LIKE THIS GAME? CHECK OUT OTHER GAMELOFT GAMES!",
         98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
         99 to "CONGRATULATIONS!\n\nYOU UNLOCKED HARD MODE!",
+        // 51-54: city names for the mission-select sub-labels
+        // `eX` (k.java:300, proven) — `d(0, eX[eW[i13]])` (:6092).
+        51 to "VENICE", 52 to "FLORENCE", 53 to "ROME", 54 to "PANTHEON",
 
         38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
         41 to "SOULS", 42 to "TIME", 43 to "SCORE",
@@ -1669,7 +1672,13 @@ class Level0World(
             if (i == 27) audioStop()                 // e.b() — audio stop (unported)
             when {
                 i == 9 -> {                          // L7: renderer teardown
-                    kFo = 0                          // ac(); ad(); e.b(); L() unported
+                    // `fO=0; ac(); ad(); e.b(); L()` (k.java:1685-1690
+                    // proven): ac/ad = the soft-unpack blit-bank reset
+                    // (fB/fz/fA + b.b/b.c frame-steal cache — no port
+                    // equivalent: clips decode once); e.b() = audio
+                    // stop; L() = `dg=0; ap[0..5]=0` (:3273).
+                    kFo = 0; audioStop()
+                    kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
                     scrollBounds()                   // b(true) — scroll refresh (unported)
@@ -1900,13 +1909,13 @@ class Level0World(
         if (i <= 0) return
         if (pad.v(Pad.M_UP)) {
             kBw--
-            if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1 }
+            if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1; menuFkArm = 21 }
             if (audioTrack >= 0) return
             z(23); return
         }
         if (pad.v(Pad.M_DOWN)) {
             kBw++
-            if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1 }
+            if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1; menuFkArm = 21 }
             if (audioTrack >= 0) return
             z(23)
         }
@@ -2414,7 +2423,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 24, 25, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 1, 2, 3, 4, 5, 6, 9, 14, 18, 19, 20, 23, 24, 25, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2573,6 +2582,51 @@ class Level0World(
      *  grown `fa`, cu>=3 the full `fb`, cu 0/1 nothing (k.java:1211,
      *  `str = fb` local per frame; cu2 `str = fa` :1251). */
     fun storyText(): String = when { kCu >= 3 -> kFb; kCu == 2 -> kFa; else -> "" }
+
+    /** `k.a()` case 1 (k.java:800-811, proven) — the one-time
+     *  "CONGRATULATIONS! YOU UNLOCKED HARD MODE!" toast after first-play
+     *  credits (scrollPanel tail `dx && bA[69]==0` → `bA[69]=1; e(true);
+     *  l(1)`). Draw arm `a(y,0,d(0,99),200,120,220,240,0,3)` + `y.l(1)` +
+     *  `j.g%10<5` blink `d(0,9)` at (200,220,3). `v(262144)||j()` →
+     *  `l(25); v(); z(23)` — the post-credits redirect. */
+    private fun menuJc1() {
+        scrollPanel(d0(99) ?: "", 120, 240, 220, true)
+        if (pad.v(Pad.M_PAUSE) || pointerStrip()) {
+            stateL(25); inputReset(); z(23)          // l(25); v(); z(23)
+        }
+        hintBlink = jG % 10L < 5L                    // `y.l(1)` palette + blink — renderer
+    }
+
+    /** `k.a()` case 19 (k.java:1178-1206, proven) — mission select.
+     *  `ey=da`; panel `d(14,47,180)`; footer `a(d(0,79),d(0,17))`.
+     *  Rows draw `d(0, eA[bv][m(bv,i13)])` — bv inherited from the
+     *  calling menu (canonical entry bv=0 → eA[0] = {2/117,1,3,32-34} —
+     *  the row text is verbatim-weird: main-menu strings, rows ≥3 clamp
+     *  onto the promo slot and get the padlock arm) PLUS the real
+     *  per-mission city sub-label `d(0, eX[eW[i13]])` (:6083-6100) —
+     *  eW={2,2,1,1,2,0,3,2,2} eX={51,52,53,54} → ROME/ROME/FLORENCE/
+     *  FLORENCE/ROME/VENICE/PANTHEON/ROME — the mined 8-mission order.
+     *  `v(327712)` confirm: `bw==-1→0; aj=bw; a(bA,16,0); eg[aj] →
+     *  fF=19;l(30);z(23)` — `eg[]` all-true, no writer (dead lock).
+     *  `v(131072)` → `l(2);z(30)`. `v(16388/33024)` → `L(da);aj=bw`. */
+    private fun menuJc19() {
+        kEy = kDa
+        footerQ()                                    // a(d(0,79),d(0,17)) — OK/BACK pills
+        if (pad.v(327712)) {                         // M_PAUSE|M_CONTEXT
+            if (kBw == -1) kBw = 0
+            kAj = kBw
+            kBA[16] = 0                              // a(bA,16,(short)0)
+            if (kEgFlags[kAj]) {
+                kFF = 19
+                stateL(30)
+                z(23)
+            }
+        } else if (pad.v(Pad.M_CYCLE)) {             // v(131072) — BACK
+            stateL(2); z(30)
+        } else if (pad.v(Pad.M_UP) || pad.v(Pad.M_DOWN)) {
+            menuL(kDa); kAj = kBw                    // L(da); aj=bw — both dirs
+        }
+    }
 
     /** `k.a()` case 20 (k.java:1208-1306, proven) — the story-typewriter
      *  intro: `cu` 0 init (cT=10) → 1 wait cT→255 (z[39] anim1 icon, pause
@@ -2840,6 +2894,8 @@ class Level0World(
                       stateL(18)
                   }
             28 -> menuAe(pressY)                     // ae() (:6204, proven)
+            1 -> menuJc1()                          // case 1 (:800-811, proven)
+            19 -> menuJc19()                        // case 19 (:1178-1206, proven)
             18 -> menuJc18()                         // case 18 (:1146, proven)
             30 -> menuAf()                           // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }

@@ -1335,6 +1335,16 @@ class Level0Renderer {
         // jc24 ending credits (k.java:1326-1386, proven)
         if (world.jC == 24) creditsScreen(world)
 
+        // jc1 hard-mode unlock toast (k.java:800-811, proven): `f(false)`
+        // world behind; `a(y,0,d(0,99),200,120,220,240,0,3)` early-returns
+        // on the dx end-tail (fd=-1 post-l() → re-fires — the toast text
+        // never draws, verbatim quirk); `y.l(1)` + `d(0,9)` blink at
+        // (200,220,3) while `j.g%10<5` — unreachable in practice since
+        // j.c==1 self-skips to l(25) in one tick, kept verbatim.
+        if (world.jC == 1 && world.hintBlink) {
+            drawText(world.d0(9) ?: "", 200, 220, 3, pack = 92)
+        }
+
         // M() win-stats screen (k.java:3280-3445, proven positions):
         // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
         // (align 20), values right-aligned x=305 (align 24), rows
