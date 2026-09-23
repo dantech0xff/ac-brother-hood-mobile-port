@@ -109,14 +109,17 @@ class Level0World(
     /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id. */
     data class Checkpoint(val aw: Int, val ak: Int, val al: Int, var consumed: Boolean = false)
 
-    /** Snapshot written into bA[16..] by aY()/i.X() — i.java:18631:
+    /** Snapshot written into bA[16..] by aY()/i.X() — i.java:18631
+     *  (write side i.java:13488-13500, read side k.java:5185-5203):
      *  pos/facing (18-22), g.J/g.I (24/26), ap[0,3,2/16,4] + ap[5] at
-     *  52+aj*2, ax/ay/az/aN/aL (28-34, 50), aZ/bn flags, br[] dead set.
-     *  The k.ax/ay/az/aN/aL globals have no producers in our model yet
-     *  (mission-script ops, unknown) — modeled fields only. */
+     *  52+aj*2, ax/ay/az/aN/aL (28-34, 50), aZ/bn flags (68/79),
+     *  br[] dead set (76+). All fields now modeled. */
     data class Snapshot(val aw: Int, val ak: Int, val al: Int,
                         val av: Boolean, val x1: Int,
-                        val gJ: Int, val gI: Int, val ap: IntArray)
+                        val gJ: Int, val gI: Int, val ap: IntArray,
+                        val kAx: Int, val kAy: Int, val kAz: Int,
+                        val kAN: Int, val kAL: Int,
+                        val kAZ: Boolean, val iBn: Boolean)
 
     val checkpoints: List<Checkpoint> = level.entities
         .filter { it.size >= 4 && it[0] == 2 }
@@ -509,6 +512,13 @@ class Level0World(
             player.setPositionPx(s.ak, s.al)
             player.av = s.av
             player.x1 = s.x1
+            // k.java:5185-5203 (proven, k.a(z2) restore arm): g.I/g.J,
+            // ap[0..5], the mission globals (ax/ay/az/aN/aL), aZ/bn flags.
+            player.gJ = s.gJ; player.gI = s.gI
+            for (i in kAp.indices) kAp[i] = s.ap[i]
+            kAx = s.kAx; kAy = s.kAy; kAz = s.kAz
+            kAN = s.kAN; kAL = s.kAL
+            kAZ = s.kAZ; iBn = s.iBn
         } else {
             val spawn = level.playerSpawn() ?: (100 to 200)
             player.setPositionPx(spawn.first, spawn.second)
@@ -1465,8 +1475,19 @@ class Level0World(
         kBA[15] = 1                          // bA[15]=1 — checkpoint-exists
                                              // flag read by l(15)'s r82
                                              // (i.java:2077, proven)
+        // i.java:13488-13500 (proven): stamp the mission globals + flags
+        // into the buffer — ax/ay/az/aN u16, aL, ap[5] at 52+aj*2,
+        // aZ/bn booleans, br[] dead set (the entity re-stamp loop stays
+        // on `checkpointDead`/fireCheckpoints).
+        kBA[28] = kAx; kBA[30] = kAy
+        kBA[32] = kAz; kBA[34] = kAN
+        kBA[50] = kAL
+        kBA[52 + (kAj shl 1)] = kAp[5]
+        kBA[68] = if (kAZ) 1 else 0          // j.a(k.bA,68,aZ?1:0)
+        kBA[79] = if (iBn) 1 else 0          // j.a(k.bA,79,bn?1:0)
         return Snapshot(aw, player.ak, player.al, player.av, player.x1,
-                        player.gJ, player.gI, kAp.copyOf())
+                        player.gJ, player.gI, kAp.copyOf(),
+                        kAx, kAy, kAz, kAN, kAL, kAZ, iBn)
     }
 
     /**
