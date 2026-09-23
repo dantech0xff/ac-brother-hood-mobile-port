@@ -125,6 +125,10 @@ class Level0World(
 
     override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
+    /** `k.bd[]`/`k.be` (k.java:97/2492, proven): per-frame draw list —
+     *  entities sorted into draw order by `d(i)` each frame. */
+    val drawList = arrayOfNulls<Entity>(600)
+    var drawCount = 0
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
 
     // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
@@ -271,9 +275,20 @@ class Level0World(
     /** `k.al == false` (i.I() entity gate): the real world-run condition
      *  — false on states {12,13,16,17,31} and {21 when kMode∉{8,9}}. */
     override val inPlay: Boolean get() = !kAl
-    /** `k.cm` — mounted flag (k.k() at k.java:638; `cm=true` writes 1 at
-     *  g.java:3564). */
-    var cm = 0
+    /** `k.cm` — the `k()` touch-controls flag (k.java:159 `cm = 1` +
+     *  :549 `cm == 1`; cheat op 123 toggles `cm = 1 - cm`, k.java:3937).
+     *  When set, `j()`/the `z[74]` overlay drive the on-screen D-pad +
+     *  action buttons; cleared = the player-relative invisible wheel.
+     *  (The `mounted` accessor name is historical — it IS `k()`.) */
+    var cm = 1
+    /** `k.bJ`/`k.de`/`k.df` (k.java:194-195/318, proven) — the full-screen
+     *  damage flash: `I()` ticks `bJ--` and recomputes `df` as an ARGB
+     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the only
+     *  producer so far is the boss-grab `k.bJ = 6` (i.java:8869, arm
+     *  unported). `de` clears in `f()` reload (k.java:5131). */
+    var kBJ = 0
+    var kDe = false
+    var kDf = -1
     override val mounted: Boolean get() = cm == 1
     override fun setMounted() { cm = 1 }
     /** `k.H`/`k.I` — the pointer-RELEASE point in view px (-1 = none).
@@ -747,7 +762,13 @@ class Level0World(
         private set
     var kMode = 0                      // k.u — screen mode 0-10 (NOT k.U)
     var kEg = 0                        // k.eG
-    var kCZ = 0                        // k.cZ — win-stats row counter
+    var kCZ = 0                        // k.cZ — win-stats row counter / G() total
+    /** `cV[4]` (k.java:184) — G() help pages. */
+    val kCV = arrayOfNulls<String>(4)
+    /** `cX[4]` (k.java:185) — G() per-page 8-line-screen counts. */
+    val kCX = IntArray(4)
+    var kCY = 1                        // k.cY — G() current 8-line screen
+    var kCW = 0                        // k.cW — G() page-1 pad
     var kCb = false                    // k.cb
     var kCu = 0                        // k.cu — k-side flag (entity cu is i's)
     var kFd = 0                        // k.fd
@@ -831,6 +852,12 @@ class Level0World(
         25 to "DO YOU WANT TO RESTART?",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
+        47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
+        48 to "FIND THE HEALTH POTION TO RECOVER LIFE.",
+        49 to "THE GAME CAN ALSO BE PLAYED ENTIRELY WITH THE VIRTUAL PAD.\n\nCORRESPONDING CONTROLS\n\nTOUCH THE ASSASSIN = ATTACK ICON\nTOUCH THE AREA TO THE ASSASSIN'S LEFT = VIRTUAL PAD LEFT\nTOUCH THE AREA TO THE ASSASSIN'S RIGHT = VIRTUAL PAD RIGHT\nTOUCH THE AREA ABOVE THE ASSASSIN = VIRTUAL PAD UP OR JUMP ICON\nTOUCH THE AREA BELOW THE ASSASSIN = VIRTUAL PAD DOWN",
+        50 to "\\^ACHIEVEMENTS\\^  \n\\0INCREDIBLE ASSASSIN:\\1 KILL 7 ENEMIES IN ONE LEVEL. \n\\0HARDCORE:\\1 COMPLETE ONE LEVEL IN HARD MODE. \n\\0BLOOD KILLER:\\1 KILL 28 ENEMIES IN LEVEL 2 IN HARD MODE.",
+        98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
+
         38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
         41 to "SOULS", 42 to "TIME", 43 to "SCORE",
         56 to "MISSION FAILED. YOU DID NOT CATCH YOUR TARGET!",
@@ -839,7 +866,8 @@ class Level0World(
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
         69 to "DO YOU WANT TO DELETE YOUR DATA?",
         71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
-        73 to "DO YOU WANT TO QUIT?",
+        73 to "DO YOU WANT TO QUIT?", 78 to "ESCAPE TIME",
+        122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
         97 to "CONTROL", 103 to "PLAYER LIST",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
@@ -913,6 +941,18 @@ class Level0World(
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
     override var kAO = 0                       // k.aO — message countdown
     override var kAP: String? = null           // k.aP — HUD message text
+    var kAB: String? = null                    // k.aB — c(z2) center banner (k.java:4327)
+    var kAC = 0                                // k.aC — banner TTL
+    var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
+    var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
+    /** `dn[]` (k.java:207) — z[12] weapon-icon anim per weapon index. */
+    private val kDn = intArrayOf(10, 12, 9, 11)
+    /** `p(int)` (k.java:3542): bit-index scan — weapon mask → dn slot. */
+    fun weaponIconAnim(): Int {
+        var i2 = 0
+        while (i2 < 5) { if (((player.gI shr i2) and 1) != 0) return kDn[i2]; i2++ }
+        return kDn[0]
+    }
     override fun levelString(level: Int, idx: Int): String? =
         levelStrings.getOrNull(idx)
     override var kT: Int get() = boundMinY; set(v) { boundMinY = v }
@@ -1251,6 +1291,82 @@ class Level0World(
      *  117..230px above camB, then `O+=l(cA-O,4); P+=l(cB-P,30)`.
      *  Dead code on level 0 (bh=4); reachable via tests.
      */
+    /** `k.b(z2)` draw-pass bubble arm (k.java:2927, proven): `(z2==0 &&
+     *  (ax!=11 && ax!=17 || aB>0)) → iVar2.ad()`. The ax!=11/17 half is
+     *  already ticked per-sim-tick; this call adds the `aB>0` soldier/
+     *  civilian increment during the draw pass. */
+    fun drawPassBubble(e: Entity) {
+        npcFsm.tickBubble(e, this)
+    }
+
+    /** `i.h(iVar)` (simple/i.java:20791-20822, proven — the structured
+     *  decompile folds the switch): the draw-pass HP-bar predicate —
+     *  `a(W, ac)` strict overlap, then ax11/73 → `!P() && aA>=1` (alive and
+     *  alerted), ax17/50 → true, anything else → false. */
+    fun showsHpBar(e: Entity): Boolean {
+        if (!Entity.overlapStrict(e.W, camRect)) return false
+        return when (e.ax) {
+            11, 73 -> !e.deadRelease() && e.aA >= 1
+            17, 50 -> true
+            else -> false
+        }
+    }
+
+    /** `k.d(i)` (k.java:2492-2505, proven): insert `e` into `bd[]`
+     *  sorted by `az` ASCENDING (insert before first `bd[i].az >= e.az`;
+     *  ties keep `al` ASCENDING via the `iVar.al > bd[i].al` skip). */
+    private fun drawInsert(e: Entity) {
+        var i = 0
+        while (i < drawCount && drawList[i]!!.az < e.az) i++
+        while (i < drawCount && drawList[i]!!.az == e.az && e.al > drawList[i]!!.al) i++
+        var i2 = drawCount
+        while (i2 > i) { drawList[i2] = drawList[i2 - 1]; i2-- }
+        drawList[i] = e
+        drawCount++
+    }
+
+    /** `k.b(z2)` draw-list build (k.java:2861-2902, proven): `be=0` then
+     *  the visibility arms — `(P&128)==0 || ax==10 || ax==51` gate;
+     *  `aw==205 && S==34` force-draw; `v()`-in-play + `bh3||ay==-1` gate
+     *  (ax14 `S==38` → `az=301` + `ae` child when `(ae.P&128)==0` →
+     *  `d(ae)` + `ae.s()`); else `P&16` arms: ax15 `S==9||S==10`, ax9
+     *  `S==5`, ax14 `S==74`, ax66. Player appended last via the same
+     *  `aS` block. */
+    fun buildDrawList() {
+        drawCount = 0
+        for (i31 in npcs.indices) {
+            val e = npcs[i31]
+            if ((e.P and 128) == 0 || e.ax == 10 || e.ax == 51) {
+                if (e.aw == 205 && e.S == 34) {
+                    drawInsert(e)
+                } else if (e.inPlayV(this)) {
+                    if (missionBh() != 3 || e.ay == -1) {
+                        if (e.ax == 14 && e.S == 38) e.az = 301
+                        drawInsert(e)
+                        val ae = e.ae
+                        if (ae != null && (ae.P and 128) == 0) {
+                            drawInsert(ae); ae.advanceAnim()
+                        }
+                    }
+                } else if ((e.P and 16) != 0) {
+                    when {
+                        e.ax == 15 && (e.S == 9 || e.S == 10) -> drawInsert(e)
+                        e.ax == 9 && e.S == 5 -> drawInsert(e)
+                        e.ax == 14 && e.S == 74 -> drawInsert(e)
+                        e.ax == 66 -> drawInsert(e)
+                    }
+                }
+            }
+        }
+        if ((player.P and 128) == 0) {
+            drawInsert(player)
+            val ae = player.ae
+            if (ae != null && (ae.P and 128) == 0) {
+                drawInsert(ae); ae.advanceAnim()
+            }
+        }
+    }
+
     private fun kD() {
         val c = kC                                                       // L7-L12
         if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
@@ -1449,7 +1565,23 @@ class Level0World(
                     audioStop()
                 }
                 i == 23 -> { kEc = 19; bannerK(3); kEb = 70; kBw = -1 }
-                i == 5 -> { /* win-stats text build: eE/eF/cZ/cX — unported */ }
+                i == 5 -> {                                          // (:1806)
+                    kEe = 0                                          // eE/eF shared
+                    for (i5 in 0 until 4) {                            //   with the
+                        kCV[i5] = d0(i5 + 47)                          //   stats procs
+                        if (i5 == 1) {
+                            kCW = footerFont?.linesHeight(wrapPage(kCV[i5], 261)[0]) ?: 0
+                            kCV[i5] = "\n\n" + kCV[i5] + "\n\n\n" + d0(98)
+                        }
+                        val sLines = wrapPage(kCV[i5], 261)[0]
+                        val iK = footerFont?.linesHeight(sLines) ?: 0
+                        if (iK > kEe) kEe = iK
+                        kCZ += (sLines + 7) / 8                      // ((s+8)-1)/8
+                        kCX[i5] = (sLines + 7) / 8
+                    }
+                    kEe = footerFont?.linesHeight(11) ?: 0
+                    kEf = 37 + kEe
+                }
                 i == 20 -> { /* kFb = y.a(d(0,27),390) — unported */ }
             }
             break
@@ -1932,6 +2064,7 @@ class Level0World(
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
+        5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         else -> Pair(null, null)
     }
@@ -2126,6 +2259,50 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
+     *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
+     *  '%' (non-break marker), then `bVar.a(string,w,false)`. */
+    private fun wrapPage(str: String?, w: Int): IntArray {
+        val f = footerFont ?: return intArrayOf(0)
+        if (str == null) return f.wrap("", w)
+        val sb = StringBuilder(str)
+        for (i in str.indices) {
+            if (str[i] == ' ' && i + 1 < str.length &&
+                str[i + 1] in ".!?,:") sb[i] = '%'
+        }
+        return f.wrap(sb.toString(), w)
+    }
+
+    /** `G()` (k.java:2412-2488, proven) — the jc5 help/instructions
+     *  scroller: 4 pages, 8 lines per screen (`cY` counts screens, not
+     *  lines), left/right scroll + page wrap mod 4, `v(131072)` back
+     *  to `cy`. Chevron taps inject the same pad masks via `E()`.
+     *  `iK = 47 + (eE - y.k(1))/2` centers the viewport. */
+    fun menuGIK(): Int = 47 + (kEe - (footerFont?.linesHeight(1) ?: 0)) / 2
+
+    /** renderer's wrap of the current G() page — `a(y,str,261)`. */
+    fun helpWrap(str: String): IntArray = wrapPage(str, 261)
+
+    private fun menuG() {
+        kCb = true
+        footerQ()                                       // `a("",d(0,17))` (:2461)
+        val iK = menuGIK()
+        if (pointerDownIn(45, iK - 15, 50, 30)) padE(Pad.M_LEFT)     // `c()` → E(4112)
+        if (pointerDownIn(305, iK - 15, 50, 30)) padE(Pad.M_RIGHT)   // `c()` → E(8256)
+        if (pad.v(Pad.M_LEFT)) {                        // `v(4112)` (:2464)
+            if (kCY > 1) kCY--
+            else { kBw = (kBw - 1 + 4) % 4; kCY = kCX[kBw] }
+            z(23)
+        } else if (pad.v(Pad.M_RIGHT)) {                // `v(8256)` (:2474)
+            if (kCX[kBw] > kCY) kCY++
+            else { kCY = 1; kBw = (kBw + 1) % 4 }
+            z(23)
+        }
+        if (pad.v(Pad.M_CYCLE)) {                       // `v(131072)` (:2483)
+            kCY = 1; stateL(kCy); z(30)
+        }
+    }
+
     /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
      *  `bA` save array; `kBA` stores one byte per slot so this is
      *  `kBA[i] | kBA[i+1]<<8`. */
@@ -2234,6 +2411,7 @@ class Level0World(
                 menuQ(pressY)
             }
             4 -> menuF()                           // F() (:2338, proven)
+            5 -> menuG()                           // G() (:2412, proven)
             23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
             30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
@@ -2408,6 +2586,7 @@ class Level0World(
         spawnEntities()
         jC = 8                                   // back to play (j.c==8)
         kAl = false
+        kDe = false                               // f() `de=false` (:5131)
         kM(kAd)                                   // C()/f() `m(ad)` snap
     }
 
@@ -2521,7 +2700,7 @@ class Level0World(
     /** `c(x,y,x1,x2,y1,y2)` (k.java:623, proven): the wheel cell index
      *  0..8 — 3×3 split at the rect bounds; mounted widens the inner
      *  column split (inner halves → 3/5). */
-    private fun wheelCell(x: Int, y: Int, x1: Int, x2: Int, y1: Int, y2: Int): Int {
+    fun wheelCell(x: Int, y: Int, x1: Int, x2: Int, y1: Int, y2: Int): Int {
         if (x == -1 && y == -1) return -1
         val i7 = if (y < y1) 0 else if (y > y2) 2 else 1
         val i8 = if (x < x1) 0 else if (x > x2) 2 else 1
@@ -2546,8 +2725,9 @@ class Level0World(
         val p = player
         if (mounted) {                                          // k()
             if (!bh3) {
-                if (insideRadial(x, y, 270, 165, 70)) return 4
-                if (insideRadial(x, y, 320, 110, 70)) return 1
+                // b(x,y,cx,cy,70) = a(x,y,cx+35,cy+35,35) — r35 at box center
+                if (insideRadial(x, y, 270 + 35, 165 + 35, 35)) return 4
+                if (insideRadial(x, y, 320 + 35, 110 + 35, 35)) return 1
             }
             val cn = if (bh3) 50 else 5                          // k.java:3146
             if (!insideRect(x, y, cn - 10, 124, 116, 116)) return -1
@@ -2574,9 +2754,122 @@ class Level0World(
         return wheelCell(x, y, i6, i6 + 50, (p.W[1] - camY) - 10, (p.W[3] - camY) + 10)
     }
 
+    // -- z[74] touch-controls overlay (k.java:3142-3161, proven) ----------
+    /** `cn` — pad x-offset: 50 under `bh[aj]==3`, else 5 (k.java:3146). */
+    val padCn: Int get() = if (bh3) 50 else 5
+    /** `b(J,K,cn-10,124,116,116)` — live pointer inside the pad box;
+     *  `!(x==-1 && y==-1)` guard (k.java:537). */
+    fun padPressed(): Boolean =
+        !(lastMoveX == -1 && lastMoveY == -1) &&
+            lastMoveX >= padCn - 10 && lastMoveX <= padCn - 10 + 116 &&
+            lastMoveY >= 124 && lastMoveY <= 124 + 116
+    /** `c(J,K, cn+28, cn+67, 162, 201)` — the 9-zone inner split. */
+    fun padZone(): Int = wheelCell(lastMoveX, lastMoveY,
+        (padCn - 10) + 38, (padCn - 10) + 77, 162, 201)
+    /** `i55` frame map (k.java:3148-3153, proven): zone ≠4 → `iC+1`,
+     *  `iC>4` one less; `-1`/`4` → 0. */
+    fun padZoneFrame(iC: Int): Int {
+        if (iC == -1 || iC == 4) return 0
+        return if (iC > 4) iC else iC + 1
+    }
+    /** `b(J,K,x,y,70)` 5-arg (k.java:544): `a(x,y,cx+35,cy+35,35)` —
+     *  radius-35 circle at the 70px box's center. */
+    fun padButton(cx: Int, cy: Int): Boolean =
+        lastMoveX >= 0 && insideRadial(lastMoveX, lastMoveY, cx + 35, cy + 35, 35)
+    /** The `b(z2)` gate (k.java:3142, proven): `k() && j.c∉{14,5} &&
+     *  (j.c!=21||u!=9) && (C==null||C.cb==null||C.cb[1]>=0||aS.P&512)`. */
+    fun touchPadVisible(): Boolean {
+        if (!mounted || jC == 14 || jC == 5) return false
+        if (jC == 21 && subU == 9) return false
+        val c = kC
+        return c == null || c.cb == null || c.cb!![1] >= 0 || (player.P and 512) != 0
+    }
+
+    // -- c(z2) draw-side state step (k.java:4176-4350, proven) --------------
+    /** The mutations `c(z2)` performs inside the paint, hoisted into the
+     *  tick: lazy `ax` init + `g.f(ax)` meter cap, `az` clamp, the `aJ/aK/aL/aM`
+     *  stopwatch slide + remaining-ms, `aC--` banner TTL, `aO` expiry on the
+     *  `aP` line (the `aO-=62` itself lives in the tick already), and the
+     *  `at==1→0` weapon-corner latch. Only runs while no claim overlay holds
+     *  the screen — the orig call site gates identically. */
+    private fun hudStep() {
+        if (kAx == 0) kAx = 30                     // k.java:4177
+        player.x1 = minOf(player.x1, kAx)          // g.f(ax) :4180
+        if (!bh3 && kAj < 8) {                     // score arm :4247
+            if (kAz < 0) kAz = 0
+            if (kAz > 32767) kAz = 32767
+        }
+        // aJ stopwatch slide (k.java:4290-4320): 1 in → 2 run → 3 out
+        when (kAJ) {
+            1 -> {
+                kAK += 10
+                if (kAK > 80) { kAK = 80; kAJ = 2; kAM = 0 }
+                kTimerMs = kAL * 1000
+            }
+            3 -> {
+                kAK -= 20
+                if (kAK < -40) { kAK = -40; kAJ = 0; kAM = 0 }
+                kTimerMs = kAL * 1000 - kAM
+            }
+            2 -> kTimerMs = maxOf(0, kAL * 1000 - kAM)
+        }
+        // aB/aC center banner (k.java:4327-4335)
+        val ab = kAB
+        if (ab != null && kAC != 0) {
+            if (kAC > 0) kAC--
+            if (kAC == 0) kAB = null
+        }
+        // aO/aP timed line (k.java:4337-4343): expired or absent → null
+        if (kAO < 0 || kAP == null) kAP = null
+        // weapon-corner latch (k.java:4277): at==1 → 0 inside the gate
+        if (weaponCornerArmed() && kAt == 1) kAt = 0
+    }
+
+    /** `i.o()` (i.java:5423): player alive-and-acting —
+     *  S ∉ {2,20..29}. */
+    fun playerAliveO(): Boolean = player.S !in
+        intArrayOf(2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29)
+
+    /** The weapon-corner gate (k.java:4274-4276): `!z2 && !bh3 && aS.o()
+     *  && (C==null || (aS.P&512)!=0) && ((jc==21&&u==8)||jc==8) &&
+     *  z[12]!=null` (z12 is always loaded in the port). */
+    fun weaponCornerArmed(): Boolean {
+        if (bh3 || !playerAliveO()) return false
+        val c = kC
+        if (c != null && (player.P and 512) == 0) return false
+        return (jC == 21 && subU == 8) || jC == 8
+    }
+
+    /** `d(355,197,30,26)` (k.java:4278): live pointer in the weapon
+     *  corner rect → the pressed-state frame. */
+    fun weaponCornerPressed(): Boolean =
+        lastMoveX >= 355 && lastMoveX <= 385 && lastMoveY >= 197 && lastMoveY <= 223
+
+    /** The `az`/`dE[]` progress text (k.java:4252-4261): remainder at top
+     *  tier, `n/d` to the next threshold otherwise. null when gated. */
+    fun hudScoreText(): String? {
+        if (bh3 || kAj >= 8) return null
+        val dE = intArrayOf(0, 100, 200, 400, 600, 800)
+        var length = dE.size - 1
+        while (length > 0 && kAz < dE[length]) length--
+        return if (length == dE.size - 1) (kAz - dE[dE.size - 1]).toString()
+        else "${kAz - dE[length]}/${dE[length + 1] - dE[length]}"
+    }
+
+    /** The stopwatch `mm:ss:cc` string of `i8` (k.java:4320-4324 —
+     *  bytecode :1428-1491 confirms `(i8/1000/60)%60:(i8/1000)%60:
+     *  (i8%1000)/10`; the structured decompile's `i%60` is scratch
+     *  reuse). */
+    fun stopwatchText(): String {
+        val t = kTimerMs
+        return "${(t / 1000 / 60) % 60}:${(t / 1000) % 60}:${(t % 1000) / 10}"
+    }
+
     /** Canvas point guaranteed inside wheel `cell` for the current player
-     *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). */
+     *  (test helper — the wheel splits at aS±25 x, W-box ±10 y). Forces
+     *  `cm = 0` since the player wheel is the `!k()` (touch-pad-off) arm. */
     fun cellPoint(cell: Int): Pair<Int, Int> {
+        cm = 0
         val p = player
         val x = when (cell % 3) { 0 -> (p.ak - camX) - 30; 1 -> p.ak - camX; else -> (p.ak - camX) + 30 }
         val y = when (cell / 3) { 0 -> (p.W[1] - camY) - 15; 1 -> (p.W[1] + p.W[3]) / 2 - camY; else -> (p.W[3] - camY) + 15 }
@@ -2779,6 +3072,20 @@ class Level0World(
             kD()
         }
         l142Tail()          // L142-L200 — runs on both camera arms
+
+        // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
+        // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
+        if (kBJ > 0) {
+            kBJ--
+            val c = (120 * kBJ) / 8
+            kDe = true
+            kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
+        }
+
+        // c(z2) draw-side mutations (k.java:4176+): orig runs them inside
+        // the paint under `(C==null||!C.cd[6]||!C.ab())` — same gate here.
+        val hc = kC
+        if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep()
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)

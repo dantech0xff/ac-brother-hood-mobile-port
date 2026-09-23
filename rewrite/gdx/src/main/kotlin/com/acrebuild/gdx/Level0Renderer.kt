@@ -4,6 +4,7 @@ import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
+import com.acrebuild.core.Trig
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.badlogic.gdx.Gdx
@@ -203,6 +204,8 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
+    private val ROPE_COL = -3584205                    // k.b rope-line (k.java:2961)
+    private val BAR_DEAD_S = intArrayOf(24, 21, 0, 139, 133, 134, 145, 135, 106, 107)
     private var menuEz = 0                            // k.ez fit-scroll
 
     /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
@@ -215,6 +218,118 @@ class Level0Renderer {
                    (Level0World.VIEW_H - y - h).toFloat(),
                    w.toFloat(), h.toFloat())
         batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `j.c(g,x,y,w,h)` (j.java, proven) — 1px hollow rect outline. */
+    private fun outlineAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        fillAr(x, y, w, 1, argb); fillAr(x, y + h - 1, w, 1, argb)
+        fillAr(x, y + 1, 1, h - 2, argb); fillAr(x + w - 1, y + 1, 1, h - 2, argb)
+    }
+
+    /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
+     *  rotated `white` quad (screen-space y-down → rotate by −dy). */
+    private fun drawLine(x0: Int, y0: Int, x1: Int, y1: Int, argb: Int) {
+        val dx = x1 - x0; val dy = y1 - y0
+        if (dx == 0 && dy == 0) { fillAr(x0, y0, 1, 1, argb); return }
+        val len = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+        val rot = Math.toDegrees(Math.atan2(-dy.toDouble(), dx.toDouble())).toFloat()
+        batch.setColor(((argb ushr 16) and 255) / 255f,
+                       ((argb ushr 8) and 255) / 255f,
+                       (argb and 255) / 255f,
+                       ((argb ushr 24) and 255) / 255f)
+        batch.draw(white, x0.toFloat(), (Level0World.VIEW_H - y0).toFloat(),
+                   0f, 0.5f, len, 1f, 1f, 1f, rot,
+                   0, 0, white.width, white.height, false, false)
+        batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `g.a(i2,i3,i4,i5,i6)` (g.java:4723-4733, proven): the dotted
+     *  rope — `k.h(len)/6` clip61 dots stepped 6px along `+angle` from
+     *  `(i4,i5)`. (`i.bg` in the call is the Graphics, so anim0/frame0
+     *  and no palette.) Caller passes screen coords. */
+    private fun ropeDots(x2: Int, y2: Int, x4: Int, y4: Int, ang: Int) {
+        if (clips[61] == null) return
+        var seg = Trig.khypot(x4 - x2, y4 - y2) / 6
+        var d = 0
+        while (seg > 0) {
+            seg--
+            d += 6
+            drawFrame(61, 0, 0,
+                      x4 + ((d * Trig.sin(ang)) shr 8),
+                      y4 - ((d * Trig.sin(Trig.N - ang)) shr 8), 0)
+        }
+    }
+
+    /**
+     * `k.b(z2)` per-entity overlay tail (k.java:2931-2990, proven):
+     * gated by `C==null || !C.ab() || !C.cd[2] || P&512 || ax==0` (a
+     *  claim-script in its marker-quiet state suppresses all bars), then
+     *  `(P&32)==0 && (P&128)==0`:
+     *  - `bl>0` && ax!={73,11} → mash/charge bar (white 42×5 @ ak,al-70,
+     *    red fill `bl*40/10`);
+     *  - ax11 alive-anim + `h()`, or ax73 `h()`, or ax17 `h()` && S!=69
+     *    → HP bar (41×5 @ ak-20,al-80; green >half else red/white blink;
+     *    fill `aB*40/i33`, halved to `*20` when Z0∈{1,2} or ax73;
+     *    `i33 = i.bu[k.au]` soldiers / `i.bv[k.au]` civilians);
+     *  - ax10 S==32 → rope-volume lines (W mid-height; two toward the
+     *    claimed player when `aS.ac==self`, else the W span);
+     *  - ax0 → claim `cd[9]` hints (`a(cg,ch)` link rope or `cf` dotted
+     *    line) else `S∈272-277|293|298` → `aS.i()` own grapple rope.
+     */
+    private fun drawOverlayTail(w: Level0World, e: Entity, camX: Int, camY: Int) {
+        val c = w.kC
+        if (!(c == null || !c.claimAb() || !c.cd[2] ||
+              (e.P and 512) != 0 || e.ax == 0)) return
+        if ((e.P and 32) != 0 || (e.P and 128) != 0) return
+        if (e.bl > 0) {
+            if (e.ax != 73 && e.ax != 11) {
+                outlineAr(e.ak - camX, e.al - camY - 70, 42, 5, -1)
+                fillAr(e.ak - camX + 1, e.al - camY - 70,
+                       (e.bl * 40) / 10, 4, -65536)
+            }
+        } else if ((e.ax == 11 && e.S !in BAR_DEAD_S && w.showsHpBar(e)) ||
+                   (e.ax == 73 && w.showsHpBar(e)) ||
+                   (e.ax == 17 && w.showsHpBar(e) && e.S != 69)) {
+            val ex = e.ak - 20 - camX
+            val ey = e.al - camY - 80
+            outlineAr(ex, ey, 41, 5, -1)
+            val i33 = if (e.ax == 17) Entity.NPC_HP_BV[w.kAu]
+                      else Entity.WEAPON_DMG[w.kAu]
+            val col = if (e.aB > (i33 shr 1)) 65280
+                      else if ((w.jG and 1L) == 0L) -65536 else -1
+            val fw = if (e.Z[0] == 2 || e.Z[0] == 1 || e.ax == 73)
+                     (e.aB * 20) / i33 else (e.aB * 40) / i33
+            fillAr(ex + 1, ey, fw, 4, col)
+        } else if (e.ax == 10 && e.S == 32) {
+            val my = (e.W[1] + e.W[3]) shr 1
+            val p = w.player
+            if (p.ac == e) {
+                drawLine(e.W[0] - camX, my - camY, p.ak - camX, p.al - camY, ROPE_COL)
+                drawLine(e.W[2] - camX, my - camY, p.ak - camX, p.al - camY, ROPE_COL)
+                drawLine(e.W[0] - camX, my + 1 - camY, p.ak - camX, p.al + 1 - camY, ROPE_COL)
+                drawLine(e.W[2] - camX, my + 1 - camY, p.ak - camX, p.al + 1 - camY, ROPE_COL)
+            } else {
+                drawLine(e.W[0] - camX, my - camY, e.W[2] - camX, my - camY, ROPE_COL)
+                drawLine(e.W[0] - camX, my + 1 - camY, e.W[2] - camX, my + 1 - camY, ROPE_COL)
+            }
+        } else if (e.ax == 0) {
+            if (c != null && c.claimAb() && c.cd[9]) {
+                if (c.cg != null && c.ch != null) {
+                    val g0 = c.cg!!; val g1 = c.ch!!
+                    val dx = g1.X[0] - g0.X[0]; val dy = g1.X[1] - g0.X[1]
+                    ropeDots(g0.X[0] - camX, g0.X[1] - camY,
+                             g1.X[0] - camX, g1.X[1] - camY,
+                             Trig.atan2(dy, -dx))
+                } else if (c.cf != null) {
+                    val cf = c.cf!!
+                    ropeDots(cf[0] - camX, cf[1] - camY,
+                             cf[2] - camX, cf[3] - camY, cf[4])
+                }
+            } else if (e.S in 272..277 || e.S == 293 || e.S == 298) {
+                ropeDots(e.cJ - camX, e.cK - camY,
+                         e.cH - camX, e.cI - camY, e.cy)
+            }
+        }
     }
 
     /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
@@ -451,6 +566,27 @@ class Level0Renderer {
         drawObject(pack, cell, anchorX, anchorY, dX)
     }
 
+    /** `G()` draw surface (:2412-2460) — help/instructions scroller:
+     *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
+     *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
+     *  `z[11]`/`z[54]` page arts not converted — skipped (`inferred`). */
+    private fun helpScreen(world: Level0World) {
+        val iK = world.menuGIK()
+        val lf = if (world.pointerMoveIn(45, iK - 15, 50, 30)) 40 else 36  // d()
+        val rf = if (world.pointerMoveIn(305, iK - 15, 50, 30)) 39 else 35 // d()
+        drawFrame(93, lf, 0, 70, iK, 0)
+        drawFrame(93, rf, 0, 330, iK, 0)
+        val page = world.kCV[world.kBw] ?: return
+        val u = world.helpWrap(page)
+        fontY.l(1)
+        fontY.drawWrapped(page, u, 200, iK, 8 * (world.kCY - 1), 8, 3)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        var i = 0
+        for (i2 in 0 until world.kBw) i += world.kCX[i2]
+        fontY.l(0)
+        drawText("${i + world.kCY}/${world.kCZ}", 200, 220, 33)
+    }
+
     /** `F()` draw surface (:2338-2371) — `a(30,d(0,5))` title bar,
      *  subtitle, chevrons, 8 score rows + TOTAL. */
     private fun scoreScreen(world: Level0World) {
@@ -460,8 +596,8 @@ class Level0Renderer {
         fontW.l(0)
         world.d0(5)?.let { drawText(it, 200, 30, 3, pack = 91) }
         world.d0(35 + world.kCU)?.let { drawText(it, 200, 55, 3, pack = 91) }
-        val lf = if (world.pointerDownIn(110, 15, 50, 80)) 40 else 36
-        val rf = if (world.pointerDownIn(240, 15, 50, 80)) 39 else 35
+        val lf = if (world.pointerMoveIn(110, 15, 50, 80)) 40 else 36      // d()
+        val rf = if (world.pointerMoveIn(240, 15, 50, 80)) 39 else 35      // d()
         drawFrame(93, lf, 0, 160, 55, 0)
         drawFrame(93, rf, 0, 240, 55, 0)
         for (i in 0 until 8) {
@@ -503,8 +639,56 @@ class Level0Renderer {
             }
         }
 
-        for (e in world.npcs) drawEntity(e, camX, camY)
-        drawEntity(world.player, camX, camY)
+        // k.b(z2) entity draw pass (k.java:2904-2934, proven): iterate the
+        // `bd[]` sorted list; `ad` child draws BEFORE the parent except
+        // ax76/ax29 (after + `ad.s()`); `E` held entity + `ab` overlay.
+        world.buildDrawList()
+        for (i32 in 0 until world.drawCount) {
+            val e = world.drawList[i32]!!
+            if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(e.ad!!, camX, camY)
+            if (e.ax == 21 && e.S == 1 && e.ad != null) {
+                if (world.kC == null || world.subU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
+                e.ad!!.advanceAnim()
+            }
+            drawEntity(e, camX, camY)
+            if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
+                drawEntity(e.ad!!, camX, camY); e.ad!!.advanceAnim()
+            }
+            // ag()→ah() ghost-trail draw — `a` card producer unported
+            // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
+            val kE = world.kE
+            if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
+                (world.jC == 8 || (world.jC == 21 && world.subU == 8))) {
+                drawEntity(kE, camX, camY); kE.advanceAnim()
+            }
+            if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
+            val ab = e.ab
+            if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
+                drawEntity(ab, camX, camY)
+            drawOverlayTail(world, e, camX, camY)
+        }
+
+        // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
+        // scissor + full-screen fill `df` (the damage flash; sim side
+        // ticks `bJ--` + recomputes the ARGB ramp — k.java:2522-2526).
+        if (world.kBJ > 0 && world.kDe) {
+            val df = world.kDf
+            batch.setColor(((df ushr 16) and 0xFF) / 255f,
+                           ((df ushr 8) and 0xFF) / 255f,
+                           (df and 0xFF) / 255f,
+                           ((df ushr 24) and 0xFF) / 255f)
+            batch.draw(white, 0f, 0f, Level0World.VIEW_W.toFloat(),
+                       Level0World.VIEW_H.toFloat())
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
+
+        // c(z2) top bar (k.java:4178-4186, proven): `ax==0→ax=30` +
+        // `g.f(ax)` (applied in hudStep), z[12] anim2 emblem at (2,30)
+        // frame `(ax/15)-1` = the meter tier, `A[4]` card anim `8+bL`
+        // at (22,30), then the sync bar, then z[12] anim6 overlay.
+        val tierFrame = world.kAx / 15 - 1
+        drawFrame(12, 2, tierFrame, 2, 30, 0)
+        drawFrame(4, 8 + world.kBL, 0, 22, 30, 0)
 
         // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
         // reveals z[12] bar art; sprite undecoded → filled rect (inferred
@@ -516,6 +700,70 @@ class Level0Renderer {
         batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
+        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
+
+        // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
+        // hudStep; `n/d` progress toward the next dE threshold (or raw
+        // remainder at the top tier) at (200,-1) align 17, plus the
+        // z[12] anim7 icon that bobbles 1px every 3 frames.
+        world.hudScoreText()?.let { score ->
+            drawText(score, 200, -1, 17)
+            val tw = fontY.measure(score).first()
+            drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
+                      13 + ((world.jG / 3) % 2).toInt(), 0)
+        }
+
+        // weapon corner (k.java:4273-4287, proven): armed gate in
+        // world; `at==1→0` consumed in hudStep; d(355,197,30,26) press →
+        // anim22 else anim8 at (370,210), plus `dn[p(gI)]` weapon icon.
+        if (world.weaponCornerArmed()) {
+            drawFrame(12, if (world.weaponCornerPressed()) 22 else 8,
+                      0, 370, 210, 0)
+            drawFrame(12, world.weaponIconAnim(), 0, 370, 210, 0)
+        }
+
+        // aJ stopwatch (k.java:4289-4326, proven): slide-in label +
+        // mm:ss:cc of `i8` at (aK,40/60); aj==7 swaps d(0,78) for d(0,122).
+        if (world.kAJ >= 1) {
+            val lbl = if (world.kAj == 7) world.d0(122) else world.d0(78)
+            lbl?.let { drawText(it, world.kAK, 40, 0) }
+            drawText(world.stopwatchText(), world.kAK, 60, 0)
+        }
+
+        // aB/aC center banner (k.java:4327-4335, proven): 400x40 black
+        // bar at (0,200) + centered `aB` text; TTL steps in hudStep.
+        world.kAB?.let {
+            if (world.kAC != 0) {
+                fillAr(0, 200, 400, 40, -16777216)
+                drawText(it, 200, 202, 17)
+            }
+        }
+
+        // aO/aP timed line (k.java:4337-4343, proven)
+        world.kAP?.let { drawText(it, 200, 23, 17) }
+
+        // z[74] touch-controls overlay (k.java:3142-3161, proven):
+        // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at
+        // (cn,134) with pressed-sector art `i55`, plus the two radial
+        // action buttons (270,165)=9/10 and (320,110)=11/12 when !bh3.
+        if (world.touchPadVisible()) {
+            val cn = world.padCn
+            val iC = if (world.padPressed()) world.padZone() else -1
+            drawObject(74, world.padZoneFrame(iC), cn, 134, 0)
+            if (!world.bh3) {
+                drawObject(74, if (world.padButton(270, 165)) 10 else 9,
+                           270, 165, 0)
+                drawObject(74, if (world.padButton(320, 110)) 12 else 11,
+                           320, 110, 0)
+            }
+        }
+
+        // claim footer (k.java:3164, proven): `C!=null && (C.ab()||u==9)
+        // && C.cd[2]` → `a("", d(0,18))` — right-pill "context" softkey.
+        val kC = world.kC
+        if (kC != null && (kC.claimActive() || world.subU == 9) && kC.cd[2]) {
+            footer(world, "", world.d0(18))
+        }
 
         // k.l(21) modal dialog — the original suspends the sim behind a
         // drawn dialog box (i.java:20190-20240, j.d text panel); port draws
@@ -536,6 +784,7 @@ class Level0Renderer {
         // :5903-6150, proven): `b(x,y,w,z2,z3)` panel + `bW` prompt/title +
         // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
         if (world.jC == 4) scoreScreen(world)
+        if (world.jC == 5) helpScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],

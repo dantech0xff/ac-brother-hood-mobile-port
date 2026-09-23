@@ -39,6 +39,7 @@ class Level0Game : ApplicationAdapter() {
         clips[92] = Clip.load(Gdx.files.internal("clips/clip92/clip.acpk").readBytes())
         clips[93] = Clip.load(Gdx.files.internal("clips/clip93/clip.acpk").readBytes())
         clips[94] = Clip.load(Gdx.files.internal("clips/clip94/clip.acpk").readBytes())
+        clips[12] = clips[94]!!   // z[12] = entry-012 — alias under its z[] index
         clips[95] = Clip.load(Gdx.files.internal("clips/clip95/clip.acpk").readBytes())   // A[3]
         clips[1] = Clip.load(Gdx.files.internal("clips/clip1/clip.acpk").readBytes())
         clips[7] = Clip.load(Gdx.files.internal("clips/clip7/clip.acpk").readBytes())
@@ -57,6 +58,8 @@ class Level0Game : ApplicationAdapter() {
         clips[25] = Clip.load(Gdx.files.internal("clips/clip25/clip.acpk").readBytes())
         clips[29] = Clip.load(Gdx.files.internal("clips/clip29/clip.acpk").readBytes())
         clips[60] = Clip.load(Gdx.files.internal("clips/clip60/clip.acpk").readBytes())
+        clips[61] = Clip.load(Gdx.files.internal("clips/clip61/clip.acpk").readBytes())   // z[61] rope dots
+        clips[74] = Clip.load(Gdx.files.internal("clips/clip74/clip.acpk").readBytes())   // z[74] touch pad
         clips[51] = Clip.load(Gdx.files.internal("clips/clip51/clip.acpk").readBytes())
         clips[63] = Clip.load(Gdx.files.internal("clips/clip63/clip.acpk").readBytes())
         clips[20] = Clip.load(Gdx.files.internal("clips/clip20/clip.acpk").readBytes())
