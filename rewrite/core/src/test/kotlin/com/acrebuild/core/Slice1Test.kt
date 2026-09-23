@@ -13280,7 +13280,7 @@ class Slice137Test {
     }
 
     @Test fun `S102 cling up-edge kicks to S17 in E-zone g2751`() {
-        Entity.gq = false; Entity.gE = true   // inside S55 zone → !E tail off
+        Entity.gq = false; Entity.gE = true   // inside S31 zone → !E tail off
         val w = Slice134Test.PassWorld(cell = 0)
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
@@ -13387,11 +13387,11 @@ class Slice137Test {
         assertNull(p.gd)
     }
 
-    @Test fun `ax10 S55 zone latches and clears gE i9830`() {
+    @Test fun `ax10 S31 zone latches and clears gE i9830`() {
         Entity.gE = false
         val w = Slice134Test.PassWorld(cell = 0)
         val fsm = NpcFsm(w)
-        val zone = Entity(10, null); zone.S = 55
+        val zone = Entity(10, null); zone.S = 31
         zone.W[0] = 190; zone.W[2] = 230; zone.W[1] = 60; zone.W[3] = 140
         val p = mk(200, 100)
         fsm.tickTrigger(zone, w, p, Pad())
@@ -13403,11 +13403,11 @@ class Slice137Test {
         assertEquals(128, zone.P and 128, "P |= 128 while empty")
     }
 
-    @Test fun `ax10 S55 Z0 nonzero sets icu i9857`() {
+    @Test fun `ax10 S31 Z0 nonzero sets icu i9857`() {
         Entity.gE = false; Entity.icu = false
         val w = Slice134Test.PassWorld(cell = 0)
         val fsm = NpcFsm(w)
-        val zone = Entity(10, null); zone.S = 55
+        val zone = Entity(10, null); zone.S = 31
         zone.W[0] = 190; zone.W[2] = 230; zone.W[1] = 60; zone.W[3] = 140
         zone.Z[0] = 1
         val p = mk(200, 100)
@@ -13519,12 +13519,12 @@ class Slice138Test {
     }
 }
 
-/** Slice 139 — ax10 S55 claim-QTE zone tail (i.java:9795-10423): the
+/** Slice 139 — ax10 S31 claim-QTE zone tail (i.java:9795-10423): the
  *  4-lane sequence QTE — Z[1] nibble lane types → i.cs[] pad masks →
  *  i.ct[] card frames; aB progress vs Z[2]; aA script uid Z[4]→Z[3];
  *  consumed reset P|=8192 → self-remove; claim bind h/k(k.s(aA)). */
 class Slice139Test {
-    open class S55World(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
+    open class ClaimZoneWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
         val removed = mutableListOf<Entity>()
         val sfxCalls = mutableListOf<Int>()
         override fun removeEntity(e: Entity) { removed += e }
@@ -13535,6 +13535,7 @@ class Slice139Test {
         override var iBe = false
         override var iAH = false
         override var kAm = false
+        override var kAU: Entity? = null
     }
 
     private fun mk(ak: Int, al: Int): Entity {
@@ -13545,7 +13546,7 @@ class Slice139Test {
     }
 
     private fun zone(z1: Int = 0x1234, z2: Int = 2, z3: Int = 9, z4: Int = 7): Entity {
-        val z = Entity(10, null); z.S = 55
+        val z = Entity(10, null); z.S = 31
         z.W[0] = 190; z.W[2] = 230; z.W[1] = 60; z.W[3] = 140
         z.Z[1] = z1; z.Z[2] = z2; z.Z[3] = z3; z.Z[4] = z4
         return z
@@ -13558,17 +13559,17 @@ class Slice139Test {
 
     @kotlin.test.AfterTest fun cleanupStatics() = resetStatics()
 
-    @Test fun `S55 iBe removes zone i9799`() {
+    @Test fun `S31 iBe removes zone i9799`() {
         resetStatics()
-        val w = S55World(); w.iBe = true
+        val w = ClaimZoneWorld(); w.iBe = true
         val z = zone(); val p = mk(200, 100)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertSame(z, w.removed.single(), "i.be → k.c(this)")
     }
 
-    @Test fun `S55 claimAb ticks bound script i9802`() {
+    @Test fun `S31 claimAb ticks bound script i9802`() {
         resetStatics()
-        val w = S55World()
+        val w = ClaimZoneWorld()
         val z = zone(); z.ca = 0; z.cK = 0          // ab() = ca>=0&&!cd[0]&&cK>=0
         val p = mk(200, 100)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
@@ -13576,17 +13577,17 @@ class Slice139Test {
         assertFalse(Entity.gE, "early return — gE untouched")
     }
 
-    @Test fun `S55 consumed flag self-removes i9807`() {
+    @Test fun `S31 consumed flag self-removes i9807`() {
         resetStatics()
-        val w = S55World()
+        val w = ClaimZoneWorld()
         val z = zone(); z.P = 8192
         NpcFsm(w).tickTrigger(z, w, mk(200, 100), Pad())
         assertSame(z, w.removed.single(), "P&8192 → k.c(this)")
     }
 
-    @Test fun `S55 arm pass fills lanes and cards i10030`() {
+    @Test fun `S31 arm pass fills lanes and cards i10030`() {
         resetStatics()
-        val w = S55World(); w.mountMode = false        // !k.k() → clip74 cards
+        val w = ClaimZoneWorld(); w.mountMode = false        // !k.k() → clip74 cards
         val z = zone(z1 = 0x1234, z2 = 99)
         val p = mk(200, 100)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
@@ -13607,9 +13608,9 @@ class Slice139Test {
         assertEquals(1, z.aB, "aB progress only (no hit)")
     }
 
-    @Test fun `S55 mounted pass binds clip9 key cards i10148`() {
+    @Test fun `S31 mounted pass binds clip9 key cards i10148`() {
         resetStatics()
-        val w = S55World()                              // mounted → k.k()
+        val w = ClaimZoneWorld()                              // mounted → k.k()
         val z = zone(z1 = 0x0100, z2 = 99)              // lane1 = type1, rest 0
         val p = mk(200, 100)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
@@ -13624,9 +13625,9 @@ class Slice139Test {
         assertEquals(3, z.aD, "3 spawned lanes (r9=3 always spawns)")
     }
 
-    @Test fun `S55 lane hit advances cursor i10224`() {
+    @Test fun `S31 lane hit advances cursor i10224`() {
         resetStatics()
-        val w = S55World(); w.mountMode = false
+        val w = ClaimZoneWorld(); w.mountMode = false
         val z = zone(z1 = 0x1234, z2 = 99)
         val p = mk(200, 100)
         val fsm = NpcFsm(w)
@@ -13640,9 +13641,9 @@ class Slice139Test {
         assertEquals(2, z.aB, "aB++ once more")
     }
 
-    @Test fun `S55 last lane hit sets aA sentinel i10255`() {
+    @Test fun `S31 last lane hit sets aA sentinel i10255`() {
         resetStatics()
-        val w = S55World(); w.mountMode = false
+        val w = ClaimZoneWorld(); w.mountMode = false
         val z = zone(z1 = 0x1111, z2 = 99)              // all lanes type1
         val p = mk(200, 100)
         val fsm = NpcFsm(w)
@@ -13659,9 +13660,9 @@ class Slice139Test {
         assertTrue(w.sfxCalls.contains(25), "k.A(25) on completion")
     }
 
-    @Test fun `S55 full progress auto-passes lane i10395`() {
+    @Test fun `S31 full progress auto-passes lane i10395`() {
         resetStatics()
-        val w = S55World(); w.mountMode = false
+        val w = ClaimZoneWorld(); w.mountMode = false
         val z = zone(z1 = 0x1000, z2 = 1, z3 = 9)       // aB>=Z[2] at scan
         val p = mk(200, 100)
         val fsm = NpcFsm(w)
@@ -13670,9 +13671,9 @@ class Slice139Test {
         assertEquals(10, z.m, "m = 10 + lane → resolved marker")
     }
 
-    @Test fun `S55 consumed reset binds claim script i9870`() {
+    @Test fun `S31 consumed reset binds claim script i9870`() {
         resetStatics()
-        val w = S55World(); w.mountMode = false
+        val w = ClaimZoneWorld(); w.mountMode = false
         val z = zone()
         z.aB = 3; z.nl = 1                              // busy latch (script-set)
         z.aA = 5                                        // armed script uid
@@ -13690,14 +13691,60 @@ class Slice139Test {
         assertSame(z, w.removed.last(), "P&8192 → removed next tick")
     }
 
-    @Test fun `S55 busy tick with nl set exits early i9929`() {
+    @Test fun `S31 busy tick with nl set exits early i9929`() {
         resetStatics()
-        val w = S55World()
+        val w = ClaimZoneWorld()
         val z = zone(); z.nl = 1                        // n!=0, aB==0 → L737
         val p = mk(200, 100)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertEquals(0, z.aB, "no scan — n!=0 returned")
         assertTrue(Entity.gE, "overlap still latches gE")
+    }
+
+    // -- S55 (Lf4, i.java:9227-9253) — boss-reposition zone ----------
+
+    private fun bossAt(ak: Int, s: Int = 13, y1: Int = 60, y2: Int = 140): Entity {
+        val b = Entity(29, null); b.S = s; b.ak = ak; b.al = 100
+        b.Y[0] = 190; b.Y[2] = 230; b.Y[1] = y1; b.Y[3] = y2
+        b.ah = 111; b.ag = 222
+        return b
+    }
+
+    private fun zone55(ak: Int = 210): Entity {
+        val z = Entity(10, null); z.S = 55; z.ak = ak
+        z.W[0] = 190; z.W[2] = 230; z.W[1] = 60; z.W[3] = 140
+        return z
+    }
+
+    @Test fun `S55 repositions S13 boss on overlap i9227`() {
+        val w = ClaimZoneWorld()
+        val z = zone55(); val boss = bossAt(999); w.kAU = boss
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(25, boss.S, "k.aU.i(25)")
+        assertEquals(210, boss.ak, "aU.ak ← zone.ak")
+        assertEquals(100, boss.al, "aU.al untouched")
+        assertEquals(0, boss.ah); assertEquals(0, boss.ag)
+    }
+
+    @Test fun `S55 no-op without bound boss Lf4`() {
+        val w = ClaimZoneWorld()                                 // kAU null
+        NpcFsm(w).tickTrigger(zone55(), w, mk(0, 0), Pad())      // bare return
+    }
+
+    @Test fun `S55 no-op when boss not S13 Lf4`() {
+        val w = ClaimZoneWorld()
+        val z = zone55(); val boss = bossAt(999, s = 7); w.kAU = boss
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(7, boss.S); assertEquals(999, boss.ak)
+        assertEquals(111, boss.ah)
+    }
+
+    @Test fun `S55 no-op when boss rect misses zone Lf4`() {
+        val w = ClaimZoneWorld()
+        val z = zone55()
+        val boss = bossAt(999, y1 = 500, y2 = 560); w.kAU = boss   // Y far below
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(13, boss.S); assertEquals(999, boss.ak)
     }
 }
 
@@ -13706,7 +13753,7 @@ class Slice139Test {
 // (L13a1-L14a2) + initTrigger's per-S record arms (L59/L95).
 
 class Slice140Test {
-    class S140World(cell: Int = 0) : Slice139Test.S55World(cell) {
+    class S140World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
         override var camAf = 0
         override var camAg = 0
         private val cam = intArrayOf(0, 0, 400, 240)
@@ -13872,7 +13919,7 @@ class Slice140Test {
 // previously ported as "S10" is case 46 (L1e1) — relabeled.
 
 class Slice141Test {
-    class S141World(cell: Int = 0) : Slice139Test.S55World(cell) {
+    class S141World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
         override fun spawnPickup(anim: Int, x: Int, y: Int): Entity =
             Entity(14, null).also {
                 it.setAnim(anim); it.az = 302; it.av = false
@@ -14049,7 +14096,7 @@ class Slice141Test {
 // speed (L166), S49 →S20 (L1bc), S54 S29→S30 advance (L136).
 
 class Slice142Test {
-    class S142World(cell: Int = 0) : Slice139Test.S55World(cell) {
+    class S142World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
         override var kAQ: Entity? = null
         override fun findByAw(aw: Int): Entity? =
             if (aw == -1) null

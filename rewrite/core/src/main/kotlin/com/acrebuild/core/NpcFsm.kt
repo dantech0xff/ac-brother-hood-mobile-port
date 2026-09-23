@@ -745,7 +745,8 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gq = false; player.gd = null
                 }
             }
-            // `aV()` S55 arm (i.java:9795-10423 L5ea-La66, proven) — the
+            // `aV()` S31 arm (i.java:9804-10466 L5ea-La66, proven;
+            // dispatch `case 31: goto L5ea` i.java:9200) — the
             // claim-QTE zone: 4 pad lanes from Z[1] nibbles (types index
             // i.cs[]/i.ct[]), `aB` ticks vs Z[2] (required presses),
             // `aA` = bound script uid (Z[4]→Z[3] when the sequence ends),
@@ -753,7 +754,7 @@ class NpcFsm(val world: LevelCellSource) {
             // zones otherwise). `m` lane cursor; `m>=10` = lane resolved.
             // `n` is set externally (claim script) → the next overlap tick
             // runs the consumed reset (P|=8192) and the zone removes itself.
-            55 -> {
+            31 -> {
                 if (w.iBe) { w.removeEntity(e); return }               // L5ea
                 if (e.claimAb()) { e.runClaimScript(w); return }       // L5f5
                 if (e.P and 8192 != 0) { w.removeEntity(e); return }   // L601
@@ -874,6 +875,23 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                     e.m = 10 + e.m                                     // La13
                 }
+            }
+            // `aV()` S55 arm (i.java:9227-9253 Lf4, proven; dispatch
+            // `case 55: goto Lf4` i.java:9224) — boss-reposition zone:
+            // when the bound boss (k.aU — ax29 binds itself at init,
+            // i.java:2468 `sArr[5]!=30 → k.aU=this`) sits in S13 and its
+            // interact-rect `Y` overlaps this zone's `W`, force anim 25,
+            // snap boss `ak` to the zone's `ak`, and zero both velocities.
+            // The `aB`=800 HP pool is untouched.
+            55 -> {
+                val boss = w.kAU ?: return                            // k.aU
+                if (boss.S != 13) return                              // Lf4 gate
+                if (!rectsOverlap(boss.Y, e.W)) return                // a(aU.Y, W)
+                boss.setAnim(25)                                      // aU.i(25)
+                boss.ak = e.ak                                        // aU.ak ← zone x
+                boss.ah = 0                                           // zero velocities
+                boss.ag = 0
+                return
             }
             33 -> if (rectsOverlap(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
