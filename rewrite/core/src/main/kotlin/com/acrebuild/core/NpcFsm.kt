@@ -794,6 +794,27 @@ class NpcFsm(val world: LevelCellSource) {
             // 68 — event-done toggles).
             6 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = true; return }
             7 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = false; return }
+            // S8 = L152b (i.java:12052-12076): alert-toggle zone —
+            // overlap flips `i.bn` and self-removes; `bn` now true →
+            // `i(0)` + `E()` + `i(79)` + `g.z=0`; now false → `i(80)` +
+            // `g.z=1` + `k.v()`.
+            8 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    w.iBn = !w.iBn                                  // L1546
+                    w.removeEntity(e)
+                    if (w.iBn) {
+                        player.setAnim(0)                           // L1563
+                        player.eSettle(w)                           // E()
+                        player.setAnim(79)
+                        player.z = false                            // g.z = 0
+                    } else {
+                        player.setAnim(80)                          // L157a
+                        player.z = true                             // g.z = 1
+                        w.clearLatches()                            // k.v()
+                    }
+                }
+                return
+            }
             // S9 = L1658, S19 = L15b8, S39 = L1a02: bare `return` arms —
             // no port (dead states; the dispatch records them verbatim
             // here for the table's completeness).
@@ -836,6 +857,31 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 player.af = null                                    // L1750
                 w.removeEntity(e)
+                return
+            }
+            // S18 = L1c98 (i.java:12952-13070): spawn-release zone —
+            // overlap + `o`→ax4 with `S==33` and `aA∈{0,2}` → `P&=~32`,
+            // `P&=~128`, `P|=16`; then spawn the target just offscreen
+            // on its side of the player (`ak>player.ak` → right:
+            // `ag=-p`, `av=1`, `ak=camR+width`; else `ag=p`, `av=0`,
+            // `ak=camL-width`), `al=camT+70`, `aA=1`.
+            18 -> {
+                if (!rectsOverlap(player.W, e.W)) return            // L1c98
+                if (e.oId == -1) return
+                val t = w.findByAw(e.oId) ?: return                 // L1cb9
+                if (t.ax != 4 || t.S != 33) return                  // L1cd2
+                if (t.aA != 0 && t.aA != 2) return                  // L1cdb
+                t.P = t.P and -33; t.P = t.P and -129
+                t.P = t.P or 16                                     // L1cff
+                if (t.ak > player.ak) {
+                    t.ag = -t.pv; t.av = true                       // L1d1e
+                    t.ak = w.camRect[2] + (t.W[2] - t.W[0])         // L1d2c
+                } else {
+                    t.ag = t.pv; t.av = false                       // L1d47
+                    t.ak = w.camRect[0] - (t.W[2] - t.W[0])         // L1d5c
+                }
+                t.al = w.camRect[1] + 70                            // L1d68
+                t.aA = 1                                            // L1d6f
                 return
             }
             // S21 = L1855 (i.java:12432-12456): checkpoint-write zone —
