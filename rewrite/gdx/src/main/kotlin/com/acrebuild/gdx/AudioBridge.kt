@@ -28,6 +28,7 @@ class AudioBridge {
                 }
                 is Command.RequestSave -> Unit // handled by save adapter
                 is Command.PersistBA -> Unit // handled by save adapter
+                is Command.QuitApp -> Unit // handled by Level0Game
             }
         }
     }

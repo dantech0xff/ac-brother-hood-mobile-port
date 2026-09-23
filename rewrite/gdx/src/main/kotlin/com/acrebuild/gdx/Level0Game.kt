@@ -147,6 +147,11 @@ class Level0Game : ApplicationAdapter() {
                     save.write(c.record)
                     Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
                 }
+                is com.acrebuild.core.Command.QuitApp -> {
+                    // j.c==11 → notifyDestroyed (j.java:218)
+                    Gdx.app.log(TAG, "quit: notifyDestroyed via EXIT menu")
+                    Gdx.app.exit()
+                }
                 else -> Unit
             }
         }
