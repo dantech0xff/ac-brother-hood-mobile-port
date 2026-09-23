@@ -7730,3 +7730,105 @@ private fun ax64S7(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.al > w.kP - 20) e.ah = w.kY              // L258
     if (!ax64Alive(e, w)) w.removeEntity(e)        // L261→L306: v()==false
 }
+
+// ============================================================ ax74 = bN()
+// Wisp/collectible (i.java:21280, proven): spawned clipless-record (bi[74]=54)
+// or by the `m(-1)` burst (`a(74,54,1,az)`, spawnWisp). S0 proximity collect
+// feeds `ap[4|5]` + the `k.s()` streak meter; S1 polar spiral-in orbit; S2
+// attach anim pinned above the player → despawn; S5 fall→bezier; S3/S6
+// quadratic-bezier view-space flight; S4 end. `j.a(6-arg)` param curve at
+// j.java:515 — `b(a,b,c, t(1-t), (1-t)², t²)>>16` blend (verbatim weight
+// order).
+
+/** `j.a(x0,y0,x1,y1,x2,y2,t)` (j.java:515, proven) — quadratic bezier in
+ *  the 256-param domain; returns [x,y]. `b(6-arg)` = `a·t(1-t) +
+ *  2b·(1-t)² + c·t²` scaled >>16 (verbatim — the weight order is NOT the
+ *  textbook Bernstein row). */
+private fun jBezier(x0: Int, y0: Int, x1: Int, y1: Int,
+                    x2: Int, y2: Int, t: Int): IntArray {
+    val tt = t * t
+    val om = 256 - t
+    val om2 = om * om
+    val omt = om * t
+    fun blend(a: Int, b: Int, c: Int) = (a * omt + 2 * b * om2 + c * tt) shr 16
+    return intArrayOf(blend(x0, x1, x2), blend(y0, y1, y2))
+}
+
+/** Record init (L116 at i.java:3029, proven): `P|=512`, `az = r8[7]`,
+ *  `k.aq++` when `r8[5]==0`, then the shared L392 tail `i(r8[5]) + t()`. */
+fun NpcFsm.initAx74(e: Entity, f: List<Int>, w: LevelCellSource) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.P = e.P or 512
+    e.az = rf(7)
+    if (rf(5) == 0) w.kAq++                        // anim-0 wisp counter
+    e.setAnim(rf(5))                               // L392 tail
+    e.refreshBoxes()                               // t()
+}
+
+fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
+    when (e.S) {                                   // bN() switch (proven)
+        0 -> {                                     // L4-17: collect scan
+            val d = e.h(e.ak - p.ak, e.al - p.al)  // k.h octagonal
+            if (!Entity.overlapStrict(p.W, e.Y) && d > 20) return
+            if (w.missionBh() != 3) { w.kCount(5); w.kCollectStreak() }
+            else w.kCount(4)                       // flying → ap[4]
+            w.sfx(15)
+            e.setAnim(2)
+            e.az = p.az + 1
+            e.af?.let { if (it.aG != 0) w.sfx(15); e.af = null }   // L15-17
+            return
+        }
+        1 -> {                                     // L20-41: polar spiral
+            e.P = e.P or 16
+            e.az = p.az + 1
+            if (e.aA != 0) return                  // aA!=0 → L62
+            if (e.j >= e.aE) e.aC-- else e.j += 15 // L28/L30
+            e.aF = (e.aD * 256) / 360              // aF = aD·m/360
+            e.ak = e.aq + ((Trig.sin(e.aF) * e.j) shr 8)
+            e.al = e.ar + ((Trig.sin(Trig.N - e.aF) * e.j) shr 8)
+            if (e.j < e.aE) return
+            if (e.aC > 0) return                   // L64: keep orbiting
+            e.setAnim(2)
+            e.af?.let { if (it.aG != 0) w.sfx(15); e.af = null }   // L38-40
+            e.aC = 0; e.aE = e.j; e.j = 0          // L41
+            return
+        }
+        2 -> {                                     // L43: attach anim
+            e.P = e.P and -17
+            e.ak = p.ak; e.al = p.al - 30
+            if (e.animFinished()) w.removeEntity(e)
+            return
+        }
+        3, 6 -> {                                  // L51: bezier flight
+            val t = if (e.Z[7] != 0) (e.Z[6] * 256) / e.Z[7] else 0
+            val xy = jBezier(e.Z[0], e.Z[1], e.Z[4], e.Z[5],
+                             e.Z[2], e.Z[3], t)
+            e.ak = xy[0] + w.kO
+            e.al = xy[1] + w.kP
+            e.Z[6]++
+            if (e.Z[6] >= e.Z[7]) {
+                e.setAnim(4)
+                if (e.Q == 6) e.T = 1              // L70: skip frame 0
+            }
+            return
+        }
+        5 -> {                                     // L48: fall→bezier setup
+            if (!e.animFinished()) return
+            e.ah = 0; e.ag = 0
+            w.jRand(0, 40)                         // verbatim dead RNG draw
+            e.Z[0] = e.ak - w.kO
+            e.Z[1] = e.al - w.kP
+            val cx = (e.Z[0] + e.Z[2]) shr 1
+            val cy2 = (e.Z[1] + e.Z[3]) shr 1
+            e.Z[4] = cx + w.jRand(-80, 80)
+            e.Z[5] = cy2
+            e.setAnim(3)
+            return
+        }
+        4 -> {                                     // L58: end
+            if (e.animFinished()) w.removeEntity(e)
+            return
+        }
+        else -> return                             // L65
+    }
+}

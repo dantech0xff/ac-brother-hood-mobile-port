@@ -3997,7 +3997,7 @@ interface LevelCellSource {
     var kAb: Boolean get() = false; set(_) {}
     /** `k.aj` — level/mission index into `MISSION_BH` (bh[aj]==3 →
      *  missions 1/4 — the k.X time-scale missions). */
-    val kAj: Int get() = 0
+    var kAj: Int get() = 0; set(_) {}
     /** `k.T`/`k.U` — camera bounds (boundMinY/boundMaxY aliases). */
     var kT: Int get() = 0; set(_) {}
     var kU: Int get() = 0; set(_) {}
@@ -4131,6 +4131,21 @@ interface LevelCellSource {
      *  always false during gameplay; gates the ax64 S1 grab check at
      *  i.java:15773). */
     val gS: Boolean get() = false
+    // -- slice 66: ax74 `bN()` hooks ------------------------------------
+    /** `k.o(int)` (k.java:4304, proven): `ap[r5]++` progress slot; `r5==3`
+     *  is gated on `k.aj == 7` in the original. */
+    fun kCount(slot: Int) {}
+    /** `k.az` — collect-streak counter consumed by `k.s()` (k.java:5338,
+     *  proven). */
+    var kAz: Int get() = 0; set(_) {}
+    /** `k.aq` — level wisp/anim-0 record counter (`k.aq++` at
+     *  i.java:3033). */
+    var kAq: Int get() = 0; set(_) {}
+    /** `k.s()` (k.java:5338, proven): `az++` streak → meter floor
+     *  `30 + tier·15` via `dE = {0,100,200,400,600,800}` — `g.f(ax)` caps
+     *  `x[1]` at the tier then `g.e(ax)` raises it when the floor grew. */
+    fun kCollectStreak() {}
+
     /** `i.bi` — ax64 grab-hitlag flag (set by the S2 hold arm,
      *  i.java:15686). */
     var iBi: Boolean get() = false; set(_) {}
