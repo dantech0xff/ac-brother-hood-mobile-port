@@ -9745,8 +9745,12 @@ class Slice84Test {
     @Test fun `draw escapes switch palette and styles`() {
         // `\\<digit>` -> l(d)
         val pals = mutableListOf<Int>()
-        fontY.draw("A\\5B", 0, 0, 0) { _, _, _, p -> pals += p }
-        assertEquals(listOf(0, 5), pals)
+        fontY.draw("A\\3B", 0, 0, 0) { _, _, _, p -> pals += p }
+        assertEquals(listOf(0, 3), pals)
+        // out-of-range digits are ignored (l() clamps, b.java:1964)
+        val palsOob = mutableListOf<Int>()
+        fontY.draw("A\\9B", 0, 0, 0) { _, _, _, p -> palsOob += p }
+        assertEquals(listOf(0, 0), palsOob)
         // char-1 sets palette from the embedded char code
         val pals2 = mutableListOf<Int>()
         fontY.draw("A\u0001\u0003B", 0, 0, 0) { _, _, _, p -> pals2 += p }

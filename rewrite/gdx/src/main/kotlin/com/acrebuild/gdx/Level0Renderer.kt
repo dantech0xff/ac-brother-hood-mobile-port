@@ -91,7 +91,7 @@ class Level0Renderer {
     private fun drawText(str: String, x: Int, y: Int, align: Int,
                          palette: Int = -1, pack: Int = 92) {
         val f = if (pack == 91) fontW else fontY
-        if (palette >= 0) f.palette = palette
+        if (palette >= 0) f.l(palette)
         f.draw(str, x, y, align) { g, gx, gy, pal ->
             drawObject(pack, g, gx, gy, 0, 0, pal)
         }
@@ -254,11 +254,12 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
-        // menu screens — k.L462 (k.java:1775, proven): frozen world +
-        // `b(93,67,214,true,true)` panel, `eB` title, `eC` prompt, eA[bv]
-        // rows with `bw` cursor. Glyph stand-in: BitmapFont (inferred —
-        // the original's `bW`/`y` bitmap-font clips are unported). Layout
-        // `inferred` (rows ~36px from y≈130 in world y-down space).
+        // menu screens — k.L462/Q() (k.java:1108-1138 + :5960+, proven):
+        // `b(93,67,214,true,true)` panel, `bW.l(1)` prompt centered on
+        // (200,93) align 3, eA[bv] rows `bW.a(cd,strA,i14-ez,i9+(i4>>1),3)`
+        // (row-center x, align 3; i4=30px rows). `b()` panel and the A[2]
+        // row-icon/selection-pill procs unported — procedural panel +
+        // inferred sel strip; `a(strD,zD,w)` fit-scroll not yet mined.
         if (world.menuVisible) {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 93f, 40f, 214f, 150f)
@@ -266,47 +267,32 @@ class Level0Renderer {
             batch.draw(white, 95f, 42f, 210f, 2f)
             batch.draw(white, 95f, 186f, 210f, 2f)
             batch.setColor(1f, 1f, 1f, 1f)
-            font.setColor(1f, 1f, 1f, 1f)
-            world.menuTitle()?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 76f)
-            }
-            world.menuPrompt()?.let { t ->
-                font.setColor(0.9f, 0.85f, 0.5f, 1f)
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 98f)
-                font.setColor(1f, 1f, 1f, 1f)
-            }
+            // `bW.l(1)` before the prompt/title; rows draw under `bW.l(0)`.
+            world.menuTitle()?.let { t -> drawText(t, 200, 76, 3, palette = 1, pack = 91) }
+            world.menuPrompt()?.let { t -> drawText(t, 200, 93, 3, palette = 1, pack = 91) }
             for ((i, row) in world.menuRows().withIndex()) {
                 val (text, sel) = row
                 if (sel) {
                     batch.setColor(0.85f, 0.8f, 0.5f, 0.35f)
                     batch.draw(white, 100f,
-                               (Level0World.VIEW_H - 130 - i * 36 - 14).toFloat(),
+                               (Level0World.VIEW_H - 130 - i * 33 - 14).toFloat(),
                                200f, 20f)
                     batch.setColor(1f, 1f, 1f, 1f)
                 }
-                font.draw(batch, text, 200f - text.length * 3.5f,
-                          Level0World.VIEW_H - 130 - i * 36f)
+                drawText(text, 200, 130 + i * 33, 3, pack = 91)
             }
         }
 
         // stats screen — k.L466 (k.java:1788, proven): `d(0,bx)` text +
-        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173).
+        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173) on `y`.
         if (world.statsVisible) {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 93f, 40f, 214f, 150f)
             batch.setColor(1f, 1f, 1f, 1f)
-            font.setColor(0.9f, 0.85f, 0.5f, 1f)
-            world.statsText()?.let { t ->
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 90f)
-            }
-            font.setColor(1f, 1f, 1f, 1f)
+            world.statsText()?.let { t -> drawText(t, 200, 90, 3) }
             if (world.jG % 6L < 3L) {
                 val t = world.d0(9) ?: "TOUCH THE SCREEN"
-                font.draw(batch, t, 200f - t.length * 3.5f,
-                          Level0World.VIEW_H - 173f)
+                drawText(t, 200, 173, 3)
             }
         }
 
@@ -378,7 +364,7 @@ class Level0Renderer {
             batch.setColor(0f, 0f, 0f, 0.85f)
             batch.draw(white, 0f, 0f, 400f, 240f)
             if (world.medalTitle.isNotEmpty()) {
-                drawText(world.medalTitle, 210, 43, 17, pack = 91)
+                drawText(world.medalTitle, 210, 43, 17, palette = 1, pack = 91)
             }
             batch.setColor(0.08f, 0.07f, 0.1f, 0.95f)
             batch.draw(white, 114f, (H - 59 - 155).toFloat(), 172f, 155f)
