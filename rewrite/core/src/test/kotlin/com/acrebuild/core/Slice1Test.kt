@@ -11240,3 +11240,66 @@ class Slice107Test {
         assertNotEquals(22, w3.player.S)
     }
 }
+
+
+// --------------------------------------------------------------- slice 108
+// jC==18 title tick + jc23 boot sound-prompt confirm (k.a() cases 18/23,
+// k.java:1146-1175,1310-1324). Completes the screen-state coverage for the
+// boot flow — reachable via stateL(23)'s confirm arm or the title itself.
+class Slice108Test {
+
+    @Test fun `jc18 context press latches cS then exits to main menu`() {
+        val w = world()
+        w.stateL(18)
+        assertEquals(18, w.jC)
+        w.pad.queuePress(Pad.M_CONTEXT)      // v(65568) edge (:1156)
+        w.tick(emptyList())
+        assertTrue(w.kCS, "press → cS")
+        assertEquals(100, w.kCT)
+        w.pad.queuePress(0)
+        w.tick(emptyList())                  // cS arm: cT-=10 → l(2)
+        assertEquals(2, w.jC, "cS → l(2) → main menu")
+        assertEquals(0, w.kCT)
+    }
+
+    @Test fun `jc18 play-area tap also confirms via k-j pointerStrip`() {
+        val w = world()
+        w.stateL(18)
+        // j() (k.java:523) reads k.H/k.I — the last pointer RELEASE
+        // point — so drive it via an UP event inside the play strip.
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.UP, 200, 100)))
+        assertTrue(w.kCS, "tap → cS")
+    }
+
+    @Test fun `jc23 sound prompt YES arms audio flags and lands on title`() {
+        val w = world()
+        w.stateL(23)                          // boot sound prompt (l(23) arm)
+        assertEquals(19, w.kEc)
+        w.kBw = 0                             // YES selected (eA[3][0]=14)
+        w.kBE = false; w.kBF = false          // pre-clear to observe the set
+        w.pad.queuePress(327712)              // v(327712) confirm (:1311)
+        w.tick(emptyList())
+        assertTrue(w.kBE && w.kBF, "bw==0 → bE=bF=true")
+        assertEquals(18, w.jC, "confirm → l(18)")
+    }
+
+    @Test fun `jc23 NO clears both audio flags before l-18`() {
+        val w = world()
+        w.stateL(23)
+        w.kBw = 1                             // NO selected (eA[3][1]=15)
+        w.pad.queuePress(327712)
+        w.tick(emptyList())
+        assertFalse(w.kBE); assertFalse(w.kBF)
+        assertEquals(18, w.jC)
+    }
+
+    @Test fun `jc23 without confirm keeps running ae`() {
+        val w = world()
+        w.stateL(23)
+        w.pad.queuePress(0)
+        w.tick(emptyList())
+        assertEquals(23, w.jC, "no confirm → ae() only, stays on jc23")
+    }
+}
+
+

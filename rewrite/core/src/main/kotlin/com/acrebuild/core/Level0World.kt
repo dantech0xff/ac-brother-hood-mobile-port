@@ -823,6 +823,8 @@ class Level0World(
     var kEx = 0                        // k.ex — Q()'s caller state (menus)
     var kFF = 0                        // k.fF — delayed l() target
     var kFG = false                    // k.fG — wipe-confirm flag
+    var kCS = false                    // k.cS — jc18 confirm latch
+    var kCT = 0                        // k.cT — jc18 fade counter
     var kFH = 0                        // k.fH — row-anim phase
     var kFI = 0                        // k.fI — row-anim dir
     var kFE = 0                        // k.fE — fade alpha
@@ -2366,7 +2368,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
+    private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 18, 19, 23, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2463,6 +2465,25 @@ class Level0World(
         menuL(kEy); menuQ(pressY)
     }
 
+    /** `k.a()` case 18 (k.java:1146-1175, proven) — title screen tick.
+     *  `!cS`: `v(65568)||j()` (context edge or a play-area tap) →
+     *  `cT=100; cS=true; z(23)`. `cS`: `cb=true; cT-=10; !e.a()→z(0)`
+     *  (no track → sfx slot 0); `l(2)` → main menu; `A[0]=null`
+     *  (clip-96 pack release — our clip map is static); `cT=0`.
+     *  The A[] anims + `j.g%10>5` press-fire blink draw in the
+     *  renderer's `titleScreen` — this is only the input/exit arm. */
+    private fun menuJc18() {
+        if (!kCS) {
+            if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
+                kCT = 100; kCS = true; z(23)
+            }
+        } else {
+            kCb = true; kCT -= 10
+            if (audioTrack == -1) z(0)
+            stateL(2); kCT = 0
+        }
+    }
+
     /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
      *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
      *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
@@ -2521,8 +2542,19 @@ class Level0World(
             }
             4 -> menuF()                           // F() (:2338, proven)
             5 -> menuG()                           // G() (:2412, proven)
-            23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
-            30 -> menuAf()                         // af() (:6230, proven)
+            // `k.a()` case 23 (k.java:1310-1324, proven): confirm
+            // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
+            // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
+            // `l(18)` → title. 327712 = pause|context union.
+            23 -> if (!pad.v(327712)) menuAe(pressY)
+                  else {
+                      if (kBw == 0) { kBE = true; kBF = true; z(0) }
+                      else if (kBw == 1) { kBE = false; kBF = false }
+                      stateL(18)
+                  }
+            28 -> menuAe(pressY)                     // ae() (:6204, proven)
+            18 -> menuJc18()                         // case 18 (:1146, proven)
+            30 -> menuAf()                           // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)
