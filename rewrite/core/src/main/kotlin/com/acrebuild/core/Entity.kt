@@ -239,6 +239,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gQL = 0                   // g.L — grab-QTE display x (k.java:4348)
     var gQM = 0                   // g.M — grab-QTE display y (k.java:4348)
     var z = false                 // g.z — cleared on grab (c() callers)
+    /** `g.cm` (g.java:15430 init 0, proven) — the mount-indicator
+     *  "refresh pending" latch: set after any r98 mount-event tick
+     *  (L37eb), consumed next tick when r9==0 (L37f2) to run
+     *  `k.k() ? G() : U()`. Distinct from `k.cm` (touchpad flag). */
+    var gcm = false
     /** `i.cU[5]` — the afterimage-trail ring (`a(true,0)`/`bP()`); each
      *  element is an (a,b) pos pair flattened to 10 ints. */
     var cU: IntArray? = null
@@ -2765,11 +2770,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun edgeFlag(): Boolean =
         if (ag < 0) bb else if (ag > 0) bc else if (av) bb else bc
 
-    /** `g.o()` (g.java:6369, proven shape): grounded-or-mounted gate for
-     *  the weapon cycle — `aZ` or standing on ax51/15/43. `g.a` vehicle
-     *  static approximated by `standingOn` (inferred). */
-    fun groundOrVehicle(): Boolean =
-        aZ || standingOn?.ax == 51 || standingOn?.ax == 15 || standingOn?.ax == 43
+    /** `g.o()` (g.java:6090, proven): grounded-or-mounted gate for the
+     *  weapon cycle — `aZ` true; `a == null || a.ax == 43` → false;
+     *  else `a.ax ∈ {51,15,43}` (the trailing `ax == 43` is unreachable
+     *  dead code — kept verbatim). `g.a` = `standingOn`. */
+    fun groundOrVehicle(): Boolean {
+        if (aZ) return true
+        val s = standingOn ?: return false
+        if (s.ax == 43) return false
+        return s.ax == 51 || s.ax == 15 || s.ax == 43
+    }
 
     /**
      * `g.ap()` (g.java:3817, proven): the 65568 context dispatcher —

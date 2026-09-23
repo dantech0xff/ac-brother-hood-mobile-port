@@ -168,7 +168,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // l()+k.v()`.
             34 -> {
                 wallJumpKick(p, world, pad)                                   // aA()
-                if ((if (p.av) p.aT else p.aU) != 20) p.enterFall()
+                if ((if (p.av) p.aT else p.aU) != 20)
+                    p.flingAirborne(0, world)                          // a(0)
                 if (p.aR >= 19 || p.aR == 5) {
                     l(p, pad)
                     world.clearLatches()                               // k.v()
@@ -196,17 +197,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.go != 0) {
                     if (p.al > p.go) p.setAnim(if (p.S == 315) 318 else 28)
                 } else if (p.gk == -1) p.flingAirborne(p.ah, world)
-            }
-            // `e()` case 34 (L1a0a, proven): `aA()` wall-kick input;
-            // `(av?aT:aU)!=20` → `a(0)` fling; `aR>=19 || aR==5` →
-            // `l()` climb input + `k.v()` latch clear.
-            34 -> {
-                wallJumpKick(p, world, pad)                           // aA()
-                if ((if (p.av) p.aT else p.aU) != 20)
-                    p.flingAirborne(0, world)
-                if (p.aR >= 19 || p.aR == 5) {
-                    l(p, pad); world.clearLatches()
-                }
             }
             // L1863 — lunge states tick the arc (g.java:886-906 dispatch)
             272, 273, 274, 275, 292 -> {
@@ -657,10 +647,26 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (!p.indicatorIsHand(world)) p.releaseAe()
                 p.spawnHand(world, 200 + world.kO, 120 + world.kP)
                 p.moveHand(world, 200 + world.kO, 120 + world.kP)
+            } else if (!p.indicatorIsHand(world)) {
+                // L37b6-L37c1 (fallback g.java:7882-7898, proven): mounted
+                // + `!T()` → `U()` (a no-op when `T()==0` — verbatim) +
+                // `a(8, ak, al-85)` clip-9 ax14 marker + `ae` pinned to
+                // (ak, al-85) — the mount-confirm indicator flash.
+                p.dropIndicator(world)
+                p.spawnMarker(world, 8, p.ak, p.al - 85)
+                p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
             }
             world.setMounted()
+            p.gcm = true                            // L37eb — `g.cm = 1`
+        } else if (p.gcm) {
+            // L37f2 (proven): quiet tick after a mount event — clear the
+            // g.cm latch and refresh the indicator: `k.k() ? G() : U()`.
+            p.gcm = false
+            if (world.mounted) p.releaseAe() else p.dropIndicator(world)
         }
-        // L2051-L2057 aA fixups; L2048 o()→ao() debug arm unported
+        // L2051-L2057 aA fixups; the L380d `o()?ao()` weapon-cycle gate
+        // already runs in postTail (:1021) — don't double-call it here
+        // (`k.at` latches, but the port keeps one call site).
         if (p.aA == 0) p.aA = 1
         if (p.aA and 4 != 0) p.aA = p.aA and -5
     }
