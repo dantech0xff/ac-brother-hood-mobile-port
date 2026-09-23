@@ -941,8 +941,8 @@ class Level0World(
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
     override var kAO = 0                       // k.aO — message countdown
     override var kAP: String? = null           // k.aP — HUD message text
-    var kAB: String? = null                    // k.aB — c(z2) center banner (k.java:4327)
-    var kAC = 0                                // k.aC — banner TTL
+    override var kAB: String? = null           // k.aB — c(z2) center banner (k.java:4327)
+    override var kAC = 0                       // k.aC — banner TTL
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
     var alertSlide = 0                         // derived `i3` = 30-aH slide
