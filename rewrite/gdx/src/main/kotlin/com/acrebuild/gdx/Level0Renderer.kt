@@ -287,6 +287,57 @@ class Level0Renderer {
             }
         }
 
+        // M() win-stats screen (k.java:3280-3445, proven positions):
+        // `a(i2,d(0,60))` title ribbon + `bW.a` rows — labels x=95
+        // (align 20), values right-aligned x=305 (align 24), rows
+        // 55+20i; total row y=175; `a(d(0,16),str2)` bottom hint.
+        // Ribbon/panel sprites (A[3], fJ/fK corners) are unported —
+        // procedural stand-ins, `inferred` styling.
+        if (world.jC == 15) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.8f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            // title ribbon — `a(i2,str)`: color box + centered text
+            // (A[3] clip sprites 1/2 unported → gold bar stand-in)
+            val ty = world.statsTitleY
+            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
+            batch.draw(white, 87f, (H - ty - 12).toFloat(), 226f, 20f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            world.d0(60)?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          (H - ty).toFloat())
+            }
+            // row labels + right-aligned values
+            font.setColor(1f, 1f, 1f, 1f)
+            for (i3 in 0..4) {
+                val v = world.statsRowText[i3]
+                if (v.isEmpty()) continue
+                world.d0(38 + i3)?.let { t ->
+                    font.draw(batch, t, 95f, (H - 55 - i3 * 20).toFloat())
+                }
+                font.draw(batch, v, 305f - v.length * 7f,
+                          (H - 55 - i3 * 20).toFloat())
+            }
+            // total row (y=175, one-shot after jG>10)
+            if (world.statsScoreVisible) {
+                world.d0(43)?.let { t ->
+                    font.draw(batch, t, 95f, (H - 175).toFloat())
+                }
+                val t = world.fmtJ(world.statsScore)
+                font.draw(batch, t, 305f - t.length * 7f,
+                          (H - 175).toFloat())
+            }
+            // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
+            if (world.statsTypeNext >= 0) {
+                val t = (world.d0(16) ?: "NEXT") + " " +
+                        world.typewriterText
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, t, 390f - t.length * 7f,
+                          (H - 222).toFloat())
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+        }
+
         batch.end()
         fbo.end()
 
