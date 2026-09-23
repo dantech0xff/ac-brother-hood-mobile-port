@@ -297,10 +297,14 @@ class FontClip(
     /** `a(Graphics, str, U, x, y, i3, i4, i5, i6)` (b.java:1721-1769,
      *  proven): wrapped-lines renderer — draws `i4` lines starting at
      *  line `i3` (i4=-1 → to the end, clamped), align bits on each
-     *  line's own width, shared escape state across lines. */
+     *  line's own width, shared escape state across lines. `limit` =
+     *  `i6`: char budget — chars past `firstLineStart + limit` are
+     *  clipped (the `X = s3 + i6` cap at :1736-1739) — the dialog
+     *  typewriter's `bT`. */
     fun drawWrapped(
         str: String, u: IntArray, x: Int, yIn: Int, i3: Int, i4in: Int,
-        align: Int, drawGlyph: (glyph: Int, x: Int, y: Int, palette: Int) -> Unit,
+        align: Int, limit: Int = -1,
+        drawGlyph: (glyph: Int, x: Int, y: Int, palette: Int) -> Unit,
     ) {
         var y = yIn
         val s2 = u[0]
@@ -311,10 +315,13 @@ class FontClip(
         val i8 = baseK + baseJ
         if ((align and 32) != 0) y -= i8 * (i4 - 1)
         else if ((align and 2) != 0) y -= (i8 * (i4 - 1)) shr 1
+        val xEnd = if (limit >= 0)
+            (if (i3 > 0) u[((i3 - 1) shl 1) + 1] else 0) + limit
+        else Int.MAX_VALUE                                        // (:1736-1739)
         var i10 = 0
         while (i9 < s2 && i10 <= i4 - 1) {
             var v = if (i9 > 0) u[((i9 - 1) shl 1) + 1] else 0
-            val w = u[(i9 shl 1) + 1]
+            val w = minOf(u[(i9 shl 1) + 1], xEnd)
             if (v < str.length && str[v] == '\n') v++
             var i11 = x
             var i12 = y + i10 * i8

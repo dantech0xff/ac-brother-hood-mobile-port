@@ -4681,10 +4681,13 @@ class Slice43cTest {
         assertTrue(e.cd[0], "cd[0]=true halt")
         assertTrue(w.dialogModal, "k.b accept → k.l(21)")
         assertEquals(1, w.bO); assertEquals(3, w.bN0); assertEquals(42, w.dialogLine)
-        // screen-21 dismiss edge → k.C.Z() (cd[0]=false), modal clears.
-        // The arming tick's press is already consumed — the first fresh
-        // press edge dismisses (no cooldown, k.java:1578-1603 semantics).
+        // case-21 u==9 press semantics (k.java:945-1017): the typewriter
+        // starts un-revealed, so press 1 only forces `bT=-1` (reveal);
+        // press 2 hits the v<w catch-all → C.Z() + l(8).
+        w.autoDismissDialog = false
         w.kC = e
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertTrue(w.dialogModal, "press while typing reveals, not dismisses")
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
         assertFalse(w.dialogModal)
         assertFalse(e.cd[0], "Z() resumed the claim")
@@ -11044,5 +11047,68 @@ class Slice99Test {
         w.pad.commit(16388)
         w.npcFsm.tickTrigger(door, w, p)
         assertNull(p.ae, "o==-1 → L17d0 early return")
+    }
+}
+
+// =========================================================================
+// Slice 103 — jC==21 dialog render state (k.java:350-450, 899-1017):
+// b(9,1+aj,str,str) load → bM[] 3-line pages + bN icon propagation,
+// typewriter bR/bS/bT, u==9 press tail (reveal → dismiss, no page adv).
+// =========================================================================
+class Slice103Test {
+    @Test fun `kDialog loads u-9 state and wraps pages at 300`() {
+        val w = world()
+        assertTrue(w.kDialog(5, 26, 1))
+        assertEquals(9, w.dlgU)
+        assertEquals(1, w.bO); assertEquals(5, w.bN0); assertEquals(5, w.dlgBN[0])
+        assertTrue(w.dlgW >= 1)
+        assertNotNull(w.dlgBM[0]); assertTrue(w.dlgBM[0]!!.isNotEmpty())
+        assertEquals(0, w.dlgV); assertEquals(0, w.dlgBT)
+        assertEquals(0, w.dlgBR); assertEquals(30, w.dlgBS); assertTrue(w.dlgBQ)
+        // bN[i] propagates to every page slot (k.java:392-398, proven)
+        for (i in 1 until w.dlgW) assertEquals(5, w.dlgBN[i])
+    }
+
+    @Test fun `typewriter counts bT up then pins -1`() {
+        val w = world()
+        w.kDialog(1, 27, 0)
+        val len = w.dlgBM[0]!!.length
+        w.dlgTypeTick(len)
+        assertEquals(1, w.dlgBR); assertEquals(30 / 16, w.dlgBT)   // (bR*bS)/16
+        repeat(400) { w.dlgTypeTick(len) }
+        assertEquals(-1, w.dlgBT)                                // A() done
+        val after = w.dlgBR
+        w.dlgTypeTick(len)
+        assertEquals(after, w.dlgBR, "bT==-1 stops the counter")
+    }
+
+    @Test fun `typing press reveals and revealed press dismisses`() {
+        val w = scriptedWorld(
+            scriptBlock(0, 0, scriptGroup(0, op105(3, 42, 1))))
+        val e = claimer(w)
+        e.runClaimScript(w)
+        assertTrue(w.dialogModal)
+        w.autoDismissDialog = false
+        w.kC = e
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertTrue(w.dialogModal, "press while typing reveals only (:955)")
+        assertEquals(-1, w.dlgBT)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertFalse(w.dialogModal, "revealed press → v<w catch-all (:1003)")
+        assertFalse(e.cd[0], "C.Z() resumed the claim")
+        assertTrue(e.cd[1], "C.cd[1]=true catch-all write (:1005)")
+        assertEquals(w.dlgW, w.dlgV, "v=w on the dismiss path (:1016)")
+        assertEquals(0, w.pad.edge)
+    }
+
+    @Test fun `cd2 claimer + 131072 edge suppresses the dialog press`() {
+        val w = world()
+        w.kDialog(1, 18, 0)
+        w.screenL(21)
+        val e = Entity(5, null); e.cd[2] = true; w.kC = e
+        w.pad.edge = 131072                      // v(131072) edge latched
+        assertTrue(w.dlgSuppressed(), "(:946) — claim script eats the press")
+        e.cd[2] = false
+        assertFalse(w.dlgSuppressed())
     }
 }

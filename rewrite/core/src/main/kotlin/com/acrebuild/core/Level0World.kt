@@ -1066,16 +1066,101 @@ class Level0World(
     override var kCP = false                           // k.cP direction
     override var bO = 0                                // k.bO — dialog flag
     override var bN0 = -1                              // k.bN[0] — dialog idx
-    /** `k.b(idx,str,flag)` (k.java:430, head proven): stores `bO`/`bN[0]`
-     *  then `b(9, 1+aj, str, str)` — the dialog-display call; `inferred`
-     *  accept-return (display pipeline unported). */
+
+    // ---- jC==21 dialog state (k.java:10-15,135-140, all proven) -------
+    /** `u` — dialog kind (k.java:10); level-0 op105 only emits u==9. */
+    var dlgU = 0
+    /** `bM[15]` — wrapped dialog pages (k.java:135). */
+    val dlgBM = arrayOfNulls<String>(15)
+    /** `bN[15]` — per-page icon ids propagated from `bN[0]` (k.java:136,
+     *  :392-398). For u==9 the digit-write is skipped but the propagation
+     *  still runs — every page carries the speaker icon. */
+    val dlgBN = IntArray(15)
+    /** `v`/`w` — current page / total pages (k.java:11-12,:371). */
+    var dlgV = 0
+    var dlgW = 0
+    /** `bQ` — typewriter arm gate (k.java:140,:370). */
+    var dlgBQ = true
+    /** `bR`/`bS`/`bT` — typewriter counter / speed / char limit
+     *  (k.java:13-15,:441-443); `bT==-1` = page fully revealed (`A()`). */
+    var dlgBR = 0
+    var dlgBS = 30
+    var dlgBT = 0
+
+    /** `k.b(idx,str,flag)` + `b(9,1+aj,str,str)` loader (k.java:405-412 +
+     *  :350-372, all proven): `bO=flag`; `bN[0]=idx` (`-1` when idx≤0); `u=9`; wraps
+     *  `d(1+aj,strRef)` at 300 (the `i!=6` → z2 arm) into `bM[]` 3-line
+     *  pages; `w=iA+1`; `D(0)`; `bQ=true`; `z()`. */
     override fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean {
         bO = flag
-        bN0 = if (idx > 0) idx else -1
+        bN0 = if (idx > 0) idx else -1                    // (:406-410)
+        dlgBN[0] = bN0
+        dlgU = 9
         dialogLine = strRef
+        val iA = dlgLoadPage(levelString(1 + kAj, strRef) ?: "", 0, 300)
+        dlgW = iA + 1                                     // w = iA+1 (:371)
+        dlgD(0)                                           // D(0)   (:368)
+        dlgBQ = true                                      // bQ     (:370)
+        dlgZ()                                            // z()    (:371)
         return true
     }
     var dialogLine = -1                                // last b(9,·) str arg
+
+    /** `a(String,int,boolean,int)` (k.java:374-401, proven) — wraps `str`
+     *  at `width` (caller's resolved `i3`: z2 → 300, else 220) into
+     *  `bM[]` pages of ≤3 wrapped lines starting at slot `i`, copying
+     *  `bN[i]` into every page slot (`z2` arm); returns `i+i4`. The
+     *  `i2==9` digit-write skip + the `bN` propagation are u==9's path. */
+    private fun dlgLoadPage(str: String, i: Int, width: Int): Int {
+        val u = wrapPage(str, width)                      // a(y,str,i3) (:382)
+        var i4 = 0
+        var s = 0
+        var i5 = u[0]
+        while (i5 > 3) {
+            i4++
+            val s2 = u[(i4 shl 1) * 3 - 1]                // sArrA[6·i4-1] (:387)
+            dlgBM[i + i4 - 1] = str.substring(s, s2)
+            dlgBN[i + i4 - 1] = dlgBN[i]                  // z2 arm      (:392)
+            s = s2
+            i5 -= 3
+        }
+        dlgBM[i + i4] = str.substring(s)
+        dlgBN[i + i4] = dlgBN[i]                          // z2 arm      (:398)
+        return i + i4
+    }
+
+    /** `D(int)` (k.java:437-440, proven): `v=min(i,w)`; if `A()` → `z()`. */
+    private fun dlgD(i: Int) {
+        dlgV = minOf(i, dlgW)
+        if (dlgBT == -1) dlgZ()
+    }
+    /** `z()` typewriter reset (k.java:441-443, proven). */
+    private fun dlgZ() { dlgBS = 30; dlgBR = 0; dlgBT = 0 }
+
+    /** `k.bL` (already declared as the af() cursor — one shared static
+     *  in the original): portrait variant — `4+bL`/`8+bL` pick the A[4]
+     *  portrait anims; only the jc30 browser writes it (:6090). */
+    /** The `!v(131072) || C == null || u != 9 || !C.cd[2]` gate
+     *  (k.java:946, proven) — while the claimer sits in its `cd[2]`
+     *  state and the 131072 key edge fires, the whole typewriter/press
+     *  block is suppressed (the claim script consumes the press). */
+    fun dlgSuppressed(): Boolean =
+        pad.v(131072) && dlgU == 9 && kC?.cd?.get(2) == true
+
+    /** Render-side typewriter tick — the `bQ && !A()` arm of case-21
+     *  (k.java:947-955, proven): per frame `bR++`; `bT=(bR*bS)/16`;
+     *  `bT` past the page length → `bT=-1` (revealed). Fire press while
+     *  typing also forces `bT=-1` (:955-957) — world-side in the press
+     *  tail. Runs inside the original's render dispatch, so it lives
+     *  renderer-side here too. Returns `bT` for the text call. */
+    fun dlgTypeTick(pageLen: Int): Int {
+        if (dlgBQ && dlgBT != -1) {
+            dlgBR++
+            dlgBT = (dlgBR * dlgBS) / 16
+            if (dlgBT > pageLen) dlgBT = -1
+        }
+        return dlgBT
+    }
     override fun pointerDownIn(x: Int, y: Int, w: Int, h: Int): Boolean =
         lastTouchX >= x && lastTouchY >= y &&
             lastTouchX <= x + w && lastTouchY <= y + h &&
@@ -3086,8 +3171,27 @@ class Level0World(
         if (dialogModal) {
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
+            } else if (sawPressPending(events) && dlgSuppressed()) {
+                pad.edge = 0        // C.cd[2] consumes the press (:946)
             } else if (sawPressPending(events)) {
-                kC?.resumeScript(); leaveDialog()
+                // case-21 u==9 press tail (k.java:945-1017, proven):
+                // `v(65568)` while typing → `bT=-1` reveal (:955-957);
+                // while revealed → the `v==w` dispatch — but u==9 has no
+                // `D(v+1)` page-advance arm at all, so v<w always holds
+                // and the press lands in the catch-all dismiss:
+                // `C.Z(); C.cd[1]=true; bh!=3 → m(ad); z(23); l(8); v=w`
+                // (:1003-1016). Verbatim quirk: `bM[1..]` pages are never
+                // shown for u==9 — no page advance exists for it.
+                if (dlgBT != -1) {
+                    dlgBT = -1                                // reveal (:955)
+                } else {
+                    kC?.resumeScript()                        // C.Z()
+                    kC?.cd?.set(1, true)                      // C.cd[1]=true
+                    if (!bh3) kM(kAd)                         // bh!=3 → m(ad)
+                    z(23)
+                    dlgV = dlgW
+                    leaveDialog()                             // l(8)
+                }
                 pad.edge = 0        // eat the dismiss edge — not a gameplay tap
             } else { tickIndex++; jG++; return }
         }
