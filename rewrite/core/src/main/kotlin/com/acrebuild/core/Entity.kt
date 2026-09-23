@@ -2948,13 +2948,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
             49 -> {
                 aj = 0; ah = 0; ag = 0
                 ag = ((snapX - ak) / 10) shl 8
-                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+                world.kStatE(aw); world.kAp[3]++; world.sfx(20)
             }
             283 -> {
                 val ax2 = attacker?.ak ?: ak
                 ak = ax2 + if (av) 10 else -10
                 aj = 0; ah = 0; ag = 0
-                world.kStatE(aw); world.apStats[3]++; world.sfx(20)
+                world.kStatE(aw); world.kAp[3]++; world.sfx(20)
             }
             else -> {
                 ak = snapX
@@ -2963,7 +2963,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (anim == 90) {
                     // ax47 attacker → k.e(0,aw) stat; every attacker → k.o(3).
                     if (attacker?.ax == 47) world.kStatE(aw)
-                    world.apStats[3]++
+                    world.kAp[3]++
                 } else {
                     al = attacker?.al ?: al
                 }
@@ -3757,7 +3757,7 @@ interface LevelCellSource {
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
     var aq: Int
-    val apStats: IntArray
+    val kAp: IntArray
     var shake: Int
     val sfxLog: List<Int>
     fun sfx(id: Int)
