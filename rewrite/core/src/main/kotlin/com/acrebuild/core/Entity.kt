@@ -3541,6 +3541,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return r0
     }
 
+    /** `i.d(i,x,y)` (i.java:16745, proven): spawn the ax24/clip40 `S=i`
+     *  score floatie at pixel (x,y) — `a(24,40,i,201)` child, then
+     *  `av=false`, `N/O` = 8.8 pos, `ak/al` = pos, vel 0, `t()`, `k.b`
+     *  insert. (spawnChildFx's settleToGround runs before the pos
+     *  re-anchor, so it's a no-op vs the raw a() — flagged.) */
+    fun spawnFloatie(world: LevelCellSource, i: Int, x: Int, y: Int) {
+        val aK = spawnChildFx(world, 24, 40, i, 201)
+        aK.av = false
+        aK.N = x shl 8; aK.O = y shl 8
+        aK.ak = x; aK.al = y
+        aK.aj = 0; aK.ai = 0; aK.ah = 0; aK.ag = 0
+        aK.refreshBoxes()                        // t()
+        world.queueInsert(aK)                    // k.b(aK)
+    }
+
     /** `i.a(x,y,tx,ty,ax,clip,S,az)` (i.java:21212, proven): 4-arg spawn
      *  + ax74 burst-particle customization — `ag/ah = j.a(-6,6)<<8`,
      *  `Z[8]` arc table `{x-kO, y-kP, tx-kO, ty-kP, midX+rand±80, y-kP,

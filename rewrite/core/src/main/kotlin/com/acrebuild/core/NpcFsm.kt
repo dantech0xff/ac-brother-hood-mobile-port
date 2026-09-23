@@ -550,7 +550,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   sets `P|=16`; leaving clears only when this trigger still owns.
      * - S43 (L744): overlap && player.S ∈ {60,61} → `i(203)`.
      * - S53 (L886): `g.D && overlap && player.S ∈ {0,1,5}` → `i(360)`,
-     *   `ag=ah=0`, `k.c(this)` remove. (g.D producer arm unported.)
+     *   `ag=ah=0`, `k.c(this)` remove. (g.D set by the S90 launch arm.)
      * - S16 (L177d→L1850): door-teleport — `bh()` exit + `bi()` arrival
      *   driving `k.B(26)`/`k.C(26)` fades. (The slice-20 "rope-attach"
      *   stub label was wrong — this is the paired-door transition.)
@@ -1703,7 +1703,7 @@ class NpcFsm(val world: LevelCellSource) {
     /** `a()` side-push (i.java:914+, L48-63 ax4 path, proven): while the
      *  player is grounded (S<=43) and overlapping the volume, clamp their
      *  `ak` to its edge (dead ±1 `ag` nudge kept verbatim, L63 zeroes it).
-     *  Guards that can't fire here omitted; `aS.y()` unported → treated
+     *  Guards that can't fire here omitted; `aS.y()` → `hitWall()`
      *  false (inferred). */
     private fun pushOut(e: Entity, p: Entity, w: LevelCellSource) {
         if (e.S == 139) return
@@ -2958,7 +2958,7 @@ class NpcFsm(val world: LevelCellSource) {
                         if (!Entity.overlapI(e.W, ad.W)) continue
                         if (e.S != 39) e.setAnim(e.S + 1)
                         ad.setAnim(2)
-                        // d(8, ad.ak, ad.al) floatie spawner — unported
+                        e.spawnFloatie(world, 8, ad.ak, ad.al)   // d(8,…)
                         r0.setAnim(10)
                         return
                     }
@@ -6281,7 +6281,9 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
             54 -> {                                        // L26-fallback arm
                 if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30) continue
                 r0.ad?.let { if (Entity.overlapStrict(it.W, e.X)) {
-                    it.setAnim(2); w.countKill(r0.aw); r0.setAnim(10)
+                    it.setAnim(2)
+                    e.spawnFloatie(w, 8, it.ak, it.al)          // d(8,…)
+                    w.countKill(r0.aw); r0.setAnim(10)
                     hit = true } }
                 if (Entity.overlapStrict(r0.W, e.X)) { r0.setAnim(10)
                     w.countKill(r0.aw); hit = true }
@@ -6294,7 +6296,8 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
                 r0.aB -= 20; r0.cGCount = 6
                 if (r0.aB <= 0) {
                     r0.cGCount = 0; r0.setAnim(10); w.countKill(r0.aw)
-                    r0.ad?.setAnim(2)
+                    r0.ad?.let { it.setAnim(2)
+                        e.spawnFloatie(w, 8, it.ak, it.al) }    // d(8,…)
                 }
                 e.setAnim(9); hit = true; return true
             }
@@ -6376,7 +6379,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
                 val r1 = e.aC; e.aC = r1 - 1
                 if (r1 < 0) {
                     runnerBurst(e, 9, false, w)          // a(9,false)
-                    // if (e.S == 22) → d(9,ak,al) floatie — unported
+                    if (e.S == 22) e.spawnFloatie(w, 9, e.ak, e.al)  // d(9,…)
                     e.P = e.P or 128; e.P = e.P and -17; e.af = null
                 }
             }
