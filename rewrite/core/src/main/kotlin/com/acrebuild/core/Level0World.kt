@@ -1466,7 +1466,6 @@ class Level0World(
             if (n.ax == 44) npcFsm.tickDoor(n, player)
             else if (n.ax == 10) npcFsm.tickTrigger(n, player)
             else if (n.ax == 4) npcFsm.tickDestructible(n, player)
-            else if (n.ax == 74) npcFsm.tickWisp(n, player)
             else if (n.ax == 67) npcFsm.tickDecor(n, player)
             else if (n.ax == 14) npcFsm.tickPickup(n, player)
             else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
@@ -1488,7 +1487,6 @@ class Level0World(
             else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
             else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
             else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
             else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
             else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
@@ -1507,7 +1505,6 @@ class Level0World(
             else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
             else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
             else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
-            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
 
             else npcFsm.tick(n, player)
             // i.ad() per-frame bubble tick (k.java:3740-3749 proven):

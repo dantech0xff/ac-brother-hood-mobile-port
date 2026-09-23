@@ -669,30 +669,6 @@ class NpcFsm(val world: LevelCellSource) {
         p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
     }
 
-    fun tickWisp(e: Entity, player: Entity) {
-        e.advanceAnim()   // universal s()
-        when (e.S) {
-            1 -> {
-                if (e.aA != 0) return            // L28 gate (aA==0 arm only)
-                if (e.j >= e.aE) e.aC-- else e.j += 15
-                e.aF = (e.aD * Trig.M) / 360
-                e.setPositionPx(
-                    e.aq + ((Trig.sin(e.aF) * e.j) shr 8),
-                    e.ar + ((Trig.sin(Trig.N - e.aF) * e.j) shr 8))
-                if (e.j >= e.aE && e.aC <= 0) {
-                    e.setAnim(2)
-                    e.af?.let { if (it.aG != 0) world.sfx(15); e.af = null }
-                    e.aC = 0; e.aE = e.j; e.j = 0
-                }
-            }
-            2 -> {
-                e.P = e.P and -17
-                e.setPositionPx(player.ak, player.al - 30)
-                if (e.animFinished()) world.removeEntity(e)
-            }
-        }
-    }
-
     private fun overlap(a: IntArray, b: IntArray): Boolean =
         a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 
@@ -7740,6 +7716,10 @@ fun NpcFsm.initAx74(e: Entity, f: List<Int>, w: LevelCellSource) {
 }
 
 fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
+    // s() ordering (i.java:6407 L25-L34, proven): the universal anim
+    // advance runs in the shared per-tick TAIL — after the FSM arm — so
+    // an arm's r() still sees last-frame state before s() wraps T.
+    try {
     when (e.S) {                                   // bN() switch (proven)
         0 -> {                                     // L4-17: collect scan
             val d = e.h(e.ak - p.ak, e.al - p.al)  // k.h octagonal
@@ -7804,6 +7784,9 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
             return
         }
         else -> return                             // L65
+    }
+    } finally {
+        e.advanceAnim()                            // universal s() tail (i.java:6407)
     }
 }
 
