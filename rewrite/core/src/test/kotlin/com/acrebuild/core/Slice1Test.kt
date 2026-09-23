@@ -9002,10 +9002,11 @@ class Slice78Test {
         val w = world()
         w.stateL(12)
         val npcCount = w.npcs.size
-        // row 1 (NO) sits at world-y 166 in the inferred layout
+        // verbatim b() layout: 2-row dialogs split columns — NO sits in
+        // the right-column rect (206,117,214,30) (k.java:5962-6000, proven)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 166),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 166)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
         assertEquals(2, w.jC)                // W() teardown + l(2)
         assertEquals(-1, w.kBx)
         assertTrue(w.npcs.size < npcCount)   // teardown cleared entities
@@ -9014,9 +9015,10 @@ class Slice78Test {
     @Test fun `YES row tap dispatches restart directly`() {
         val w = world()
         w.stateL(12)
+        // YES is the left-column rect (93,117,214,30)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 110),
-            InputQueue.Event(1, InputQueue.Type.UP, 200, 110)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
+            InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
         assertEquals(8, w.jC)                // reload ran
         assertFalse(w.kAl)
     }
@@ -9767,5 +9769,92 @@ class Slice84Test {
         fontY.draw("A", 100, 0, 8) { _, x, _, _ -> calls += x }
         val (d, _) = fontY.measure("A")
         assertEquals(100 - d, calls[0])
+    }
+}
+
+/** Slice 86 — b(x,y,w,z2,z3) menu panel: row rects, two-column split,
+ *  strD text, a(str,z2,i) fit proc, and the `a` UiAnimObject semantics
+ *  (k.java:5868-6150 + a.java, proven). */
+class Slice86Test {
+
+    @Test fun `two rows split columns side by side`() {
+        val w = world()
+        w.stateL(12)
+        val r = w.menuRowRects()
+        assertEquals(2, r.size)
+        // verbatim: YES left column, NO right column, SAME top row
+        assertEquals(listOf(93, 117, 214, 30), r[0].toList())
+        assertEquals(listOf(206, 117, 214, 30), r[1].toList())
+    }
+
+    @Test fun `non-19 rows render LEVEL n`() {
+        val w = world()
+        w.stateL(12)
+        // j.c==12 → strD = d(0,10)+" "+(i13+1) = "LEVEL n" (k.java:6078)
+        assertEquals("LEVEL 1", w.menuRowText(0).first)
+        assertEquals("LEVEL 2", w.menuRowText(1).first)
+    }
+
+    @Test fun `row pitch is 30 except first jc2 row 35`() {
+        val w = world()
+        assertEquals(30, w.menuI4(0))
+        assertEquals(30, w.menuI4(1))
+        // row width: 170 normally, 135 for bv4-non14 / jc19
+        assertEquals(170, w.menuI5())
+    }
+
+    @Test fun `menuRowAt hits the verbatim rects`() {
+        val w = world()
+        w.stateL(12)
+        // release inside right column → row 1
+        w.lastTouchX = 350; w.lastTouchY = 120
+        assertEquals(1, w.menuRowAt(120))
+        // inside left column → row 0; overlap zone (x 206..307) → row 0 wins
+        w.lastTouchX = 150; w.lastTouchY = 120
+        assertEquals(0, w.menuRowAt(120))
+        w.lastTouchX = 250; w.lastTouchY = 120
+        assertEquals(0, w.menuRowAt(120))
+        // above the panel → miss
+        w.lastTouchX = 150; w.lastTouchY = 100
+        assertEquals(-1, w.menuRowAt(100))
+        w.lastTouchX = -1; w.lastTouchY = -1
+    }
+
+    @Test fun `UiAnimObject arm-seek-tick matches a() semantics`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        val a = UiAnimObject()
+        a.attach(clip)
+        // e=-1 → stopped; arm(i,1) starts state i
+        assertTrue(a.stopped())
+        a.arm(21, 1)
+        assertEquals(21, a.e)
+        // seek wraps: seek(i) maps t into [0,len)
+        a.arm(21, 1)
+        val len = a.len()
+        if (len > 0) {
+            a.seek(len + 2)
+            assertTrue(a.currentFrame in 0 until clip.frameCount(21))
+        }
+        // finite loop counts down to latched stop
+        a.arm(18, 1)
+        var guard = 0
+        while (!a.stopped() && guard++ < 2000) a.tick(62)
+        assertTrue(a.stopped(), "finite anim should latch stopped")
+        assertEquals(18, a.e)
+        // infinite (h=-1) never reports stopped while ticking
+        a.arm(20, -1)
+        repeat(50) { a.tick(62) }
+        assertFalse(a.stopped())
+    }
+
+    @Test fun `clip93 has the A2 edge frames 10 to 17`() {
+        val clip = Clip.load(
+            java.io.File("../generated/clips/clip93/clip.acpk").readBytes())
+        // edge-band frames used by a(i,i2,i3,z2,z3) (:5872): 10..17 exist
+        assertTrue(clip.animCount() >= 18)
+        assertTrue(clip.frameCount(10) >= 1)
+        assertTrue(clip.frameCount(17) >= 1)
+        assertTrue(clip.moduleWidth(clip.frameModuleIndex(10, 0)) > 0)
     }
 }

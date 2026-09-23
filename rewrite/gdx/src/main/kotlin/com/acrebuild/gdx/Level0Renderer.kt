@@ -2,6 +2,8 @@ package com.acrebuild.gdx
 
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
+import com.acrebuild.core.FontClip
+import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.badlogic.gdx.Gdx
@@ -186,6 +188,197 @@ class Level0Renderer {
         }
     }
 
+    /** `b.a(g, anim, frame, x, y, flags, 0, 0)` — single frame draw
+     *  (the `a`-object/`A[2]` path, b.java:915). */
+    private fun drawFrame(pack: Int, anim: Int, frame: Int, x: Int, y: Int,
+                          flags: Int, palette: Int = 0) {
+        val clip = clips[pack] ?: clips[-pack] ?: return
+        if (anim < 0 || anim >= clip.animCount() ||
+            frame < 0 || frame >= clip.frameCount(anim)) return
+        val fd = clip.frameDraw(anim, frame, flags)
+        drawModule(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
+                   fd.transform, palette)
+    }
+
+    // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
+    private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
+    private var menuFk: UiAnimObject? = null          // k.fK
+    private var menuEz = 0                            // k.ez fit-scroll
+
+    /** `j.h(argb); j.d(g,x,y,w,h)` — translucent rect fill, verbatim ints. */
+    private fun fillAr(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        batch.setColor(((argb ushr 16) and 255) / 255f,
+                       ((argb ushr 8) and 255) / 255f,
+                       (argb and 255) / 255f,
+                       ((argb ushr 24) and 255) / 255f)
+        batch.draw(white, x.toFloat(),
+                   (Level0World.VIEW_H - y - h).toFloat(),
+                   w.toFloat(), h.toFloat())
+        batch.setColor(1f, 1f, 1f, 1f)
+    }
+
+    /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
+    private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
+        batch.flush()
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+        Gdx.gl.glScissor(x, Level0World.VIEW_H - y - h, w, h)
+    }
+    private fun clipReset() {
+        batch.flush()
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+    }
+
+    /** `a(i,i2,i3,z2,z3)` (k.java:5872, proven) — ornamental band:
+     *  cap frame at x, fill repeated to x+w, cap mirrored (flags=1).
+     *  Frame pick: z3? (z2?16,17:14,15) : (z2?12,13:10,11). */
+    private fun panelEdge(x: Int, y: Int, w: Int, z2: Boolean, z3: Boolean) {
+        val clip = clips[93] ?: return
+        val (cap, fill) = if (z3) {
+            if (z2) 16 to 17 else 14 to 15
+        } else if (z2) 12 to 13 else 10 to 11
+        val fM = clip.moduleWidth(
+            clip.frameDraw(cap, 0, 0).module and 0x3FFF)
+        val fN = clip.moduleWidth(
+            clip.frameDraw(fill, 0, 0).module and 0x3FFF)
+        if (fM <= 0 || fN <= 0) return
+        drawFrame(93, cap, 0, x, y, 0)
+        var i7 = x + fM
+        do {
+            drawFrame(93, fill, 0, i7, y, 0)
+            i7 += fN
+        } while (i7 + fN < x + w)
+        drawFrame(93, cap, 0, x + w, y, 1)     // flags=1 — mirrored end cap
+    }
+
+    /** `a(str, z2, i)` (k.java:6335, proven) — unpressed rows truncate
+     *  with "..."; pressed rows scroll `ez` (-w .. textW); else `ez=0`. */
+    private fun fitText(str0: String, zD: Boolean, w: Int): String {
+        var str = str0
+        var i2 = fontW.measure(str).first()
+        if (!zD) {
+            var length = str.length - 3
+            while (length > 0 && i2 > w) {
+                length--
+                str = str.substring(0, length) + "..."
+                i2 = fontW.measure(str).first()
+            }
+        } else if (i2 > w) {
+            menuEz += 2
+            if (menuEz > i2) menuEz = -w
+        } else {
+            menuEz = 0
+        }
+        return str
+    }
+
+    /** `b(i,i2,i3,z2,z3)` (k.java:5903-6150, proven) — the menu panel +
+     *  row renderer. The `c()→bw` tap hook is the world's `menuRowAt`;
+     *  the j.c==2 side soft-buttons are unported (jC==2 unreachable). */
+    private fun menuPanel(world: Level0World, x: Int, y: Int, w: Int,
+                          z2: Boolean, z3: Boolean) {
+        val clipA2 = clips[93]
+        if (menuFj == null && clipA2 != null) {
+            menuFj = UiAnimObject(clipA2); menuFj!!.arm(18, -1)
+        }
+        if (menuFk == null && clipA2 != null) {
+            menuFk = UiAnimObject(clipA2); menuFk!!.arm(21, 1)
+        }
+        val frameMs = (Gdx.graphics.deltaTime * 1000f).toInt()
+        var i9 = y + 10
+        val i10 = world.menuRowCount()
+        val i11 = if (z3) 40 else 0
+        if (z2) {
+            fillAr(x, y, w, i10 * 33 + 20 + i11, -856756498)
+            fillAr(x - 2, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
+            fillAr(x + w, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
+            fillAr(x, y - 2, 95, 2, -2013265920)
+            fillAr(x, y + i10 * 33 + 20 + i11, 95, 2, -2013265920)
+            fillAr(x + 108, y - 2, w - 108, 2, -2013265920)
+            fillAr(x + 108, y + i10 * 33 + 20 + i11, w - 108, 2, -2013265920)
+        }
+        fillAr(x, y, w, 10, 805306368)
+        if (z2) fillAr(x + 95, y - 2, 13, 2, -2013265920)
+        if (z3) { fillAr(x, i9, w, 40, 805306368); i9 += 40 }
+        val i12 = i9
+        var i = x
+        for (i13 in 0 until i10) {
+            val i4 = world.menuI4(i13)
+            val i5 = world.menuI5()
+            if (i13 == 1 && world.jC == 2) i9 += 13
+            val zD = world.pointerMoveIn(i, i9, w, i4)
+            if (zD) {
+                fillAr(i, i9, w, i4, 1879048192)
+                panelEdge(i + ((w - i5) shr 1), i9 + (i4 shr 1), i5,
+                          false, i13 == 0 && world.jC == 2)
+                val icon = if (world.jC == 30) i13 + 5
+                           else if (i13 == 0 && world.jC == 2) 9 else 5
+                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
+                fontW.l(0)
+            } else {
+                val fj = menuFj
+                if (fj != null) {
+                    if (i13 == 0 && world.jC == 2) {
+                        if (fj.e != 19) fj.arm(19, -1)
+                    } else if (fj.e != 18) fj.arm(18, -1)
+                    fj.a = (i + w) - ((w - i5) shr 1); fj.b = i9
+                    fj.tick(frameMs)
+                }
+                if (world.kFI > 0) {
+                    fillAr(i, i9, w, i4, 1879048192)
+                    clipScissor(0, i9 + ((i4 - world.kFI) shr 1),
+                                400, world.kFI)
+                    world.kFI += world.kFH; world.kFH += 8
+                    if (world.kFI >= i4) world.kFI = 0
+                }
+                fj?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
+                clipReset()
+                fillAr(i, i9, (w + i5) shr 1, i4, -16777216)
+                panelEdge(i + ((w - i5) shr 1) - 2, i9 + (i4 shr 1),
+                          i5 + 4, true, i13 == 0 && world.jC == 2)
+                val icon = if (world.jC == 30) i13
+                           else if (i13 == 0 && world.jC == 2) 4 else 0
+                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
+                val fk = menuFk
+                if (fk != null) {
+                    fk.tick(frameMs)
+                    if (fk.stopped()) fk.arm(20, -1)
+                    fk.a = i; fk.b = i9 + (i4 shr 1)
+                    drawFrame(93, fk.e, fk.currentFrame, fk.a, fk.b, fk.c)
+                    fontW.l(1)
+                }
+            }
+            val (strD, pal) = world.menuRowText(i13)
+            val strA = fitText(strD, zD, i5 - 50)
+            val i15 = if (world.jC == 19) -3 else 0
+            val i14 = world.menuI14(i, w)
+            if (zD) {
+                drawText(strA, i14, i9 + (i4 shr 1) + i15,
+                         3, palette = pal, pack = 91)
+            } else {
+                world.menuRowSub(i13)?.let {
+                    fontY.l(1)
+                    drawText(it, i14 - menuEz,
+                             i9 + (i4 shr 1) + 10 + i15, 3)
+                }
+                clipScissor(i14 - (i5 shr 1) + 25, i9, i5 - 50, 240)
+                drawText(strA, i14 - menuEz, i9 + (i4 shr 1) + i15,
+                         3, palette = pal, pack = 91)
+                clipReset()
+            }
+            if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
+                var i16 = i10 / 2
+                if (i10 % 2 == 0) i16--
+                if (i13 == i16 && i13 < i10 - 1) {
+                    fillAr(i, i9 + i4, w, 10, 805306368)
+                    i = 206
+                    i9 = i12 - (i4 + 3)
+                    fillAr(206, i9 + i4 + 3 - 10, w, 10, 805306368)
+                }
+            }
+            i9 += i4 + 3
+        }
+    }
+
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
@@ -261,25 +454,12 @@ class Level0Renderer {
         // row-icon/selection-pill procs unported — procedural panel +
         // inferred sel strip; `a(strD,zD,w)` fit-scroll not yet mined.
         if (world.menuVisible) {
-            batch.setColor(0f, 0f, 0f, 0.85f)
-            batch.draw(white, 93f, 40f, 214f, 150f)
-            batch.setColor(0.8f, 0.15f, 0.15f, 1f)
-            batch.draw(white, 95f, 42f, 210f, 2f)
-            batch.draw(white, 95f, 186f, 210f, 2f)
-            batch.setColor(1f, 1f, 1f, 1f)
-            // `bW.l(1)` before the prompt/title; rows draw under `bW.l(0)`.
-            world.menuTitle()?.let { t -> drawText(t, 200, 76, 3, palette = 1, pack = 91) }
-            world.menuPrompt()?.let { t -> drawText(t, 200, 93, 3, palette = 1, pack = 91) }
-            for ((i, row) in world.menuRows().withIndex()) {
-                val (text, sel) = row
-                if (sel) {
-                    batch.setColor(0.85f, 0.8f, 0.5f, 0.35f)
-                    batch.draw(white, 100f,
-                               (Level0World.VIEW_H - 130 - i * 33 - 14).toFloat(),
-                               200f, 20f)
-                    batch.setColor(1f, 1f, 1f, 1f)
-                }
-                drawText(text, 200, 130 + i * 33, 3, pack = 91)
+            // `b(93,67,214,true,true)` + `bW.l(1)` prompt at the
+            // clip-centered variant's anchor (~200,93) + `L(ey);Q()`.
+            val py = world.menuPanelY()
+            menuPanel(world, 93, py, 214, true, world.menuPanelZ3())
+            world.menuPrompt()?.let { t ->
+                drawText(t, 200, py + 26, 3, palette = 1, pack = 91)
             }
         }
 
