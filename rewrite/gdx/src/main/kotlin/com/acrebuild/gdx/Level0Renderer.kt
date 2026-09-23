@@ -79,7 +79,11 @@ class Level0Renderer {
             for (i in clip.moduleNames.indices) {
                 // aU==2 non-pixel modules are empty-name slots in the blob.
                 if (clip.moduleNames[i].isEmpty()) continue
-                val t = Texture(Gdx.files.internal("$base/${clip.moduleNames[i]}"))
+                val file = Gdx.files.internal("$base/${clip.moduleNames[i]}")
+                // aliased pack ids (e.g. clips[12]=clips[94]) share module
+                // metadata but resolve a pack dir that may not be converted.
+                if (!file.exists()) continue
+                val t = Texture(file)
                 t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
                 regs[i] = TextureRegion(t)
             }
@@ -621,7 +625,40 @@ class Level0Renderer {
 
         val camX = world.camX
         val camY = world.camY
-        // draw order: eu backdrop (skipped v1), ep, er — same as original
+        // `eu` backdrop (k.java:2680-2771 composite + :4372-4409 `h()`
+        // painter + :4504-4519 `a()` cell, proven): painted into the
+        // 420×260 `dJ` offscreen buffer — cell (cx,cy) → buffer anchor
+        // (cx*20, cy*20-20) — then `d()` blits the 400×240 view
+        // toroidally from (i12,i13) = (euX%420, euY%260).
+        // euX = camX*(euCols<21 ? 0 : euCols-21)/(lvlCols-21),
+        // euY = camY*(euRows-13)/(lvlRows-13) — level-0: eu=21×13 ⇒
+        // euX=euY=0, a fully static backdrop. `h()`'s aR/dT vertical-
+        // parallax arm is bh3-flying-only (aR=-1 → i5=i6, dead here);
+        // `ef[aj]` z[58] drift overlay static-init all-false (dead arm).
+        val eu = world.level.layers.firstOrNull { it.id == 2 }
+        if (eu != null) {
+            val euX = camX * (if (eu.cols < 21) 0 else eu.cols - 21) /
+                      (world.level.cols - 21)
+            val euY = camY * (eu.rows - 13) / (world.level.rows - 13)
+            val sx = euX % 420; val sy = euY % 260
+            for (cy in 0 until eu.rows) {
+                for (cx in 0 until eu.cols) {
+                    val cell = eu.cell(cx, cy)
+                    if (cell < 0 || cell == 255) continue
+                    val flag = eu.flag(cx, cy)
+                    var wx = (cx * 20 - sx) % 420; if (wx < 0) wx += 420
+                    var wy = (cy * 20 - 20 - sy) % 260; if (wy < 0) wy += 260
+                    // toroidal blit: a cell crossing a wrap edge splits
+                    for (dx in intArrayOf(wx, wx - 420)) {
+                        for (dy in intArrayOf(wy, wy - 260)) {
+                            if (dx < 400 && dx > -20 && dy < 240 && dy > -20)
+                                drawTileCell(eu.tilesetClip, cell, dx, dy, flag)
+                        }
+                    }
+                }
+            }
+        }
+        // draw order (k.java:2800-2819): eu → ep → er (bh4/bh3) → entities
         for (layer in world.level.layers) {
             if (layer.id == 0 || layer.id == 2) continue
             val pack = layer.tilesetClip
