@@ -451,6 +451,27 @@ class Level0Renderer {
         drawObject(pack, cell, anchorX, anchorY, dX)
     }
 
+    /** `G()` draw surface (:2412-2460) — help/instructions scroller:
+     *  chevrons, `a(y,1,cV[bw],200,iK,261,240,0,3)` wrapped viewport
+     *  (8-line window, `i3 = 8*(cY-1)` start line), page counter.
+     *  `z[11]`/`z[54]` page arts not converted — skipped (`inferred`). */
+    private fun helpScreen(world: Level0World) {
+        val iK = world.menuGIK()
+        val lf = if (world.pointerMoveIn(45, iK - 15, 50, 30)) 40 else 36  // d()
+        val rf = if (world.pointerMoveIn(305, iK - 15, 50, 30)) 39 else 35 // d()
+        drawFrame(93, lf, 0, 70, iK, 0)
+        drawFrame(93, rf, 0, 330, iK, 0)
+        val page = world.kCV[world.kBw] ?: return
+        val u = world.helpWrap(page)
+        fontY.l(1)
+        fontY.drawWrapped(page, u, 200, iK, 8 * (world.kCY - 1), 8, 3)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        var i = 0
+        for (i2 in 0 until world.kBw) i += world.kCX[i2]
+        fontY.l(0)
+        drawText("${i + world.kCY}/${world.kCZ}", 200, 220, 33)
+    }
+
     /** `F()` draw surface (:2338-2371) — `a(30,d(0,5))` title bar,
      *  subtitle, chevrons, 8 score rows + TOTAL. */
     private fun scoreScreen(world: Level0World) {
@@ -460,8 +481,8 @@ class Level0Renderer {
         fontW.l(0)
         world.d0(5)?.let { drawText(it, 200, 30, 3, pack = 91) }
         world.d0(35 + world.kCU)?.let { drawText(it, 200, 55, 3, pack = 91) }
-        val lf = if (world.pointerDownIn(110, 15, 50, 80)) 40 else 36
-        val rf = if (world.pointerDownIn(240, 15, 50, 80)) 39 else 35
+        val lf = if (world.pointerMoveIn(110, 15, 50, 80)) 40 else 36      // d()
+        val rf = if (world.pointerMoveIn(240, 15, 50, 80)) 39 else 35      // d()
         drawFrame(93, lf, 0, 160, 55, 0)
         drawFrame(93, rf, 0, 240, 55, 0)
         for (i in 0 until 8) {
@@ -536,6 +557,7 @@ class Level0Renderer {
         // :5903-6150, proven): `b(x,y,w,z2,z3)` panel + `bW` prompt/title +
         // `a(str,str2)` footer soft-keys for the ae()/jc14/19/29 states.
         if (world.jC == 4) scoreScreen(world)
+        if (world.jC == 5) helpScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
             menuPanel(world, pr[0], pr[1], pr[2],

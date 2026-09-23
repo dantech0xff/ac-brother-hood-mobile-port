@@ -144,15 +144,27 @@ class FontClip(
             if ((align and 32) != 0) i5 -= e
             else if ((align and 2) != 0) i5 -= e shr 1
         }
+        drawChars(str, i4, i5, 0, str.length, drawGlyph)
+    }
+
+    /** Shared char-cursor loop over `str[start,end)` — used by `draw`
+     *  and by `drawWrapped` per line. Escape state (`underline`,
+     *  `bold`, `palette`) persists across calls exactly like the
+     *  orig's instance fields (`proven` — :1721 keeps them live
+     *  between its per-line `a()` calls). */
+    fun drawChars(
+        str: String, i4: Int, i5base: Int, start: Int, end: Int,
+        drawGlyph: (glyph: Int, x: Int, y: Int, palette: Int) -> Unit,
+    ) {
         val saved = palette                              // H = aH; restore at end (z=true path)
         var i6 = i4
-        var i7 = i5
-        var idx = 0
-        while (idx < str.length) {
+        var i7 = i5base
+        var idx = start
+        while (idx < end) {
             val c2 = str[idx]
             if (c2 == '\\') {
                 idx++
-                if (idx >= str.length) break
+                if (idx >= end) break
                 when (str[idx]) {
                     '_' -> underline = !underline
                     '^' -> bold = !bold
@@ -181,7 +193,7 @@ class FontClip(
                     }
                     c2.code == 1 -> {
                         idx++
-                        if (idx >= str.length) break
+                        if (idx >= end) break
                         val c4 = str[idx]
                         if (c4.code < paletteCap) palette = c4.code
                         if (c4.code == 255) palette = saved
@@ -209,5 +221,111 @@ class FontClip(
             idx++
         }
         palette = saved
+    }
+
+    /** `k(i)` (b.java:1609, proven): `i*J + (i-1)*K` — pixel height of
+     *  i wrapped lines. */
+    fun linesHeight(i: Int): Int = i * baseJ + (i - 1) * baseK
+
+    /** `a(String, w, false)` (b.java:1618-1760, proven): word-wrap —
+     *  returns the `U[]` line table: `U[0]` = line count, then
+     *  `{endIndex, width}` pairs at `U[1],U[2]`, `U[3],U[4]`, …
+     *  (`V` = previous line's end, `W` = this line's end). */
+    fun wrap(str: String, w: Int): IntArray {
+        val u = IntArray(250)
+        var s2 = 0                                // running line width
+        var s3 = 1                                // write cursor
+        var s4 = 0                                // last space index
+        var z2 = underline
+        var z3 = false
+        var s5 = 0                                // carried-word width
+        var z4 = bold
+        var iS = 0
+        var i2 = 0
+        val length = str.length
+        while (i2 < length) {
+            val c = str[i2]
+            if (c == ' ') {
+                s2 += spaceL; s4 = i2; z2 = z4; z3 = true; s5 = 0
+                if (s2 > w) {
+                    z3 = false
+                    var i3 = s4
+                    while (i3 >= 0 && str[i3] == ' ') { s2 -= spaceL; i3-- }
+                    while (s4 < length && str[s4] == ' ') s4++
+                    s4--
+                    i2 = s4
+                    z4 = z2
+                    u[s3] = s4 + 1; s3++; u[s3] = s2; s3++
+                    s2 = 0
+                }
+            } else if (c == '\\') {
+                i2++
+                if (i2 < length && str[i2] == '^') z4 = !z4
+            } else if (c == '\n') {
+                u[s3] = i2; s3++; u[s3] = s2; s3++
+                s2 = 0; s5 = 0
+            } else {
+                if (c.code >= ' '.code) {
+                    iS = s(c.code)
+                } else if (c.code == 1) {
+                    i2++
+                } else if (c.code == 2) {
+                    i2++
+                    iS = if (i2 < length) str[i2].code else 0
+                }
+                if (iS > clip.objPlaceStart.size) iS = 0   // c()
+                var i4 = advanceOf(iS)
+                if (z4) i4++
+                s5 += i4
+                s2 += i4
+                if (s2 > w && z3) {
+                    z3 = false
+                    var i5 = s4
+                    while (i5 >= 0 && str[i5] == ' ') { s2 -= spaceL; i5-- }
+                    u[s3] = s4 + 1; s3++; u[s3] = s2 - s5; s3++
+                    s2 = 0; i2 = s4; z4 = z2
+                }
+            }
+            i2++
+        }
+        val s11 = s3 + 1                        // verbatim tail (:1748)
+        u[s3] = length; u[s11] = s2
+        u[0] = (s11 + 1) / 2
+        return u
+    }
+
+    /** `a(Graphics, str, U, x, y, i3, i4, i5, i6)` (b.java:1721-1769,
+     *  proven): wrapped-lines renderer — draws `i4` lines starting at
+     *  line `i3` (i4=-1 → to the end, clamped), align bits on each
+     *  line's own width, shared escape state across lines. */
+    fun drawWrapped(
+        str: String, u: IntArray, x: Int, yIn: Int, i3: Int, i4in: Int,
+        align: Int, drawGlyph: (glyph: Int, x: Int, y: Int, palette: Int) -> Unit,
+    ) {
+        var y = yIn
+        val s2 = u[0]
+        var i4 = i4in
+        var i9 = i3
+        if (i4 == -1) i4 = s2
+        if (i9 + i4 > s2) i4 = s2 - i9
+        val i8 = baseK + baseJ
+        if ((align and 32) != 0) y -= i8 * (i4 - 1)
+        else if ((align and 2) != 0) y -= (i8 * (i4 - 1)) shr 1
+        var i10 = 0
+        while (i9 < s2 && i10 <= i4 - 1) {
+            var v = if (i9 > 0) u[((i9 - 1) shl 1) + 1] else 0
+            val w = u[(i9 shl 1) + 1]
+            if (v < str.length && str[v] == '\n') v++
+            var i11 = x
+            var i12 = y + i10 * i8
+            if ((align and 43) != 0) {
+                if ((align and 8) != 0) i11 -= u[(i9 + 1) shl 1]
+                else if ((align and 1) != 0) i11 -= u[(i9 + 1) shl 1] shr 1
+                if ((align and 32) != 0) i12 -= baseJ
+                else if ((align and 2) != 0) i12 -= baseJ shr 1
+            }
+            drawChars(str, i11, i12, v, w, drawGlyph)
+            i9++; i10++
+        }
     }
 }

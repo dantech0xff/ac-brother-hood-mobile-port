@@ -747,7 +747,13 @@ class Level0World(
         private set
     var kMode = 0                      // k.u — screen mode 0-10 (NOT k.U)
     var kEg = 0                        // k.eG
-    var kCZ = 0                        // k.cZ — win-stats row counter
+    var kCZ = 0                        // k.cZ — win-stats row counter / G() total
+    /** `cV[4]` (k.java:184) — G() help pages. */
+    val kCV = arrayOfNulls<String>(4)
+    /** `cX[4]` (k.java:185) — G() per-page 8-line-screen counts. */
+    val kCX = IntArray(4)
+    var kCY = 1                        // k.cY — G() current 8-line screen
+    var kCW = 0                        // k.cW — G() page-1 pad
     var kCb = false                    // k.cb
     var kCu = 0                        // k.cu — k-side flag (entity cu is i's)
     var kFd = 0                        // k.fd
@@ -831,6 +837,12 @@ class Level0World(
         25 to "DO YOU WANT TO RESTART?",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
+        47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
+        48 to "FIND THE HEALTH POTION TO RECOVER LIFE.",
+        49 to "THE GAME CAN ALSO BE PLAYED ENTIRELY WITH THE VIRTUAL PAD.\n\nCORRESPONDING CONTROLS\n\nTOUCH THE ASSASSIN = ATTACK ICON\nTOUCH THE AREA TO THE ASSASSIN'S LEFT = VIRTUAL PAD LEFT\nTOUCH THE AREA TO THE ASSASSIN'S RIGHT = VIRTUAL PAD RIGHT\nTOUCH THE AREA ABOVE THE ASSASSIN = VIRTUAL PAD UP OR JUMP ICON\nTOUCH THE AREA BELOW THE ASSASSIN = VIRTUAL PAD DOWN",
+        50 to "\\^ACHIEVEMENTS\\^  \n\\0INCREDIBLE ASSASSIN:\\1 KILL 7 ENEMIES IN ONE LEVEL. \n\\0HARDCORE:\\1 COMPLETE ONE LEVEL IN HARD MODE. \n\\0BLOOD KILLER:\\1 KILL 28 ENEMIES IN LEVEL 2 IN HARD MODE.",
+        98 to "COLLECT ENOUGH SOULS TO OBTAIN A LIFE EXTENSION.",
+
         38 to "ENEMIES KILLED", 39 to "SILENT KILLS", 40 to "RETRIES",
         41 to "SOULS", 42 to "TIME", 43 to "SCORE",
         56 to "MISSION FAILED. YOU DID NOT CATCH YOUR TARGET!",
@@ -1449,7 +1461,23 @@ class Level0World(
                     audioStop()
                 }
                 i == 23 -> { kEc = 19; bannerK(3); kEb = 70; kBw = -1 }
-                i == 5 -> { /* win-stats text build: eE/eF/cZ/cX — unported */ }
+                i == 5 -> {                                          // (:1806)
+                    kEe = 0                                          // eE/eF shared
+                    for (i5 in 0 until 4) {                            //   with the
+                        kCV[i5] = d0(i5 + 47)                          //   stats procs
+                        if (i5 == 1) {
+                            kCW = footerFont?.linesHeight(wrapPage(kCV[i5], 261)[0]) ?: 0
+                            kCV[i5] = "\n\n" + kCV[i5] + "\n\n\n" + d0(98)
+                        }
+                        val sLines = wrapPage(kCV[i5], 261)[0]
+                        val iK = footerFont?.linesHeight(sLines) ?: 0
+                        if (iK > kEe) kEe = iK
+                        kCZ += (sLines + 7) / 8                      // ((s+8)-1)/8
+                        kCX[i5] = (sLines + 7) / 8
+                    }
+                    kEe = footerFont?.linesHeight(11) ?: 0
+                    kEf = 37 + kEe
+                }
                 i == 20 -> { /* kFb = y.a(d(0,27),390) — unported */ }
             }
             break
@@ -1932,6 +1960,7 @@ class Level0World(
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
+        5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
         else -> Pair(null, null)
     }
@@ -2126,6 +2155,50 @@ class Level0World(
      *  — orig suspends sim on menu screens). */
     private val menuStates = intArrayOf(2, 3, 4, 5, 6, 14, 19, 28, 29, 30)
 
+    /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
+     *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
+     *  '%' (non-break marker), then `bVar.a(string,w,false)`. */
+    private fun wrapPage(str: String?, w: Int): IntArray {
+        val f = footerFont ?: return intArrayOf(0)
+        if (str == null) return f.wrap("", w)
+        val sb = StringBuilder(str)
+        for (i in str.indices) {
+            if (str[i] == ' ' && i + 1 < str.length &&
+                str[i + 1] in ".!?,:") sb[i] = '%'
+        }
+        return f.wrap(sb.toString(), w)
+    }
+
+    /** `G()` (k.java:2412-2488, proven) — the jc5 help/instructions
+     *  scroller: 4 pages, 8 lines per screen (`cY` counts screens, not
+     *  lines), left/right scroll + page wrap mod 4, `v(131072)` back
+     *  to `cy`. Chevron taps inject the same pad masks via `E()`.
+     *  `iK = 47 + (eE - y.k(1))/2` centers the viewport. */
+    fun menuGIK(): Int = 47 + (kEe - (footerFont?.linesHeight(1) ?: 0)) / 2
+
+    /** renderer's wrap of the current G() page — `a(y,str,261)`. */
+    fun helpWrap(str: String): IntArray = wrapPage(str, 261)
+
+    private fun menuG() {
+        kCb = true
+        footerQ()                                       // `a("",d(0,17))` (:2461)
+        val iK = menuGIK()
+        if (pointerDownIn(45, iK - 15, 50, 30)) padE(Pad.M_LEFT)     // `c()` → E(4112)
+        if (pointerDownIn(305, iK - 15, 50, 30)) padE(Pad.M_RIGHT)   // `c()` → E(8256)
+        if (pad.v(Pad.M_LEFT)) {                        // `v(4112)` (:2464)
+            if (kCY > 1) kCY--
+            else { kBw = (kBw - 1 + 4) % 4; kCY = kCX[kBw] }
+            z(23)
+        } else if (pad.v(Pad.M_RIGHT)) {                // `v(8256)` (:2474)
+            if (kCX[kBw] > kCY) kCY++
+            else { kCY = 1; kBw = (kBw + 1) % 4 }
+            z(23)
+        }
+        if (pad.v(Pad.M_CYCLE)) {                       // `v(131072)` (:2483)
+            kCY = 1; stateL(kCy); z(30)
+        }
+    }
+
     /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
      *  `bA` save array; `kBA` stores one byte per slot so this is
      *  `kBA[i] | kBA[i+1]<<8`. */
@@ -2234,6 +2307,7 @@ class Level0World(
                 menuQ(pressY)
             }
             4 -> menuF()                           // F() (:2338, proven)
+            5 -> menuG()                           // G() (:2412, proven)
             23, 28 -> menuAe(pressY)                 // ae() (:6204, proven)
             30 -> menuAf()                         // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
