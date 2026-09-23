@@ -117,6 +117,13 @@ CLIPS = {
     "clip5": ("pack-3", "entry-005-marker-003"),   # ax8 knife projectile (bi[8]=5)
     "clip12": ("pack-3", "entry-012-marker-003"),  # k.dA HUD indicator (T(), k.java:4165)
     "clip59": ("pack-3", "entry-059-marker-003"),  # ax8 boss-knife param (op111 spawnParam)
+    "clip13": ("pack-3", "entry-013-marker-003"),  # ax21 director/ax48 (bi[21]=13, bi[48]=13)
+    "clip14": ("pack-3", "entry-014-marker-003"),  # ax22 capture zone (bi[22]=14 — 10 records on level 0)
+    "clip15": ("pack-3", "entry-015-marker-003"),  # ax26 (bi[26]=15)
+    "clip16": ("pack-3", "entry-016-marker-003"),  # ax25 (bi[25]=16)
+    "clip23": ("pack-3", "entry-023-marker-003"),  # ax66 moving platform (bi[66]=23)
+    "clip28": ("pack-3", "entry-028-marker-003"),  # ax51 pushable crate (bi[51]=28)
+    "clip44": ("pack-3", "entry-044-marker-003"),  # ax31 (bi[31]=44)
 
     # pack-2 UI bank — A[] clips load under j.a("/2") (k.java:4058-4075).
     # A[2]/A[3] already live as clip93/clip95.
