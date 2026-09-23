@@ -383,6 +383,61 @@ class NpcFsm(val world: LevelCellSource) {
             e.aA = 1
             e.setAnim(5)
         }
+        // i.java:4165-4170 (proven): the crate/carrier ride helper runs
+        // every patrol tick while not in hit-react — a moving crate feeds
+        // its velocity into the soldier.
+        if (e.S != 85) {
+            crateRide11(e)
+            val s = e.s
+            if (s != null && s.ax == 51 && s.ag != 0) e.ag = s.ag
+        }
+    }
+
+    /** `i.aD()` (i.java:7167-7205, proven): ax11's crate/carrier ride
+     *  helper — binds `s` to a Z[7]-linked ax51/ax43 overlapping entity
+     *  (`k.q(Z[7])`), tracks its top (`al = s.W[1]+3`, `ak += s.ag>>8` on
+     *  bind), plays `i(96)` while the crate is in S2, and when the cell
+     *  beside the feet is open (`!h(cx,cy)` → `e() < 5`) and still
+     *  patrolling (`aA != 0`) snaps to the edge with `i(22)/i(23)`.
+     *  `!g.j && aA != 0 → Q()` — the grab-latch (g.j) suppresses the
+     *  face-player flip while the wall sequence holds it (i.java:7180,
+     *  a `g.j` reader). `Q()` = `av = aS.ak < ak` (i.java:6207). */
+    fun crateRide11(e: Entity): Boolean {
+        val s = e.s
+        if (s == null) {
+            if (e.Z[7] > 0) {
+                val q = world.findByAw(e.Z[7])
+                if (q != null && (q.ax == 51 || q.ax == 43) &&
+                    Entity.overlapI(e.W, q.W)) {
+                    e.s = q
+                    if (e.S != 3) { e.setAnim(2); e.aA = 0 }
+                    e.al = q.W[1] + 1
+                    e.ak += q.ag shr 8
+                }
+            }
+        } else if (s.ax == 51 || s.ax == 43) {
+            if (s.ax == 51 && s.S == 2) {
+                e.setAnim(96)
+            } else if (Entity.overlapI(e.W, s.W)) {
+                if (!Entity.grabLatch && e.aA != 0) {       // !g.j (:7180)
+                    e.av = world.player.ak < e.ak           // Q() (:6207)
+                }
+                e.al = s.W[1] + 3
+                val sideX = e.ak / 20 + (if (e.av) -1 else 1)
+                if (e.e(world, sideX, e.al / 20) < 5 && e.aA != 0) {
+                    if (e.ag > 0 && e.W[2] > s.W[2]) {
+                        e.ak = s.W[2] - ((e.W[2] - e.W[0]) shr 1)
+                        e.setAnim(if (e.av) 22 else 23)
+                    } else if (e.ag < 0 && e.W[0] < s.W[0]) {
+                        e.ak = s.W[0] + ((e.W[2] - e.W[0]) shr 1)
+                        e.setAnim(23)                       // both arms 23
+                    }
+                }
+            } else {
+                e.s = null                                  // lost overlap
+            }
+        }
+        return e.s != null
     }
 
     // -- L451 chase (proven core) ---------------------------------------------
