@@ -104,8 +104,14 @@ class Level0World(
     /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id. */
     data class Checkpoint(val aw: Int, val ak: Int, val al: Int, var consumed: Boolean = false)
 
-    /** Snapshot written into bA[16..] by aY() — subset we model. */
-    data class Snapshot(val ak: Int, val al: Int, val av: Boolean, val x1: Int)
+    /** Snapshot written into bA[16..] by aY()/i.X() — i.java:18631:
+     *  pos/facing (18-22), g.J/g.I (24/26), ap[0,3,2/16,4] + ap[5] at
+     *  52+aj*2, ax/ay/az/aN/aL (28-34, 50), aZ/bn flags, br[] dead set.
+     *  The k.ax/ay/az/aN/aL globals have no producers in our model yet
+     *  (mission-script ops, unknown) — modeled fields only. */
+    data class Snapshot(val aw: Int, val ak: Int, val al: Int,
+                        val av: Boolean, val x1: Int,
+                        val gJ: Int, val gI: Int, val ap: IntArray)
 
     val checkpoints: List<Checkpoint> = level.entities
         .filter { it.size >= 4 && it[0] == 2 }
@@ -362,11 +368,15 @@ class Level0World(
     private var camM = 200                    // cM — look-ahead x margin
     private var camCI = 0                     // cI — focus-N watch
     private var camXw = -7                    // m()'s X watch counter (L300);
-                                              // the original reuses k.X, but
-                                              // D()'s Y=X<<8 refresh is
-                                              // unported — keep it private so
-                                              // kY stays a stable snapshot
-                                              // (inferred)
+                                              // the original reuses k.X — D()
+                                              // drains W into it on bh3; kept
+                                              // private since m() and D() never
+                                              // co-run (bh!=3 vs bh==3 arms)
+    private var camCN = 0                     // cN — D()'s player-ak snapshot
+    private var camCG = -1                    // cG — cached corridor left
+    private var camCH = -1                    // cH — cached corridor right
+                                              // (populated by the k.ai row
+                                              // scan, read back when iBV>0)
     private var camAf = 0                     // af — lookahead x offset
     private var camAg = 0                     // ag — lookahead y offset
     private var camCF = 0                     // cF — snap-arm scratch
@@ -572,6 +582,7 @@ class Level0World(
     override var iBX = 0                       // i.bX
     override var iBT = false                   // i.bT — director armed
     override var iBj = false                   // i.bj — finale freeze
+    override var iBe = false                   // i.be — D() X-lock
     override var iQ = false                    // i.q — gauge-charge mode
     override var iCC = 0                       // i.cC — waypoint phase
     override var iCD = -1                      // i.cD — active phase
@@ -993,6 +1004,103 @@ class Level0World(
             kAw = 0; kAv = false; kDz = 120                         // k.r()
         }
     }
+    /** `i.X()` (i.java:18631, proven): writes the checkpoint slot into
+     *  `bA` — aw/pos/facing, g.J/g.I, ap[0,3,2/16,4] + ap[5] at 52+aj*2,
+     *  ax/ay/az/aN/aL (unmodeled — mission-script globals), aZ/bn flags,
+     *  br[] dead set, then re-stamps `k.a(bb[i], bb[i].as)` on every
+     *  non-consumed entity (skipped: as==-98 corpses, ax==70). */
+    private fun writeIX(aw: Int): Snapshot =
+        Snapshot(aw, player.ak, player.al, player.av, player.x1,
+                 player.gJ, player.gI, apStats.copyOf())
+
+    /**
+     * `k.D()` (k.java:2721-2860, proven): the bh[aj]==3 autoscroll camera
+     *  that REPLACES m(1) on the flying/chase missions — swept cell-22
+     *  corridor walls → R/S, director `k.ai` corridor via cG/cH cache or
+     *  the row scan, wind `X` drained from `W` once (`Y=X<<8` = the
+     *  `ae.ah` clamp via the derived `kY` getter), `Q` keeps the player
+     *  117..230px above camB, then `O+=l(cA-O,4); P+=l(cB-P,30)`.
+     *  Dead code on level 0 (bh=4); reachable via tests.
+     */
+    private fun kD() {
+        val c = kC                                                       // L7-L12
+        if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
+            camA = camX; camB = camY                                     // snap
+            return
+        }
+        if (dialogModal) { camA = camX; camB = camY; return }            // j.c==21
+        val ae = player                                                  // ae=aS
+        if (kW != 0) { kX = kW; kW = 0 }                                 // L17 wind
+        // kY = kX << 8 — the derived getter (k.java:2737)
+        var r6 = ae.W[0] / 20                                            // L18-L21
+        var r7 = ae.W[2] / 20
+        val r02 = ae.al / 20
+        val r03 = level.worldW / 20                                      // br/20
+        if (kAi) {                                                       // L20
+            if (boundMinX == -1) {
+                boundMaxX = -1
+                if (iBV > 0) {                                           // L22-L23
+                    boundMinX = camCG; boundMaxX = camCH
+                } else {
+                    // L24-L36: linear row scan — first 22 opens the
+                    // corridor, later 22s narrow it to fit the 400px
+                    // view (cache cG/cH).
+                    var r92 = 0
+                    while (r92 < r03) {
+                        if (level.collisionCell(r92, r02) == 22) {
+                            if (boundMinX == -1) boundMinX = r92 * 20
+                            else {
+                                var s = (r92 + 1) * 20
+                                if (s - 400 < boundMinX) {
+                                    boundMinX -=
+                                        (boundMinX - (s - 400)) shr 1
+                                    s = boundMinX + 400
+                                }
+                                boundMaxX = s
+                                camCG = boundMinX; camCH = boundMaxX     // L35
+                            }
+                        }
+                        r92++
+                    }
+                }
+            }
+        } else {
+            // L37-L56: sweep left/right from the player until cell 22.
+            var r9 = 0; var r10 = 0
+            var leftDone = false; var rightDone = false
+            while (!(leftDone && rightDone)) {
+                if (r6 <= 0 || r9 == 22) leftDone = true
+                else { r6--; r9 = level.collisionCell(r6, r02) }
+                if (r7 >= r03 || r10 == 22) rightDone = true
+                else { r7++; r10 = level.collisionCell(r7, r02) }
+            }
+            boundMinX = r6 * 20                                          // L56
+            boundMaxX = ((r7 + 1) * 20) - 400
+            if (boundMinX > boundMaxX) boundMinX = boundMaxX             // L58
+            camCN = ae.ak                                                // L59
+        }
+        // L61-L70: cA — corridor-center for k.ai else player-relative
+        if (kAi) camA = ((boundMinX + boundMaxX) shr 1) - 200
+        else if (!iBe) {                                                 // L64
+            camA = camCN - 200
+            if (camA < boundMinX) camA = boundMinX
+            else if (camA > boundMaxX) camA = boundMaxX
+        }
+        camB += kX                                                       // L71 wind
+        val q = ae.al - camB                                             // L72
+        if (!iBj) {                                                      // L74-L82
+            if (q <= 117) {                                              // L74
+                // Q=117 writeback is into k.Q — display-only, unmodeled
+                if (ae.ah < kY) ae.ah = kY
+            } else if (q >= 230) {                                       // L79
+                if (ae.ah > kY) ae.ah = kY
+            }
+        }
+        camX += lerpStep(camA - camX, 4)                                 // L83-L86
+        camY += lerpStep(camB - camY, 30)
+        // ac[] = {camX, camY, +400, +240} — the camRect getter derives it
+    }
+
     /** `k.l(int)` — 12 mission-fail, 13 win, 15 mission-complete, 21 modal. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
@@ -1106,7 +1214,7 @@ class Level0World(
             if (Math.abs(cp.ak - player.ak) > cellPx) continue
             if (player.al < cp.al - cellPx) continue
             cp.consumed = true
-            checkpointSnap = Snapshot(cp.ak, cp.al, player.av, player.x1)
+            checkpointSnap = writeIX(cp.aw)
             checkpointDead = npcs.filter { it.S == 139 }.map { it.aw }.toSet()
             // k.a(bb[i], bb[i].as): re-materialize each entity at its home
             // slot — original skips as==-98 (consumed/dead) and ax==70
@@ -1366,6 +1474,16 @@ class Level0World(
         // the verbatim tracker — lookahead margin, scroll walls, bounds,
         // lerp `l(dx/2, kX|28)`, cO shake. Replaces the placeholder follow.
         if (Entity.MISSION_BH[kAj] != 3) kM(1)
+        else {
+            // k.java:3363-3368 (L137/L139): bh3 replaces m(1) with
+            // `if (i.bW) i.X(); D()` — the director's phase-checkpoint
+            // write then the autoscroll camera.
+            if (iBW) {
+                checkpointSnap = writeIX(checkpointSnap?.aw ?: -1)
+                iBW = false                                        // consumed
+            }
+            kD()
+        }
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) missionFail()
