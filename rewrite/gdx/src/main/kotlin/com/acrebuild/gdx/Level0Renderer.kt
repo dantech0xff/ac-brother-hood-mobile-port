@@ -1649,6 +1649,11 @@ class Level0Renderer {
         var palette = e.palette
         var alpha = 255
         val last = e.T >= clip.frameCount(e.S) - 1
+        // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
+        // draws the rope segments (object Z[7] of clip61) BEFORE the
+        // standard blit; the ax13 entity skips the art-select `when`
+        // entirely (it's the `else` branch in the original).
+        if (e.ax == 13) drawRopeSegments(e, pack, camX, camY)
         when {
             e.ax == 45 -> palette = e.Z.getOrElse(0) { 0 }
             e.ax == 30 || e.ax == 32 -> {
@@ -1731,6 +1736,30 @@ class Level0Renderer {
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
+    }
+
+    /** `i.a(Graphics)` ax13 rope draw (i.java:13391-13411, proven):
+     *  anchor object `Z[7]` at `(N>>8, O>>8)`, then `i4` middle
+     *  segments (`Z[1]-1`, or `bN-1` when `aG==4`) stepped 12px along
+     *  the pendulum angle `bP>>8` (angle-256), plus the end segment.
+     *  `iB = 3072·j.b(n-θ)>>8` = 12px·cos θ; `iB2 = 3072·j.b(θ)>>8` =
+     *  12px·sin θ. */
+    private fun drawRopeSegments(e: Entity, pack: Int, camX: Int, camY: Int) {
+        if (e.Z.size <= 7) return
+        val ax = (e.N shr 8) - camX
+        val ay = (e.O shr 8) - camY
+        val th = e.bP shr 8
+        val sx = (3072 * Trig.sin(Trig.N - th)) shr 8   // iB  = 12px·cos θ
+        val sy = (3072 * Trig.sin(th)) shr 8            // iB2 = 12px·sin θ
+        val segs = if (e.aG == 4) e.bN - 1 else e.Z[1] - 1
+        drawObject(pack, e.Z[7], ax, ay, e.P, palette = e.palette)  // anchor
+        var fx = ax shl 8
+        var fy = (ay shl 8) + 3072                                // i7 = i6+3072
+        for (s in 1..segs) {
+            drawObject(pack, e.Z[7], fx shr 8, fy shr 8, 0, palette = e.palette)
+            fx += sx; fy += sy
+        }
+        drawObject(pack, e.Z[7], fx shr 8, fy shr 8, 0, palette = e.palette)
     }
 
     /** `aU()` case-34 draw (i.java:9106-9143, proven): rail line(s) in
