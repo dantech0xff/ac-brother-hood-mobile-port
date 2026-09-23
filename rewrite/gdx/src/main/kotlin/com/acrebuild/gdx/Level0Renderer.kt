@@ -702,15 +702,52 @@ class Level0Renderer {
         batch.setColor(1f, 1f, 1f, 1f)
         drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
 
-        // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
-        // hudStep; `n/d` progress toward the next dE threshold (or raw
-        // remainder at the top tier) at (200,-1) align 17, plus the
-        // z[12] anim7 icon that bobbles 1px every 3 frames.
-        world.hudScoreText()?.let { score ->
-            drawText(score, 200, -1, 17)
-            val tw = fontY.measure(score).first()
-            drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
-                      13 + ((world.jG / 3) % 2).toInt(), 0)
+        if (world.bh3) {
+            // bh3 arm (k.java:4187-4245, proven)
+            // i.bT && B!=null → boss HP column: black 6x100 at (389,60)
+            // + red fill (100*aB)/bU climbing from the bottom (1px stub
+            // at y159 when the fill rounds to 0 but aB>0).
+            val b = world.kB
+            if (world.iBT && b != null && world.iBU > 0) {
+                fillAr(389, 60, 6, 100, -16777216)
+                val h = (100 * b.aB) / world.iBU
+                if (b.aB <= 0 || h != 0)
+                    fillAr(389, 160 - h, 6, h, -65536)      // 0xFFFF0000
+                else
+                    fillAr(389, 159, 6, 1, -65536)
+            }
+            clips[54]?.let { c ->
+                drawFrame(54, 0, ((world.jG % c.frameCount(0))).toInt(),
+                          300, 8, 0)
+            }
+            drawText("${world.kAp[4]}/${world.kAq}", 312, 5, 20)
+            // aE alert meter (k.java:4208-4244): aH countdown slides the
+            // icon column out over 30 frames (i3 = 30-aH), aF trickles
+            // +3/tick into aE (i4 = min(aE,100)); aE<25 → animated anim5
+            // else anim3; anim4 marker rides the fill height.
+            if (world.kAE > 0) {
+                val i3 = world.alertSlide; val i4 = world.alertFill
+                clips[12]?.let { c ->
+                    if (world.kAE < 25)
+                        drawFrame(12, 5, ((world.jG % c.frameCount(5))).toInt(),
+                                  15 - i3, 165, 0)
+                    else
+                        drawFrame(12, 3, 0, 15 - i3, 165, 0)
+                }
+                drawFrame(12, 4, 0, 10 - i3,
+                          49 + (116 * (100 - i4)) / 100, 0)
+            }
+        } else {
+            // !bh3 score HUD (k.java:4247-4263, proven): `az` clamped in
+            // hudStep; `n/d` progress toward the next dE threshold (or raw
+            // remainder at the top tier) at (200,-1) align 17, plus the
+            // z[12] anim7 icon that bobbles 1px every 3 frames.
+            world.hudScoreText()?.let { score ->
+                drawText(score, 200, -1, 17)
+                val tw = fontY.measure(score).first()
+                drawFrame(12, 7, 0, 200 - (tw shr 1) - 10,
+                          13 + ((world.jG / 3) % 2).toInt(), 0)
+            }
         }
 
         // weapon corner (k.java:4273-4287, proven): armed gate in
@@ -741,6 +778,15 @@ class Level0Renderer {
 
         // aO/aP timed line (k.java:4337-4343, proven)
         world.kAP?.let { drawText(it, 200, 23, 17) }
+
+        // g.g overhead icon (k.java:4344-4350, proven): while the player
+        // rides the grab-QTE states with a focus entity, z[10] anim 41
+        // (S303) or 29 (S295) frame `aS.K` sits at (aS.L-O, aS.M-P).
+        val pg = world.player
+        if (pg.g != null && (pg.S == 303 || pg.S == 295)) {
+            drawFrame(10, if (pg.S == 295) 29 else 41, pg.K,
+                      pg.gQL - world.camX, pg.gQM - world.camY, 0)
+        }
 
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
         // `k()` + jc∉{14,5} + !(jc21,u9) + claim-gate → D-pad object at

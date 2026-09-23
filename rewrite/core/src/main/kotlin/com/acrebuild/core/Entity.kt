@@ -227,6 +227,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cL = 0                    // mount-on counter (as() clears; au() oscillates)
     var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
     var K = 0                     // g.K — interact-gauge anim frame (aB())
+    var gQL = 0                   // g.L — grab-QTE display x (k.java:4348)
+    var gQM = 0                   // g.M — grab-QTE display y (k.java:4348)
     var z = false                 // g.z — cleared on grab (c() callers)
     /** `i.cU[5]` — the afterimage-trail ring (`a(true,0)`/`bP()`); each
      *  element is an (a,b) pos pair flattened to 10 ints. */
