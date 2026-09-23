@@ -4605,6 +4605,8 @@ interface LevelCellSource {
     var gj: Boolean get() = false; set(_) {}
     /** `k.L` — the entity currently registered as the interact claim. */
     var kL: Entity? get() = null; set(_) {}
+    /** `k.au` — difficulty/medal-condition field (indexes `bu[]` HP table). */
+    var kAu: Int get() = 0; set(_) {}
     /** `k.co` — claim priority countdown (reset 6 by `k.m()`). */
     var claimCo: Int get() = 6; set(_) {}
     /** `k.cp` — the claim marker rect (k.java:~820 `a(int[])`). */
