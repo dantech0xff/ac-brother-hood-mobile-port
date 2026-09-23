@@ -251,8 +251,32 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
                 if (!pad.u(Pad.M_UP)) p.setAnim(0)
             }
-            10 -> {                           // L1315 — dash decay
+            // g.java:1265-1290 (proven) — the shared stagger/recoil arm:
+            // `ag/=2` decay + `ab` held item tracks the player's box;
+            // side strip ≥19 kills `ag`; `r()` → `bl=0`, drop `ae` (`G()`)
+            // and `ab` (`H()`), `i(1)` + `a(false)` rescan, then
+            // `!M() && a==null → a(0)` when no floor sits ahead; a
+            // `Q∈{0,54}` (came from idle/roll) pulses `ah=1; a(true)`.
+            9, 10 -> {
                 p.ag /= 2; p.ah = 0; p.aj = 0
+                p.ab?.let { it.av = p.av; it.ak = p.ak; it.al = p.al }
+                if ((if (p.av) p.aU else p.aT) >= 19) p.ag = 0
+                if (p.animFinished()) {
+                    p.bl = 0
+                    p.releaseAe()                        // G()
+                    p.dropHeld()                         // H()
+                    p.setAnim(1)
+                    p.probeSnapSides(false, world)       // a(false)
+                    if (!p.floorAhead(world) && p.standingOn == null) {
+                        p.flingAirborne(0, world)        // g.a(0)
+                    }
+                }
+                if (p.Q == 0 || p.Q == 54) {
+                    p.ah = 1
+                    p.probeSnapSides(true, world)        // a(true)
+                    p.ah = 0
+                }
+                world.scrollWallClamp(p)                 // i.f(this)
             }
             21, 233 -> preJumpArm(p)          // L859
             20, 22, 23, 25, 215 -> airFamily(p, pad)
@@ -391,6 +415,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.cq = false
                 p.enterFall(0, world)
             }
+            // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
+            // checks `cp && ct` (edge ledge-grab ak()||al()), `cu`
+            // (down-edge pop + drop held), `cv` (dir press → aF=1), and
+            // `cw` (aO==5 → i(280) one-way hang) — but e()'s head clears
+            // all five flags every tick (g.java:617-623) and case 0 sets
+            // none of them, so all four arms read false and can never
+            // fire in the original. `al()` and `i.H()` are ported on
+            // Entity for their live call sites.
         } else {
             p.setAnim(79)
         }

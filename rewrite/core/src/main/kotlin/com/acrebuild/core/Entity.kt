@@ -71,6 +71,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aF = 0
     var k = false                    // NPC patrol-active flag
     var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
+    var cu = false                      // g.cu — case-60 sets it (ledge-
+                                        // hang drop eligibility); dead
+                                        // in the original (head-cleared)
     var zz = true
     var aA = 0                       // alert level (NPC) / turn-block (player)
     var aB = 0                       // hp-ish stat (az = max)
@@ -952,6 +955,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * ±r13/r14 mirror fixup inside quad space, again as the ±av anchor —
      * transcribed verbatim even though it reads like a double shift.
      */
+    var centerX = 0; var centerY = 0    // i.t/i.u — W-box center
     fun refreshBoxes() {
         if (ax == 14 || ax == 37 || ax == 10 || ax == 5 || ax == 42) return
         val c = clip
@@ -1514,6 +1518,117 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  pocket beyond it (i3 column, rows i4-1..i4+2 plus i2/i4-1) is
      *  empty → snap onto the lip and enter `i(60)` hang. `Q==61`
      *  blocks outright. */
+    /**
+     * `i.al()` (g.java:209-239, proven) — the wider ledge-mount probe:
+     * column one cell further out than `ledgeLipGrab` (W[0]-20 / W[2]+20)
+     * must hold a ≥19 cell at hand row with the 2×4 pocket beyond clear.
+     * Snap: `ak = i2*20 (+20 when av)`, `al = i4*20 - 1`. Cell 21
+     * (ladder) → bare `true` and no state change (the caller's mount
+     * stays deferred); otherwise `k.v()` + `i(61)` hang + `aC=40`.
+     */
+    /**
+     * `i.a(boolean)` (i.java:829-915, proven): the side-strip rescan —
+     * `v=true`, `x()` probe, clears `bb/bc/ba`/`aT`/`aU`, then scans the
+     * left/right columns from head-row to `W[3]-10` (player crouch
+     * states 12/7/32/199 extend it another 10), recording the worst
+     * cell per side in `aT`/`aU` and the clearance in `aX`/`aY`,
+     * flagging `bb`/`bc` at ≥18 with early exit. When `z2 && v` it
+     * snaps `ak` off the flagged wall (`ag<=0` picks the side:
+     * `bb` → push right of cell, else `bc` → pull left; `ag>0`
+     * mirrors), re-probing after each snap; `z2` also pre-adjusts `al`
+     * by the ground strip (`aR>=10|5 → al-=x()`, `aO>=12&&!23 → +cell`,
+     * `aQ>=12|5&&!23 → +half`). Ends with `t()` + the `t/u` center.
+     */
+    fun probeSnapSides(z2: Boolean, w: LevelCellSource) {
+        v = true
+        val iX = probeCells(w)
+        var i = W[0] - 1; var i2 = W[2] + 1
+        var i3 = W[1]; var i4 = W[3] - 10
+        if (ax == 0 && (S == 12 || S == 7 || S == 32 || S == 199)) i4 -= 10
+        bb = false; bc = false; ba = false; aT = 0; aU = 0
+        if (z2) {
+            if (bd) {
+                if (aR >= 10 || aR == 5) al -= iX
+                else if (aO >= 12 && aO != 23) { ba = true; al += (20 - (i3 % 20)) + 1 }
+                else if ((aQ >= 12 || aQ == 5) && aO != 23) { ba = true; al += (10 - (i3 % 20)) + 4 }
+            }
+            refreshBoxes()
+            i = W[0] - 1; i2 = W[2] + 1; i3 = W[1]; i4 = W[3] - 10
+        }
+        val iE = e(w, i / 20, i3 / 20 - 1)
+        val iE2 = e(w, i2 / 20, i3 / 20 - 1)
+        var i5 = i3 / 20
+        while (i5 <= i4 / 20) {
+            val iE3 = e(w, i / 20, i5)
+            if (iE3 > aT) {
+                aT = iE3
+                if (aT >= 18) {
+                    aX = if (iE >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
+                    bb = true
+                }
+            }
+            val iE4 = e(w, i2 / 20, i5)
+            if (iE4 > aU) {
+                aU = iE4
+                if (aU >= 18) {
+                    aY = if (iE2 >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
+                    bc = true
+                }
+            }
+            if (bb || bc) break
+            i5++
+        }
+        if (z2 && v) {
+            if (bb == bc) { bc = false; bb = false }
+            else if (ag <= 0) {
+                if (bb) { ak += (20 - ((i + 20) % 20)) - 1; probeCells(w) }
+                else { ak -= i2 % 20; probeCells(w) }
+            } else if (bc) {
+                ak -= i2 % 20; probeCells(w)
+            } else {
+                ak += (20 - ((i + 20) % 20)) - 1; probeCells(w)
+            }
+        }
+        refreshBoxes()
+        centerX = (W[0] + W[2]) shr 1
+        centerY = (W[1] + W[3]) shr 1
+    }
+
+    /** `i.M()` (i.java:5849, proven): feet-level cell one column into
+     *  the facing direction is solid (≥12) or "≥5" (verbatim — the
+     *  second conjunct subsumes the first). */
+    fun floorAhead(w: LevelCellSource): Boolean {
+        val iE = e(w, ak / 20 + (if (av) -1 else 1), al / 20)
+        return iE >= 12 || iE >= 5
+    }
+
+    fun ledgeHangGrab(w: LevelCellSource): Boolean {
+        val i4 = (W[1] + 10) / 20
+        val i2: Int; val i3: Int
+        if (av) { i2 = (W[0] - 20) / 20; i3 = i2 + 1 }
+        else { i2 = (W[2] + 20) / 20 + 1; i3 = i2 - 1 }
+        val iE = e(w, i2, i4)
+        if (iE < 19 || e(w, i2, i4 - 1) > 0 || e(w, i3, i4) > 0 ||
+            e(w, i3, i4 - 1) > 0 || e(w, i3, i4 + 1) > 0 || e(w, i3, i4 + 2) > 0) {
+            return false
+        }
+        ak = if (av) i2 * 20 + 20 else i2 * 20
+        al = i4 * 20 - 1
+        if (iE == 21) return true
+        w.clearLatches()
+        setAnim(61)
+        aC = 40
+        return true
+    }
+
+    /** `i.H()` (i.java:3684, proven) — release the `ab` held link
+     *  (`ab.p()` + `ab = null`); the drop-half of the `cu && v(33024)`
+     *  arm in the grounded tail. */
+    fun dropHeld() {
+        ab?.releaseCascade()
+        ab = null
+    }
+
     fun ledgeLipGrab(w: LevelCellSource): Boolean {
         val i4 = (W[1] + 10) / 20
         val i2: Int; val i3: Int
