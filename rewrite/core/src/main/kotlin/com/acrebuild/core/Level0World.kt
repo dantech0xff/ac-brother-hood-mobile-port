@@ -159,6 +159,15 @@ class Level0World(
     var statsScoreVisible = false
     var statsTypeNext = -1
     var typewriterText = ""
+    /** Row value strings per `d(0,38+i3)` label — filled as each `j.g`
+     *  gate passes (`bW.a(cd,…,305,55+i3*20,24)`, proven positions). */
+    val statsRowText = Array(5) { "" }
+
+    /** `j.c(i,0)` (j.java:1202, proven head) — thousands-grouped digits:
+     *  `<1000` raw, else separator groups (`,` inferred — the locale
+     *  switch decompiled oddly). */
+    fun fmtJ(i: Int): String = if (i in -999..999) i.toString()
+        else "%,d".format(i)
     /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
      *  arming clears bit128 (`P &= -129`) marking the slot live again. */
     fun projectileAlloc(): Int {
@@ -1448,17 +1457,26 @@ class Level0World(
         var i4 = 0
         val i5 = kAp[0]
         if (kAj == 7) i4 = 3000 else if (kAj >= 8) i4 = 5000
-        if (jG > 0) i4 += i5 * kDH[kAu]                   // kills
-        if (jG > 2) i4 += kAp[3] * kDI[kAu]               // collects
-        if (jG > 4) i4 -= minOf(kAp[1], 4) * 300          // deaths
+        if (jG > 0) { statsRowText[0] = i5.toString(); i4 += i5 * kDH[kAu] }
+        if (jG > 2) {
+            statsRowText[1] = kAp[3].toString()
+            i4 += kAp[3] * kDI[kAu]
+        }
+        if (jG > 4) {                                   // row shows raw i7
+            statsRowText[2] = kAp[1].toString()
+            i4 -= minOf(kAp[1], 4) * 300
+        }
         if (jG > 6) {
             var i = if (bh3) kAp[4] else kAp[5]           // bonus
             if (i < 0) i = 0
+            statsRowText[3] = fmtJ(i)
             i4 += i * 30
         }
         if (jG > 8) {
             val i8 = kDg / 16
             statsTimeSec = i8
+            // verbatim mm:ss — i9=i8%60, abs, zero-pad <10
+            statsRowText[4] = "%d:%02d".format(i8 / 60, Math.abs(i8 % 60))
             if (i8 > 180) i4 -= minOf(1000, (i8 - 180) shl 1)
         }
         if (i4 < 0) i4 = 0
@@ -2252,17 +2270,19 @@ class Level0World(
             } else { tickIndex++; jG++; return }
         }
 
+        // case 15 → M() (k.java:1141) — the win-stats screen proc
+        // replaces the entity sim entirely while j.c==15. jG++ runs
+        // first (j.java:255 `g++` precedes each `a()` dispatch). The
+        // play-frame counters below don't tick — they're inside the
+        // play case the dispatch replaces.
+        if (jC == 15) { jG++; winStatsM(); tickIndex++; return }
+
         // mission timer + ap[2] frame counter (k.java:1652-1655,
         // proven): ticks while unpaused and not dialog-suspended.
         if ((player.P and 512) != 0 ||
             (kC?.claimActive() != true && (jC != 21 || subU != 9))) {
             kDg++; kAp[2]++
         }
-
-        // case 15 → M() (k.java:1141) — the win-stats screen proc
-        // replaces the entity sim entirely while j.c==15. jG++ runs
-        // first (j.java:255 `g++` precedes each `a()` dispatch).
-        if (jC == 15) { jG++; winStatsM(); tickIndex++; return }
 
         player.collideSides(this, true)
         playerFsm.tick(player, pad)
