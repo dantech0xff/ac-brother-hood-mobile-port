@@ -176,6 +176,22 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
             183, 184 -> assassinArm(p)                          // L413/L426
+            // g.java:4245-4309 (proven) — ax61 aura knockback slide:
+            // S375 skid ±1280 → S376 halt → S377 recover → a(0).
+            375 -> {
+                p.ag = if (p.av) -1280 else 1280
+                if (p.animFinished()) p.setAnim(376)
+                world.scrollWallClamp(p)                        // i.f(this)
+            }
+            376 -> {
+                p.ah = 0; p.ag = 0
+                if (p.animFinished()) p.setAnim(377)
+                world.scrollWallClamp(p)
+            }
+            377 -> {
+                if (p.animFinished()) p.enterFall()             // a(0)
+                world.scrollWallClamp(p)
+            }
             else -> {
                 // attack anims play to completion then settle (inferred
                 // arm — the real per-state arms are unmined)
