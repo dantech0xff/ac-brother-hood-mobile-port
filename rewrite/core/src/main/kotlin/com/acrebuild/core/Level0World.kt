@@ -43,7 +43,13 @@ class Level0World(
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
-            10 to 6,      // clip6 not converted yet — triggers spawn clipless
+            10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
+                          // modules, proven) — zones still draw nothing
+            29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
+            41 to 30,     // ax41 knockable prop (bi[41]=30, proven)
+            8 to 5,       // ax8 knife/param projectiles (bi[8]=5, proven);
+                          // bi[12]=8 has no pack-3 entry-008 → ax12 stays
+                          // clipless (J(8)=null in the original too)
             14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
             16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
             71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
@@ -58,7 +64,7 @@ class Level0World(
             79 to 0,      // ax79 palette prop (bi[79]=0, proven)
             6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
             19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
-            74 to 54,     // ax74 burst spark (bi[74]=54 — ax19's a(74,54,5,300))
+            // ax74 maps at the end of the table (bi[74]=54).
             80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
                           // entry-057: J(57)=null → invisible/vestigial, proven)
             54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
@@ -69,9 +75,12 @@ class Level0World(
             60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
             43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
             69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
-            64 to 6,      // ax64 harrier — bi[64]=-1 (clipless record spawn);
-                          // unconverted index → null clip, matching the
-                          // original's own clipless record path
+            64 to 6,      // ax64 harrier — bi[64]=22 unconverted; clip6
+                          // stands in (load-valid nonrendering, so the
+                          // record still spawns clipless like the original)
+            13 to 61,     // ax13 rope/vine (bi[13]=61, proven)
+            32 to 36,     // ax32 (bi[32]=36 — same clip as ax30, proven)
+            68 to 26,     // ax68 (bi[68]=26 — generic small-item clip, proven)
             74 to 54,     // ax74 wisp (bi[74]=54, proven)
             76 to 56,     // ax76 hazard volume — bi[76]=56 but pack-3 slot 56
                           // is a zero-size entry (metadata, proven) → null
