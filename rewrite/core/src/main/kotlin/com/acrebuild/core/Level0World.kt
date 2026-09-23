@@ -814,7 +814,12 @@ class Level0World(
     override var kAo = false           // k.ao — fade-side flag
     var kCU = 0                        // k.cU — l(4) stash
     var kFi = 0                        // k.fi
-    var kFb: Any? = null               // k.fb — font measurer (unported)
+    var kFb = ""                       // k.fb — wrapped story text (l(20))
+    var kEY = 200                      // k.eY — jc20 text/icon slide y
+    var kEz = 85                       // k.eZ — jc20 text draw y
+    var kFc = 0                        // k.fc — jc20 typewriter counter
+    var kFa = ""                       // k.fa — jc20 accumulated text
+    /** `k.fd` exists (:774) — jc20 snapshots `fd=eZ` at cu4→5. */
 
     // -- menu machine (K()/L()/m()/Q() — k.java:6956/:7084/:5472/:3576) ----
     /** `dp[]/dq[]/dr[]/ds` — the O()/P() state stack (structured
@@ -853,6 +858,7 @@ class Level0World(
         14 to "YES", 15 to "NO", 16 to "NEXT", 17 to "BACK", 18 to "SKIP",
         22 to "SOUND", 23 to "TOTAL", 24 to "LOADING",
         25 to "DO YOU WANT TO RESTART?",
+        27 to "IN AN ATTACK ON THE AUDITORE FAMILY VILLA, RODRIGO'S SON, CESARE, HAS KILLED EZIO'S BELOVED UNCLE, MARIO, AND STOLEN THE DANGEROUS AND POWERFUL APPLE OF EDEN. VOWING TO AVENGE HIS UNCLE AND RECOVER THE APPLE, EZIO SEEKS THE AID OF HIS FRIEND, NICCOLÒ MACCHIAVELLI, WHO INFORMS HIM THAT HE WON'T BE ABLE TO GET TO CESARE WITHOUT HELP FROM LOCALS...",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
         47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
@@ -1705,7 +1711,17 @@ class Level0World(
                     kEe = footerFont?.linesHeight(11) ?: 0
                     kEf = 37 + kEe
                 }
-                i == 20 -> { /* kFb = y.a(d(0,27),390) — unported */ }
+                i == 20 -> {
+                    // `fb = y.a(d(0,27),390)` (:1825, proven) — story
+                    // text re-broken into <=390px lines joined by '\n'.
+                    kFb = wrapJoin(d0(27) ?: "")
+                    // `eZ` — `b.e`-height arm (:1291-1293): text taller
+                    // than 120px slides its draw origin up (inferred
+                    // height = linesHeight(lineCount)).
+                    val h = footerFont?.linesHeight(
+                        kFb.split('\n').size) ?: 0
+                    kEz = if (h > 120) 85 - (h - 120) else 85
+                }
             }
             break
         }
@@ -2189,6 +2205,7 @@ class Level0World(
         4 -> Pair("", d0(17))           // F() `a("",d(0,17))` (:2371)
         5 -> Pair("", d0(17))           // G() `a("",d(0,17))` (:2461)
         30 -> Pair(d0(79), d0(17))      // af() `a(d(0,79),d(0,17))` (:6266)
+        20 -> Pair(d0(16), d0(18))      // case20 `a(d(0,16),d(0,18))` (:1299)
         else -> Pair(null, null)
     }
     /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
@@ -2380,7 +2397,7 @@ class Level0World(
      *  — states entered through `l()` + `K(bv)` (level select, options,
      *  score tables...). The world doesn't tick behind them (`inferred`
      *  — orig suspends sim on menu screens). */
-    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 23, 28, 29, 30)
+    private val menuStates = intArrayOf(0, 2, 3, 4, 5, 6, 14, 18, 19, 20, 23, 28, 29, 30)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
      *  ' ' before a `bV` char ({'.','!','?',',',':'} — :142) becomes
@@ -2518,8 +2535,84 @@ class Level0World(
         if (jG - kDu >= 81) { kCu = 7; stateL(23) }
     }
 
-    /** `k.a()` case 18 (k.java:1146-1175, proven) — title screen tick.
-     *  `!cS`: `v(65568)||j()` (context edge or a play-area tap) →
+    /** `y.a(str,i)` (b.java:1707-1718, proven): wrap `str` (the call
+     *  hardcodes 390; `i` is ignored) then re-join the pieces with '\n'
+     *  — except where the source char at the boundary is already '\n'.
+     *  `wrap` returns the same U[] table the font draw uses. */
+    private fun wrapJoin(str: String): String {
+        val f = footerFont ?: return str
+        val u = f.wrap(str, 390)
+        val sb = StringBuilder()
+        var s2 = 0
+        for (i2 in 0 until u[0]) {
+            if (s2 != 0 && (s2 >= str.length || str[s2] != '\n')) sb.append('\n')
+            val end = u[(i2 shl 1) + 1].coerceAtMost(str.length)
+            sb.append(str.substring(s2, end)); s2 = end
+        }
+        return sb.toString()
+    }
+
+    /** The string jc20 draws this frame (renderer read): cu2 shows the
+     *  grown `fa`, cu>=3 the full `fb`, cu 0/1 nothing (k.java:1211,
+     *  `str = fb` local per frame; cu2 `str = fa` :1251). */
+    fun storyText(): String = when { kCu >= 3 -> kFb; kCu == 2 -> kFa; else -> "" }
+
+    /** `k.a()` case 20 (k.java:1208-1306, proven) — the story-typewriter
+     *  intro: `cu` 0 init (cT=10) → 1 wait cT→255 (z[39] anim1 icon, pause
+     *  skips → `eY=200,eZ=85,fc=0,fa=""`) → 2 typewriter one char/frame
+     *  into `fa` (esc chars {1,2,'\\'} consume the next char too; `fc >=
+     *  len-1` or pause → cu3) → 3 slide eY 200→100 at -4/frame → 4 wait
+     *  cT→255 (z[39] anim10 spinner) → 5 done (`fd=eZ`).
+     *  Tail: `a(d(0,16),d(0,18))` NEXT/SKIP footer; `v(131072)` — NEXT —
+     *  OR `v(262144) && cu==5` — SKIP once typewriter done — → `l(9)`
+     *  (load screen) + z(23). */
+    private fun menuJc20() {
+        kCb = true
+        footerQ()                                   // NEXT/SKIP (:1299-1301)
+        when (kCu) {
+            0 -> { kCT = 10; kCu = 1 }
+            1 -> {
+                kCT += 10
+                if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 2; kEY = 200; kEz = 85; kFc = 0; kFa = ""
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            2 -> {
+                if (kFc < kFb.length) {
+                    val c = kFb[kFc]; kFa += c; kFc++
+                    if (c == '\u0001' || c == '\u0002' || c == '\\') {
+                        if (kFc < kFb.length) { kFa += kFb[kFc]; kFc++ }
+                    }
+                }
+                if (kFc >= kFb.length - 1 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 3; kEY = 200
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            3 -> {
+                kEY -= 4
+                if (kEY <= 100 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 4; kEY = 100; kCT = 10
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            4 -> {
+                kCT += 10
+                if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
+                    kCu = 5; kFd = kEz
+                    if (pad.v(Pad.M_PAUSE)) z(23)
+                }
+            }
+            5 -> { /* full text + spinner — render side only */ }
+        }
+        if (pad.v(Pad.M_CYCLE) || (pad.v(Pad.M_PAUSE) && kCu == 5)) {
+            stateL(9); z(23)                        // (:1300-1305)
+        }
+    }
+
+    /** `k.a()` case 18 (k.java:1146-1175, proven) — the title screen
+     *  input arm: `v(65568)||k.j()` (press-fire or touch) →
      *  `cT=100; cS=true; z(23)`. `cS`: `cb=true; cT-=10; !e.a()→z(0)`
      *  (no track → sfx slot 0); `l(2)` → main menu; `A[0]=null`
      *  (clip-96 pack release — our clip map is static); `cT=0`.
@@ -2595,12 +2688,13 @@ class Level0World(
             }
             4 -> menuF()                           // F() (:2338, proven)
             5 -> menuG()                           // G() (:2412, proven)
+            0 -> bootR()                             // case 0 = R() (:3949)
+            20 -> menuJc20()                         // case 20 (:1208-1306)
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
             // `l(18)` → title. 327712 = pause|context union.
-            0 -> bootR()                             // case 0 = R() (:3949)
-        23 -> if (!pad.v(327712)) menuAe(pressY)
+            23 -> if (!pad.v(327712)) menuAe(pressY)
                   else {
                       if (kBw == 0) { kBE = true; kBF = true; z(0) }
                       else if (kBw == 1) { kBE = false; kBF = false }
