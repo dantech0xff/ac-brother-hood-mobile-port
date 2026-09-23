@@ -998,6 +998,45 @@ class Level0World(
     /** `k.ee[]` — per-mission music table (k.java:8436, proven):
      *  `B()` plays `ee[aj]` (or track 9 when `aJ==1`). */
     val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
+    /** `h.a[34]` — per-slot duration ms the original uses to fake a
+     *  "still playing" check (h.java:8, proven). */
+    private val hA = intArrayOf(38958, 14569, 7449, 16958, 9682, 11837,
+        6964, 3435, 5340, 9010, 218, 310, 812, 665, 518, 502, 990, 2823,
+        621, 797, 1108, 1581, 385, 325, 517, 990, 665, 281, 1862, 251,
+        177, 930, 458, 236)
+    /** `e.a[]` — per-slot stream availability (e.java:18-38 sniff loop):
+     *  pack-17 ships entries for every slot except 22/26/27 (proven —
+     *  legitimately empty in the pack). */
+    private val audioAvail = BooleanArray(34) { it != 22 && it != 26 && it != 27 }
+    /** `e.d` — play-start timestamp. The original uses
+     *  `System.currentTimeMillis()`; the port's deterministic clock is
+     *  `tickIndex * 62` (verbatim semantic — elapsed ms). */
+    private var audioStartMs = 0L
+    private fun audioNowMs() = tickIndex * 62L
+    /** `e.a()` (e.java:40-48, proven): `e != -1 && (now - d) < h.a[e]`. */
+    fun audioPlaying(): Boolean =
+        audioTrack != -1 && (audioNowMs() - audioStartMs) < hA[audioTrack]
+    /** `e.b()` (e.java:87-98, proven): stop/close the one `Player`,
+     *  `e = -1`. Emits `StopAudio` so the runtime channel halts too. */
+    override fun audioStop() {
+        if (audioTrack != -1) pendingCommands += Command.StopAudio
+        audioTrack = -1
+    }
+    /** `e.a(i, z2)` (e.java:50-85, proven): option gates, then the
+     *  duration-window gate — the nested L18–L29 checks collapse to
+     *  "both options on && a slot still within `h.a[e]` → every request
+     *  skipped" (each path provably returns). `z2` is a dead param in
+     *  the original (never read). */
+    private fun audioPlay(i: Int) {
+        if (!audioAvail[i]) return
+        if (!kBE && i < 10) return
+        if (!kBF && i >= 10) return
+        if (kBF && kBE && audioTrack != -1 && audioPlaying()) return
+        if (audioTrack != -1) pendingCommands += Command.StopAudio
+        audioStartMs = audioNowMs()
+        pendingCommands += Command.PlaySfx(i)
+        audioTrack = i
+    }
     /** Deferred audio commands — drained by the game loop each tick
      *  (same pattern as SpikeWorld's Command queue; real samples for
      *  the 34 tracks are not decoded into the app — adapters log). */
@@ -1005,15 +1044,11 @@ class Level0World(
     fun drainCommands(): List<Command> {
         val out = pendingCommands.toList(); pendingCommands.clear(); return out
     }
-    /** `z(int)` (k.java:7363, proven): `n∉[0,34) → nop`, then `e.a(n,false)`
-     *  — play iff `a[n]!=null` (assumed available, inferred) &&
-     *  `(kBE || n>=10)` && `(kBF || n<10)`. Sets loop count 1 (verbatim). */
+    /** `z(int)` (k.java:7363, proven): `n∉[0,34) → nop`, then
+     *  `e.a(n,false)` — see `audioPlay` (proven, `false` is dead). */
     private fun z(n: Int) {
         if (n < 0 || n >= 34) return
-        if (!kBE && n < 10) return
-        if (!kBF && n >= 10) return
-        audioTrack = n
-        pendingCommands += Command.PlaySfx(n)
+        audioPlay(n)
     }
     override var iBn = false                     // i.bn — bA[79] alert flag
     override var kAJ = 0                         // k.aJ — ax42 fuse phase
@@ -2012,13 +2047,13 @@ class Level0World(
         if (pad.v(Pad.M_UP)) {
             kBw--
             if (kBw < 0) kBw = 0 else { kFH = 0; kFI = 1; menuFkArm = 21 }
-            if (audioTrack >= 0) return
+            if (audioPlaying()) return           // `e.a()` — skip blip while live
             z(23); return
         }
         if (pad.v(Pad.M_DOWN)) {
             kBw++
             if (kBw >= i) kBw = i - 1 else { kFH = 0; kFI = 1; menuFkArm = 21 }
-            if (audioTrack >= 0) return
+            if (audioPlaying()) return           // `e.a()` — skip blip while live
             z(23)
         }
     }
@@ -2162,10 +2197,9 @@ class Level0World(
         Entity.gE = false                           // g.E=false (same teardown)
         Entity.icu = false                          // i.cu=false (same teardown)
     }
-    /** `k.x()`→`e.a()` (e.java:32, proven shape): a track is playing.
-     *  `inferred` mapping — our audio has no real-time expiry, so any
-     *  queued track counts. */
-    override fun musicActive() = audioTrack >= 0
+    /** `k.x()`→`e.a()` (e.java:32, proven): a slot is still within its
+     *  `h.a[e]` duration window. */
+    override fun musicActive() = audioPlaying()
     /** `a(z2)` (structured :5139) — level (re)load: `e.b(); V(); d(z2)`.
      *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
      *  Maps to our `reload()` (`inferred`). */
@@ -3182,8 +3216,6 @@ class Level0World(
     /** Stats screen (L466): `d(0,bx)` + "TOUCH THE SCREEN" blink. */
     val statsVisible get() = kAl && jC == 31 && kBx >= 0
     fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
-    /** `e.b()` (e.java:87, proven) — stop the current track. */
-    override fun audioStop() { audioTrack = -1 }
     private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
 
     /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our

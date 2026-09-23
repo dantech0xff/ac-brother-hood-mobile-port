@@ -188,6 +188,123 @@
       "source": "reconstructed-project/resources/decoded/pack-17/entry-033-marker-000.wav",
       "source_sha256": "cf9ca7f7af35da808b251998260479392c106eaed9b9ecf231e42dafcdbf0409",
       "transform": "copy-v1"
+    },
+    {
+      "output": "audio/music-0.ogg",
+      "output_bytes": 310281,
+      "output_sha256": "daec1e1afaabf469a46a27c9445a17f13f321f222c189f3b5de4dada6f7a7355",
+      "role": "pack-17 audio slot 0 (MIDI music/stinger) \u2014 k.A(0) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-000-marker-001.mid",
+      "source_sha256": "bf582a7e31c4f350a7b33e8d4cbb1ef9c88386eaccd188d6c78532f8698ef7a3",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-1.ogg",
+      "output_bytes": 139547,
+      "output_sha256": "f04cd4a05a4f8ac18837c041b9b7e3369dff69cb1567e9de4543b5a365e30beb",
+      "role": "pack-17 audio slot 1 (MIDI music/stinger) \u2014 k.A(1) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-001-marker-001.mid",
+      "source_sha256": "62840ee2a722c9d1f10bbcaea795da335ad3e3594936d3cc5cbc2c3e5ed3ecdf",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-2.ogg",
+      "output_bytes": 96418,
+      "output_sha256": "598637d5bbce405f42b8f1e3b33f65e5655fdac08419e90f1b09d73f751d93b8",
+      "role": "pack-17 audio slot 2 (MIDI music/stinger) \u2014 k.A(2) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-002-marker-001.mid",
+      "source_sha256": "d1c9c69f9de35f181d9ae4872970500dfc0634289005066d4f9774a110610c7e",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-3.ogg",
+      "output_bytes": 204999,
+      "output_sha256": "db41313f3e1972cb8651d15ad955309e785d13b7c9ec4d57714ca3df4203b7d0",
+      "role": "pack-17 audio slot 3 (MIDI music/stinger) \u2014 k.A(3) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-003-marker-001.mid",
+      "source_sha256": "a705ec8095cdb30cfddd3762dcdf1c2d56d9186ab57e3ee5a3b183db80d75276",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-4.ogg",
+      "output_bytes": 127118,
+      "output_sha256": "3fe0c10420e10d500cec3a5f331f9358f37531512306ec576ef936a9a1917d27",
+      "role": "pack-17 audio slot 4 (MIDI music/stinger) \u2014 k.A(4) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-004-marker-001.mid",
+      "source_sha256": "a477b360b5c55f88cac3f46264468fdd68422436db5a4830c9f4468a53b05768",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-5.ogg",
+      "output_bytes": 117683,
+      "output_sha256": "4f4b15004edd921b5bac705e15eafb7b632ffdfb469c150d54632489fff79891",
+      "role": "pack-17 audio slot 5 (MIDI music/stinger) \u2014 k.A(5) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-005-marker-001.mid",
+      "source_sha256": "5cb83f25f632134e6005a2348f02cfea4620eb9cf6bd0fe614550199449fce6a",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-6.ogg",
+      "output_bytes": 4919,
+      "output_sha256": "2fe38f531496cd9d86a6ccd08caafd5756701771eb69e8dbe6c8473f98d52492",
+      "role": "pack-17 audio slot 6 (MIDI music/stinger) \u2014 k.A(6) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-006-marker-001.mid",
+      "source_sha256": "9da9c47c87f943da1b42d37521322e8ccc4fc46b838915c699683ad3a9b07265",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-7.ogg",
+      "output_bytes": 41859,
+      "output_sha256": "f5cda463ed4bb3d7c35ead3ad3d78cd3c047acdeae6cb9b792d1e8e3cdedd020",
+      "role": "pack-17 audio slot 7 (MIDI music/stinger) \u2014 k.A(7) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-007-marker-001.mid",
+      "source_sha256": "091117595832bb5cb9fc93036e0941dc0c788552c733822a4a0468dc5156f845",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-8.ogg",
+      "output_bytes": 70816,
+      "output_sha256": "de795659d4b729c58c8cd854d8fdba3e3057ab2d2f1ab16324c9b6911ea396dc",
+      "role": "pack-17 audio slot 8 (MIDI music/stinger) \u2014 k.A(8) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-008-marker-001.mid",
+      "source_sha256": "35a625af0d085d076abe05b7b2ed137bbb6b764f60a79077cac8eac48d93e6cc",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-9.ogg",
+      "output_bytes": 131521,
+      "output_sha256": "bf5c09b9c2a979c2137fa17813260c40da8d685cb2639647c21a21e39a150d99",
+      "role": "pack-17 audio slot 9 (MIDI music/stinger) \u2014 k.A(9) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-009-marker-001.mid",
+      "source_sha256": "28e0e71ea19a91360ee7329116df92f9c03863b355d1735c358022336c860aca",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-17.ogg",
+      "output_bytes": 4494,
+      "output_sha256": "fde70b3c594a1f438c0a4fd300664193218cddfaae116bcc8374ef6b4eada2c2",
+      "role": "pack-17 audio slot 17 (MIDI music/stinger) \u2014 k.A(17) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-017-marker-001.mid",
+      "source_sha256": "407823bc7bd04643946e7098aeafc120d78528f8140ff8ddcc09052a9a07e214",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-21.ogg",
+      "output_bytes": 4328,
+      "output_sha256": "75ee4cb050d8060e1d280082be34dd1e4d0a779b13751c4f7ac48d9026d1777e",
+      "role": "pack-17 audio slot 21 (MIDI music/stinger) \u2014 k.A(21) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-021-marker-001.mid",
+      "source_sha256": "290dc2c562aff8782e63af823e94289886ee6c2306d925814746f78147ff2c17",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
+    },
+    {
+      "output": "audio/music-28.ogg",
+      "output_bytes": 4379,
+      "output_sha256": "79d2c416cc795cd69e85bcadc2be9396d11b3377b76e4e94da01ba27a096f6dd",
+      "role": "pack-17 audio slot 28 (MIDI music/stinger) \u2014 k.A(28) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-028-marker-001.mid",
+      "source_sha256": "aa130a70886111aa367c5b1357acb6098d133d4981149d0093a3c6cfe04e5405",
+      "transform": "midi-render-v1 (JDK Gervill software synth \u2192 WAV 44.1k s16 \u2192 ffmpeg libvorbis q3 OGG; slots 6/17/21/28 render silence under the default soundbank)"
     }
   ],
   "provenance_version": 1
