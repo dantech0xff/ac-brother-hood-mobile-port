@@ -1101,6 +1101,64 @@ class Level0World(
         // ac[] = {camX, camY, +400, +240} — the camRect getter derives it
     }
 
+    /**
+     * `i.w()` (i.java:793-816, proven) — the goal entity's camera-band
+     *  query for the L142 win check: 0 = `v()` true (on-screen/active),
+     *  1 = anchor inside the (ac2, ac2+200) band past the camera right
+     *  edge while offscreen, 2 = anchor >200px beyond it (win), 3 =
+     *  anchor at/behind the right edge. Both interior `v()` re-evals are
+     *  verbatim — `v()` is pure, so `return 1`/`return 2` hinge on a
+     *  `wasHitRecently` re-eval flipping mid-check (decompiler artifact;
+     *  kept for fidelity).
+     */
+    private fun iW(e: Entity): Int {
+        if (e.wasHitRecently(this)) return 0                           // L5
+        val ac2 = camRect[2]                                           // k.ac[2]=O+400
+        if (e.ak > ac2 && e.ak < ac2 + 200) {                          // in band
+            return if (e.wasHitRecently(this)) 3 else 1                // L7 tail
+        }
+        if (e.ak > ac2 + 200)                                          // L15→L17
+            return if (e.wasHitRecently(this)) 3 else 2                // L22 / 2
+        return 3
+    }
+
+    /**
+     * `k.I()`'s L142-L200 tail (k.java:3321-3358, proven): runs right
+     *  after the per-tick camera call on BOTH bh arms (m(1) falls
+     *  through; D() gotos it).
+     *  1. Goal arm — `k.aV` (the `r8[5]==0` ax9 block `initAx9` bound)
+     *     while `Z[0]==1` (script ops L146/L147 arm/disarm) and
+     *     `aV.S∉{4,5}`: `w()==1` → the `j.f`-even milestone font blit
+     *     (`z[9].a(cd,38,0,360,120,…)` — draw unported; `goalTicker`
+     *     flag only, inferred); `w()==2` → `bx=56; l(13); bw=0` —
+     *     the scripted win. The `j.c∈{13,31}` skip maps to `won`;
+     *     screen 31 has no analog yet (inferred).
+     *  2. Claimer step — `C.cd[2] && C.cd[1] && C.ab()` → `C.aa()`:
+     *     one claim-script step per tick on the fast-forwarded claimer
+     *     (L161-L167).
+     *  3. bh3 tail — `cA=O; cB=P` (L172): targets snap to the lerped
+     *     pos so an early-returning D() doesn't drift.
+     */
+    private fun l142Tail() {
+        val aV = kAV
+        if (aV != null && aV.Z[0] == 1 && !won && aV.S != 4 && aV.S != 5) {
+            when (iW(aV)) {
+                1 -> if (tickIndex and 1L == 0L) goalTicker = true     // L157
+                2 -> { kBx = 56; screenL(13); kBw = 0 }                // L159
+                else -> goalTicker = false
+            }
+        } else goalTicker = false
+        val c = kC                                                     // L161-L167
+        if (c != null && c.cd[2] && c.cd[1] && c.claimActive()) {
+            c.runClaimScript(this)
+        }
+        if (Entity.MISSION_BH[kAj] == 3) { camA = camX; camB = camY }  // L172
+    }
+
+    /** L157's `z[9]` milestone blit active this tick (render unported). */
+    var goalTicker = false
+        private set
+
     /** `k.l(int)` — 12 mission-fail, 13 win, 15 mission-complete, 21 modal. */
     override fun screenL(n: Int) {
         if (n == 12) missionFail() else if (n == 15) missionComplete()
@@ -1484,6 +1542,7 @@ class Level0World(
             }
             kD()
         }
+        l142Tail()          // L142-L200 — runs on both camera arms
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) missionFail()
