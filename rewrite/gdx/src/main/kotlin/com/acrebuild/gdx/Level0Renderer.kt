@@ -338,6 +338,95 @@ class Level0Renderer {
             }
         }
 
+        // ag() mission poster card (k.java:6358, proven positions):
+        // `i(0,120)` card overlay (frame12 + fill — procedural stand-in),
+        // `A[4]` frame i+4 at (200,119), brief a(y,0,d(0,110),200,150,
+        // 380,240,0,3), `j.g%10<5` → d(0,9) blink at (200,220).
+        if (world.jC == 10) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            // card frame (A[4] clip unported → dark plate stand-in)
+            batch.setColor(0.12f, 0.1f, 0.16f, 1f)
+            batch.draw(white, 10f, (H - 200).toFloat(), 380f, 190f)
+            batch.setColor(0.8f, 0.15f, 0.15f, 0.9f)
+            batch.draw(white, 10f, (H - 30).toFloat(), 380f, 4f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            if (world.posterBrief.isNotEmpty()) {
+                font.draw(batch, world.posterBrief, 20f, (H - 150).toFloat())
+            }
+            if (world.hintBlink) {
+                world.d0(9)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 200f - t.length * 3.5f,
+                              (H - 220).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
+        }
+
+        // ah() medal/unlock viewer (k.java:6392-6490, proven positions):
+        // title d(0,113) at (210,43); panel (114,59,172,155); rows
+        // (114,70+45i,172,40) labels at (164, 70+45i+21); j.g<10 →
+        // black fade (10-j.g)*25 alpha; blink hint (200,220).
+        if (world.jC == 22) {
+            val H = Level0World.VIEW_H
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 0f, 0f, 400f, 240f)
+            if (world.medalTitle.isNotEmpty()) {
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, world.medalTitle,
+                          210f - world.medalTitle.length * 3.5f,
+                          (H - 43).toFloat())
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+            batch.setColor(0.08f, 0.07f, 0.1f, 0.95f)
+            batch.draw(white, 114f, (H - 59 - 155).toFloat(), 172f, 155f)
+            for (i in 0 until world.medalRowCount) {
+                val ry = (H - 70 - i * 45 - 40).toFloat()
+                batch.setColor(0.16f, 0.14f, 0.2f, 1f)
+                batch.draw(white, 114f, ry, 172f, 40f)
+                // medal icon placeholder — z[73] frame circle
+                val icon = world.medalRowIcon[i]
+                if (icon >= 0) {
+                    if (world.medalRowDim[i])
+                        batch.setColor(0.3f, 0.3f, 0.35f, 1f)
+                    else
+                        batch.setColor(0.85f, 0.7f, 0.25f, 1f)
+                    batch.draw(white, 122f, ry + 12f, 16f, 16f)
+                }
+                val t = world.medalRowText[i]
+                if (t.isNotEmpty()) {
+                    batch.setColor(1f, 1f, 1f, 1f)
+                    font.setColor(1f, 1f, 1f, 1f)
+                    font.draw(batch, t, 146f, ry + 26f)
+                }
+            }
+            batch.setColor(1f, 1f, 1f, 1f)
+            if (world.screenFadeAlpha > 0) {
+                batch.setColor(0f, 0f, 0f,
+                               (world.screenFadeAlpha / 255f).coerceIn(0f,1f))
+                batch.draw(white, 0f, 0f, 400f, 240f)
+                batch.setColor(1f, 1f, 1f, 1f)
+            }
+            if (world.hintBlink && !world.hintBack) {
+                world.d0(9)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 200f - t.length * 3.5f,
+                              (H - 220).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
+            if (world.hintBack) {
+                world.d0(17)?.let { t ->
+                    font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                    font.draw(batch, t, 390f - t.length * 7f,
+                              (H - 222).toFloat())
+                    font.setColor(1f, 1f, 1f, 1f)
+                }
+            }
+        }
+
         batch.end()
         fbo.end()
 
