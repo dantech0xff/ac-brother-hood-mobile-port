@@ -520,7 +520,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   driving `k.B(26)`/`k.C(26)` fades. (The slice-20 "rope-attach"
      *   stub label was wrong — this is the paired-door transition.)
      */
-    fun tickTrigger(e: Entity, w: LevelCellSource, player: Entity) {
+    fun tickTrigger(e: Entity, w: LevelCellSource, player: Entity, pad: Pad) {
         when (e.S) {
             // `aV()` S10 arm (i.java:9338-9363 L1e1, proven) — wall-run
             // zone: sets `g.q`/`g.d` while the player overlaps; clears
@@ -533,26 +533,135 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gq = false; player.gd = null
                 }
             }
-            // `aV()` S55 arm (i.java:9818-9862 L611-L651 head, proven) —
-            // suppress-jump zone: `P|=128` while empty; on overlap a stale
-            // `k.C` claim is released (`ab()`→`bI()`→`k.c`→null), `P&=~128`,
-            // `g.E=true`, `Z[0]!=0` → `i.cu`. Leaving → `g.E=false`.
-            // (aA-gauge / k.C-rebind / `k.bh[k.aj]` tail L66e-L737 unported
-            // — claim machinery, separate slice.)
+            // `aV()` S55 arm (i.java:9795-10423 L5ea-La66, proven) — the
+            // claim-QTE zone: 4 pad lanes from Z[1] nibbles (types index
+            // i.cs[]/i.ct[]), `aB` ticks vs Z[2] (required presses),
+            // `aA` = bound script uid (Z[4]→Z[3] when the sequence ends),
+            // bA[] prompt cards (clip9 keys when `k.k()`, clip74 touch
+            // zones otherwise). `m` lane cursor; `m>=10` = lane resolved.
+            // `n` is set externally (claim script) → the next overlap tick
+            // runs the consumed reset (P|=8192) and the zone removes itself.
             55 -> {
-                e.P = e.P or 128
+                if (w.iBe) { w.removeEntity(e); return }               // L5ea
+                if (e.claimAb()) { e.runClaimScript(w); return }       // L5f5
+                if (e.P and 8192 != 0) { w.removeEntity(e); return }   // L601
+                e.P = e.P or 128                                       // L611
                 if (!rectsOverlap(e.W, player.W)) {
                     Entity.gE = false; return
                 }
-                val kc = w.kC
+                val kc = w.kC                                          // L632
                 if (kc != null && kc.claimAb()) {
                     kc.releaseClaim(w)
                     w.removeEntity(kc)
                     w.kC = null
                 }
-                e.P = e.P and -129
+                e.P = e.P and -129                                     // L651
                 Entity.gE = true
                 if (e.Z[0] != 0) Entity.icu = true
+                if (e.aB != 0 && e.nl != 0) {                          // L66e
+                    e.P = e.P or 8192                                  // consumed
+                    e.aB = 0; e.nl = 0
+                    e.X.fill(0)   // X=null → lazy realloc; the port's
+                                  // fixed IntArray(4) gets refilled from
+                                  // Z[1] on the next armed pass
+                    Entity.scriptPrompts.fill(null)
+                    Entity.gE = false
+                    if (e.Z[0] != 0) Entity.icu = false
+                    if (e.aA > 0) {                                    // L6bb
+                        e.bindScript(w.kS(e.aA), w)
+                        e.P = e.P or 512 or 16
+                        w.kC = e
+                        e.bindScript(w.kS(e.aA), w)   // verbatim double h()
+                        e.scriptKeyStep(w.kS(e.aA), w)
+                        e.P = e.P or 128
+                    } else if (w.missionBh() == 3) {
+                        w.removeEntity(e)                              // L70d
+                    }
+                    if (w.missionBh() == 3) {                          // L71c
+                        pad.y(65568); e.unlockInput(w); e.timewarpOff(w)
+                    } else {
+                        pad.clearLatches()                             // L733
+                    }
+                    return
+                }
+                if (e.nl != 0) return                                  // L737
+                if (w.missionBh() == 3 &&
+                    (w.iAH || !w.kAm)) {                               // L73f
+                    e.timewarp(w, 2); e.lockInput(w)                   // L756
+                }
+                if (e.aB == 0) {                                       // L75d
+                    if (w.missionBh() == 3) pad.y(65568)
+                    else pad.clearLatches()
+                    // L77a — arm the lane sequence
+                    e.P = e.P and -129
+                    e.P = e.P or 16
+                    e.aA = e.Z[4]; e.j = 0; e.pv = 0
+                    e.aD = 0; e.az = 300
+                    e.m = 0                                            // L7bf
+                    for (r9 in 0..3) {                                 // L7c6
+                        e.X[r9] = (e.Z[1] shr ((3 - r9) shl 2)) and 15
+                        if (r9 != 3 && e.m == 0 && e.X[r9] == 0) continue
+                        e.m = 1; e.aD++                                // L7f5
+                        var pr = Entity.scriptPrompts[r9]
+                        if (pr == null) {
+                            pr = ScriptPrompt()
+                            Entity.scriptPrompts[r9] = pr
+                        }
+                        if (w.mounted) {                               // L839
+                            pr.attach(9, w.clipFor(9))
+                            pr.setState(Entity.CT[e.X[r9]], -1)
+                        } else {                                       // L818
+                            pr.attach(74, w.clipFor(74))
+                            pr.setState(0, -1)
+                        }
+                    }
+                    e.m = 0; e.nl = 0                                  // L860
+                    while (e.pv == 0 && e.j < 4) {                     // L86a
+                        e.pv = e.X[e.j]; e.j++
+                    }
+                    e.m = e.j - 1; e.aE = e.m                          // L893
+                }
+                // L8a5 — lane scan
+                if (e.aB >= e.Z[2] || e.m >= 10 || e.aA == e.Z[3]) {
+                    // La1f — sequence complete / lane timed out
+                    if (e.aB < e.Z[2] || e.m >= 10) return
+                    val pr = Entity.scriptPrompts[e.m] ?: return
+                    if (w.mounted) pr.setState(Entity.CT[e.X[e.m]] + 2, 1)
+                    else pr.setState(-1, 1)
+                    e.m = 10 + e.m                                     // La66
+                    return
+                }
+                e.aB++                                                 // progress
+                val pr0 = Entity.scriptPrompts[e.m]
+                if (!w.mounted && pr0 != null && pr0.e != -1 &&
+                    w.pointerMoveIn(pr0.a - 35, pr0.b - 35, 70, 70)) {
+                    pr0.setState(1, 1)                                 // hover
+                }
+                val hit = pad.v(Entity.CS[e.pv]) ||                    // L91c
+                    (!w.mounted && pr0 != null &&
+                        w.pointerDownIn(pr0.a - 35, pr0.b - 35, 70, 70))
+                if (hit) {                                             // L956
+                    if (pr0 != null) {
+                        if (w.mounted) pr0.setState(Entity.CT[e.X[e.m]] + 1, 1)
+                        else pr0.setState(-1, 1)
+                    }
+                    if (e.j > 3) {                                     // L987
+                        e.aA = e.Z[3]; w.sfx(25); return
+                    }
+                    e.m = e.j; e.pv = e.X[e.j]; e.j++                  // L99f
+                    return
+                }
+                val stray = if (w.mounted)                             // L9bf
+                    w.pointerStrip() || pad.bB != 0                    // k.t()
+                else w.pointerStrip()
+                if (stray) {
+                    if (e.aE == e.m) return                            // L9d7
+                    if (pr0 != null) {
+                        if (w.mounted) pr0.setState(Entity.CT[e.X[e.m]] + 2, 1)
+                        else pr0.setState(-1, 1)
+                    }
+                    e.m = 10 + e.m                                     // La13
+                }
             }
             33 -> if (rectsOverlap(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
