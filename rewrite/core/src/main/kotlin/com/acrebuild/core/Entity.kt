@@ -3079,6 +3079,25 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  default `e()` arm's `r() && !j` fall guard (g.java:1146) plus
          *  the i.java:7180/:15564 mount/overlap gates. */
         var grabLatch = false
+        /** `g.q` (g.java:63, proven) — static wall-run-zone latch: set by
+         *  the ax10 S10 zone arm while the player overlaps it
+         *  (i.java:9343-9363), read by the S317 arm's `!q` release gate
+         *  (g.java:4093). Cleared by `i.D()` pool init (i.java:1818). */
+        var gq = false
+        /** `g.f` (g.java:10, proven) — static wall-run marker-FX entity
+         *  (`i.a(8,30,4,...)` spawned by the S317 arm, g.java:4083);
+         *  the marker's own FSM checks `g.f == this` (i.java:6122). */
+        var gf: Entity? = null
+        /** `g.E` (g.java:36, proven) — static jump-tail suppress latch:
+         *  set while the player overlaps an ax10 S55 zone
+         *  (i.java:9843-9860), read as `cq && !E` in the shared e()
+         *  jump tail (g.java:788). Without it the tail's `i(233/22/21)`
+         *  overrides the arm-level `i(17)` wall-kick — the wall-run
+         *  family is only reachable inside these zones. */
+        var gE = false
+        /** `i.cu` (i.java static, proven) — set by the ax10 S55 arm's
+         *  `Z[0]!=0` branch (i.java:9857); consumers unmined. */
+        var icu = false
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
          *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */

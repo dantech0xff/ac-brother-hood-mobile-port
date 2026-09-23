@@ -522,6 +522,38 @@ class NpcFsm(val world: LevelCellSource) {
      */
     fun tickTrigger(e: Entity, w: LevelCellSource, player: Entity) {
         when (e.S) {
+            // `aV()` S10 arm (i.java:9338-9363 L1e1, proven) — wall-run
+            // zone: sets `g.q`/`g.d` while the player overlaps; clears
+            // both when this zone still owns the link after contact ends.
+            10 -> {
+                if (rectsOverlap(player.W, e.W)) {
+                    Entity.gq = true; player.gd = e
+                }
+                if (!rectsOverlap(player.W, e.W) && player.gd === e) {
+                    Entity.gq = false; player.gd = null
+                }
+            }
+            // `aV()` S55 arm (i.java:9818-9862 L611-L651 head, proven) —
+            // suppress-jump zone: `P|=128` while empty; on overlap a stale
+            // `k.C` claim is released (`ab()`→`bI()`→`k.c`→null), `P&=~128`,
+            // `g.E=true`, `Z[0]!=0` → `i.cu`. Leaving → `g.E=false`.
+            // (aA-gauge / k.C-rebind / `k.bh[k.aj]` tail L66e-L737 unported
+            // — claim machinery, separate slice.)
+            55 -> {
+                e.P = e.P or 128
+                if (!rectsOverlap(e.W, player.W)) {
+                    Entity.gE = false; return
+                }
+                val kc = w.kC
+                if (kc != null && kc.claimAb()) {
+                    kc.releaseClaim(w)
+                    w.removeEntity(kc)
+                    w.kC = null
+                }
+                e.P = e.P and -129
+                Entity.gE = true
+                if (e.Z[0] != 0) Entity.icu = true
+            }
             33 -> if (rectsOverlap(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
                     player.gB = e.av

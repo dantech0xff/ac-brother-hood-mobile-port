@@ -2083,6 +2083,10 @@ class Level0World(
         npcs.clear(); pendingInsert.clear()
         kC = null                                   // claimer released
         Entity.grabLatch = false                    // g.j=false (i.D(), i.java:1817)
+        Entity.gq = false                           // g.q=false (i.D(), i.java:1818)
+        Entity.gf = null                            // g.f=null (same teardown)
+        Entity.gE = false                           // g.E=false (same teardown)
+        Entity.icu = false                          // i.cu=false (same teardown)
     }
     /** `k.x()`→`e.a()` (e.java:32, proven shape): a track is playing.
      *  `inferred` mapping — our audio has no real-time expiry, so any
