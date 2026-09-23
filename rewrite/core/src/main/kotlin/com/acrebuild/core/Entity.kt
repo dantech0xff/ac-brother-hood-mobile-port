@@ -4223,6 +4223,11 @@ interface LevelCellSource {
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}
+    /** `i.f(i)` (i.java:5382, proven) — the scroll-wall clamp called at
+     *  the tail of the player's motion arms (16 call sites, all on g):
+     *  while the ax37 holder is in overlap mode it pins the entity's Y
+     *  box inside the holder's bound rect. */
+    fun scrollWallClamp(e: Entity) {}
     /** `g.r` — grab-QTE lock flag on the player (g.java:23). */
     var gR: Boolean get() = false; set(_) {}
     /** `g.u[]` (g.java:6400) — per-weapon damage TO the player; index k.au. */
