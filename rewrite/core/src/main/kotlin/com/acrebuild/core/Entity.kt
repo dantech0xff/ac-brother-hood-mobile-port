@@ -4305,7 +4305,7 @@ interface LevelCellSource {
     val kBu: Int get() = 0
     /** `k.bk[]` — per-record type table read by `u()`'s ax67 arms
      *  (`inferred` — table unmined; default 0). */
-    fun kBk(i: Int): Int = 0
+    fun kBk(i: Int): Int = NpcFsm.decorClip(i)
     /** `j.a(lo,hi)` (j.java:328, proven): `lo + |nextInt| % (hi-lo)`. */
     fun jRand(lo: Int, hi: Int): Int = lo
     /** `j.j.nextInt()` — raw RNG (bG scatter/homing arms). */
