@@ -816,6 +816,24 @@ class Level0Renderer {
         // aO/aP timed line (k.java:4337-4343, proven)
         world.kAP?.let { drawText(it, 200, 23, 17) }
 
+        // k.aD capture/fuse bar (k.java:3133-3139, proven): under the
+        // C-claim gate `(C!=null && (!C.cd[6] || !C.ab())) || C==null`,
+        // when the HUD-bar entity sits in S6 with Z[1]>0 → z[12] f18
+        // outline at (110,215), then f19 fill clipped to
+        // (125,0,120*(Z[1]-Z[2])/Z[1],240) — progress fill = elapsed
+        // share of the Z[1] total.
+        val cEnt = world.kC
+        val cGate = cEnt == null || !cEnt.cd[6] || !cEnt.claimActive()
+        val barEnt = world.kAD
+        if (cGate && !world.gG() && barEnt != null && barEnt.Z != null &&
+            barEnt.S == 6 && barEnt.Z[1] > 0) {
+            drawFrame(12, 18, 0, 110, 215, 0)
+            clipScissor(125, 0, (120 * (barEnt.Z[1] - barEnt.Z[2])) /
+                        barEnt.Z[1], 240)
+            drawFrame(12, 19, 0, 110, 215, 0)
+            clipReset()
+        }
+
         // g.g overhead icon (k.java:4344-4350, proven): while the player
         // rides the grab-QTE states with a focus entity, z[10] anim 41
         // (S303) or 29 (S295) frame `aS.K` sits at (aS.L-O, aS.M-P).
