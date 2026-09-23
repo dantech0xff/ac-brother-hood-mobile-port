@@ -355,16 +355,31 @@ class Level0Renderer {
         return if (n <= 0) 0 else ((world.jG - world.kDu) % n).toInt()
     }
 
-    /** jc20 overlay — `z[39]` slide icon + wrapped story text + spinner. */
+    /** jc20 overlay (k.java:1280-1298, proven): `z[39]` anim-1 icon at
+     *  (eY,80) for ALL `cu>=2`; text at eZ inside the (85,120) clip for
+     *  `cu<=4`; cu5 draws the scroll panel's text at `fd` inside the
+     *  same clip; `z[39]` anim-10 spinner at (300,80) for `cu>=4`. */
     private fun storyScreen(world: Level0World) {
         if (world.kCu < 2) return
         val icon = clips[39]
-        if (icon != null && world.kCu <= 4) {
+        if (icon != null) {
             val n = icon.frameCount(1)
             drawFrame(39, 1, if (n <= 0) 0 else (world.jG % n).toInt(),
                       0, world.kEY, 80)
         }
-        drawText(world.storyText(), 5, world.kEz, 0)
+        clipScissor(0, 85, 400, 120)
+        if (world.kCu <= 4) {
+            // :1290-1296 — `y.a(str,null)` measure, tall text slides
+            // eZ up (`eZ = 85-(b.e-120)`), then draws at eZ; the write-
+            // back is verbatim so `fd = eZ` at cu4→5 inherits it.
+            val h = world.footerFont?.linesHeight(
+                world.storyText().count { it == '\n' } + 1) ?: 0
+            if (h > 120) world.kEz = 85 - (h - 120)
+            drawText(world.storyText(), 5, world.kEz, 0)
+        } else {
+            drawText(world.storyText(), 5, world.kFd, 0)
+        }
+        clipScissor(0, 0, 400, 240)
         if (icon != null && world.kCu >= 4) {
             val n = icon.frameCount(10)
             drawFrame(39, 10, if (n <= 0) 0 else (world.jG % n).toInt(),
