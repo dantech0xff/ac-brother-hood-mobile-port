@@ -2659,6 +2659,31 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
 
+    /**
+     * `i.S()` (i.java:7276, proven): the victim-payoff tick inside the
+     *  S183/184 assassination arm — three bursts of `m(-1)` wisp spawn,
+     *  `k.o(5)` stat and `k.s()` streak/shake per iteration.
+     */
+    fun victimPayoff(w: LevelCellSource) {
+        repeat(3) {
+            w.spawnWisp(this)               // m(-1) → a(74,54,1,…)
+            w.kStat(5)                      // k.o(5)
+            w.kCollectStreak()              // k.s()
+        }
+    }
+
+    /**
+     * `i.d(iVar)` (i.java:1221, proven): per-ax anim reset applied to the
+     *  released `i.aN` victim when the finisher ends — ax11 → `i(0)`,
+     *  ax23 → `i(79)`, anything else untouched.
+     */
+    fun releaseAnimReset() {
+        when (ax) {
+            11 -> setAnim(0)
+            23 -> setAnim(79)
+        }
+    }
+
     /** `i.ab()` (i.java:18914, proven): claim-script parked at an active
      *  marker — bound (`ca>=0`), not flag-0 suspended, `cK` snapshot
      *  armed. The draw pass reads this (and `cd[2]`/`cd[9]`) for the

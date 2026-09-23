@@ -286,7 +286,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.animFinished()) p.setAnim(0)
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
-            183, 184 -> assassinArm(p)                          // L413/L426
             // g.java:4245-4309 (proven) — ax61 aura knockback slide:
             // S375 skid ±1280 → S376 halt → S377 recover → a(0).
             375 -> {
@@ -328,6 +327,68 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     world.sfx(18)                    // k.A(18)
                     world.resetLevel(true)           // k.a(true) (:5139)
                     world.kAz = world.kBA[32]        // k.a(bA,32) short
+                }
+            }
+            // ---- case 183 (g.java:3041-3097, proven) — assassination
+            // finisher anim: while it plays the weakened `i.aN` victim is
+            // dragged into its own death anim (i(106) ∓30px) with the kill
+            // tally + payoff per tick; when the anim ends (or the lock is
+            // gone) release — k.p() + i.O() + i(0), victim aB=0 + i.d()
+            // reset, i.aN = null. The embedded `S==184` check below is a
+            // verbatim dead conjunct (S is 183 in this arm, :3059).
+            183 -> {
+                val aN = world.lockTarget
+                if (aN != null && aN.S != 106 &&
+                    Math.abs(aN.al - p.al) < 20) {
+                    aN.setAnim(106)                     // victim → i(106)
+                    world.kStatE(p.aw)                  // k.e(0,aw)
+                    aN.victimPayoff(world)              // i.aN.S() (:7276)
+                    aN.ak = if (p.av) p.ak - 30 else p.ak + 30
+                    aN.al = p.al
+                }
+                // `if (S==184 && aN!=null && aN.S!=107 && |Δal|<20)` —
+                // verbatim dead inside case 183 (g.java:3059); the live
+                // copy is in the 184/205 arm.
+                p.ag = 0; p.ah = 0
+                // `if (!r() || i.aN == null)` — JADX renders the end-gate
+                // as `!r()` but that releases mid-anim; taken as the
+                // `r()` end-trigger + `aN==null` early-out (g.java:3073,
+                // branch-inversion noise in the mangled dump).
+                if (p.animFinished() || aN == null) {
+                    p.unlockInput(world)                // k.p()
+                    p.eventDisarm(world)                // i.O()
+                    p.setAnim(0)                        // i(0)
+                    if (aN != null) {
+                        aN.aB = 0
+                        aN.releaseAnimReset()           // i.d(iVar)
+                        world.lockTarget = null         // i.aN = null
+                    }
+                }
+            }
+            // ---- case 184/205 (g.java:3098-3140, proven) — the second
+            // finisher anim: S184 drags the victim to i(107) ±35px; S205
+            // shares the arm with no drag. Same `!r()`→`r()` end-gate
+            // reading as case 183 (:3120).
+            184, 205 -> {
+                val aN = world.lockTarget
+                if (p.S == 184 && aN != null && aN.S != 107 &&
+                    Math.abs(aN.al - p.al) < 20) {
+                    aN.setAnim(107)                     // victim → i(107)
+                    world.kStatE(p.aw)                  // k.e(0,aw)
+                    aN.victimPayoff(world)              // i.aN.S()
+                    aN.ak = if (p.av) p.ak + 35 else p.ak - 35
+                    aN.al = p.al
+                }
+                p.ag = 0; p.ah = 0
+                if (p.animFinished()) {                 // `r()` end (:3120)
+                    p.unlockInput(world)                // k.p()
+                    p.eventDisarm(world)                // i.O()
+                    p.setAnim(0)
+                    if (aN != null) {
+                        aN.aB = 0
+                        aN.releaseAnimReset()
+                        world.lockTarget = null
+                    }
                 }
             }
             else -> {
@@ -878,34 +939,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.R != -1) { p.setAnim(p.R); p.R = -1 }
             else p.setAnim(0)                                  // l()
             if (p.T == 2) world.sfx(10)                        // k.A(10)
-        }
-    }
-
-    /**
-     * Assassination finisher arm (L413 for S183, L426 for S184, proven):
-     * while playing, the locked victim is snapped beside the player and put
-     * into its stagger anim (106 for 183, 107 for 184); on `r()` end →
-     * `aN.aB=0`, `d(aN)` (kill), `aN=null`, `i(0)`. `k.p()`/`i.O()` cutscene
-     * hooks omitted.
-     */
-    private fun assassinArm(p: Entity) {
-        p.ag = 0; p.ah = 0
-        val t = world.lockTarget
-        if (t != null && t.S != 106 && t.S != 107 &&
-            kotlin.math.abs(t.al - p.al) < 20) {
-            t.setAnim(if (p.S == 183) 106 else 107)
-            t.ak = if (p.av) p.ak - if (p.S == 183) 30 else 35
-                   else p.ak + if (p.S == 183) 30 else 35
-            t.al = p.al
-        }
-        if (p.animFinished()) {
-            if (t != null) {
-                t.aB = 0
-                t.setAnim(139)                    // i.d(aN) → corpse
-                t.P = t.P and -17 or 32 or 64
-                world.lockTarget = null
-            }
-            p.setAnim(0)
         }
     }
 
