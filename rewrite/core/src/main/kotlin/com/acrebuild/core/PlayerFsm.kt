@@ -82,10 +82,97 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             78, 80 -> {                       // L771
                 if (p.animFinished()) p.setAnim(if (p.S == 78) 79 else 1)
             }
-            12 -> {                           // L639 — co++, ledge grabs skipped
+            // g.java:1313-1352 (proven) — dismount/swing: `D=false`,
+            // `co++`, then inside `ag!=0 && aO==0`: `A()` ladder snap →
+            // i(74); side-strip ∈[19,24) → edge-count i8 picks i(107/
+            // 108/109); else `co>2 && z()` wall face → `ak()` lip grab or
+            // the S33 wall-rebound (`i(33); ah=-4096`).
+            12 -> {
+                p.gD = false                      // D = false
                 p.co++
-                if (p.ag != 0 && p.aO == 0) { /* ledge-climb arms not ported */ }
-                groundedTail(p, pad)
+                if (p.ag != 0 && p.aO == 0) {
+                    val i8 = if (p.av) p.aX else p.aY
+                    val i9 = if (p.av) p.aT else p.aU
+                    if (p.ladderCell(world)) {                 // A()
+                        p.ai = 0; p.ag = 0; p.al = p.W[1]
+                        p.ak += if (p.av) -20 else 20
+                        p.setAnim(74)
+                    } else if (i9 >= 19 && i9 < 24) {
+                        if (i8 == 1) { p.ag = 0; p.ah = 0; p.setAnim(107) }
+                        else if (i8 == 2) { p.ag = 0; p.ah = 0; p.setAnim(108) }
+                        else if (i8 == 3) { p.ag = 0; p.ah = 0; p.setAnim(109) }
+                        else if (p.co > 2 && p.pushColumnBlocked(world)) {
+                            if (p.ledgeLipGrab(world)) {       // ak()
+                                p.aj = 0; p.ah = 0; p.ag = 0
+                            } else {
+                                p.setAnim(33); p.ag = 0; p.ah = -4096
+                            }
+                        }
+                    }
+                }
+                // (the case `break`s to the shared post-switch code —
+                //  the l() input handler does NOT run for S12)
+            }
+            // g.java:1938-2015 (proven) — wall-rebound jump: `cp=true`,
+            // `aj=512`; `A()` → ledge snap i(74); direction-toward-av
+            // press → x() probe, `aR|aS∈{5,20}` → a(43,32) else
+            // a(34,36)+aA() wall-kick; `ah<0` fall → ct=true, r() → the
+            // i4/i5 wall-column pocket scan → ak() lip grab.
+            33 -> {
+                p.cp = true; p.aj = 512
+                if (p.ladderCell(world)) {                     // A()
+                    p.aj = 0; p.ah = 0; p.ai = 0; p.ag = 0
+                    p.al = p.W[1]
+                    p.ak = if (p.av) p.W[0] - 10 else p.W[2] + 10
+                    p.setAnim(74)
+                } else {
+                    val dirKey = if (!p.av) pad.u(Pad.M_RIGHT)
+                                 else pad.u(Pad.M_LEFT)
+                    if (dirKey) {
+                        p.probeCells(world)                            // x()
+                        if (p.aR == 5 || p.aR == 20 ||
+                            p.aS == 5 || p.aS == 20) {
+                            p.ah = 0; p.ag = 0
+                            p.enterStateMasked(43, 32, world)
+                        } else {
+                            p.ct = false; p.ag = 0; p.ah = 1536
+                            p.enterStateMasked(34, 36, world)
+                            wallJumpKick(p, world, pad)                       // aA()
+                        }
+                    } else if (p.ah < 0) {
+                        p.ct = true
+                        if (p.animFinished()) {
+                            var z4 = false
+                            var i10 = (p.W[1] + 10) / 20
+                            val i4: Int; val i5: Int
+                            if (p.av) { i4 = (p.W[0] - 5) / 20; i5 = i4 + 1 }
+                            else { i4 = (p.W[2] + 5) / 20; i5 = i4 - 1 }
+                            var i13 = 0
+                            while (i13 < 2) {           // JADX while(true)
+                                i10 -= i13              // elided else-break
+                                if (p.e(world, i4, i10) < 19 ||
+                                    p.e(world, i4, i10 - 1) > 0 ||
+                                    p.e(world, i5, i10) > 0 ||
+                                    p.e(world, i5, i10 - 1) > 0) i13++
+                                else { z4 = true; break }
+                            }
+                            if (z4 && p.ledgeLipGrab(world)) {
+                                p.aj = 0; p.ah = 0; p.ag = 0
+                            }
+                        }
+                    }
+                }
+            }
+            // g.java:2018-2032 (proven) — wall-jump rise partner: `aA()`
+            // every tick, `(av?aT:aU)!=20 → a(0)`, `aR>=19||==5 →
+            // l()+k.v()`.
+            34 -> {
+                wallJumpKick(p, world, pad)                                   // aA()
+                if ((if (p.av) p.aT else p.aU) != 20) p.enterFall()
+                if (p.aR >= 19 || p.aR == 5) {
+                    l(p, pad)
+                    world.clearLatches()                               // k.v()
+                }
             }
             32 -> {                           // case 32 — run-start end → settle
                 if (p.animFinished()) {
@@ -672,6 +759,27 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
         }
         world.scrollWallClamp(p)                               // i.f(this)
+    }
+
+    /**
+     * `g.aA()` (g.java:5545-5565, proven): wall-kick — on the up-edge
+     * (`u(16388)`) or a direction-press toward the facing side
+     * (`u(8264)` av / `u(4114)` !av) → `i(92)` + spawn the ax8/clip5/
+     * S17/az201 marker bound to `i.aK` (`av` copied, `P=512`, `N/O` the
+     * 8.8 pos, vel zeroed, `t()`), then `k.b()` inserts it.
+     */
+    private fun wallJumpKick(p: Entity, w: LevelCellSource, pad: Pad) {
+        val dir = (p.av && pad.u(8264)) || (!p.av && pad.u(4114))
+        if (!pad.u(16388) && !dir) return
+        p.setAnim(92)
+        val aK = p.spawnChildFx(w, 8, 5, 17, 201)              // a(8,5,17,201)
+        aK.av = p.av
+        aK.P = 512
+        aK.N = p.ak shl 8; aK.O = p.al shl 8
+        aK.ak = p.ak; aK.al = p.al
+        aK.aj = 0; aK.ai = 0; aK.ah = 0; aK.ag = 0
+        aK.refreshBoxes()
+        w.queueInsert(aK)
     }
 
     private fun comboArm(p: Entity, pad: Pad) {
