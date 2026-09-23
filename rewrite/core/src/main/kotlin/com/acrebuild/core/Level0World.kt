@@ -772,8 +772,9 @@ class Level0World(
     var kCb = false                    // k.cb
     var kCu = 0                        // k.cu — boot R() sub-phase (entity cu is i's)
     var kDu = 0L                       // k.du — jG snapshot at a cu transition
-    var kFd = 0                        // k.fd
-    var kFe = 0                        // k.fe
+    var kFd = 0                        // k.fd — scroll-panel text offset
+    var kFe = 0                        // k.fe — scroll velocity
+    var kDw = 0                        // k.dw — jc24 scroller end-fade
     // k.aD → `kAD` (existing field, HUD fuse entity — same original field)
     var kEc = 0                        // k.eC — screen timer
     var kEb = 0                        // k.eB — banner variant
@@ -1642,7 +1643,7 @@ class Level0World(
     fun stateL(iArg: Int) {
         var i = iArg
         while (true) {                               // L2 — re-entry for i=22 only
-            kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0
+            kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0
             jG = 0                                   // j.g=0 (k.java:2047)
             if (i == 27) audioStop()                 // e.b() — audio stop (unported)
             when {
@@ -1715,12 +1716,6 @@ class Level0World(
                     // `fb = y.a(d(0,27),390)` (:1825, proven) — story
                     // text re-broken into <=390px lines joined by '\n'.
                     kFb = wrapJoin(d0(27) ?: "")
-                    // `eZ` — `b.e`-height arm (:1291-1293): text taller
-                    // than 120px slides its draw origin up (inferred
-                    // height = linesHeight(lineCount)).
-                    val h = footerFont?.linesHeight(
-                        kFb.split('\n').size) ?: 0
-                    kEz = if (h > 120) 85 - (h - 120) else 85
                 }
             }
             break
@@ -2601,14 +2596,62 @@ class Level0World(
                 kCT += 10
                 if (kCT >= 255 || pad.v(Pad.M_PAUSE)) {
                     kCu = 5; kFd = kEz
+                    scrollPanel(kFb, 85, 120, false)   // :1273
                     if (pad.v(Pad.M_PAUSE)) z(23)
                 }
             }
-            5 -> { /* full text + spinner — render side only */ }
+            5 -> {
+                // `a(y,0,str,5,85,390,120,0,0,false)` every frame
+                // (:1282) — the scrollable panel ticks fe/fd; the draw
+                // is renderer-side.
+                scrollPanel(kFb, 85, 120, false)
+            }
         }
         if (pad.v(Pad.M_CYCLE) || (pad.v(Pad.M_PAUSE) && kCu == 5)) {
             stateL(9); z(23)                        // (:1300-1305)
         }
+    }
+
+    /** `a(bVar, i, str, x2, y3, w4, h5, flags, align, wrap)`
+     *  (k.java:5627-5693, proven) — the scrollable text panel's sim
+     *  side. `fe` = scroll velocity (edge presses, not held):
+     *  `v(33024)` → fe-- clamped -5; `v(16388)` → fe++ clamped +2
+     *  (dx/jc24 → -1); fe==0 → -1; unwrapped (`wrap=false`) forces
+     *  fe<0. `fd` = text draw-y; `fd < y3 - iK` → off the top →
+     *  `fd = 240` wrap-restart (dx → the l(25)/l(1) ending hook);
+     *  `fe>0 && fd >= h5` → bounce fe=-1. jc24 stops scrolling at
+     *  `fd < -iK + 160` and arms dw=30 instead. iK = text block height
+     *  (`y.a(str,null)` → b.e; ours = linesHeight — inferred).
+     *  Returns fd for the renderer's draw-y. */
+    private fun scrollPanel(str: String, y3: Int, h5: Int, wrap: Boolean): Int {
+        if (pad.v(Pad.M_DOWN)) {
+            if (--kFe < -5) kFe = -5
+        } else if (pad.v(Pad.M_UP)) {
+            if (++kFe == 0) kFe = 1
+            if (kDx || jC == 24) {
+                if (kFe > -1) kFe = -1
+            } else if (kFe > 2) kFe = 2
+        }
+        if (kFe == 0) kFe = -1
+        if (!wrap && kFe >= 0) kFe = -1
+        val f = footerFont
+        val iK = if (f == null) 0 else {
+            if (wrap) f.linesHeight(f.wrap(str, 390)[0])
+            else f.linesHeight(str.split('\n').size)
+        }
+        if (jC == 24) {
+            if (kDw < 30 && kFd < -iK + 160) kDw = 30
+        } else if (kFd < y3 - iK) {
+            if (kDx) {
+                if (kBA[69] != 0) stateL(25)
+                else { kBA[69] = 1; saveFlush(); stateL(1) }
+                kDw = 255
+                return kFd
+            }
+            kFd = 240
+        } else if (kFe > 0 && kFd >= h5) kFe = -1
+        if (jC != 24 || kFd >= -iK + 160) kFd += kFe
+        return kFd
     }
 
     /** `k.a()` case 9 (k.java:1067-1088, proven) — the N() load
