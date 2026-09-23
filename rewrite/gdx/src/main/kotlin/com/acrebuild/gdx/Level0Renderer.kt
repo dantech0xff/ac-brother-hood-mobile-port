@@ -8,6 +8,7 @@ import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
+import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.FrameBuffer
@@ -35,6 +36,7 @@ class Level0Renderer {
     private lateinit var fbo: FrameBuffer
     private lateinit var batch: SpriteBatch
     private lateinit var white: Texture
+    private lateinit var font: BitmapFont
 
     // (module index, palette slot) -> TextureRegion, per pack id.
     // palette-00 is canonical (clip.moduleNames); palette-NN siblings are
@@ -48,6 +50,7 @@ class Level0Renderer {
         fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
         fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
+        font = BitmapFont()
         Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
             setColor(1f, 1f, 1f, 1f); fill()
             white = Texture(this); dispose()
@@ -228,15 +231,60 @@ class Level0Renderer {
             batch.setColor(1f, 1f, 1f, 1f)
         }
 
-        // mission-fail banner — k.java:1782 (proven): b(93,67,214,true,true)
-        // solid dark box over the frozen world; y-down→y-up: box (93,47) 214x126.
-        if (world.failed) {
+        // menu screens — k.L462 (k.java:1775, proven): frozen world +
+        // `b(93,67,214,true,true)` panel, `eB` title, `eC` prompt, eA[bv]
+        // rows with `bw` cursor. Glyph stand-in: BitmapFont (inferred —
+        // the original's `bW`/`y` bitmap-font clips are unported). Layout
+        // `inferred` (rows ~36px from y≈130 in world y-down space).
+        if (world.menuVisible) {
             batch.setColor(0f, 0f, 0f, 0.85f)
-            batch.draw(white, 93f, 47f, 214f, 126f)
+            batch.draw(white, 93f, 40f, 214f, 150f)
             batch.setColor(0.8f, 0.15f, 0.15f, 1f)
-            batch.draw(white, 95f, 49f, 210f, 2f)
-            batch.draw(white, 95f, 169f, 210f, 2f)
+            batch.draw(white, 95f, 42f, 210f, 2f)
+            batch.draw(white, 95f, 186f, 210f, 2f)
             batch.setColor(1f, 1f, 1f, 1f)
+            font.setColor(1f, 1f, 1f, 1f)
+            world.menuTitle()?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 76f)
+            }
+            world.menuPrompt()?.let { t ->
+                font.setColor(0.9f, 0.85f, 0.5f, 1f)
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 98f)
+                font.setColor(1f, 1f, 1f, 1f)
+            }
+            for ((i, row) in world.menuRows().withIndex()) {
+                val (text, sel) = row
+                if (sel) {
+                    batch.setColor(0.85f, 0.8f, 0.5f, 0.35f)
+                    batch.draw(white, 100f,
+                               (Level0World.VIEW_H - 130 - i * 36 - 14).toFloat(),
+                               200f, 20f)
+                    batch.setColor(1f, 1f, 1f, 1f)
+                }
+                font.draw(batch, text, 200f - text.length * 3.5f,
+                          Level0World.VIEW_H - 130 - i * 36f)
+            }
+        }
+
+        // stats screen — k.L466 (k.java:1788, proven): `d(0,bx)` text +
+        // `j.g%6` "TOUCH THE SCREEN" blink at (200,173).
+        if (world.statsVisible) {
+            batch.setColor(0f, 0f, 0f, 0.85f)
+            batch.draw(white, 93f, 40f, 214f, 150f)
+            batch.setColor(1f, 1f, 1f, 1f)
+            font.setColor(0.9f, 0.85f, 0.5f, 1f)
+            world.statsText()?.let { t ->
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 90f)
+            }
+            font.setColor(1f, 1f, 1f, 1f)
+            if (world.jG % 6L < 3L) {
+                val t = world.d0(9) ?: "TOUCH THE SCREEN"
+                font.draw(batch, t, 200f - t.length * 3.5f,
+                          Level0World.VIEW_H - 173f)
+            }
         }
 
         batch.end()
@@ -274,6 +322,7 @@ class Level0Renderer {
 
     fun dispose() {
         fbo.dispose(); batch.dispose()
+        if (::font.isInitialized) font.dispose()
         if (::white.isInitialized) white.dispose()
         clipModules.values.forEach { arr ->
             arr.filterNotNull().forEach { it.texture.dispose() }
