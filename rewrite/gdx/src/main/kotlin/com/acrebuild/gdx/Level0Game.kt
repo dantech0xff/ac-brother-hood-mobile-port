@@ -148,6 +148,8 @@ class Level0Game : ApplicationAdapter() {
             when (c) {
                 is com.acrebuild.core.Command.PlaySfx ->
                     Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
+                is com.acrebuild.core.Command.StopAudio ->
+                    Gdx.app.log(TAG, "audio: e.b() stop channel")
                 is com.acrebuild.core.Command.PersistBA -> {
                     save.write(c.record)
                     Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
