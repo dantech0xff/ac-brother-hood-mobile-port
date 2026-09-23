@@ -3145,7 +3145,9 @@ class Level0World(
     /** `k.bz[ca]` (k.java:20039 seed): first-group offsets per block. */
     override fun claimOps(ca: Int): IntArray? = kBz.getOrNull(ca)
     override fun kT(op: Int): Int = ScriptTables.EI[op - 100]
-    override var gj = false                        // g.j context latch
+    override var gj                               // g.j context latch —
+        get() = Entity.grabLatch                  // delegates to the real
+        set(v) { Entity.grabLatch = v }           // companion var (slice 135)
     override var kL: Entity? = null                // k.L claim entity
     override var claimCo = 6                       // k.co
     override var claimRect: IntArray? = null       // k.cp
