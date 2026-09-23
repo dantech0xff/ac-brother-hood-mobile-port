@@ -81,6 +81,13 @@ class Level0Game : ApplicationAdapter() {
         clips[5] = Clip.load(Gdx.files.internal("clips/clip5/clip.acpk").readBytes())     // ax8 knife projectile (bi[8]=5)
         clips[12] = Clip.load(Gdx.files.internal("clips/clip12/clip.acpk").readBytes())   // k.dA HUD indicator (T())
         clips[59] = Clip.load(Gdx.files.internal("clips/clip59/clip.acpk").readBytes())   // ax8 boss-knife param (op111)
+        clips[13] = Clip.load(Gdx.files.internal("clips/clip13/clip.acpk").readBytes())   // ax21/ax48 (bi=13)
+        clips[14] = Clip.load(Gdx.files.internal("clips/clip14/clip.acpk").readBytes())   // ax22 capture zone
+        clips[15] = Clip.load(Gdx.files.internal("clips/clip15/clip.acpk").readBytes())   // ax26
+        clips[16] = Clip.load(Gdx.files.internal("clips/clip16/clip.acpk").readBytes())   // ax25
+        clips[23] = Clip.load(Gdx.files.internal("clips/clip23/clip.acpk").readBytes())   // ax66 platform
+        clips[28] = Clip.load(Gdx.files.internal("clips/clip28/clip.acpk").readBytes())   // ax51 crate
+        clips[44] = Clip.load(Gdx.files.internal("clips/clip44/clip.acpk").readBytes())   // ax31
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space. Negated keys: entity
         // clips share this map via k.bi[] whose values 10/11 collide with

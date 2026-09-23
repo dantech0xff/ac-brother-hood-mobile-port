@@ -75,12 +75,19 @@ class Level0World(
             60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
             43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
             69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
-            64 to 6,      // ax64 harrier — bi[64]=22 unconverted; clip6
-                          // stands in (load-valid nonrendering, so the
-                          // record still spawns clipless like the original)
+            64 to 22,     // ax64 harrier — bi[64]=22; pack-3 has no
+                          // entry-022 → clipless (J(22)=null in the original)
             13 to 61,     // ax13 rope/vine (bi[13]=61, proven)
             32 to 36,     // ax32 (bi[32]=36 — same clip as ax30, proven)
             68 to 26,     // ax68 (bi[68]=26 — generic small-item clip, proven)
+            22 to 14,     // ax22 capture zone (bi[22]=14, proven)
+            21 to 13,     // ax21 mission director (bi[21]=13, proven)
+            48 to 13,     // ax48 (bi[48]=13 — same clip, proven)
+            25 to 16,     // ax25 (bi[25]=16, proven)
+            26 to 15,     // ax26 (bi[26]=15, proven)
+            51 to 28,     // ax51 pushable crate (bi[51]=28, proven)
+            31 to 44,     // ax31 (bi[31]=44, proven)
+            66 to 23,     // ax66 moving platform (bi[66]=23, proven)
             74 to 54,     // ax74 wisp (bi[74]=54, proven)
             76 to 56,     // ax76 hazard volume — bi[76]=56 but pack-3 slot 56
                           // is a zero-size entry (metadata, proven) → null
