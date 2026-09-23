@@ -3048,6 +3048,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         var M = -1
         /** `i.bq` — static cleared on grab (`c()` head, g.java:4118). */
         var bq = 0
+        /** `g.j` (g.java:60, proven) — static grab/pass latch: set by the
+         *  S146/S147 wall-sequence arms (g.java:2865/:2898), cleared by
+         *  `i.D()` entity-pool init (i.java:1817/:1977), and read by the
+         *  default `e()` arm's `r() && !j` fall guard (g.java:1146) plus
+         *  the i.java:7180/:15564 mount/overlap gates. */
+        var grabLatch = false
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
          *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */
@@ -4021,6 +4027,22 @@ interface LevelCellSource {
     val kAp: IntArray
     val sfxLog: List<Int>
     fun sfx(id: Int)
+
+    // -- k.bG/k.bH music slot + k.x() + k.bA[32] + k.a(z2) (S147 arm) --
+    /** `k.bG` (k.java:310) — one-shot music slot (-1 = nothing queued). */
+    var kBg: Int get() = -1; set(_) {}
+    /** `k.bH` (k.java:311) — saved music slot the S147 arm restores. */
+    var kBH: Int get() = -1; set(_) {}
+    /** `k.bA` (k.java:291) — the 512-byte save/ACRS record array. */
+    val kBA: IntArray get() = IntArray(0)
+    /** `k.x()` (k.java:5711) → `e.a()` (e.java:32, proven): an audio
+     *  track is actively playing (orig: index set AND inside its
+     *  `h.a[e]` duration window — our port has no real-time expiry,
+     *  so a queued track counts as playing; `inferred` mapping). */
+    fun musicActive(): Boolean = false
+    /** `k.a(z2)` (k.java:5139, proven) — level (re)load: audio stop,
+     *  V(), `d(z2)`, g-link clears. `a(true)` = restart-ish reset. */
+    fun resetLevel(full: Boolean) {}
 
     // -- i.a() big-op plumbing (k.b/k.n(int)/k.v=k.w/pointer/spawn) -----
     /** `k.b(idx,str,flag)` (k.java:430): queue the op105 dialog —

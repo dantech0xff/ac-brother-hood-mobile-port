@@ -733,7 +733,8 @@ class Level0World(
     override val kBb: List<Entity> get() = npcs  // k.bb follower list
     override val kBc: Int get() = npcs.size      // k.bc
     override var kAd = 2                         // k.ad=2 (k.java:8348 static init)
-    var kBg = -1                            // k.bG=-1 (:310) — one-shot music slot
+    override var kBg = -1                   // k.bG=-1 (:310) — one-shot music slot
+    override var kBH = -1                   // k.bH=-1 (:311) — saved music slot
     var kAk = 0                             // k.ak (:66) — flying group marker
     var kQ = 0                              // k.Q (:42) — flying scroll count
     var kV = -7                             // k.V=-7 (:49) — camera watch
@@ -825,7 +826,7 @@ class Level0World(
     val kFp = intArrayOf(0, 2, 5, 7)  // k.fP (k.java:344) — chapter thresholds
     /** `k.bA` — save/snapshot buffer: [15]=checkpoint-exists flag (set in
      *  writeIX), [130..132]=cc medal stamps (k.java:2055-2064 proven). */
-    val kBA = IntArray(160)
+    override val kBA = IntArray(160)
     var kAu = 0                        // k.au — medal-condition field
     var kDx = false                    // k.dx — cheat-enabled flag
     override var kAo = false           // k.ao — fade-side flag
@@ -2081,10 +2082,16 @@ class Level0World(
     private fun teardown() {
         npcs.clear(); pendingInsert.clear()
         kC = null                                   // claimer released
+        Entity.grabLatch = false                    // g.j=false (i.D(), i.java:1817)
     }
+    /** `k.x()`→`e.a()` (e.java:32, proven shape): a track is playing.
+     *  `inferred` mapping — our audio has no real-time expiry, so any
+     *  queued track counts. */
+    override fun musicActive() = audioTrack >= 0
     /** `a(z2)` (structured :5139) — level (re)load: `e.b(); V(); d(z2)`.
      *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
      *  Maps to our `reload()` (`inferred`). */
+    override fun resetLevel(full: Boolean) { reloadCheckpoint(full) }
     private fun reloadCheckpoint(full: Boolean) { reload() }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm

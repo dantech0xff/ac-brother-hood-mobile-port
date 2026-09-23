@@ -303,13 +303,43 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.animFinished()) p.enterFall()             // a(0)
                 world.scrollWallClamp(p)
             }
+            // ---- case 146/147 (g.java:2859-2918, proven) — wall/pass
+            // sequence arms: S146 drives forward at walk speed until the
+            // anim ends or the facing side-strip is no longer wall (3),
+            // then bumps `al` a cell and enters S147 which latches `g.j`,
+            // restores the saved music slot, plays sfx 18, runs the full
+            // `k.a(true)` level reset and restores `k.az` from bA[32].
+            146 -> {
+                p.ag = if (p.av) -2048 else 2048
+                if (p.animFinished() ||
+                    (p.av && p.aT != 3) || (!p.av && p.aU != 3)) {
+                    p.al += 20
+                    p.setAnim(147)
+                    Entity.grabLatch = true          // g.j = true (:2865)
+                }
+            }
+            147 -> {
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    if (p.S == 145) p.al += 20       // dead conjunct — S
+                    // is 147 here (verbatim quirk, :2894)
+                    Entity.grabLatch = true          // g.j = true (:2898)
+                    world.kBg = if (world.musicActive()) world.kBH else -1
+                    world.sfx(18)                    // k.A(18)
+                    world.resetLevel(true)           // k.a(true) (:5139)
+                    world.kAz = world.kBA[32]        // k.a(bA,32) short
+                }
+            }
             else -> {
-                // attack anims play to completion then settle (inferred
-                // arm — the real per-state arms are unmined)
-                if (isAttackState(p.S)) {
-                    if (p.animFinished()) p.setAnim(if (p.aZ) 0 else 43)
-                } else if (p.animFinished()) {
-                    p.setAnim(if (p.Q == 79) 79 else 0)
+                // default arm (g.java:1145-1147, proven) — the ~150-state
+                // fallthrough family (attack anims, hit-reacts, decor
+                // states): when the anim ends and the latch wasn't
+                // claimed and `l()` consumed no input → `a(0)` fling.
+                // The doubled `!j` is verbatim — `l()` runs between the
+                // two reads.
+                if (p.animFinished() && !Entity.grabLatch &&
+                    !l(p, pad) && !Entity.grabLatch) {
+                    p.flingAirborne(0, world)
                 }
             }
         }
