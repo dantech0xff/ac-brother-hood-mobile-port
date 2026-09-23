@@ -28,6 +28,7 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
     private val save = SaveBridge("asbr-save.bin")
+    private val audio = AudioBridge()
     private var accumulatorMs = 0L
 
     override fun create() {
@@ -115,6 +116,7 @@ class Level0Game : ApplicationAdapter() {
         world.stateL(0)
         renderer = Level0Renderer()
         renderer.create(world)
+        audio.create()
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
         Gdx.app.log(TAG, "level0: ${level.entities.size} records, " +
             "${level.cols}x${level.rows} cells, world=${level.worldW}x${level.worldH}px, " +
@@ -136,10 +138,13 @@ class Level0Game : ApplicationAdapter() {
             accumulatorMs -= TICK_MS
             ticks++
         }
-        // `z()`/`e.b()` audio commands (e.java:50-87): the 34 track
-        // samples are not decoded into the app — log the command the
-        // original would have issued. `audioTrack` mirrors e.e.
-        for (c in world.drainCommands()) {
+        // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
+        // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
+        // (0–9,17,21,28) log-skip — undecoded on this pipeline.
+        // `audioTrack` mirrors e.e.
+        val commands = world.drainCommands()
+        audio.execute(commands)
+        for (c in commands) {
             when (c) {
                 is com.acrebuild.core.Command.PlaySfx ->
                     Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
@@ -172,6 +177,7 @@ class Level0Game : ApplicationAdapter() {
     }
 
     override fun dispose() {
+        audio.dispose()
         renderer.dispose()
     }
 }

@@ -26,6 +26,168 @@
       "source": "reconstructed-project/resources/decoded/pack-17/entry-020-marker-000.wav",
       "source_sha256": "5f951e42452a5b05601a1dfb0d24277899de43853acda4b71a84aaba773637dd",
       "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-10.wav",
+      "output_bytes": 1384,
+      "output_sha256": "f2ca62915c959eb6af0411abc2ebcf6ec327dc7e5696374b21db4eeb99ff164a",
+      "role": "pack-17 audio slot 10 (SFX WAV) \u2014 k.A(10) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-010-marker-000.wav",
+      "source_sha256": "f2ca62915c959eb6af0411abc2ebcf6ec327dc7e5696374b21db4eeb99ff164a",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-11.wav",
+      "output_bytes": 2402,
+      "output_sha256": "31b77345e291148dfb54b2271e53a3eb7d41e002efe66df9cae747d1426e55a8",
+      "role": "pack-17 audio slot 11 (SFX WAV) \u2014 k.A(11) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-011-marker-000.wav",
+      "source_sha256": "31b77345e291148dfb54b2271e53a3eb7d41e002efe66df9cae747d1426e55a8",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-12.wav",
+      "output_bytes": 6578,
+      "output_sha256": "6636aaf01d11216d2c84ed64801c5cb3b42c01cafeec8190be609da9a87201d9",
+      "role": "pack-17 audio slot 12 (SFX WAV) \u2014 k.A(12) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-012-marker-000.wav",
+      "source_sha256": "6636aaf01d11216d2c84ed64801c5cb3b42c01cafeec8190be609da9a87201d9",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-13.wav",
+      "output_bytes": 5314,
+      "output_sha256": "0bcd0cf05a65de01058a5a9defa165f0306dfc565c1d84182efe8d1b3c0e3fdb",
+      "role": "pack-17 audio slot 13 (SFX WAV) \u2014 k.A(13) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-013-marker-000.wav",
+      "source_sha256": "0bcd0cf05a65de01058a5a9defa165f0306dfc565c1d84182efe8d1b3c0e3fdb",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-14.wav",
+      "output_bytes": 4138,
+      "output_sha256": "7dde66a17665de405eae51aceb59cff1c5825d95cee9b270a662b9fd1ae307bd",
+      "role": "pack-17 audio slot 14 (SFX WAV) \u2014 k.A(14) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-014-marker-000.wav",
+      "source_sha256": "7dde66a17665de405eae51aceb59cff1c5825d95cee9b270a662b9fd1ae307bd",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-15.wav",
+      "output_bytes": 3734,
+      "output_sha256": "1532f26f08d1eb7257ca6c4187c7b841709517172af94ad74853e224a4de823e",
+      "role": "pack-17 audio slot 15 (SFX WAV) \u2014 k.A(15) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-015-marker-000.wav",
+      "source_sha256": "1532f26f08d1eb7257ca6c4187c7b841709517172af94ad74853e224a4de823e",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-16.wav",
+      "output_bytes": 8180,
+      "output_sha256": "c0ff3080a8f2e23214a23c3ce24d24054d7734d355a01c43910c3cf4063a1aa6",
+      "role": "pack-17 audio slot 16 (SFX WAV) \u2014 k.A(16) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-016-marker-000.wav",
+      "source_sha256": "c0ff3080a8f2e23214a23c3ce24d24054d7734d355a01c43910c3cf4063a1aa6",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-18.wav",
+      "output_bytes": 4898,
+      "output_sha256": "ea30a03ad50e6c8aca083f4c2a7d80d081011fa548b8644a62b586c6e018e9b3",
+      "role": "pack-17 audio slot 18 (SFX WAV) \u2014 k.A(18) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-018-marker-000.wav",
+      "source_sha256": "ea30a03ad50e6c8aca083f4c2a7d80d081011fa548b8644a62b586c6e018e9b3",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-19.wav",
+      "output_bytes": 6582,
+      "output_sha256": "55ffea1e49a841af8d80e8d89aee38935179657aa4f89e7a1ae3f9ba7418e080",
+      "role": "pack-17 audio slot 19 (SFX WAV) \u2014 k.A(19) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-019-marker-000.wav",
+      "source_sha256": "55ffea1e49a841af8d80e8d89aee38935179657aa4f89e7a1ae3f9ba7418e080",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-20.wav",
+      "output_bytes": 9102,
+      "output_sha256": "5f951e42452a5b05601a1dfb0d24277899de43853acda4b71a84aaba773637dd",
+      "role": "pack-17 audio slot 20 (SFX WAV) \u2014 k.A(20) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-020-marker-000.wav",
+      "source_sha256": "5f951e42452a5b05601a1dfb0d24277899de43853acda4b71a84aaba773637dd",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-23.wav",
+      "output_bytes": 2462,
+      "output_sha256": "d88208918f366fdcc1c1fb36ac49aed60fe455b636456c0f1232b879d85177e7",
+      "role": "pack-17 audio slot 23 (SFX WAV) \u2014 k.A(23) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-023-marker-000.wav",
+      "source_sha256": "d88208918f366fdcc1c1fb36ac49aed60fe455b636456c0f1232b879d85177e7",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-24.wav",
+      "output_bytes": 4166,
+      "output_sha256": "69843b7c2cd867012e993fc5ede47d3342bc3246b7dc3cad729b266626da90d2",
+      "role": "pack-17 audio slot 24 (SFX WAV) \u2014 k.A(24) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-024-marker-000.wav",
+      "source_sha256": "69843b7c2cd867012e993fc5ede47d3342bc3246b7dc3cad729b266626da90d2",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-25.wav",
+      "output_bytes": 8156,
+      "output_sha256": "1b49acbe22b1021cf181e81a19207f4ceb5e1c608cd48792e94391aa0dedeb1b",
+      "role": "pack-17 audio slot 25 (SFX WAV) \u2014 k.A(25) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-025-marker-000.wav",
+      "source_sha256": "1b49acbe22b1021cf181e81a19207f4ceb5e1c608cd48792e94391aa0dedeb1b",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-29.wav",
+      "output_bytes": 1824,
+      "output_sha256": "f3065609a0fa5ecd4eb33b5fdc3fb0fe1f0c3e1207b7963c526ea38bfca288e1",
+      "role": "pack-17 audio slot 29 (SFX WAV) \u2014 k.A(29) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-029-marker-000.wav",
+      "source_sha256": "f3065609a0fa5ecd4eb33b5fdc3fb0fe1f0c3e1207b7963c526ea38bfca288e1",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-30.wav",
+      "output_bytes": 1356,
+      "output_sha256": "47c575ef3eb9ca48da6c7575967d1e851f6f84b63c103afe52b3c3c22233345a",
+      "role": "pack-17 audio slot 30 (SFX WAV) \u2014 k.A(30) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-030-marker-000.wav",
+      "source_sha256": "47c575ef3eb9ca48da6c7575967d1e851f6f84b63c103afe52b3c3c22233345a",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-31.wav",
+      "output_bytes": 7562,
+      "output_sha256": "1d9f6b5fe2cf5418e96c229a4e2571cdacebc13d163e10bf849ae13949fdf44a",
+      "role": "pack-17 audio slot 31 (SFX WAV) \u2014 k.A(31) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-031-marker-000.wav",
+      "source_sha256": "1d9f6b5fe2cf5418e96c229a4e2571cdacebc13d163e10bf849ae13949fdf44a",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-32.wav",
+      "output_bytes": 3588,
+      "output_sha256": "83314b64579d6ae0725e71ee301a632272a80098a3278625bc9168f101463d6e",
+      "role": "pack-17 audio slot 32 (SFX WAV) \u2014 k.A(32) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-032-marker-000.wav",
+      "source_sha256": "83314b64579d6ae0725e71ee301a632272a80098a3278625bc9168f101463d6e",
+      "transform": "copy-v1"
+    },
+    {
+      "output": "audio/sfx-33.wav",
+      "output_bytes": 1746,
+      "output_sha256": "cf9ca7f7af35da808b251998260479392c106eaed9b9ecf231e42dafcdbf0409",
+      "role": "pack-17 audio slot 33 (SFX WAV) \u2014 k.A(33) play target",
+      "source": "reconstructed-project/resources/decoded/pack-17/entry-033-marker-000.wav",
+      "source_sha256": "cf9ca7f7af35da808b251998260479392c106eaed9b9ecf231e42dafcdbf0409",
+      "transform": "copy-v1"
     }
   ],
   "provenance_version": 1
