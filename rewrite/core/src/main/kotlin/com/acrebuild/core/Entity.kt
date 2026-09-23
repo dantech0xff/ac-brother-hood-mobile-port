@@ -1422,14 +1422,32 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * then `k.l(12)` mission-fail. Ported as `dead` flag → world respawn.
      */
     /**
-     * `c(i attacker)` counter-stagger (proven, i.java:4379): face the
-     * attacker, `ag = ±1536` knockback away, floatie `a(8,5,14)` skipped,
-     * `i(9)` stagger (i(6) for ax61 omitted).
+     * `i.c(iVar)` (i.java:3398-3432, proven): hit-react — release `g.b`,
+     * spawn the damage floatie `a(8,5,14,av,ak,midY,300)` (plus the
+     * `k.bK`-gated `a(8,59,0,...)` flash marker), face the attacker for
+     * ax∈{11,17,23,50,73}, push `ag=±1536` away — cancelled by the
+     * `y()||aF()||e(next,al/20)>=12` guard chain — then `i(0); t()` and
+     * the `k.R`/`k.S` camera-wall clamp, ending `i(9)` (`i(6)` vs ax61
+     * while `Q==6`).
      */
-    fun counteredBy(attacker: Entity) {
-        av = attacker.ak < ak
+    fun counteredBy(attacker: Entity, w: LevelCellSource) {
+        w.playerLinkB = null                                  // g.b = null
+        val midY = (W[1] + W[3]) shr 1
+        spawnFx8(w, 5, 14, av, ak, midY, 300)                 // a(8,5,14,…)
+        if (w.kBK) spawnFx8(w, 59, 0, av, ak, midY, 300)    // k.bK flash
+        if (attacker.ax == 11 || attacker.ax == 17 || attacker.ax == 23 ||
+            attacker.ax == 50 || attacker.ax == 73)
+            av = attacker.ak < ak
         ag = if (av) 1536 else -1536
-        setAnim(9)
+        val i = if (ag < 0) ak / 20 - 1 else ak / 20 + 1
+        if (forwardWall() || sideFree(w) || e(w, i, al / 20) >= 12) ag = 0
+        setAnim(0)                                          // i(0)
+        refreshBoxes()                                      // t()
+        val i3 = w.kR + (W[2] - W[0])
+        val i4 = w.kSBound - (W[2] - W[0])
+        if (ak + (ag shr 8) <= i3 && w.kR > 0) { ag = 0; ak = i3 }
+        else if (ak + (ag shr 8) >= i4 && w.kSBound > 0) { ag = 0; ak = i4 }
+        if (attacker.ax == 61 && Q == 6) setAnim(6) else setAnim(9)
     }
 
     /**
@@ -2930,11 +2948,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (S == 284 || S == 285 || S == 50) return
                 if (attacker != null && attacker.ax == 61 &&
                     playerDamageable(attacker, world)) {
-                    attacker.counteredBy(this)
+                    attacker.counteredBy(this, world)
                 }
                 if (S != 9 && playerDamageable(g, world) && attacker != null &&
                     attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61) {
-                    attacker.counteredBy(this)
+                    attacker.counteredBy(this, world)
                 }
                 world.sfx(18)
             }
