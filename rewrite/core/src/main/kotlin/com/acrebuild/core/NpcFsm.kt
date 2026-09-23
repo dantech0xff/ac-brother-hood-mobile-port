@@ -1665,7 +1665,7 @@ class NpcFsm(val world: LevelCellSource) {
                         world.claim(e, 5, e.W)
                         world.setMarker(e.ak, e.al - 85, e.aw)
                     }
-                    pushOut(e, player)       // L18: a() solid-side helper
+                    pushOut(e, player, world) // L18: a() solid-side helper
                 }
                 // L24: the player's attack hitbox reaching W also arms it.
                 if (rectsOverlap(player.X, e.W)) {
@@ -1705,7 +1705,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  `ak` to its edge (dead ±1 `ag` nudge kept verbatim, L63 zeroes it).
      *  Guards that can't fire here omitted; `aS.y()` unported → treated
      *  false (inferred). */
-    private fun pushOut(e: Entity, p: Entity) {
+    private fun pushOut(e: Entity, p: Entity, w: LevelCellSource) {
         if (e.S == 139) return
         if (e.S == 18 && p.S == 12) return
         if (e.S == 131 || e.S == 146) return
@@ -1713,11 +1713,14 @@ class NpcFsm(val world: LevelCellSource) {
         if (p.ga != null) return
         if (p.S > 43) return
         val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
-        if (p.ak <= e.ak) {
-            if (p.ag >= 0) { p.ak = e.ak - pw / 2 - ew / 2; p.ai = 0; p.ag = -1 }
-        } else if (p.ag <= 0) {
+        // i.java:749-758 (proven): the push only fires when the player is
+        // NOT wall-blocked on the travel side — `!aS.y()`.
+        if (p.ak <= e.ak && p.ag >= 0 && !p.wallOnFacingSide()) {
+            p.ak = e.ak - pw / 2 - ew / 2; p.ai = 0; p.ag = -1
+        } else if (p.ak > e.ak && p.ag <= 0 && !p.wallOnFacingSide()) {
             p.ak = e.ak + pw / 2 + ew / 2; p.ai = 0; p.ag = 1
         }
+        p.collideSides(w, true)      // a(true) side-strip rescan + snap
         p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
     }
 
@@ -1746,7 +1749,7 @@ class NpcFsm(val world: LevelCellSource) {
 
     fun tickKnockable(e: Entity, w: Level0World, p: Entity) {
         when (e.S) {
-            3 -> pushOut(e, p)                                        // L44 a()
+            3 -> pushOut(e, p, w)                                     // L44 a()
             4 -> {                                                    // L4 settle
                 e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 // k.bd includes the player — w.npcs does not, append it.
