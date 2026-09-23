@@ -1631,6 +1631,14 @@ class Level0Renderer {
         intArrayOf(0, -1), intArrayOf(3, 1), intArrayOf(5, 2), intArrayOf(6, 3))
 
     private fun drawEntity(world: Level0World, e: Entity, camX: Int, camY: Int) {
+        // `aU()` (i.java:3047 → :8989-9143, proven): ax10 early-outs of
+        // the blit path entirely — before the clip checks (zones carry
+        // no drawable clip). S34 draws its rail line(s); S31's prompt
+        // row is dormant on level 0 (no records); other S draw nothing.
+        if (e.ax == 10) {
+            if (e.S == 34) drawRailLine(world, e, camX, camY)
+            return
+        }
         val clip = e.clip ?: return
         if (e.S < 0 || e.S >= clip.animCount()) return
         val pack = clipPackOf(clip) ?: return
@@ -1723,6 +1731,41 @@ class Level0Renderer {
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
+    }
+
+    /** `aU()` case-34 draw (i.java:9106-9143, proven): rail line(s) in
+     *  ROPE_COL — single span when the player isn't over the rail's
+     *  x-range, else two segments split at the player's screen x. */
+    private fun drawRailLine(world: Level0World, e: Entity, camX: Int, camY: Int) {
+        val wa = e.W
+        val fwd = e.Z[0] == 0
+        val p = world.player
+        val free = p.af == null || p.af === e
+        val near = p.S != 9 &&
+            ((p.af === e && p.ak > wa[0] && p.ak < wa[2]) ||
+             Entity.overlapI(p.W, wa))
+        var i10 = -1; var i3 = wa[1] - camY; var i11 = 0
+        if (near) {
+            if (p.ak >= wa[0] && p.ak <= wa[2]) i10 = p.ak - camX
+            val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])
+            val ry = wa[1] + (if (fwd)
+                (slope * (p.ak - wa[0])) shr 8
+            else
+                (slope * (wa[2] - p.ak)) shr 8)
+            i11 = ry - camY
+        }
+        val i9 = wa[3] - camY
+        val xa = (if (fwd) wa[0] else wa[2]) - camX
+        val xb = (if (fwd) wa[2] else wa[0]) - camX
+        if (i10 == -1) {
+            drawLine(xa, i3, xb, i9, ROPE_COL)
+            drawLine(xa + 1, i3 + 1, xb + 1, i9 + 1, ROPE_COL)
+        } else {
+            drawLine(xa, i3, i10, i11, ROPE_COL)
+            drawLine(i10, i11, xb, i9, ROPE_COL)
+            drawLine(xa + 1, i3 + 1, i10 + 1, i11 + 1, ROPE_COL)
+            drawLine(i10 + 1, i11 + 1, xb + 1, i9 + 1, ROPE_COL)
+        }
     }
 
     private fun clipPackOf(clip: Clip): Int? =
