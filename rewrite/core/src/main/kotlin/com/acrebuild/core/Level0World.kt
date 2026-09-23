@@ -163,6 +163,21 @@ class Level0World(
      *  gate passes (`bW.a(cd,…,305,55+i3*20,24)`, proven positions). */
     val statsRowText = Array(5) { "" }
 
+    // --- ag() poster card (k.java:6358) + ah() medal viewer (:6392) ---
+    var posterVisible = false               // jC==10 render arm
+    var posterFrame = -1                    // A[4] frame i+4 (or 8)
+    var posterBrief = ""                    // d(0,110)
+    var cardOverlayY = -1                   // i(0,i2) card overlay
+    var hintBlink = false                   // j.g%10<5 → d(0,9)
+    var hintBack = false                    // a("",d(0,17))
+    var medalVisible = false                // jC==22 render arm
+    var medalTitle = ""                     // d(0,113)
+    val medalRowIcon = IntArray(3) { -1 }   // z[73] frame per slot
+    val medalRowText = Array(3) { "" }      // d(0,114+i)
+    val medalRowDim = BooleanArray(3)       // y.l(4) locked/dim row
+    var medalRowCount = 0                   // drawn slots
+    var screenFadeAlpha = 0                 // j.h fade (10-j.g)*25
+
     /** `j.c(i,0)` (j.java:1202, proven head) — thousands-grouped digits:
      *  `<1000` raw, else separator groups (`,` inferred — the locale
      *  switch decompiled oddly). */
@@ -751,7 +766,7 @@ class Level0World(
     val kCc = IntArray(3)
     /** `k.fP` — unlocked-mission list (save system unbuilt): all eight
      *  treated unlocked (`inferred`). */
-    val kFp = intArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+    val kFp = intArrayOf(0, 2, 5, 7)  // k.fP (k.java:344) — chapter thresholds
     /** `k.bA` — save/snapshot buffer: [15]=checkpoint-exists flag (set in
      *  writeIX), [130..132]=cc medal stamps (k.java:2055-2064 proven). */
     val kBA = IntArray(160)
@@ -1535,7 +1550,7 @@ class Level0World(
             0 -> {
                 kEb = 0
                 kEA[0][0] = if (menuHasSave()) 2 else 117   // Y(): CONTINUE?
-                if (!menuSlotReady()) kEy--                  // Z(): no save slot
+                if (!menuShopCheck()) kEy--                  // Z(): no shop → no row 3
             }
             1 -> kEb = 72
             2 -> { kEb = 71; kBw = -1; if (kBA[69] == 0) kEy-- }
@@ -1562,9 +1577,14 @@ class Level0World(
     /** `Y()` = `bA[15]==1 || bA[14]>0` (structured :5465, proven) —
      *  "has save progress" → eA[0][0] shows CONTINUE. */
     private fun menuHasSave() = kBA[15] == 1 || kBA[14] > 0
-    /** `Z()` — save-slot picker (`f.a()` device call, unported); the
-     *  original rewrites `eA[0][3]` ∈ {32,33,34}. Stubbed ready. */
-    private fun menuSlotReady() = hasSaveRecord
+    /** `Z()` (k.java:5456, proven) → `f.a()` (f.java:755): IGP shop
+     *  availability — `(aE && g()>0) ? slot : -1`; `g()` counts `br[]`
+     *  available store items (f.java = Gameloft's in-game-purchase
+     *  client: `bp[]` item URLs `&ctg=CCTL`, `igp19` RMS). The port has
+     *  no shop → always false → `m()` skips row 3 (the shop row) as on
+     *  every non-IGP device. When true the orig also rewrites
+     *  `eA[0][3]` ∈ {32,33,34} (shop label variant). */
+    private fun menuShopCheck() = false
     /** `y.k(a(y,str,206)[0])` — font measure (`inferred` 18px rows). */
     private fun menuTextHeight(s: String?) = if (s == null) 0 else 18
 
@@ -1593,7 +1613,7 @@ class Level0World(
      *  `eA[i].length-1`. */
     private fun menuM(i: Int, i2: Int): Int {
         var v = i2
-        if (i == 0 && i2 >= 3 && !menuSlotReady()) v++
+        if (i == 0 && i2 >= 3 && !menuShopCheck()) v++
         if (v > kEA[i].size - 1) v = kEA[i].size - 1
         return v
     }
@@ -1614,8 +1634,73 @@ class Level0World(
     }
 
     /** `e(true)` — RMS save flush; unported → stub (`inferred`). */
+    /** `ag()` (k.java:6358-6389, proven) — jC==10 mission poster card:
+     *  `u=8`; `i(0,120)` card overlay (frame12 + black fill, `u==8`
+     *  suppresses its hint arm); `A[4]` frame `i+4` at (0,200,119) —
+     *  i = `fP` index of `aj+1`, default 4 → frame 8; brief
+     *  `a(y,0,d(0,110),200,150,380,240,0,3)`; `v(327712)||j()` →
+     *  `l(15);z(23)`; `j.g%10<5` → `y.a(d(0,9),200,220,3)` blink. */
+    private fun posterAg(events: List<InputQueue.Event>) {
+        var i = 1
+        while (i < kFp.size && kAj + 1 != kFp[i]) i++
+        subU = 8
+        cardOverlayY = 120
+        posterVisible = true
+        posterFrame = i + 4
+        posterBrief = d0(110) ?: ""
+        if (pad.v(327712) || sawPressPending(events)) {  // j() ≈ tap (high-confidence)
+            z(23); stateL(15); return
+        }
+        hintBlink = jG % 10 < 5
+    }
+
+    /** `ah()` (k.java:6392-6490, proven) — jC==22 medal/unlock viewer:
+     *  header `d(0,113)`; dark panel (114,59,172,155) + rows
+     *  (114,70+45i,172,40); `ex==3` → 3 fixed rows (`cc==2` → icon i3
+     *  + `y.l(2)`; else locked frame3 + `y.l(4)`) + `v(131072)` →
+     *  `l(3);K(4);z(30)` + back hint; else compact `cc==1` rows,
+     *  `j.g<10` → fade `(10-j.g)*25<<24`, confirm → `cc 1→2` +
+     *  `bA[130+i]` then `!fP-member||bA[15]==1 → l(15) else l(10)`. */
+    private fun medalAh(events: List<InputQueue.Event>) {
+        medalVisible = true
+        medalTitle = d0(113) ?: ""
+        if (kEx == 3) {
+            for (i3 in 0..2) {
+                medalRowIcon[i3] = if (kCc[i3] == 2) i3 else 3
+                medalRowText[i3] = d0(114 + i3) ?: ""
+                medalRowDim[i3] = kCc[i3] != 2
+            }
+            medalRowCount = 3
+            if (pad.v(131072)) {
+                z(30); bannerK(4); kBw = -1; stateL(3); return
+            }
+            hintBack = true                       // a("", d(0,17))
+        } else {
+            var i2 = 0
+            for (i5 in 0..2) if (kCc[i5] == 1) {
+                medalRowIcon[i2] = i5
+                medalRowText[i2] = d0(114 + i5) ?: ""
+                medalRowDim[i2] = false
+                i2++
+            }
+            medalRowCount = i2
+            screenFadeAlpha = if (jG < 10) ((10 - jG) * 25).toInt() else 0
+            if (jG >= 10 && (pad.v(327712) || sawPressPending(events))) {
+                for (i7 in 0..2) {
+                    if (kCc[i7] == 1) kCc[i7] = 2
+                    kBA[130 + i7] = kCc[i7]
+                }
+                z(23)
+                if (kAj + 1 !in kFp || kBA[15] == 1) stateL(15)
+                else stateL(10)
+                return
+            }
+        }
+        hintBlink = jG % 10 < 5
+    }
+
     /** Whether the `/ASBR` RMS record exists (orig: `getNumRecords>0`).
-     *  Set on `saveLoad`/`saveFlush`; gates `Z()`/`menuSlotReady`. */
+     *  Set on `saveLoad`/`saveFlush` (`getNumRecords()>0` proxy). */
     var hasSaveRecord = false
 
     /** `e(true)` (k.java:5557, proven) — `setRecord(1,bA,0,512)` (or
@@ -2308,6 +2393,10 @@ class Level0World(
         // first (j.java:255 `g++` precedes each `a()` dispatch). The
         // play-frame counters below don't tick — they're inside the
         // play case the dispatch replaces.
+        // case 10 → ag() / case 22 → ah() (k.java:1102/:1308) — full-
+        //  screen procs replace the entity sim like M() does.
+        if (jC == 10) { jG++; posterAg(events); tickIndex++; return }
+        if (jC == 22) { jG++; medalAh(events); tickIndex++; return }
         if (jC == 15) { jG++; winStatsM(); tickIndex++; return }
 
         // mission timer + ap[2] frame counter (k.java:1652-1655,
