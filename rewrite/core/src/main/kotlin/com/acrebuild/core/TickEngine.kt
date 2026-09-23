@@ -94,6 +94,7 @@ class TickEngine(
                 is Command.PlaySfx -> { md.update(1); putInt(md, c.slot) }
                 is Command.PersistBA -> { md.update(2); md.update(c.record) }
                 is Command.RequestSave -> { md.update(2); putInt(md, c.snapshot.posX) }
+                is Command.QuitApp -> md.update(4)
             }
         }
         return md.digest().joinToString("") { "%02x".format(it) }

@@ -2252,7 +2252,7 @@ class Level0World(
      *  drawn unconditionally each frame (:1124-1185, :6218-6227). */
     val panelVisible: Boolean
         get() = menuVisible || jC == 14 || jC == 19 || jC == 23 ||
-            jC == 28 || jC == 29
+            jC == 28 || jC == 29 || jC == 30  // af() `d(93,46,214)` (:6254)
     fun menuPanelZ3(): Boolean = when {
         jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
         jC == 12 || jC == 13 -> true
@@ -3060,7 +3060,7 @@ class Level0World(
     /** `af()` (k.java:6230-6320, proven) — the jc30 medal/level browse
      *  screen: `fO==0` init (`da` unlocked count → `fQ` rows, `bL`
      *  cursor), `fC` title fade, `fR` pending-nav, footer + dispatch. */
-    private fun menuAf() {
+    private fun menuAf(pressY: Int) {
         if (kFo == 0) {                              // init arm (:6233)
             kFC = 20; kFE = 0; kFQ = 0
             kDa = if (kDt || kBA[69] != 0) 8 else kBA[14] + 1
@@ -3075,7 +3075,11 @@ class Level0World(
         // `a(d(0,79),d(0,17))` — footerQ already ran in menuQ? No — af()
         // calls its own a() → arm the footer rects here instead.
         footerQ()
-        if (pad.v(Pad.M_CONTEXT)) {                  // `v(327712)` (:6269)
+        // `v(327712)` = M_CONTEXT OR a tap on a row (draw-loop E(32)
+        // arm — folded into menuRowAt like menuQ's confirm, inferred).
+        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        if (pad.v(Pad.M_CONTEXT) || rowTap >= 0) {    // `v(327712)` (:6269)
+            if (rowTap in 0 until kFQ) { kBw = rowTap; kBL = rowTap }
             if (kFF == 20) stateL(20) else stateL(9)
             kFF = 0; z(23); return
         }
@@ -3129,7 +3133,12 @@ class Level0World(
             // fallback (`kAl && M_CONTEXT → reload`) is its live behavior.
             7, 26, 32, 33, 34 -> { }
             27 -> menuJc27()                         // case 27 (:1422-1435)
-            11 -> jC = -1                            // case 11 (:1104, proven)
+            11 -> { jC = -1                            // case 11 (:1104, proven)
+                    // j.c==-1 = `A.notifyDestroyed()` (j.java:218, proven)
+                    // — the EXIT path quits the MIDlet. `inferred`
+                    // adaptation: emit Command.QuitApp once; the gdx
+                    // launcher exits the app on drain.
+                    pendingCommands += Command.QuitApp }
             -1 -> { /* j.c==-1 — suspended/dead state; consumes ticks */ }
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
@@ -3145,7 +3154,7 @@ class Level0World(
             1 -> menuJc1()                          // case 1 (:800-811, proven)
             19 -> menuJc19()                        // case 19 (:1178-1206, proven)
             18 -> menuJc18()                         // case 18 (:1146, proven)
-            30 -> menuAf()                           // af() (:6230, proven)
+            30 -> menuAf(pressY)                       // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)
@@ -3806,8 +3815,19 @@ class Level0World(
             when (e.type) {
                 InputQueue.Type.DOWN -> {
                     // pause icon (c(354,0,46,37)→E(262144), k.java:1054)
+                    // — J() runs on jC∈{8,21} (:2653, proven).
                     if (insideRect(e.x, e.y, 354, 0, 46, 37) && jC == 8)
                         padE(Pad.M_PAUSE)
+                    else if (jC == 21 &&
+                             insideRect(e.x, e.y, 349, 198, 56, 47))
+                        // `inferred` port-adaptation: the original's
+                        // u-machine reads v(131072) — the HARDWARE
+                        // right soft key, live on every screen
+                        // regardless of pills. No footer pill draws
+                        // on jC21, so arm the same rect a()
+                        // hit-tests (cf=36 default →
+                        // (395-36-10,198,56,47), :2293-2309).
+                        padE(Pad.M_CYCLE)
                     else {
                         val iJ = resolvePadZone(e.x, e.y)
                         if (iJ != -1) { padE(2 shl iJ)         // E(2<<iJ)
@@ -3894,6 +3914,12 @@ class Level0World(
                 // edge the arms read — consume() marks presses but the
                 // dialog's own `v(65568)` checks are the only consumers.
                 if (pointerStrip()) padE(Pad.M_CONTEXT)
+                // `J()` (k.java:1040-1063, proven): `c(354,0,46,37)` →
+                // E(262144) on jC∈{8,21} — the original runs J() AFTER
+                // the j()→E(65568) arm, and E() clears+re-arms (k.java:553
+                // — `clearLatches()` in pad.e), so the pause edge must be
+                // armed after the context edge here, not in consume().
+                if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
                 if (dlgU == 0 || dlgU == 4 || dlgU == 5 || dlgU == 7) {
                     // u∈{0,4,5,7} full-screen panels (:878-904): press →
                     // u7→l(2), u5→l(15), else l(8); `z(23)` on all.
