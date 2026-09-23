@@ -512,7 +512,9 @@ class Level0WorldTest {
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 200),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 200)))
         assertEquals(cp.ak, w.player.ak, "reload must restore checkpoint pos")
-        assertEquals(cp.al, w.player.al)
+        // i.java:18634-18635: X() writes k.B.ak/al — the PLAYER's pos at
+        // write time (cp.al+5 where the player stood), not the cp's.
+        assertEquals(cp.al + 5, w.player.al)
     }
 
     @Test fun `checkpoint re-homes live npcs and keeps pre-checkpoint dead dead`() {
@@ -8556,5 +8558,56 @@ class Slice72ScrollReleaseTest {
         p.ak = 3000   // teleport past the wall as the agent did
         repeat(30) { w.tick(emptyList()) }
         assertTrue(w.camX > 9)
+    }
+}
+
+// =========================================================================
+// Slice 73 — k.D() bh3 autoscroll camera (k.java:2721-2860) + i.X() at :3363.
+// =========================================================================
+class Slice73AutoCamTest {
+    @Test fun `bh3 tick runs D() autoscroll not m(1)`() {
+        val w = world()
+        w.kAj = 1                                   // MISSION_BH[1]==3
+        val p = w.player
+        p.setPositionPx(1500, 900); p.refreshBoxes()
+        val x0 = w.camX; val y0 = w.camY
+        repeat(40) { w.tick(emptyList()) }
+        // D() lerps camX toward the corridor target and camY +30/tick-cap —
+        // either axis must move (m() path is skipped entirely on bh3).
+        assertTrue(w.camX != x0 || w.camY != y0,
+            "bh3 camera should drive via D(), got cam=${w.camX},${w.camY}")
+    }
+
+    @Test fun `wind W drains into X once then stays`() {
+        val w = world()
+        w.kAj = 1
+        w.kW = 5
+        w.tick(emptyList())
+        assertEquals(5, w.kX)
+        assertEquals(0, w.kW)
+        w.tick(emptyList())
+        assertEquals(5, w.kX, "X is a sticky counter — no re-drain")
+    }
+
+    @Test fun `iBW phase write persists extended snapshot then clears`() {
+        val w = world()
+        w.kAj = 1
+        w.apStats[0] = 7; w.apStats[3] = 2
+        w.iBW = true
+        w.tick(emptyList())
+        assertFalse(w.iBW, "pending write consumed")
+        val s = w.checkpointSnap!!
+        assertEquals(w.player.ak, s.ak); assertEquals(w.player.al, s.al)
+        assertEquals(7, s.ap[0]); assertEquals(2, s.ap[3])
+    }
+
+    @Test fun `dialog modal snaps camera and returns early`() {
+        val w = world()
+        w.kAj = 1
+        w.autoDismissDialog = false   // keep the modal armed this tick
+        w.dialogModal = true
+        val x0 = w.camX; val y0 = w.camY
+        w.tick(emptyList())
+        assertEquals(x0, w.camX); assertEquals(y0, w.camY)
     }
 }
