@@ -589,10 +589,124 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 w.removeEntity(e); return                          // L14a2
             }
-            // `aV()` S10 arm (i.java:9338-9363 L1e1, proven) — wall-run
+            // `aV()` S3 arm (i.java:11975-12050 L14a7-L1526, proven) —
+            // S2's mirror: same Z0 overlap gate and Z0==2 guard check,
+            // then the Z[1]-uid target gets `P &= ~Z[3]` (flags CLEARED);
+            // `t.ax==21` (mission director) also gets `P |= 16` — the
+            // director "re-activate" bit. One-shot: self-removes.
+            3 -> {
+                if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L14bb
+                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                }
+                if (e.Z[0] == 2) {                                 // L14cb
+                    if (e.Z[2] == 0) return                        // → L1ec7
+                    val gate = w.findByAw(e.Z[2])
+                    if (gate != null && gate.wasHitRecently(w)) return
+                }
+                val t = w.findByAw(e.Z[1])                         // L14f3
+                if (t != null) {
+                    t.P = t.P and e.Z[3].inv()                     // L150a
+                    if (t.ax == 21) t.P = t.P or 16                // L1520
+                }
+                w.removeEntity(e); return                          // L1526
+            }
+            // `aV()` S10 arm (i.java:9480-9772 L318-L5a8, proven) — the
+            // scripted wall-climb/column sequence: while the player's top
+            // sits inside the band `dy = aS.W[1]-W[3] ∈ [Z[0],Z[1]]` it
+            // locks input (k.o()), parks a clip-74 hand card at view
+            // center, and on pad-mask-1 press OR finger-on-card (V())
+            // arms the climb (`i.bB`, `i.bi`, player S4, az=199). Outside
+            // the band: overlapping + unarmed → abort (marker 71, i.be
+            // latch, player S34); overlapping + armed with `i.bF` inside
+            // `[Z[2],Z[3]]` → grip marker 35 tracked above the head; not
+            // overlapping → the L4b2 "climb finished" reset (S28, bC/bD
+            // off, bF=100, bE=Z[4], sfx 25); `dy<0` (player above) → the
+            // zone self-removes + exit anim S27 + k.p() unlock.
+            10 -> {
+                if (w.iBe) { w.removeEntity(e); return }              // L318
+                val dy = player.W[1] - e.W[3]                         // L323
+                if (dy <= e.Z[1] && dy >= e.Z[0]) {                   // in band
+                    if (w.iBB) return                                 // → L1ec7
+                    e.lockInput(w)                                    // k.o()
+                    val handUp = player.ae != null &&
+                        player.ae!!.clip === w.clipFor(74) &&
+                        player.ae!!.S == 0
+                    if (!handUp) {                                    // L377
+                        player.releaseAe()
+                        player.spawnHand(w, w.kO + 200, w.kP + 120)
+                    }
+                    // L390
+                    player.moveHand(w, w.kO + 200, w.kP + 120)
+                    if (!pad.v(1) && !player.indicatorNearTouch(w))
+                        return                                        // wait
+                    // L3b3 — confirmed: arm the climb
+                    player.releaseAe()
+                    w.iBB = true; w.iBF = -1; w.iBG = -1
+                    pad.clearLatches()                                // k.v()
+                    if (player.S != 4) player.setAnim(4)
+                    w.iBi = true
+                    player.az = 199
+                    return
+                }
+                // L3e7 — outside the band
+                if (rectsOverlap(player.W, e.W)) {
+                    if (!w.iBB || w.iBF < e.Z[2] || w.iBF > e.Z[3]) {
+                        // L46b — abort: marker 71 + suppress + S34
+                        player.releaseAe()
+                        player.spawnAeMarker(w, 71,
+                            player.ak, player.al - 85)
+                        w.iBe = true
+                        player.setAnim(34)
+                        return
+                    }
+                    // L42c/L449 — marker 35 tracked above the head
+                    if (player.ae == null || player.ae!!.S != 35) {
+                        player.releaseAe()
+                        player.spawnAeMarker(w, 35,
+                            player.ak, player.al - 85)
+                    }
+                    player.ae!!.ak = player.ak
+                    player.ae!!.al = player.al - 85
+                    return
+                }
+                // L495 — not overlapping
+                if (player.ae != null && player.ae!!.S == 39)
+                    player.releaseAe()
+                if (w.iBB && w.iBi && w.iBF == -1) {                  // L4b2
+                    player.setAnim(28)
+                    w.iBC = false; w.iBD = false; w.iBF = 100
+                    w.iBE = e.Z[4]
+                    w.sfx(25)
+                }
+                // L4e8
+                if (dy > 0 && dy < e.Z[0]) {
+                    if (w.iBF >= e.Z[2] && w.iBF <= e.Z[3]) {         // L525
+                        if (player.ae == null || player.ae!!.S != 35) {
+                            player.releaseAe()
+                            player.spawnAeMarker(w, 35,
+                                player.ak, player.al - 85)
+                        }
+                        player.ae!!.ak = player.ak                  // L542
+                        player.ae!!.al = player.al - 85
+                    }
+                    return                                            // L563
+                }
+                // L564 — dy<=0 or dy>=Z[0]: sequence end
+                if (player.ae != null) player.releaseAe()
+                if (dy < 0) {                                         // L573
+                    w.iBi = false
+                    w.removeEntity(e)
+                    if (player.S == 26 || player.S == 28 ||
+                        player.S == 29) player.setAnim(27)            // L5a0
+                }
+                player.unlockInput(w)                                 // L5a8 k.p()
+            }
+            // `aV()` S46 arm (i.java:9338-9363 L1e1, proven) — wall-run
             // zone: sets `g.q`/`g.d` while the player overlaps; clears
             // both when this zone still owns the link after contact ends.
-            10 -> {
+            // (Slice 137/138 called this arm "S10" — the real S10 is L318
+            // above; L1e1 is the dispatch's `case 46` target.)
+            46 -> {
                 if (rectsOverlap(player.W, e.W)) {
                     Entity.gq = true; player.gd = e
                 }
