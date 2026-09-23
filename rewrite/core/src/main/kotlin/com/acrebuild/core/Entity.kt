@@ -131,7 +131,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ar = 0                     // launch anchor y px (i.ar)
     var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
     var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
-                                   // i.java:922/937; producer arms unported)
+                                   // i.java:922/937; producers: ax15 bind,
+                                   // Entity:1210/1285 lunge, ax66/72 arms)
     // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
     var bZ = 0                     // i.bZ lifecycle counter (aX L23 linked
                                    // arm — used by the ax14/pickup path)
@@ -1465,7 +1466,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `g.d(int)` meter drain (proven, g.java:3884): skips while `s`
-     * (cutscene, unported), `t != 0` iframes, `c()` linked-carry, or
+     * (cheat/debug toggle — deliberately unported), `t != 0` iframes,
+     * `c()` linked-carry, or
      * `S in {67,183,184,205}`; else `i.bh = 8` flash + `x[1] -= amt`
      * clamped at 0; survival sets `t = 10`.
      */
@@ -2648,10 +2650,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /** `i.ab()` (i.java:18914, proven): claim-script parked at an active
-     *  marker — bound (`ca>=0`), not flag-0 suspended, `cK` snapshot
-     *  armed. The draw pass reads this (and `cd[2]`/`cd[9]`) for the
-     *  bar-quiet gate and the `cg`/`cf` hint arms. */
-    fun claimAb(): Boolean = ca >= 0 && !cd[0] && cK >= 0
+     *  marker — bound (`ca>=0`), not flag-0 suspended, the `i.cK` key
+     *  counter armed (>=0). Same check as `claimActive` — kept for the
+     *  draw-path call sites that name it `ab()`. */
+    fun claimAb(): Boolean = claimActive()
 
     /** `g.g(int)` (g.java:5266, proven): `J |= mask` — ORs an action-request
      *  bit, then `k.q()` rebuilds the `ar[]` equip list. */
@@ -2845,9 +2847,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /**
      * `i.e(i)` (i.java:2407, proven): Bresenham LOS walk in 20px cells
      * between the two W-centers — `cell >= 12` → true (blocked); OOB
-     * reads as 20 (blocked) via i.e(x,y) (i.java:15294, ax0-override
-     * arms for S37/257 unported — raw cell read here, `inferred` on
-     * those arms). End conditions per major axis.
+     * reads as 20 (blocked). Cells read through `i.e(x,y)`
+     * (i.java:15294) so the ax0 S37/257 + `m()` overrides apply when
+     * the walker is the player. End conditions per major axis.
      */
     fun losBlocked(t: Entity, world: LevelCellSource): Boolean {
         if (W.contentEquals(ZERO_RECT) || t.W.contentEquals(ZERO_RECT)) return false
@@ -2879,11 +2881,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return false
     }
 
-    /** `i.e(x,y)` subset (i.java:15294): OOB → 20, else raw cell value. */
-    private fun cellForLos(cx: Int, cy: Int, world: LevelCellSource): Int {
-        if (cx < 0 || cy < 0) return 20
-        return world.collisionCell(cx, cy)
-    }
+    /** `i.e(x,y)` (i.java:15294): routed through `e()` so the ax0
+     *  overrides apply for a player walker (NPC callers get the raw
+     *  read back — `ax != 0` skips both arms). */
+    private fun cellForLos(cx: Int, cy: Int, world: LevelCellSource): Int =
+        e(world, cx, cy)
 
     /**
      * `g.i(i)` (g.java:5465, proven): interact-eligibility of `cand`
@@ -3681,15 +3683,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (cU != null) cU = null
     }
 
-    /** `i.N()` (i.java:7284, head proven): claim the `k.C` HUD slot —
-     *  `k.C=this`, `P|=16`. The old-claimer arm needs the unported
-     *  sequencing fields (`ab()`/`bI()`/`k.c`) — `inferred` reduction:
-     *  port keeps only the claim. The `h(k.s(aG))`/`k(k.s(aG))`
-     *  display-row pair is render-side (skipped). */
-    fun claimKC(w: LevelCellSource) {
-        w.kC = this
-        P = P or 16
-    }
 
     /** `i.e(int,x,y,az)` (i.java:11084, proven): the ck-aura manager —
      *  first call spawns `a(61,71,anim,99)` into `i.ck` (`P&=-129&-33`,

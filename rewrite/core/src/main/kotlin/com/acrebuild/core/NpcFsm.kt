@@ -1568,7 +1568,8 @@ class NpcFsm(val world: LevelCellSource) {
                 player.ag = 0; player.ah = 0
                 world.removeEntity(e)
             }
-            // Every other aV() state: unported.
+            // aV() table closed (i.java:9160-9260 audit): every remaining
+            // state is a proven dead arm or a no-op — nothing left to port.
         }
     }
 
@@ -4287,7 +4288,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                         ?: if (p.aw == r133) p else null
                     if (r023 != null && r023.ax == 5) {
                         r023.P = r023.P or 16
-                        r023.claimKC(w)
+                        r023.bindContext(w)                // N() — i.java:8561
                     }
                 }
             }
