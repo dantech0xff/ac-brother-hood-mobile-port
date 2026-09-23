@@ -56,33 +56,11 @@ class Level0Renderer {
         for ((packId, clip) in clips) {
             val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
-            val base = when (packId) {
-                0 -> "clips/clip0/modules"
-                1 -> "clips/clip1/modules"
-                3 -> "clips/clip3/modules"
-                7 -> "clips/clip7/modules"
-                9 -> "clips/clip9/modules"
-                32 -> "clips/clip32/modules"
-                54 -> "clips/clip54/modules"
-                64 -> "clips/clip64/modules"
-                26 -> "clips/clip26/modules"
-                10 -> "clips/clip10/modules"
-                48 -> "clips/clip48/modules"
-                45 -> "clips/clip45/modules"
-                47 -> "clips/clip47/modules"
-                31 -> "clips/clip31/modules"
-                4 -> "clips/clip4/modules"
-                11 -> "clips/clip11/modules"
-                62 -> "clips/clip62/modules"
-                25 -> "clips/clip25/modules"
-                29 -> "clips/clip29/modules"
-                60 -> "clips/clip60/modules"
-                51 -> "clips/clip51/modules"
-                63 -> "clips/clip63/modules"
-                21 -> "clips/clip21/modules"
-                38 -> "clips/clip38/modules"
-                else -> "level0/tileset-${-packId}/modules"  // negated keys
-            }
+            // positive keys are clip packs (clips/clipN/), negative keys are
+            // negated tileset ids (level0/tilesetN/) — compute, don't map:
+            // every new clip slice used to crash here when the when() lagged.
+            val base = if (packId >= 0) "clips/clip$packId/modules"
+                       else "level0/tileset-${-packId}/modules"
             for (i in clip.moduleNames.indices) {
                 // aU==2 non-pixel modules are empty-name slots in the blob.
                 if (clip.moduleNames[i].isEmpty()) continue
@@ -234,6 +212,21 @@ class Level0Renderer {
         batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
                    mw.toFloat(), 20f)
         batch.setColor(1f, 1f, 1f, 1f)
+
+        // k.l(21) modal dialog — the original suspends the sim behind a
+        // drawn dialog box (i.java:20190-20240, j.d text panel); port draws
+        // a bottom dialog box so the freeze is visible (panel `inferred`,
+        // text glyphs unported). dismiss = press edge.
+        if (world.dialogModal) {
+            batch.setColor(0f, 0f, 0f, 0.8f)
+            batch.draw(white, 10f, 6f, 380f, 60f)
+            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
+            batch.draw(white, 12f, 8f, 376f, 2f)
+            batch.draw(white, 12f, 62f, 376f, 2f)
+            batch.setColor(0.85f, 0.8f, 0.5f, 1f)
+            batch.draw(white, 190f, 20f, 20f, 20f)      // ▼ hint marker
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
 
         // mission-fail banner — k.java:1782 (proven): b(93,67,214,true,true)
         // solid dark box over the frozen world; y-down→y-up: box (93,47) 214x126.

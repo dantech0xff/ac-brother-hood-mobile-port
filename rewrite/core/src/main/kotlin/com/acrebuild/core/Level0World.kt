@@ -1136,31 +1136,58 @@ class Level0World(
      * &1→k.R=X[0] (camX floor), &4→k.T=X[1] (camY floor),
      * &2→k.S=X[2] (camX+400 ceiling), &8→k.U=X[3] (camY+240 ceiling).
      * Z[2]==-1 records skip the linked-entity gate (all level-0 data).
-     * `k.ah`/`k.n()` context registration and bound-reset-on-snap
-     * (k.java:2447-2449) unported — bounds persist until overwritten
-     * (inferred: level-0 data only ever expands the bound forward).
+     * `k.ah` claim + `k.n()` release and the L8 holder-reset are ported in
+     * `fireScrollTriggers` (i.java:7053-7159). The `Z[2]!=-1` linked-entity
+     * gate (i.java:7119-7127) is skipped — every level-0 record has -1.
      */
+    /** The `k.ah` claimant — the trigger holding the wall slot (k.a(this),
+     *  i.java:7176 `b(k.aS.W, this.W)` containment arm). Released via k.n()
+     *  when its zone stops firing while it holds the slot (i.java:7068
+     *  /:7230). */
+    private var scrollHolder: ScrollTrigger? = null
+
     private fun fireScrollTriggers() {
         val view = intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
         for (t in scrollTriggers) {
             val pw = player.W
+            // i.java:7062 (L8): the k.ah holder clears R/S/T/U at the head
+            // of its own al() each tick, then re-writes below — so bounds
+            // always reflect the currently-firing set while a holder
+            // stands, and vanish entirely on release.
+            if (scrollHolder === t) {
+                boundMinX = 0; boundMinY = 0; boundMaxX = 0; boundMaxY = 0
+            }
             val fired = if (t.mode == 1) rectsOverlap(pw, t.zone)
                         else rectContains(pw, t.zone)
-            if (!fired) continue
+            if (!fired) {
+                // i.java:7068/:7230: zone lost while holding k.ah → k.n().
+                if (scrollHolder === t) scrollHolder = null
+                continue
+            }
+            // i.java:7131-7143 (L79/L85): full containment claims k.ah —
+            // unless a mode-1 (overlap) holder already stands.
+            if (rectContains(pw, t.zone) &&
+                (scrollHolder == null || scrollHolder === t ||
+                 scrollHolder!!.mode != 1)) {
+                scrollHolder = t
+                // k.a(this) → k.ah = the trigger entity: W = its ZONE rect;
+                // aF is the record flag — every level-0 ax37 record carries
+                // aF=0, so m()'s L282 wall clamp (k.java:2406 `aF != 1 →
+                // skip`) never engages for ax37 — the trigger only drives
+                // R/T/S/U bounds. (Previous rev forced aF=1 + W=bound →
+                // camA pinned between wall ceiling and R floor.)
+                kAh = Entity(37, null).apply {
+                    W[0] = t.zone[0]; W[1] = t.zone[1]
+                    W[2] = t.zone[2]; W[3] = t.zone[3]
+                }
+            }
             if (!rectsOverlap(t.zone, view)) continue
             if (t.mask and 1 != 0) boundMinX = t.bound[0]
             if (t.mask and 4 != 0) boundMinY = t.bound[1]
             if (t.mask and 2 != 0) boundMaxX = t.bound[2]
             if (t.mask and 8 != 0) boundMaxY = t.bound[3]
-            // Register as the scroll-wall entity k.ah (k.a(i), k.java:2860):
-            // its bound rect doubles as the L282 wall clamp (aF==1 active),
-            // and kAh!=null keeps m()'s head kN() from wiping the bounds.
-            kAh = Entity(37, null).apply {
-                W[0] = t.bound[0]; W[1] = t.bound[1]
-                W[2] = t.bound[2]; W[3] = t.bound[3]
-                aF = 1
-            }
         }
+        if (scrollHolder == null) kAh = null
     }
 
     private fun rectsOverlap(a: IntArray, b: IntArray) =

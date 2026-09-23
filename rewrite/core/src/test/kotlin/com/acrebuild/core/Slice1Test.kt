@@ -598,9 +598,13 @@ class Level0WorldTest {
         w.tick(emptyList())          // view-gate holds, trigger fires
         w.tick(emptyList())
         assertEquals(853, w.boundMaxY, "X[3]=al-50+300=853 → k.U")
-        w.player.setPositionPx(5000, 900)   // target camY 740 > ceiling
-        w.tick(emptyList())
         assertTrue(w.camY <= 613, "camY ceiling = U-240 = 613, got ${w.camY}")
+        // al() exit arm (i.java:7068/:7230): leaving the zone while holding
+        // k.ah releases the slot and the holder's L8 reset clears the bounds.
+        w.player.setPositionPx(5000, 900)
+        w.tick(emptyList())
+        assertEquals(0, w.boundMaxY, "k.n() release clears k.U on zone exit")
+        // (kAh may stay non-null — another zone's claim can succeed it.)
     }
 
     @Test fun `ax44 doors spawn banked and timed cycle runs i16927`() {
@@ -8495,6 +8499,7 @@ class Slice70CamTest {
         assertEquals(0, w.kR); assertEquals(0, w.kSBound)
     }
 }
+
 // =========================================================================
 // Slice 71 — k.l(13) win screen (k.java:2031 r6==13 → L12 → j.c=13).
 // =========================================================================
@@ -8520,5 +8525,36 @@ class Slice71WinTest {
         val w = world()
         w.screenL(13); w.screenL(13)
         assertTrue(w.won); assertTrue(w.missionWon)
+    }
+}
+
+class Slice72ScrollReleaseTest {
+    /** i.java:7053-7159 al(): the k.ah holder clears R/S/T/U each tick and
+     *  releases the slot (k.n()) when its zone stops firing — camera must
+     *  not stay pinned after the player leaves the trigger. */
+    @Test fun `bound release on zone exit frees the camera`() {
+        val w = world()
+        w.tick(emptyList())
+        assertEquals(true, w.kAh != null)
+        assertTrue(w.boundMinX > 0 || w.boundMinY > 0 || w.boundMaxX > 0 || w.boundMaxY > 0)
+        val p = w.player
+        // Walk the player out of the spawn-strip zone (zone ends x≈249).
+        repeat(200) {
+            p.ak = 600
+            w.tick(emptyList())
+        }
+        assertEquals(null, w.kAh)
+        assertTrue(w.camX > 9)   // camera followed right instead of pinning at the 9px floor
+    }
+
+    /** Regression: spawn-trigger bound=[9,756,41,979] used to arm kAh.aF=1
+     *  with the bound rect, pinning camA between the wall ceiling (41-400)
+     *  and the kR floor (9). ax37 records carry aF=0 → wall clamp skips. */
+    @Test fun `spawn wall does not pin camera`() {
+        val w = world()
+        val p = w.player
+        p.ak = 3000   // teleport past the wall as the agent did
+        repeat(30) { w.tick(emptyList()) }
+        assertTrue(w.camX > 9)
     }
 }
