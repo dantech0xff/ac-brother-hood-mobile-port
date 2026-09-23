@@ -1300,16 +1300,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `av()` — g.java `void av()` (proven). Air wall-resolve: probes one cell
-     * higher (head region), then pushes ak back ±10 when flying into a solid
-     * side cell at the feet row. Rope entity path (i.bq) not ported.
+     * `av()` — g.java `void av()` (i.java:4984, proven). Air wall-resolve:
+     * probes one cell higher (head region); `aO>=20 → a(0)` ceiling drop;
+     * `aO<20 || ah>=0 || i.bq!=0 → return` — the resolve only applies on
+     * the 12..19 partial-platform band while not crate-perched; then
+     * pushes ak back ±10 when flying into a solid side cell at the feet
+     * row.
      */
     fun airWallResolve(world: LevelCellSource) {
         al -= 20
         probeCells(world)
         al += 20
-        if (aO >= 20) { enterFall(); return }
-        if (ah >= 0) return
+        if (aO >= 20) enterFall()                // a(0) — no return, verbatim
+        if (aO < 20 || ah >= 0 || entBq != 0) return
         refreshBoxes()
         val r0 = W[3]
         val r02 = W[0] - 1
@@ -4341,10 +4344,6 @@ interface LevelCellSource {
     /** `g.c` (g.java:7) — static crate link: the ax51 the player is
      *  claimed on top of (bs() L188/L192 claim, L184 release). */
     var gc: Entity? get() = null; set(_) {}
-    /** `i.bq` STATIC (i.java:114) — floor-Y latch set at g.java:3637
-     *  (`al+20`), consulted by fall checks (g.java:568/1849); `bs()`
-     *  L62 clears it on mount. */
-    var iBq: Int get() = 0; set(_) {}
     /** `g.h()` (g.java:3946, proven): transition latch —
      *  `g.s == true || g.t != 0`. */
     fun gH(): Boolean = false

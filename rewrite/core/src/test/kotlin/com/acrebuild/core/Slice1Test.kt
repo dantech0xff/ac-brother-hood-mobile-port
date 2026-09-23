@@ -3095,12 +3095,12 @@ class Level0WorldTest {
         val e = pushableAt(w, p.ak, p.al, 0)
         ridePlayer(w, e, 16)
         p.al = e.W[3] - 2; p.refreshBoxes()
-        p.ah = 999; w.iBq = 777
+        p.ah = 999; Entity.entBq = 777
         w.npcFsm.tickPushable(e, w, p)
         assertEquals(0, p.S, "S16 -> aS.i(0)")
         assertSame(e, p.ga)
         assertEquals(0, p.ah); assertEquals(0, p.ag)
-        assertEquals(0, w.iBq, "i.bq latch cleared")
+        assertEquals(0, Entity.entBq, "i.bq latch cleared")
     }
 
     @Test fun `ax51 mount arm fell many cells drains op21`() {
@@ -12347,5 +12347,152 @@ class Slice127Test {
         w.tick(emptyList())
         assertEquals(0, Entity.entBq, "g.java:594 c(S) → i.bq = 0")
         Entity.entBq = 0
+    }
+}
+
+// ---- Slice 128: bs() bp() polarity + S43 aQ==3 dismount + i.D() link sweep ----
+class Slice128Test {
+
+    private class MarkerWorld : LevelCellSource {
+        override var gc: Entity? = null
+        override var vehicle: Entity? = null
+        override val cellPx = 20
+        override var lockTarget: Entity? = null
+        override val npcs = mutableListOf<Entity>()
+        override var claimPrio = 0
+        override var claimed: Entity? = null
+        override var marker: Entity? = null
+        override var aq = 0
+        override val kAp = IntArray(6)
+        override val sfxLog = mutableListOf<Int>()
+        override val player = Entity(0, null)
+        override var equipCount = 0
+        override var actionLock = 0
+        override var cEntity: Entity? = null
+        override var iFlag = false
+        override var eFlag = false
+        override var cv: Entity? = null
+        override var cFFlag = false
+        override var playerLinkB: Entity? = null
+        override var iBh = 0
+        override var iBV = 0
+        override var iBU = 0
+        override var iBW = false
+        override var iBX = 0
+        override var iBT = false
+        override var iBj = false
+        override var iQ = false
+        override var iCC = 0
+        override var iCD = 0
+        override var iCE = 0
+        override val waypoints = WaypointPool()
+        override var dirWp: WaypointNode? = null
+        override var kB: Entity? = null
+        override var kAi = false
+        override var kR = 0
+        override var kAE = 0
+        override var kAH = 0
+        override var kAR = 0
+        override fun collisionCell(cx: Int, cy: Int): Int = 3
+        override fun isSolid(v: Int): Boolean = v >= 12
+        override fun isOneWay(v: Int): Boolean = v == 3
+        override fun removeEntity(e: Entity) {}
+        override fun claim(e: Entity, prio: Int, w: IntArray) {}
+        override fun clearClaim() {}
+        override fun setMarker(x: Int, y: Int, tag: Int) {}
+        override fun clearMarker(tag: Int) {}
+        override fun sfx(id: Int) {}
+        override fun spawnWisp(src: Entity) {}
+        override fun spawnPickup(anim: Int, x: Int, y: Int): Entity = Entity(14, null)
+        override fun spawnProjectile(av: Boolean, x: Int, y: Int): Entity = Entity(24, null)
+    }
+
+    @Test fun `S43 aQ==3 dismounts to i147`() {
+        // g.java:1421 — feet on marker-3 with no g.c and no i.bq → i(147)
+        val w = MarkerWorld()
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 43
+        p.aQ = 3                                    // entity-written marker
+        Entity.entBq = 0
+        fsm.tick(p, Pad())
+        assertEquals(147, p.S)
+        assertEquals(0, Entity.entBq)
+    }
+
+    @Test fun `S43 aQ==3 below entBq dismounts`() {
+        // second arm: i.bq set + al > i.bq + g.c==null → same i(147)
+        val w = MarkerWorld()
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 43; p.al = 500
+        p.aQ = 3
+        Entity.entBq = 100
+        fsm.tick(p, Pad())
+        assertEquals(147, p.S)
+        assertEquals(0, Entity.entBq)
+    }
+
+    @Test fun `S43 aQ!=3 keeps the cell ladder`() {
+        val w = MarkerWorld()
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 43
+        p.aQ = 0; p.aR = 0; p.aS = 0
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S, "no dismount without marker-3")
+        assertEquals(1536, p.aj)
+    }
+
+    @Test fun `crate top claim sets gc on falling overlap`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = Entity(51, w.clips[7])
+        e.setPositionPx(p.ak, p.al + 40); e.refreshBoxes(); e.S = 0
+        w.npcs.add(e)
+        // al == W[3]: below the mount threshold (L22 needs al < W[3]) but
+        // inside bp()'s falling-over-top span (al <= W[3])
+        p.setPositionPx(e.ak, e.al); p.S = 43; p.T = 0
+        p.al = e.W[3]; p.refreshBoxes()
+        p.ga = null
+        p.ah = 2560                                 // falling (ah>0)
+        w.gc = null
+        w.npcFsm.tickPushable(e, w, p)
+        assertTrue(w.gc === e, "bp() claims g.c = this (i.java:15713)")
+        w.gc = null
+    }
+
+    @Test fun `P1024 latch suppresses the gc claim`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = Entity(51, w.clips[7])
+        e.setPositionPx(p.ak, p.al + 40); e.refreshBoxes(); e.S = 0
+        w.npcs.add(e)
+        p.setPositionPx(e.ak, e.al); p.S = 43; p.T = 0
+        p.al = e.W[3]; p.refreshBoxes()
+        p.ga = null
+        p.ah = 2560
+        p.P = p.P or 1024
+        w.gc = null
+        w.npcFsm.tickPushable(e, w, p)
+        assertNull(w.gc, "(aS.P&1024)!=0 keeps g.c null (i.java:15712)")
+    }
+
+    @Test fun `mission fail reload sweeps ga ac standingOn and gc`() {
+        val w = world()
+        val p = w.player
+        val link = Entity(51, null)
+        p.ga = link; p.ac = link; p.standingOn = link; w.gc = link
+        repeat(20) {
+            p.applyHit(18, 0, null, w)
+            p.gt = 0; w.iBh = 0
+        }
+        w.tick(emptyList())
+        assertTrue(w.failed)
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
+        assertFalse(w.failed)
+        assertNull(p.ga); assertNull(p.ac); assertNull(p.standingOn)
+        assertNull(w.gc, "i.D() link sweep on entity-system reset")
     }
 }

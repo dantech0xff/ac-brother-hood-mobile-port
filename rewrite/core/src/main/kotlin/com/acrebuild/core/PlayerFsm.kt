@@ -542,7 +542,17 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         p.cv = true; p.cp = true; p.ct = true; p.cw = true
         if (p.S == 43 && p.hitWall()) { p.ai = 0; p.ag = 0 }
         if (p.S == 43 && p.animFinished()) p.P = p.P or 64
-        if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) {
+        // L1421/L1430 — marker-3 feet cell: crate-top dismount probe
+        // (g.c = world.gc contact link; i.bq = Entity.entBq)
+        if (p.aQ == 3) {
+            val c = world.gc
+            if ((c != null && c.ax == 51 && p.al > c.W[3]) ||
+                (Entity.entBq > 0 && p.al > Entity.entBq && c == null) ||
+                (c == null && Entity.entBq == 0)) {
+                p.setAnim(147)                                  // i(147)
+                Entity.entBq = 0                                // i.bq = 0
+            }
+        } else if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) {
             p.land(world, p.aR == 4 || p.aS == 4)
         } else if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5 ||
                    p.aR == 4 || p.aS == 4) {

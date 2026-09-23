@@ -1106,18 +1106,18 @@ class NpcFsm(val world: LevelCellSource) {
     // Pushable crate (i.java:16440, proven): land-mount arm, edge-input
     // grab (k.v — EDGE unlike bm()'s held k.u), carry clamps, S2 death.
 
-    /** `i.bo()` (i.java:16274, proven): `g.j` latch && overlap &&
+    /** `i.bo()` (i.java:15563, proven): `g.j` latch && overlap &&
      *  `g.a == null` — player pressed against the crate while j-set. */
     private fun crateContact(e: Entity, w: LevelCellSource,
                              p: Entity): Boolean =
         w.gj && Entity.overlapI(p.W, e.W) && p.ga == null
 
-    /** `i.bp()` (i.java:16288, proven): `g.j` && `aS.S∈{43,35}` &&
-     *  `ah>0` && `W[0] < aS.ak < W[2]` && `aS.al <= W[3]` — falling onto
-     *  the crate's top while j-set. */
+    /** `i.bp()` (i.java:15567, proven): `if (g.j) return false` — then
+     *  `aS.S∈{43,35}` && `ah>0` && `W[0] < aS.ak < W[2]` &&
+     *  `aS.al <= W[3]` — falling onto the crate's top while j-clear. */
     private fun crateLandSpot(e: Entity, w: LevelCellSource,
                               p: Entity): Boolean =
-        w.gj && (p.S == 43 || p.S == 35) && p.ah > 0 &&
+        !w.gj && (p.S == 43 || p.S == 35) && p.ah > 0 &&
         p.ak > e.W[0] && p.ak < e.W[2] && p.al <= e.W[3]
 
     fun tickPushable(e: Entity, w: LevelCellSource, p: Entity) {
@@ -1139,7 +1139,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (p.S == 16 || p.Q == 16 ||
                     ((e.al - p.gy) / 20) < 20 || w.gH()) {         // L62
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
-                    p.setAnim(0); w.iBq = 0; p.ga = e
+                    p.setAnim(0); Entity.entBq = 0; p.ga = e
                 } else {                                          // mount
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
                     p.al = e.W[1] + 4
