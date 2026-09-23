@@ -562,6 +562,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     }
                 }
             }
+            // ---- case 284 (g.java:3837-3841, proven) — rope-grab anim:
+            // `r() → P|=64` (the ax13 rope FSM reads the flag and keeps
+            // driving ak/al); staying in S284 until the rope hands off —
+            // the default arm's anim-end `a(0)` fling must NOT run here.
+            284 -> {
+                if (p.animFinished()) p.P = p.P or 64
+            }
             // ---- case 184/205 (g.java:3098-3140, proven) — the second
             // finisher anim: S184 drags the victim to i(107) ±35px; S205
             // shares the arm with no drag. Same `!r()`→`r()` end-gate
