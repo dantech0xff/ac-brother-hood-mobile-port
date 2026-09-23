@@ -75,6 +75,8 @@ CLIPS = {
     "clip3": ("pack-3", "entry-003-marker-003"),   # ax4 destructibles (bi[4]=3)
     "clip91": ("pack-1", "entry-001-marker-130"),  # bW = J(1) font (k.java:3966)
     "clip92": ("pack-1", "entry-003-marker-130"),  # y  = J(3) font (k.java:3967)
+    "clip93": ("pack-2", "entry-002-marker-130"),  # A[2] menu edges/icons (k.java:4066)
+    "clip94": ("pack-3", "entry-012-marker-003"),  # z[12] row blink icon (k.java:4079)
     "clip7": ("pack-3", "entry-007-marker-130"),   # shared NPC family
     "clip9": ("pack-3", "entry-009-marker-003"),   # k.c marker popup (ax14 S54)
     "clip32": ("pack-3", "entry-032-marker-003"),  # ax44 door/gate (bi[44]=32)
