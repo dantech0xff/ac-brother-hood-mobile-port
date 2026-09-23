@@ -53,6 +53,7 @@ class Level0Game : ApplicationAdapter() {
         clips[3] = Clip.load(Gdx.files.internal("clips/clip3/clip.acpk").readBytes())
         clips[9] = Clip.load(Gdx.files.internal("clips/clip9/clip.acpk").readBytes())
         clips[54] = Clip.load(Gdx.files.internal("clips/clip54/clip.acpk").readBytes())
+        clips[11] = Clip.load(Gdx.files.internal("clips/clip11/clip.acpk").readBytes())   // z[11] G() art
         clips[64] = Clip.load(Gdx.files.internal("clips/clip64/clip.acpk").readBytes())
         clips[26] = Clip.load(Gdx.files.internal("clips/clip26/clip.acpk").readBytes())
         clips[10] = Clip.load(Gdx.files.internal("clips/clip10/clip.acpk").readBytes())
