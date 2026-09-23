@@ -572,7 +572,10 @@ class Level0WorldTest {
         repeat(9) { w.tick(emptyList()) }
         w.player.applyHit(18, 0, null, w)
         assertEquals(85, w.player.x1, "still iframe-protected on last tick")
-        w.tick(emptyList())
+        // intro claim-script dialogs (l(21)) eat sim ticks — drain iframes
+        // with a bound instead of a fixed count (g.t = 10 ticks).
+        var guard = 0
+        while (w.player.gt > 0 && guard++ < 40) w.tick(emptyList())
         assertEquals(0, w.player.gt)
         w.player.setAnim(0)
         w.iBh = 0
@@ -4681,14 +4684,19 @@ class Slice43cTest {
         assertTrue(e.cd[0], "cd[0]=true halt")
         assertTrue(w.dialogModal, "k.b accept → k.l(21)")
         assertEquals(1, w.bO); assertEquals(3, w.bN0); assertEquals(42, w.dialogLine)
-        // case-21 u==9 press semantics (k.java:945-1017): the typewriter
-        // starts un-revealed, so press 1 only forces `bT=-1` (reveal);
-        // press 2 hits the v<w catch-all → C.Z() + l(8).
+        // case-21 u==9 semantics (k.java:944-1017): a press edge while
+        // typing only forces `bT=-1` (reveal); u==9 has NO page-advance
+        // arm, so `v<w` presses stay put — the claim script steps `v` to
+        // `w` itself, and `v==w` → `C.Z(); l(8)`.
         w.autoDismissDialog = false
         w.kC = e
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
         assertTrue(w.dialogModal, "press while typing reveals, not dismisses")
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        assertEquals(-1, w.dlgBT)
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertTrue(w.dialogModal, "u==9 v<w press is inert (:956-974)")
+        w.dlgV = w.dlgW                          // script stepped v to w
+        w.tick(emptyList())
         assertFalse(w.dialogModal)
         assertFalse(e.cd[0], "Z() resumed the claim")
         // the same press does not leak a gameplay edge
@@ -8811,12 +8819,12 @@ class Slice76Test {
         val w = world()
         w.screenL(21)
         assertEquals(21, w.jC); assertTrue(w.dialogModal)
-        assertTrue(w.kAl)                          // kMode=0 not in {8,9}
+        assertTrue(w.kAl)                          // dlgU=0 not in {8,9}
     }
 
     @Test fun `l21 with mode 8 stays unfrozen`() {
         val w = world()
-        w.kMode = 8
+        w.dlgU = 8
         w.screenL(21)
         assertEquals(21, w.jC)
         assertFalse(w.kAl)                         // u==8 dialogs run world
@@ -9348,7 +9356,7 @@ class Slice79Test {
 
     @Test fun `jC 21 substate 8 keeps the wheel live`() {
         val w = world()
-        w.stateL(21); w.subU = 8
+        w.stateL(21); w.dlgU = 8
         val (x, y) = w.cellPoint(5)
         assertEquals(5, w.resolvePadZone(x, y))
     }
@@ -9641,7 +9649,7 @@ class Slice83Test {
         assertTrue(w.posterVisible)
         assertEquals(8, w.posterFrame)
         assertEquals(120, w.cardOverlayY)
-        assertEquals(8, w.subU)
+        assertEquals(8, w.dlgU)
         w.pad.queuePress(327712); w.tick(emptyList())
         assertEquals(15, w.jC)
     }
@@ -10565,9 +10573,9 @@ class Slice95Test {
         assertFalse(w.touchPadVisible(), "jc==14 hidden")
         w.stateL(5)
         assertFalse(w.touchPadVisible(), "jc==5 hidden")
-        w.stateL(21); w.subU = 9
+        w.stateL(21); w.dlgU = 9
         assertFalse(w.touchPadVisible(), "jc21 u9 hidden")
-        w.stateL(8); w.subU = 0
+        w.stateL(8); w.dlgU = 0
         assertTrue(w.touchPadVisible())
     }
 
@@ -10579,7 +10587,8 @@ class Slice95Test {
         assertTrue(w.kDe)
         val c = (120 * 5) / 8                          // fp·bJ/8 (k.java:2522)
         assertEquals((255 shl 24) or (c shl 16) or (c shl 8) or c, w.kDf)
-        repeat(5) { w.tick(emptyList()) }
+        var guard = 0                                  // l(21) dialogs eat ticks
+        while (w.kBJ > 0 && guard++ < 40) w.tick(emptyList())
         assertEquals(0, w.kBJ)
         // f() reload clears de (k.java:5131) — driven via the fail path
         w.kBJ = 6; w.kDe = true
@@ -10587,8 +10596,11 @@ class Slice95Test {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        var g2 = 0                                     // l(21) dialogs eat ticks
+        while (!w.failed && g2++ < 40) w.tick(emptyList())
         assertTrue(w.failed)
+        var g3 = 0                                     // j.t held-bits flush
+        while (w.kJT != 0 && g3++ < 10) w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
         assertFalse(w.kDe, "f() reload clears de (k.java:5131)")
@@ -11090,14 +11102,18 @@ class Slice103Test {
         assertTrue(w.dialogModal)
         w.autoDismissDialog = false
         w.kC = e
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
         assertTrue(w.dialogModal, "press while typing reveals only (:955)")
         assertEquals(-1, w.dlgBT)
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100)))
-        assertFalse(w.dialogModal, "revealed press → v<w catch-all (:1003)")
+        // u==9 has no D(v+1) arm — a revealed press while v<w does
+        // nothing (:975); reaching v==w exits via `C.Z(); l(8)` (:985-989)
+        // — no cd[1] write on this path (that's the suppressed tail only).
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertTrue(w.dialogModal, "u==9 v<w press is inert")
+        w.dlgV = w.dlgW
+        w.tick(emptyList())
+        assertFalse(w.dialogModal, "v==w && u==9 → C.Z(); l(8) (:985-989)")
         assertFalse(e.cd[0], "C.Z() resumed the claim")
-        assertTrue(e.cd[1], "C.cd[1]=true catch-all write (:1005)")
-        assertEquals(w.dlgW, w.dlgV, "v=w on the dismiss path (:1016)")
         assertEquals(0, w.pad.edge)
     }
 
@@ -11577,5 +11593,103 @@ class Slice113Test {
         repeat(7) { w.tick(emptyList()) }            // iris done + dw=1
         val f = w.menuFooter()
         assertNull(f.first); assertEquals("SKIP", f.second, "a(null,d(0,18))")
+    }
+}
+
+class Slice114Test {
+
+    private fun armDialog(w: Level0World, u: Int, v: Int, w_: Int,
+                          vararg lines: String): Level0World {
+        w.autoDismissDialog = false                    // real u-machine, not the harness tap
+        w.stateL(21)
+        w.dlgU = u; w.dlgV = v; w.dlgW = w_
+        lines.forEachIndexed { i, s -> w.dlgBM[i] = s }
+        w.dlgBT = -1                                   // fully revealed
+        return w
+    }
+
+    @Test fun `u9 single-page confirm exits via C-Z + l-8`() {
+        val w = armDialog(world(), 9, 0, 0, "Stay hidden?")
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(8, w.jC, "v==w && u==9 → C.Z(); l(8) (:985-989)")
+    }
+
+    @Test fun `u9 multi-page fire press is inert - no advance arm exists`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(21, w.jC, "v<w → the v==w dispatch cannot fire")
+        assertEquals(0, w.dlgV, "u==9 has no D(v+1) arm (:944-1017)")
+    }
+
+    @Test fun `u8 auto-advances pages on the 48-frame countdown`() {
+        val w = armDialog(world(), 8, 0, 2, "p1", "p2", "p3")
+        repeat(49) { w.tick(emptyList()) }             // x6=48→…→x6=0 → D(v+1)
+        assertEquals(1, w.dlgV, "x<=0 → x=48; D(v+1) (:964-968)")
+        assertEquals(48, w.kDlgX)
+    }
+
+    @Test fun `u8 fire press while counting also advances nothing but l-8 at last page`() {
+        val w = armDialog(world(), 8, 2, 2, "p1", "p2", "p3")
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(8, w.jC, "v==w && u==8 → cz=true; l(8) (:979-982)")
+    }
+
+    @Test fun `u10 tap advances a page and latches cz`() {
+        val w = armDialog(world(), 10, 0, 2, "p1", "p2", "p3")
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(1, w.dlgV, "v(65568) → D(v+1) (:956-958)")
+        assertEquals(21, w.jC)
+    }
+
+    @Test fun `u3 exit routes to win-stats or credits by mission`() {
+        val w = armDialog(world(), 3, 0, 0, "done")
+        w.kAj = 7                                      // finale mission
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(24, w.jC, "u==3 && aj==7 → l(24) (:994-996)")
+        val w2 = armDialog(world(), 3, 0, 0, "done")
+        w2.pad.e(Pad.M_CONTEXT); w2.tick(emptyList())
+        assertEquals(15, w2.jC, "u==3 && aj!=7 → l(15) (:991-993)")
+    }
+
+    @Test fun `u1 post-game exits to menu when aj==8`() {
+        val w = armDialog(world(), 1, 0, 0, "the end")
+        w.kAj = 8
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(2, w.jC, "u==1 && aj==8 → aj=0;W();l(2) (:1001-1004)")
+        assertEquals(0, w.kAj)
+        val w2 = armDialog(world(), 1, 0, 0, "x")
+        w2.pad.e(Pad.M_CONTEXT); w2.tick(emptyList())
+        assertEquals(8, w2.jC, "u==1 && aj!=8 → l(8)")
+    }
+
+    @Test fun `u0-4-5-7 full-screen panel exits`() {
+        val w7 = armDialog(world(), 7, 0, 0, "x")
+        w7.pad.e(Pad.M_CONTEXT); w7.tick(emptyList())
+        assertEquals(2, w7.jC, "u==7 → l(2) (:894-895)")
+        val w5 = armDialog(world(), 5, 0, 0, "x")
+        w5.pad.e(Pad.M_CONTEXT); w5.tick(emptyList())
+        assertEquals(15, w5.jC, "u==5 → l(15) (:896-897)")
+        val w0 = armDialog(world(), 0, 0, 0, "x")
+        w0.pad.e(Pad.M_CONTEXT); w0.tick(emptyList())
+        assertEquals(8, w0.jC, "u==0 → l(8)")
+    }
+
+    @Test fun `typing fire press reveals the page`() {
+        val w = armDialog(world(), 6, 0, 2, "reveal me")
+        w.dlgBT = 3                                    // mid-typing
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+        assertEquals(-1, w.dlgBT, "v(65568) while typing → bT=-1 (:953)")
+        assertEquals(21, w.jC, "v<w → dialog persists (:975)")
+    }
+
+    @Test fun `fS marquee crawls one char per two frames then resets`() {
+        val w = armDialog(world(), 9, 0, 2, "x")     // v<w → stays up
+        w.kFS = 0
+        repeat(4) { w.tick(emptyList()) }
+        assertTrue(w.tipStr.length in 1..2, "one char per two ticks")
+        val s = w.d0(111)!!
+        w.kFS = s.length + 11
+        w.tick(emptyList())
+        assertEquals(-1, w.kFS, "fS >= len+10 → -1 (:1034-1035)")
     }
 }

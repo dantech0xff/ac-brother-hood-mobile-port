@@ -273,7 +273,7 @@ class Level0World(
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
     /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
     /** `k.al == false` (i.I() entity gate): the real world-run condition
-     *  — false on states {12,13,16,17,31} and {21 when kMode∉{8,9}}. */
+     *  — false on states {12,13,16,17,31} and {21 when dlgU∉{8,9}}. */
     override val inPlay: Boolean get() = !kAl
     /** `k.cm` — the `k()` touch-controls flag (k.java:159 `cm = 1` +
      *  :549 `cm == 1`; cheat op 123 toggles `cm = 1 - cm`, k.java:3937).
@@ -319,7 +319,7 @@ class Level0World(
     val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
      *  `inferred` — orig's u is written by script ops). */
-    var subU = 0
+    var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
      *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
@@ -755,12 +755,11 @@ class Level0World(
     var kCy = 0                        // cy — previous j.c, written at commit
     private var kCz = false            // cz — u==8 dialog-tail flag
     /** `k.al` — world-freeze flag: set by l() for states
-     *  {12,13,16,17,31} and {21 when kMode∉{8,9}}; the entity gate
+     *  {12,13,16,17,31} and {21 when dlgU∉{8,9}}; the entity gate
      *  `k.al == false` in `i.I()` (k.java:4860-ish) is the real
      *  tick-suppress condition our `inPlay` derives from. */
     var kAl = false
         private set
-    var kMode = 0                      // k.u — screen mode 0-10 (NOT k.U)
     var kEg = 0                        // k.eG
     var kCZ = 0                        // k.cZ — win-stats row counter / G() total
     /** `cV[4]` (k.java:184) — G() help pages. */
@@ -907,7 +906,8 @@ class Level0World(
               "COUNTRIES.",
         104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
         106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
-        109 to "NOBLEMAN", 113 to "ACHIEVEMENTS", 117 to "NEW GAME",
+        109 to "NOBLEMAN", 111 to "CHECKPOINT", 113 to "ACHIEVEMENTS",
+        117 to "NEW GAME",
         121 to "THE GAME DATA HAS BEEN DELETED.", 123 to "CONTROL STYLE")
     /** `d(0,n)` = `bU[n]` (k.java:486, proven). */
     fun d0(n: Int): String? = bU[n]
@@ -1103,8 +1103,6 @@ class Level0World(
     override var bN0 = -1                              // k.bN[0] — dialog idx
 
     // ---- jC==21 dialog state (k.java:10-15,135-140, all proven) -------
-    /** `u` — dialog kind (k.java:10); level-0 op105 only emits u==9. */
-    var dlgU = 0
     /** `bM[15]` — wrapped dialog pages (k.java:135). */
     val dlgBM = arrayOfNulls<String>(15)
     /** `bN[15]` — per-page icon ids propagated from `bN[0]` (k.java:136,
@@ -1171,6 +1169,15 @@ class Level0World(
     }
     /** `z()` typewriter reset (k.java:441-443, proven). */
     private fun dlgZ() { dlgBS = 30; dlgBR = 0; dlgBT = 0 }
+    /** `x` — u==8 page auto-advance countdown (k.java:964-967); re-arms
+     *  at 48 each time it expires (the literal in the original). */
+    var kDlgX = 48
+    /** `fS` — `d(0,111)` tip-marquee counter (k.java:1027-1039); `<0` =
+     *  idle (armed ≥0 by claim ops), crawls one char per two frames. */
+    var kFS = -1
+    /** `tipStr` — the fS-clipped substring the `y.a(str,390,40,10)`
+     *  call draws (k.java:1032-1038). */
+    var tipStr = ""
 
     /** `k.bL` (already declared as the af() cursor — one shared static
      *  in the original): portrait variant — `4+bL`/`8+bL` pick the A[4]
@@ -1737,8 +1744,8 @@ class Level0World(
         // L151-L176 tail (proven): `al` freeze flag, u==8 dialog `cz`,
         // commit `cy=j.c; j.c=i`, `v()` input reset unless cz.
         kAl = i == 13 || i == 12 || i == 17 || i == 16 || i == 31 ||
-              (i == 21 && kMode != 8 && kMode != 9)
-        if (i == 21 && kMode == 8) kCz = true
+              (i == 21 && dlgU != 8 && dlgU != 9)
+        if (i == 21 && dlgU == 8) kCz = true
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
         if (!kCz) inputReset()
         kCz = false
@@ -1940,7 +1947,7 @@ class Level0World(
     private fun posterAg(events: List<InputQueue.Event>) {
         var i = 1
         while (i < kFp.size && kAj + 1 != kFp[i]) i++
-        subU = 8
+        dlgU = 8
         cardOverlayY = 120
         posterVisible = true
         posterFrame = i + 4
@@ -3143,7 +3150,7 @@ class Level0World(
      *  (j.c==8 or the u∈{8,10} arms of 21). Returns -1 when the tap is
      *  outside the wheel or hits a consumed zone. */
     fun resolvePadZone(x: Int, y: Int): Int {
-        if (!((jC == 21 && subU == 8) || jC == 8 || (jC == 21 && subU == 10)) ||
+        if (!((jC == 21 && dlgU == 8) || jC == 8 || (jC == 21 && dlgU == 10)) ||
             x == -1 || y == -1 || y >= 240) return -1
         // margins below the soft-key row + pause-icon rect are not wheel
         if (((x <= ce || x >= VIEW_W - cf) && y >= 207) ||
@@ -3206,7 +3213,7 @@ class Level0World(
      *  (j.c!=21||u!=9) && (C==null||C.cb==null||C.cb[1]>=0||aS.P&512)`. */
     fun touchPadVisible(): Boolean {
         if (!mounted || jC == 14 || jC == 5) return false
-        if (jC == 21 && subU == 9) return false
+        if (jC == 21 && dlgU == 9) return false
         val c = kC
         return c == null || c.cb == null || c.cb!![1] >= 0 || (player.P and 512) != 0
     }
@@ -3355,7 +3362,7 @@ class Level0World(
         if (bh3 || !playerAliveO()) return false
         val c = kC
         if (c != null && (player.P and 512) == 0) return false
-        return (jC == 21 && subU == 8) || jC == 8
+        return (jC == 21 && dlgU == 8) || jC == 8
     }
 
     /** `d(355,197,30,26)` (k.java:4278): live pointer in the weapon
@@ -3483,29 +3490,82 @@ class Level0World(
         if (dialogModal) {
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
-            } else if (sawPressPending(events) && dlgSuppressed()) {
-                pad.edge = 0        // C.cd[2] consumes the press (:946)
-            } else if (sawPressPending(events)) {
-                // case-21 u==9 press tail (k.java:945-1017, proven):
-                // `v(65568)` while typing → `bT=-1` reveal (:955-957);
-                // while revealed → the `v==w` dispatch — but u==9 has no
-                // `D(v+1)` page-advance arm at all, so v<w always holds
-                // and the press lands in the catch-all dismiss:
-                // `C.Z(); C.cd[1]=true; bh!=3 → m(ad); z(23); l(8); v=w`
-                // (:1003-1016). Verbatim quirk: `bM[1..]` pages are never
-                // shown for u==9 — no page advance exists for it.
-                if (dlgBT != -1) {
-                    dlgBT = -1                                // reveal (:955)
+            } else {
+                // case-21 u-machine (k.java:877-1019, proven). `j()` →
+                // `E(65568)` (:874-876): a screen tap feeds the context
+                // edge the arms read — consume() marks presses but the
+                // dialog's own `v(65568)` checks are the only consumers.
+                if (pointerStrip()) padE(Pad.M_CONTEXT)
+                if (dlgU == 0 || dlgU == 4 || dlgU == 5 || dlgU == 7) {
+                    // u∈{0,4,5,7} full-screen panels (:878-904): press →
+                    // u7→l(2), u5→l(15), else l(8); `z(23)` on all.
+                    if (pad.v(Pad.M_CONTEXT)) {
+                        when (dlgU) {
+                            7 -> stateL(2)
+                            5 -> stateL(15)
+                            else -> stateL(8)
+                        }
+                        z(23)
+                    }
                 } else {
-                    kC?.resumeScript()                        // C.Z()
-                    kC?.cd?.set(1, true)                      // C.cd[1]=true
-                    if (!bh3) kM(kAd)                         // bh!=3 → m(ad)
-                    z(23)
-                    dlgV = dlgW
-                    leaveDialog()                             // l(8)
+                    // u∈{1,2,3,6,8,9,10} line dialogs (:905-1019). The
+                    // skip gate (:944): `v(131072) && C!=null && u==9 &&
+                    // C.cd[2]` → `C.Z(); C.cd[1]=true; bh!=3 → m(ad);
+                    // z(23); l(8); v=w`.
+                    if (dlgSuppressed()) {
+                        kC?.resumeScript()                    // C.Z()
+                        kC?.cd?.set(1, true)                  // C.cd[1]=true
+                        if (!bh3) kM(kAd)
+                        z(23); dlgV = dlgW; stateL(8)         // l(8); v=w
+                    } else {
+                        if (dlgBQ && dlgBT != -1) {           // typing (:945)
+                            if (pad.v(Pad.M_CONTEXT)) dlgBT = -1   // reveal (:953)
+                        } else if (dlgU == 10) {
+                            if (pad.v(Pad.M_CONTEXT)) {       // :956-961
+                                dlgD(dlgV + 1); kCz = true; z(23)
+                            }
+                        } else if (!pad.v(Pad.M_CONTEXT) || dlgU == 8) {
+                            if (dlgU == 8) {                  // :962-973
+                                val x6 = kDlgX; kDlgX = x6 - 1
+                                if (x6 <= 0) {
+                                    kDlgX = 48
+                                    dlgD(dlgV + 1)
+                                    if (pad.v(Pad.M_CONTEXT)) z(23)
+                                }
+                            }
+                        }
+                        if (dlgV == dlgW) {                   // :975-1007
+                            when {
+                                dlgU == 9 -> { kC?.resumeScript(); stateL(8) }
+                                dlgU == 3 -> if (kAj != 7) stateL(15) else stateL(24)
+                                dlgU == 1 -> if (kAj != 8) stateL(8)
+                                             else { kAj = 0; teardown(); stateL(2) }
+                                else -> { if (dlgU == 8) kCz = true; stateL(8) }
+                            }
+                        }
+                    }
                 }
-                pad.edge = 0        // eat the dismiss edge — not a gameplay tap
-            } else { tickIndex++; jG++; return }
+            }
+            // `fS` tip marquee (k.java:1027-1039, proven): one char per
+            // two frames, `d(0,111)` clipped into `tipStr`, -1 = done.
+            if (kFS >= 0) {
+                val s = d0(111) ?: ""
+                if (jG % 2L == 0L) kFS++
+                tipStr = if (kFS < s.length) s.substring(0, kFS) else s
+                if (kFS >= s.length + 10) kFS = -1
+            }
+            // `J()` pause-icon arm (k.java:1040-1063, proven): the
+            // 354,0,46,37 rect-press → E(262144) is injected in consume()
+            // for jC∈{8,21}; `v(262144)` → `C.Y();bw=0;l(14)`.
+            if (jC != 12 && jC != 13) {                       // J() (:2653)
+                if (pad.v(Pad.M_PAUSE)) {
+                    kC?.pauseScript()                         // C.Y() (:1057)
+                    kBw = 0
+                    stateL(14)                                // l(14) (:1061)
+                }
+            }
+            tickIndex++; jG++
+            return
         }
 
         // case 15 → M() (k.java:1141) — the win-stats screen proc
@@ -3522,7 +3582,7 @@ class Level0World(
         // mission timer + ap[2] frame counter (k.java:1652-1655,
         // proven): ticks while unpaused and not dialog-suspended.
         if ((player.P and 512) != 0 ||
-            (kC?.claimActive() != true && (jC != 21 || subU != 9))) {
+            (kC?.claimActive() != true && (jC != 21 || dlgU != 9))) {
             kDg++; kAp[2]++
         }
 
