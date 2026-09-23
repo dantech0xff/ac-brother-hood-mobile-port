@@ -517,8 +517,9 @@ class Level0World(
     var boundMaxX = 0; var boundMaxY = 0
 
     init {
-        resetPlayerToSpawn()
-        spawnEntities()
+        spawnEntities()                         // i.D() static reset FIRST
+        resetPlayerToSpawn()                    // then k.a(z2) bA restore
+        postSpawn()                             // player-ctor kD/kE inserts
     }
 
     private fun resetPlayerToSpawn() {
@@ -556,13 +557,24 @@ class Level0World(
         kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
         clearClaim()
-        // i.D() (i.java:1795-1821): g.* link sweep on entity-system reset —
+        // i.D() (i.java:1795-1865): g.* link sweep on entity-system reset —
         // vehicle/contact/carry links must not survive into the respawned set
         player.ga = null; player.ac = null; player.standingOn = null
         gc = null
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
+        // i.D() tail — the modeled statics that must not survive a reload:
+        iZ = true                                   // i.z = true
+        iBn = false                                 // i.bn = false
+        iAJ = 0                                     // i.aJ = 0
+        kB = null; kAU = null; kAV = null           // k.B/aU/aV
+        kF = null; kC = null; kAD = null            // k.F/C/aD
+        kAi = false                                 // k.ai = false
+        kAZ = false                                 // k.aZ = false
+        camAf = 0; camAg = 0                        // k.af = k.ag = 0
+        kAE = 100; kAF = 0; kAH = -1                // k.aE/aF/aH
+        kN()                                        // k.n(-1) — wall release
         for (f in level.entities) {
             if (f.isEmpty()) continue
             if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
@@ -642,9 +654,14 @@ class Level0World(
         // ax54/ax30 runners resolve their Z[1..4] uid chain via aw().
         for (e in npcs) if (e.ax == 54 || e.ax == 30)
             npcFsm.resolveRunnerWaypoints(e, this)
+    }
+
+    /** Player-ctor `k.b` inserts (k.java:2748-2779): kD/kE spawn at the
+     *  player's already-restored pos, so they run AFTER the a(z2) restore.
+     *  Also drains pendingInsert — record-arm children land in the live
+     *  pool during load in the original. */
+    private fun postSpawn() {
         spawnCompanions()
-        // init-time k.b inserts (k.D, record-arm children) land in the
-        // live pool during load in the original — drain immediately.
         if (pendingInsert.isNotEmpty()) { npcs += pendingInsert; pendingInsert.clear() }
     }
 
@@ -3311,9 +3328,12 @@ class Level0World(
     }
 
     private fun reload() {
-        statsReset()                        // L() + a(z2) restore arm
-        resetPlayerToSpawn()
-        spawnEntities()
+        // Original order: i.D() full static reset → k.a(z2) bA/stat
+        // restore → respawn. Reversed, D() would clobber the restore.
+        spawnEntities()                         // i.D()
+        statsReset()                            // L() + a(z2) restore arm
+        resetPlayerToSpawn()                    // bA pos/globals restore
+        postSpawn()                             // k.b ctor inserts
         jC = 8                                   // back to play (j.c==8)
         kAl = false
         kDe = false                               // f() `de=false` (:5131)
