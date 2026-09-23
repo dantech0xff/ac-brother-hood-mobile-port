@@ -27,6 +27,7 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var world: Level0World
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
+    private val save = SaveBridge("asbr-save.bin")
     private var accumulatorMs = 0L
 
     override fun create() {
@@ -76,6 +77,9 @@ class Level0Game : ApplicationAdapter() {
             Gdx.files.internal("level0/scripts.bin").readBytes())
         world = Level0World(level, clips, DeterministicRandom(SEED),
             levelStrings = levelStrings, scripts = scripts)
+        // e(false) (k.java:4045): load the /ASBR record at boot — nop
+        // when no record exists (orig swallows the same path).
+        save.read()?.let { world.saveLoad(it) }
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
@@ -103,8 +107,14 @@ class Level0Game : ApplicationAdapter() {
         // samples are not decoded into the app — log the command the
         // original would have issued. `audioTrack` mirrors e.e.
         for (c in world.drainCommands()) {
-            if (c is com.acrebuild.core.Command.PlaySfx) {
-                Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
+            when (c) {
+                is com.acrebuild.core.Command.PlaySfx ->
+                    Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
+                is com.acrebuild.core.Command.PersistBA -> {
+                    save.write(c.record)
+                    Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                }
+                else -> Unit
             }
         }
         if (accumulatorMs >= TICK_MS) accumulatorMs = 0 // drop backlog

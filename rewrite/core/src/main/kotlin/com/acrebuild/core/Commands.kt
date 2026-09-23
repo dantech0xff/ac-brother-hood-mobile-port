@@ -8,4 +8,9 @@ package com.acrebuild.core
 sealed interface Command {
     data class PlaySfx(val slot: Int) : Command
     data class RequestSave(val snapshot: SaveSnapshot) : Command
+
+    /** `e(true)` (k.java:5557) — persist the `bA` record: the original
+     *  writes the raw 512-byte `bA` into RMS record 1 verbatim. The
+     *  port carries `kBA` little-endian shorts (2 bytes per slot). */
+    data class PersistBA(val record: ByteArray) : Command
 }

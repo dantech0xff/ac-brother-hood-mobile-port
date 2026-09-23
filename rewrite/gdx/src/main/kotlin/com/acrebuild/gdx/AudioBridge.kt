@@ -27,6 +27,7 @@ class AudioBridge {
                     Gdx.app.log(SpikeGame.TAG, "audio: play slot=${c.slot}")
                 }
                 is Command.RequestSave -> Unit // handled by save adapter
+                is Command.PersistBA -> Unit // handled by save adapter
             }
         }
     }
