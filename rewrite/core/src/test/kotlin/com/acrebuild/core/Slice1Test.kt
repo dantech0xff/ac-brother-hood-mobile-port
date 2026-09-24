@@ -10404,6 +10404,51 @@ class Slice89Test {
         w.stateL(19)                                  // LEVEL-n arm: no table
         assertEquals(-1, w.menuRowEntry(0))
     }
+
+    // Slice 227 — `L3ad8` ceiling-catch verdict (g.java:8255, proven):
+    // `cw && aO==5` → `i(280)` + `al` snaps onto the '5' lip row. `cw` is
+    // armed by the air family every tick, and the aO postTail reads is
+    // av()'s shifted (al-20) probe — so a RISING jump reaching under a
+    // '5' lip grabs it. '5' platforms are NOT pass-through-up: the demo
+    // report's corridor trap is verbatim level design (route is from
+    // above). A solid cell one row up instead fires av()'s `aO>=20`
+    // head-bump → `a(0)` — also verbatim (i.java:1378).
+    @Test fun `rise into 5-cell arms the S280 ceiling grab`() {
+        val w = world()
+        w.stateL(8)
+        // find a '5' overhang edge in level0: '5' cell with open air
+        // above AND below (a solid row above would instead fire av()'s
+        // verbatim aO>=20 head-bump → enterFall, i.java:1378)
+        var cx = -1; var cy = -1
+        outer@ for (y in 1 until w.level.rows - 2) {
+            for (x in 1 until w.level.cols - 1) {
+                if (w.level.collisionCell(x, y) == 5 &&
+                    w.level.collisionCell(x, y - 1) < 12 &&
+                    w.level.collisionCell(x, y + 1) < 5 &&
+                    w.level.collisionCell(x, y + 2) < 5) { cx = x; cy = y; break@outer }
+            }
+        }
+        assertTrue(cx >= 0, "no '5' overhang edge in level0")
+        val p = w.player
+        p.S = 22                                     // air family — arms cw
+        p.ah = -3000                                 // rising
+        p.ak = cx * 20 + 10
+        // W recomputes from `al` via clip rects. av()'s shifted probe
+        // (al-20) is what postTail's aO reads, so walk `al` up until the
+        // cell one row ABOVE the head is '5' — rising under the lip.
+        p.al = cy * 20 + 80
+        var guard = 0
+        while (guard++ < 60) {
+            p.probeCells(w)
+            if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
+            p.al--
+        }
+        assertEquals(5, p.e(w, p.ak / 20, p.W[1] / 20 - 1),
+            "could not place the head under a '5' lip")
+        w.tick(emptyList())
+        assertEquals(280, p.S, "cw && aO==5 must fire the S280 ceiling grab")
+        assertEquals(cy * 20 + 10, p.al, "al snaps onto the '5' lip row +10")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */

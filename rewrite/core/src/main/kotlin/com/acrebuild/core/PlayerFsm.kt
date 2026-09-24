@@ -2069,7 +2069,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                      pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
                      pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R))) p.aF = 1
         // L3ad8: `cw && aO==5` → i(280) ceiling grab — zero all motion and
-        // snap `al` onto the ceiling grid row.
+        // snap `al` onto the ceiling grid row. `aO` here is av()'s
+        // shifted (al-20) probe — the cell ABOVE the head — so the grab
+        // fires when a rise reaches under a '5' lip, not inside it.
         if (p.cw && p.aO == 5) {
             p.setAnim(280)
             p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
