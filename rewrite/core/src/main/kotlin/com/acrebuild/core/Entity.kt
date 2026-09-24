@@ -1897,6 +1897,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun climbCheck(): Boolean =
         if (ag < 0) bb else if (ag > 0) bc else if (av) bb else bc
 
+    /** `c(boolean)` (g.java:3779, proven): facing-side head cell is open —
+     *  `av → (W[0]/20)-1 : (W[2]/20)+1` at `al/20`; cell `<12 → true`.
+     *  Gates the S37 grapple-climb step. */
+    fun facingCellOpen(w: LevelCellSource): Boolean {
+        val cx = if (av) (W[0] / 20) - 1 else (W[2] / 20) + 1
+        return e(w, cx, al / 20) < 12
+    }
+
     /** `i.bf()` (i.java:14608, proven): ax58 door-open query —
      *  `S ∈ {1,3,4,6,8,10,12}`. */
     fun isBf(): Boolean =
