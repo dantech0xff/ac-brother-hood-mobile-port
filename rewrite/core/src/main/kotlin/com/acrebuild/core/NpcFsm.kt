@@ -302,10 +302,226 @@ class NpcFsm(val world: LevelCellSource) {
                 }
             }
             85 -> {
-                // hit-react (i.java j() `c(85,157)`); anim end → resume
-                // chase if alerted else patrol (subset of the real chain).
-                e.ag = 0
-                if (e.animFinished()) e.setAnim(if (e.aA != 0) 4 else 3)
+                // L302 (i.java:5447-5476, proven): hit-react — G(); the
+                // b() corner-support probe: while moving (ag!=0), facing
+                // accel ai=∓1280; any corner cell >=12 → velocity-reversal
+                // kick (ag=-ag∓2560, N+=ag) + snap ak=N>>8 + full freeze;
+                // unsupported (all corners open) → keep drifting via
+                // ak=N>>8. r() → i(174) grab lunge + az=aS.az+1 → L777.
+                e.releaseAe()                                   // G()
+                val r05 = e.cornerSupported(world)              // b()
+                if (e.ag != 0) {
+                    if (e.av) {
+                        e.ai = -1280
+                        if (r05) { e.ag = -e.ag - 2560; e.N += e.ag }
+                    } else {
+                        e.ai = 1280
+                        if (r05) { e.ag = -e.ag + 2560; e.N += e.ag }
+                    }
+                    e.ak = e.N shr 8
+                    if (r05) { e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0 }
+                }
+                if (e.animFinished()) {                         // L316 r()
+                    e.ah = 0; e.ag = 0
+                    e.setAnim(174)
+                    e.az = player.az + 1
+                }
+            }
+            1 -> {
+                // L584 (i.java:6068-6083, proven): stun-step — aA==0 →
+                // av=(aS.ak>ak); ag=av?2048:-2048; r() → i(25). → L849.
+                if (e.aA == 0) e.av = player.ak > e.ak
+                e.ag = if (e.av) 2048 else -2048
+                if (e.animFinished()) e.setAnim(25)
+                return
+            }
+            6 -> {
+                // L563 (i.java:5641-5697, proven): the grab approach-lunge
+                // — Q() face player, G(), a(true); aF()||y() → ag=0, else
+                // accel ai=∓1280; T==1 blood markers (59 on k.bK); aA=1;
+                // r() → i(23). Whole state → L849 (skips the L777 tail).
+                e.av = player.ak < e.ak                         // Q()
+                e.releaseAe()                                   // G()
+                e.collideSides(world, true)                     // a(true)
+                if (e.aF(world) || e.yWall()) e.ag = 0
+                if (e.ag != 0) e.ai = if (e.av) -1280 else 1280
+                if (e.T == 1) {
+                    e.spawnFx8(world, 50, 1, e.av, e.ak, e.al - 40, 300)
+                    if (world.kBK)
+                        e.spawnFx8(world, 59, 0, e.av, e.ak, e.al - 40, 300)
+                }
+                e.aA = 1
+                if (e.animFinished()) e.setAnim(23)
+                return
+            }
+            16 -> {
+                // L504 (i.java:6030-6034, proven): engage windup —
+                // r() → i(17) + aC=16.
+                if (e.animFinished()) { e.setAnim(17); e.aC = 16 }
+            }
+            17 -> {
+                // L532-L546 (i.java:6036-6050, proven): counter-engage —
+                // aS.X non-degenerate ∩ W + g.b() → aS.i(8)+k.E.P|=128
+                // (aS.S==8 → L849); r() → Z0==2 ? i(11) : i(23).
+                val counter = player.X[0] != player.X[2] &&
+                    Entity.overlapStrict(e.W, player.X) &&
+                    world.playerAttacking()
+                if (counter) {
+                    if (player.S == 8) return                   // L849
+                    player.setAnim(8)
+                    world.kE?.let { it.P = it.P or 128 }
+                }
+                if (e.animFinished())
+                    e.setAnim(if (e.Z[0] == 2) 11 else 23)      // L542→L777
+            }
+            18 -> grabOfferArm18(e, player, world)
+            20 -> {
+                // L728 (i.java:6195-6203, proven): r() → aB<=0→aB=0,
+                // H() consume, i(139) corpse, k.e(0,aw) tally. → L849.
+                if (e.animFinished()) {
+                    if (e.aB <= 0) e.aB = 0
+                    e.consumeH()                                // H()
+                    e.setAnim(139)
+                    world.statTally(e.aw)                       // k.e(0,aw)
+                }
+                return
+            }
+            27 -> {
+                // L734 (i.java:5753-5758, proven): ab=null; r() → i(25)
+                // + k.A(24) impact sfx. → L849.
+                e.ab = null
+                if (e.animFinished()) { e.setAnim(25); world.sfx(24) }
+                return
+            }
+            96 -> {
+                // L737 (i.java:5759-5769, proven): P|=512; r() → release
+                // the g.h holder link + k.c(this) remove. → L849.
+                e.P = e.P or 512
+                if (e.animFinished()) {
+                    if (world.grabHolder === e) world.grabHolder = null // g.h
+                    world.removeEntity(e)                       // k.c(this)
+                }
+                return
+            }
+            117 -> {
+                // L751 (i.java:5770-5776, proven): aB=0; r() → tally +
+                // k.o(3) + remove. → L849.
+                e.aB = 0
+                if (e.animFinished()) {
+                    world.statTally(e.aw)                       // k.e(0,aw)
+                    world.kAp[3]++                              // k.o(3)
+                    world.removeEntity(e)                       // k.c(this)
+                }
+                return
+            }
+            140 -> {
+                // L354 (i.java:5916-5919, proven): grab-release settle —
+                // r() → i(23). → L777.
+                if (e.animFinished()) e.setAnim(23)
+            }
+            144 -> {
+                // L548-L559 (i.java:6048-6066, proven): weakened block —
+                // T==3 → c(1); aS.X ∩ W + g.b() + aS.S!=8 → counter
+                // aS.i(8)+k.E.P|=128; L559: a() body-push; r() → i(23) +
+                // aS.G(). Whole state → L849. Original ordering: h()→i()
+                // engage (i.java:4184) runs BEFORE the switch — when it
+                // applies, the soldier lands at i(17) and this arm's own
+                // counter is shadowed. Our hGate/iEngage run post-when,
+                // so reproduce the precedence: engage first, own counter
+                // only when h()'s posed-immunity excludes the engage.
+                if (e.T == 3) world.tutorialHint(1)             // c(1)
+                val counter = player.X[0] != player.X[2] &&
+                    Entity.overlapStrict(e.W, player.X) &&
+                    world.playerAttacking() && player.S != 8
+                if (counter) {
+                    if (e.Z[0] != 3 && hGate(e, player)) {
+                        iEngage(e, player, world)          // aS.i(8)+i(17)+aC=16
+                        return                           // → L849
+                    }
+                    player.setAnim(8)
+                    world.kE?.let { it.P = it.P or 128 }
+                }
+                e.pushContact(world)                            // L559 a()
+                if (e.animFinished()) {
+                    e.setAnim(23)
+                    player.releaseAe()                          // aS.G()
+                }
+                return                                          // → L849
+            }
+            174 -> {
+                // L318-L327 (i.java:5478-5515, proven): grab approach —
+                // c(0) tutorial; player-W ∩ W → i(175) + aS.i(310) (held)
+                // + player freeze/snap (ah=ag=aj=ai=0, ak=this.ak,
+                // av=!this.av) + al=aS.al + G() + bl=40 + bx=this +
+                // ah=ag=0 → L849; else r() → i(140) → L777.
+                world.tutorialHint(0)                           // c(0)
+                if (Entity.overlapStrict(e.W, player.W)) {
+                    e.setAnim(175)
+                    player.setAnim(310)
+                    player.ah = 0; player.ag = 0
+                    player.aj = 0; player.ai = 0
+                    player.ak = e.ak
+                    player.av = !e.av
+                    e.al = player.al
+                    e.releaseAe()                               // G()
+                    e.bl = 40; world.iBx = e
+                    e.ah = 0; e.ag = 0
+                    return                                      // → L849
+                }
+                if (e.animFinished()) e.setAnim(140)            // L326→L777
+            }
+            175 -> { grabHoldArm175(e, player, world); return }  // → L849
+            176 -> {
+                // L348 (i.java:5907-5911, proven): counter-execute wind —
+                // r() → i(139) corpse + k.e(0,aw). → L777.
+                if (e.animFinished()) {
+                    e.setAnim(139)
+                    world.statTally(e.aw)
+                }
+            }
+            177 -> {
+                // L351 (i.java:5912-5915, proven): grab-release — r() →
+                // i(140). → L777.
+                if (e.animFinished()) e.setAnim(140)
+            }
+            179 -> {
+                // L748 (i.java:6205-6208, proven): mount-grab release —
+                // r() → i(2). → L849.
+                if (e.animFinished()) e.setAnim(2)
+                return
+            }
+            180, 181 -> {
+                // L756 (i.java:6209-6213, proven): mount lunge — r() →
+                // i(S+2) (→182/183); every tick aI() throw attempt.
+                // Falls into L777.
+                if (e.animFinished()) e.setAnim(e.S + 2)
+                e.throwFromGrab(world)                          // aI()
+            }
+            182, 183 -> {
+                // L759 (i.java:5777-5778, proven): aI() throw attempt.
+                // Falls into L777.
+                e.throwFromGrab(world)                          // aI()
+            }
+            184 -> {
+                // L760 (i.java:5780-5802, proven): post-throw landing —
+                // ab=null, ag=0, aj=1536, aL=null; when the current cell
+                // is solid (∈{>=18,2,3}) snap al to the cell edge
+                // (above-cell >=18 → snap up; 2/3 → snap down; open →
+                // snap up), zero all velocity, i(0), T=aa.b(S)/2. The
+                // original's `System.out.println("check phy right")`
+                // debug remnant is verbatim — noted, not carried.
+                e.ab = null; e.ag = 0; e.aj = 1536; Entity.aL = null
+                val r015 = e.e(world, e.ak / 20, e.al / 20)
+                val r016 = e.e(world, e.ak / 20, e.al / 20 - 1)
+                if (r015 >= 18 || r015 == 2 || r015 == 3) {
+                    e.al = if (r016 >= 18 || r016 == 2 || r016 == 3)
+                        ((e.al / 20) - 1) * 20 + 1
+                    else (e.al / 20) * 20 + 1
+                    e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                    e.setAnim(0)
+                    e.T = (e.clip?.frameCount(e.S) ?: 0) / 2    // aa.b(S)/2
+                }
+                return                                          // → L849
             }
             139 -> {
                 // corpse (proven L689): P&=~16 removes actor flag;
@@ -8336,6 +8552,86 @@ private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
  *  wisp burst + stat + shake, shared by every k() kill arm. */
 private fun wispBurst(e: Entity, w: LevelCellSource) {
     repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.kCollectStreak() }
+}
+
+/**
+ * `i.I()` S18 arm (i.java:5620-5655, L506-L529/L513-L527, proven): the
+ * weakened finisher-offer. `a(true)` then a label machine:
+ *  - entry: `Z0==2 → L513`; `Z0!=0 → L529`; `aB<=bu[au]/2 → L513`; else L529.
+ *  - L513: `Z0==2 && T==3 → c(2)`; → L518.
+ *  - L518: `aN!=this → L529`; `g.E=false`; `!(aS.aZ && v(65568)) → L529`;
+ *    else `aS.i(183|184)` (|nextInt|%2) then L527 `k.o();G();g.E=false;O()`
+ *    → L529.
+ *  - L529: `r()==false` → exit to L777; else `g.E=false;i(23);G();O()` and
+ *    falls through into L513 (one more offer pass; exits via L777 since the
+ *    fresh clip's r() is false, or re-arms the finisher edge).
+ */
+private fun grabOfferArm18(e: Entity, p: Entity, w: LevelCellSource) {
+    e.collideSides(w, true)                              // a(true)
+    var label = when {
+        e.Z[0] == 2 -> 513
+        e.Z[0] != 0 -> 529
+        e.aB <= BU73.getOrElse(w.weaponSlot) { BU73[0] } / 2 -> 513
+        else -> 529
+    }
+    while (label != 777) {
+        when (label) {
+            529 -> {
+                if (!e.animFinished()) label = 777
+                else {
+                    Entity.gE = false; e.setAnim(23)
+                    e.releaseAe(); e.eventDisarm(w)
+                    label = 513                        // L529 → L513
+                }
+            }
+            513 -> {
+                if (e.Z[0] == 2 && e.T == 3) w.tutorialHint(2)   // c(2)
+                label = 518
+            }
+            518 -> {
+                if (w.lockTarget !== e) { label = 529; continue }
+                Entity.gE = false
+                if (!p.aZ || !w.padHeld(65568)) { label = 529; continue }
+                p.setAnim(if (abs(w.jNextInt()) % 2 == 0) 183 else 184)
+                e.lockInput(w); e.releaseAe()                   // L527
+                Entity.gE = false; e.eventDisarm(w)
+                label = 529
+            }
+        }
+    }
+}
+
+/**
+ * `i.I()` S175 arm (i.java:5864-5906, L329-L347, proven): the grab-hold
+ * mash-QTE — player dead (`g.g()`) → i(177) release; else prompt marker
+ * `a(8, aS.ak, aS.al-85)` + `g(65568,80)` mash gauge: FILLED → the counter-
+ * execute (`bl=0; G(); aB=0; i(176); k.A(24); S() wisps; aS.i(311);
+ * aN=null; az=100; k.o(); bx=null`); EMPTY (`bl==0`) → i(177) + aS.i(312)
+ * throw + `aS.ag=∓1280` (aS.av polarity); MID → L341: hold while
+ * `aS.S∈{310,311,312}`, else i(177)+G()+az=100+bx=null. All paths → L849.
+ */
+private fun grabHoldArm175(e: Entity, p: Entity, w: LevelCellSource) {
+    if (w.playerDead()) {                                // L329 g.g()
+        e.setAnim(177); e.releaseAe(); e.az = 100
+        return
+    }
+    p.spawnMarker(w, 8, p.ak, p.al - 85)                 // L331 a(8,·)
+    if (e.mashGauge(65568, w)) {                         // g(65568,80) filled
+        e.bl = 0; e.releaseAe(); e.aB = 0                // L331
+        e.setAnim(176); w.sfx(24)                        // k.A(24)
+        wispBurst(e, w)                                  // S()
+        p.setAnim(311)
+        w.lockTarget = null                              // aN = null
+        e.aB = 0; e.az = 100; e.lockInput(w)             // k.o()
+        w.iBx = null
+    } else if (e.bl == 0) {                              // L335 empty gauge
+        e.setAnim(177); e.releaseAe(); p.setAnim(312)
+        e.az = 100; w.iBx = null
+        p.ag = if (p.av) 1280 else -1280                 // throw fling
+    }
+    // L341: hold while the player sits in a grab state, else release.
+    if (p.S == 310 || p.S == 311 || p.S == 312) return   // → L777 hold
+    e.setAnim(177); e.releaseAe(); e.az = 100; w.iBx = null
 }
 
 /** `i.k()` (i.java:2057-2255, proven): the shared stealth-kill driver.
