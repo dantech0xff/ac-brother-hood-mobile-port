@@ -4568,7 +4568,29 @@ class Level0World(
                 kAk = 0
             }
         } else {
-            for (n in npcs) tickNpc(n)
+            // `k.I()` bh[aj]!=3 arm (k.java L215→L2d9, proven): every
+            // entity re-scores `au` via `u()` FIRST (parked entities
+            // still update their LOD tier), then the eligibility gate:
+            // P|256 held → skip; au<2 → skip when parked `P&32` without
+            // the force-tick `P&16`; au>=2 → tick only under `P&16`;
+            // ax71 excluded entirely; `ag()→af()` pushes the ghost-trail
+            // slot before `I()`. `ac`/`ab` links tick unconditionally —
+            // the `ac.ax!=10` guard exists ONLY in the bh3 arm
+            // (verbatim asymmetry).
+            for (n in npcs) {
+                n.recomputeAu(camX, camY, ::kBk)
+                if ((n.P and 256) != 0) continue
+                if (n.au < 2) {
+                    if ((n.P and 32) != 0 && (n.P and 16) == 0) continue
+                } else {
+                    if ((n.P and 16) == 0) continue
+                }
+                if (n.ax == 71) continue
+                if (n.hasTrail()) n.pushTrail()
+                tickNpc(n)
+                n.ac?.let { tickNpc(it) }
+                n.ab?.let { tickNpc(it) }
+            }
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
