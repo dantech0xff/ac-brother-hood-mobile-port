@@ -279,6 +279,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             32 -> {                           // case 32 — run-start end → settle
+                world.scrollWallClamp(p)      // g.java:1895 head — i.f(this)
                 if (p.animFinished()) {
                     p.ag = 0
                     p.setAnim(if (p.Q == 79) 79 else 0)
@@ -1088,12 +1089,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 else {
                     p.setAnim(if (bn) 199 else 32)
                     p.ag = if (p.hitWall()) 0 else if (p.S == 199) 0 else -2560
+                    world.scrollWallClamp(p)   // g.java:5172 — i.f(this)
                 }
             } else if (pad.u(Pad.M_RIGHT)) {
                 if (p.av) p.av = false
                 else {
                     p.setAnim(if (bn) 199 else 32)
                     p.ag = if (p.hitWall()) 0 else if (p.S == 199) 0 else 2560
+                    world.scrollWallClamp(p)   // g.java:5182 — i.f(this)
                 }
             }
             // L41 tail: jump press continues to the shared L55 block
@@ -1157,6 +1160,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             17 -> p.ah = (-p.ag) shr 1
         }
         if (p.ah < 0) p.ah = 0
+        world.scrollWallClamp(p)               // g.java:5319 — i.f(this) tail
         return true
     }
 
@@ -1208,8 +1212,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.hitWall() && p.ag != 0) { p.ag = 0 /* a(S,4) vfx skipped */ }
             if (pad.u(Pad.M_LEFT)) {
                 if (p.av) p.ag = -2560 else p.av = true
+                world.scrollWallClamp(p)       // g.java:3153 — i.f(this)
             } else if (pad.u(Pad.M_RIGHT)) {
                 if (p.av) p.av = false else p.ag = 2560
+                world.scrollWallClamp(p)       // g.java:3160 — i.f(this)
             } else if (!pad.u(Pad.M_LEFT or Pad.M_RIGHT)) {
                 p.ag = 0; p.setAnim(79)
             }
@@ -1241,6 +1247,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.ah = -5120
             p.ag = if (p.av) -2048 else 2048
         }
+        world.scrollWallClamp(p)               // g.java:1740 — i.f(this) tail
     }
 
     // -- air family {20,22,23,25,215} (L889 block, proven core) ---------------
@@ -1261,6 +1268,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     else p.land(world, p.aR == 4 || p.aS == 4)
                 }
             }
+            // g.java:1600 (proven): i.f(this) caps the !y() free-air path.
+            // The cv/aF-bound climb sites (:1614/:1645) sit in unported
+            // branches — those climb states have their own arms.
+            world.scrollWallClamp(p)
         }
         if (p.animFinished() && p.S != 215 && p.S != 22) {
             p.enterFall(0, world)
@@ -1271,6 +1282,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- S43 fall arm (L1045, proven core) ------------------------------------
     private fun fallArm(p: Entity) {
+        world.scrollWallClamp(p)               // g.java:1406 — i.f(this) head
         p.cv = true; p.cp = true; p.ct = true; p.cw = true
         if (p.S == 43 && p.hitWall()) { p.ai = 0; p.ag = 0 }
         if (p.S == 43 && p.animFinished()) p.P = p.P or 64
