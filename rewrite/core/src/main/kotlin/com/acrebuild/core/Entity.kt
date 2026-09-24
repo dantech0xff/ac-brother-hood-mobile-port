@@ -2840,19 +2840,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return false
     }
 
+    /** `k.p(int)` (k.java:13230, proven): lowest set-bit index of `r3`
+     *  — `for r4 in 0..4: (r3>>r4)&1 → return r4; else return 0`.
+     *  `ao()` uses `ar[(p(I)+1)%as]` — the BIT index, not the `ar[]`
+     *  slot: for `ar=[1,2,8,16]` (as=4), `I=8→p=3→ar[0]=1` — the cycle
+     *  skips `ar[3]=16` (verbatim quirk; `indexOf` would cycle 8→16). */
+    private fun kp(r3: Int): Int {
+        for (r4 in 0 until 5) if ((r3 shr r4) and 1 != 0) return r4
+        return 0
+    }
+
     /** `g.ao()` (g.java:3792, proven): weapon-cycle — `v(131072)` edge or
      *  the 355,197,30x26 view button → `k.at==0 && k.as>1 &&
-     *  (k.C==null || P&512)` → `k.at=1`, `h(ar[(p(I)+1)%as])`, sfx 23.
-     *  `k.p(I)` = lowest-set-bit index ≡ position in the sorted-dense
-     *  `ar[]`, so `indexOf` is equivalent. */
+     *  (k.C==null || P&512)` → `k.at=1`, `h(ar[(p(I)+1)%as])`, sfx 23. */
     fun cycleEquip(w: LevelCellSource, pad: Pad): Boolean {
         if (!pad.v(Pad.M_CYCLE) && !w.touchRect(355, 197, 30, 26)) return false
         if (w.actionLock != 0) return false
         if (w.equipCount <= 1) return false
         if (w.cEntity != null && (P and 512) == 0) return false
         w.actionLock = 1
-        val idx = w.equipList.indexOf(gI).let { if (it < 0) 0 else it }
-        requestH(w.equipList[(idx + 1) % w.equipCount], w)
+        requestH(w.equipList[(kp(gI) + 1) % w.equipCount], w)
         w.sfx(23)
         return true
     }
