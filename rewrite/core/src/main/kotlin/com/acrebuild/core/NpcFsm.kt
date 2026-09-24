@@ -1057,6 +1057,21 @@ class NpcFsm(val world: LevelCellSource) {
     // L177d) ported in slice 99; the rope-attach reading in this comment
     // was wrong — the arm is a door/teleport pair, not a rope zone.
 
+    /** ax22 record init Le87 (i.java:9339-9381, proven): `az=1`, Z stays
+     *  the fresh `int[4]` (records with S-field `r8[5] != 0` leave it all
+     *  zero); when `r8[5] == 0` the fill is `Z = {0, r8[4], r8[7], r8[11]}`.
+     *  `P |= 512` → L1bea shared tail. W is NOT record-derived: the `I()`
+     *  preamble's `b=1` + the L1f35 `if (b) t()` tail rebuild it from the
+     *  clip-14 rect every tick ([-6,-10,34,33] around the anchor). */
+    fun initAx22(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = 1
+        if (rf(5) == 0) {
+            e.Z[1] = rf(4); e.Z[2] = rf(7); e.Z[3] = rf(11)
+        }
+        e.P = e.P or 512
+    }
+
     /** Init arm L96 (i.java:2882): `aB=0; P|=512; az=0` then S-switch. */
     fun initTrigger(e: Entity, f: List<Int>) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
