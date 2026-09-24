@@ -10655,6 +10655,25 @@ class Slice89Test {
         assertTrue(p.S == 0 || p.S == 79,
             "settle lands a grounded state on the wall top")
     }
+
+    @Test
+    fun `S63 climb-down entry is dead on shipped content`() {
+        // `wallClimb`/`am()` (PlayerFsm.kt:1610) gates on aV/aW/aR
+        // == 19 EXACTLY (g.java:301, verbatim) — but no shipped level
+        // pack's collision grid contains a type-19 cell, so the only
+        // S63 entry is unreachable and S60's `Q == 63` hang-wait branch
+        // is dead-letter. S60 itself stays live via ledgeLipGrab (Q=43).
+        for (aj in 0..7) {
+            val level = LevelPack.load(asset("level$aj/level$aj.aclv"))
+            var n19 = 0
+            for (y in 0 until level.etRows) {
+                for (x in 0 until level.etCols) {
+                    if (level.collisionCell(x, y) == 19) n19++
+                }
+            }
+            assertEquals(0, n19, "level$aj contains type-19 cells")
+        }
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
