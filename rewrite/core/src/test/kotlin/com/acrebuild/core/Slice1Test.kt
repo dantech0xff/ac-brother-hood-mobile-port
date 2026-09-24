@@ -19519,3 +19519,83 @@ class Slice204Test {
             "ac.ax==11 falls through → jump fires")
     }
 }
+
+class Slice205Test {
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 10; p.W[2] = ak + 10
+        p.W[1] = al - 20; p.W[3] = al
+        return p
+    }
+
+    // -- j.d(int) piecewise table sqrt (j.java:1097, proven; U table
+    //    verified 255/256 against resources/archive/16 offset 154) ------
+
+    @Test fun `table sqrt small inputs incl the U0 quirk`() {
+        assertEquals(0, Entity.isqrt(-1))
+        assertEquals(16, Entity.isqrt(0), "U[0]=256 quirk → d(0)=16, not 0")
+        assertEquals(1, Entity.isqrt(1))
+        assertEquals(1, Entity.isqrt(3))
+        assertEquals(15, Entity.isqrt(255))
+    }
+
+    @Test fun `table sqrt mid band boundaries`() {
+        assertEquals(16, Entity.isqrt(256))
+        assertEquals(63, Entity.isqrt(4095))
+        assertEquals(255, Entity.isqrt(65535))
+        assertEquals(256, Entity.isqrt(65536))
+        assertEquals(512, Entity.isqrt(262144))
+    }
+
+    @Test fun `table sqrt quantizes large inputs`() {
+        assertEquals(1020, Entity.isqrt(1048575),
+            "U[255]<<2 = 1020 — table value, not true floor-sqrt 1023")
+        assertEquals(32768, Entity.isqrt(0x40000000))
+        assertEquals(46080, Entity.isqrt(Int.MAX_VALUE),
+            "U[127]<<8 — top of the piecewise window")
+    }
+
+    // -- ap() S79 crouch-rope guard reads g.a = ga (g.java:8488-8497) ---
+
+    private fun world(): Slice128Test.MarkerWorld =
+        Slice128Test.MarkerWorld(cellFn = { _, cy -> if (cy == 6) 12 else 0 })
+
+    private fun contextPad(): Pad {
+        val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        return pad
+    }
+
+    @Test fun `held rope stays crouched on context press`() {
+        val w = world()
+        val p = mk(200, 100); p.S = 79; p.gI = 1
+        val rope = Entity(51, null); rope.aD = 1
+        p.ga = rope
+        p.contextDispatch(w, contextPad())
+        assertEquals(79, p.S, "g.a.ax==51 && aD!=0 → return, stays hung")
+    }
+
+    @Test fun `slack rope allows the swing`() {
+        val w = world()
+        val p = mk(200, 100); p.S = 79; p.gI = 1
+        val rope = Entity(51, null); rope.aD = 0
+        p.ga = rope
+        p.contextDispatch(w, contextPad())
+        assertEquals(81, p.S, "aD==0 falls through → i(81) rope swing")
+    }
+
+    @Test fun `no vehicle link swings from crouch`() {
+        val w = world()
+        val p = mk(200, 100); p.S = 79; p.gI = 1
+        p.ga = null
+        p.contextDispatch(w, contextPad())
+        assertEquals(81, p.S)
+    }
+
+    @Test fun `non-rope vehicle link swings from crouch`() {
+        val w = world()
+        val p = mk(200, 100); p.S = 79; p.gI = 1
+        p.ga = Entity(43, null)                      // carrier, not rope
+        p.contextDispatch(w, contextPad())
+        assertEquals(81, p.S)
+    }
+}
