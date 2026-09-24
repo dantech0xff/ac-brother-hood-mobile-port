@@ -194,7 +194,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.ae = null
                 p.ah = 0
                 p.releaseAe()                          // G()
-                pad.edge = 0                           // v()
+                pad.eL = 0                             // k.v() = eL=0 (:5710)
                 p.gD = true                            // D = true
                 if (world.gP != 0) {
                     if (world.gP == 1) { p.ag = 4096; p.av = false }
@@ -210,6 +210,35 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                         p.flingAirborne(0, world)      // a(0)
                     }
                 }
+            }
+            // g.java L297b (proven) — S86 corpse-handoff: `r()` → i(326).
+            // Arms no latch flags — clears like the other pinned arms.
+            86 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.setAnim(326)
+            }
+            // g.java L25eb (proven) — S89 grab-pinned: `h(1)` eats the
+            // pending J&1 grab request into `I=1` + `k.at=1` (and releases
+            // an ax16 request link); `ai=aj=ag=ah=0`; `r()` → `P|=64`
+            // (sleep the body, keep the corpse drawn).
+            89 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.requestH(1, world)               // h(1) — side effects
+                p.ai = 0; p.aj = 0; p.ag = 0; p.ah = 0
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L2de0 (proven) — S110 pinned settle: `r()` → `P|=64`.
+            110 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L2df5 (proven) — S165 launch/leap: `aj=1536` capped
+            // gravity; `r()` → `a(0)` (the masked fling — resolves to
+            // S43 + `al+=10`).
+            165 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.aj = 1536
+                if (p.animFinished()) p.flingAirborne(0, world)
             }
             // g.java:1938-2015 + L1ab3-L1c33 (proven) — wall-rebound:
             // `cp=true`, `aj=512`; `A()` → ledge snap i(74);
