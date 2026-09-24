@@ -10611,6 +10611,50 @@ class Slice89Test {
         while (guard++ < 60 && p.S == 61) w.tick(emptyList())
         assertEquals(43, p.S, "aC grace expiry drops into the same fling")
     }
+
+    @Test
+    fun `fall brushing a wall lip auto-mantles onto it`() {
+        val w = world()
+        w.stateL(8)
+        // same wall-top pocket as the hang tests.
+        var wx = -1; var wy = -1
+        outer@ for (y in 6 until w.level.rows - 3) {
+            for (x in 2 until w.level.cols - 1) {
+                if (w.level.collisionCell(x, y) >= 19 &&
+                    w.level.collisionCell(x, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y) == 0 &&
+                    w.level.collisionCell(x - 1, y + 1) == 0 &&
+                    w.level.collisionCell(x - 1, y + 2) == 0 &&
+                    w.level.collisionCell(x - 2, y - 1) == 0 &&
+                    w.level.collisionCell(x - 2, y) == 0 &&
+                    w.level.collisionCell(x - 2, y + 1) == 0 &&
+                    w.level.collisionCell(x - 2, y + 2) == 0) { wx = x; wy = y; break@outer }
+            }
+        }
+        assertTrue(wx >= 0, "no open-side wall top in level0")
+        val p = w.player
+        p.S = 43; p.ah = 2560; p.av = false
+        // lip probe: i2 = (W[2]+5)/20 must equal wx — the right edge
+        // kisses the wall face (~1px out), not the 1.5-cell hang gap.
+        p.ak = wx * 20 - 12
+        p.al = wy * 20 - 80
+        var guard = 0
+        while (guard++ < 80 && p.S == 43) w.tick(emptyList())
+        assertEquals(60, p.S, "the near lip probe grabs the wall edge")
+        assertEquals(wy * 20 - 1, p.al, "lip grab snaps al to the lip top")
+        // Q=43 != 63 → the S60 arm auto-fires i(62) next tick — the
+        // no-input auto-mantle (PlayerFsm.kt S60 arm).
+        w.tick(emptyList())
+        assertEquals(62, p.S, "lip grab auto-arms the climb-up")
+        guard = 0
+        while (guard++ < 120 && p.S == 62) w.tick(emptyList())
+        p.probeCells(w)
+        assertTrue(p.aZ, "mantle settles grounded on the wall top")
+        assertTrue(p.W[3] <= wy * 20, "feet rest on the lip row top edge")
+        assertTrue(p.S == 0 || p.S == 79,
+            "settle lands a grounded state on the wall top")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
