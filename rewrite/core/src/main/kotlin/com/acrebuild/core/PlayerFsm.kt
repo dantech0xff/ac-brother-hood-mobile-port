@@ -37,7 +37,8 @@ package com.acrebuild.core
  * - S5 land arm (L464): jump press → `i(21)` roll-jump, direction held →
  *   `l()`, anim end → `i(aO>12 ? 79 : 0)`.
  * - S6 (L139): on `r()` clear velocities + `P|=64`; `!u(16388)` → `i(0)`.
- * - S10 dash (L1315): `ag /= 2` per tick (plus `ab` mirror — not ported).
+ * - S10 dash (L1315): `ag /= 2` per tick (plus the `ab` mirror — the held
+ *   prop tracks the player's box at :943).
  * - S32 arm (structured g.java `case 32`): `r()` → `ag=0; i(Q==79?79:0)`.
  * - S199 arm (case 199): grounded → wall stop, L/R hold → `ag=±2560` or
  *   flip `av`, release → `ag=0; i(79)`.
@@ -2564,8 +2565,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     /** `i.v()` ax25 tail (i.java:597-640, proven subset) — the flying
      *  player stays "alive" while its `Y` box overlaps the camera rect
-     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The special-ax arms
-     *  and the `u()`/`au>i` screen-score guard are NPC-side, unported. */
+     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The `u()`/`au>i`
+     *  screen-score guard is `offscreenScore`/`inPlayV` on Entity. */
     private fun flightAliveV(p: Entity): Boolean {
         val ac = world.kAc ?: return true
         return p.Y[0] <= ac[2] && p.Y[2] >= ac[0] && p.Y[1] <= ac[3] && p.Y[3] >= ac[1]

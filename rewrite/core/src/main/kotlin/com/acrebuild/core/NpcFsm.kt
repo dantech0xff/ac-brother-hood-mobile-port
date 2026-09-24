@@ -34,8 +34,9 @@ import kotlin.math.abs
  *   gravity via `aj=1536` when `!aZ`.
  *
  * Simplifications (flagged): `b(i)` (LOS) → same-row within ±1 cell AND
- * player inside the Z[9..12] alert box AND NPC facing covers the player —
- * the original also gates on player stealth states not yet ported.
+ * player inside the Z[9..12] alert box AND NPC facing covers the player.
+ * The stealth-state gates are ported (`losL`/`spotB`: `aA&8` hide flag,
+ * blind poses S∈{267,268,291}, the ax69-ride blind arm, `iBn` notice).
  * `aC()` chase-timeout: ported as the 60-tick countdown → `i(k?3:2)`.
  * `aE()` assassination QTE, `j()`/`k()` damage/stealth-kill intake, `aD()`
  * platform links — omitted this slice.
@@ -3589,7 +3590,7 @@ class NpcFsm(val world: LevelCellSource) {
      * - bk==27 springboard: S∈{19,21,23,32,35,38} armed; W∩playerW →
      *   `ah=768+k.Y` + op40 grab + `i(S+1)`; then for S∈{19,21,23} the
      *   `bd[]` scan arms ax68-linked children (`ad.i(2)`, `d(8,…)`
-     *   floatie — unported, `r0.i(10)`); even S∈{20,22,24,33,36,39}
+     *   floatie → `spawnFloatie`, `r0.i(10)`); even S∈{20,22,24,33,36,39}
      *   despawn on `r()`; S∈{25..31,34,37} are dead.
      * - Z[0]==5 (bk=35) interactive: S28 — `X∩playerW && !v()` →
      *   spawn/re-pin the ae pickup (`i.a(71,ak,al)` at the view edge);
@@ -6931,7 +6932,7 @@ private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
 
 /** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
  *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
- *  semantics; `d(8,…)` floatie spawns remain unported (noted). */
+ *  semantics; `d(8,…)`/`d(9,…)` floatie spawns → `spawnFloatie`. */
 private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
     var hit = false
     for (r0 in w.npcs) {
@@ -7932,7 +7933,8 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
 // JAR manifest lacks the property → false → censored S10/11/12 set):
 //  S2 →r()→ bK?3:10 (re-center player X); S3/S10 →r()→ bK?4:11 +
 //  `af=null; G()`; S4/S11: `aA==1` →r()→ `bw=-1,bx=57,l(13)` (mission
-//  advance, unported); `aA!=1`: Z[0]==0 →r()→ `aS.S==244` → bK?5:12 →
+//  advance — `kBw=-1;kBx=57;screenL(13)` below); `aA!=1`: Z[0]==0 →r()→
+//  `aS.S==244` → bK?5:12 →
 //  `aS.i(0), P&=-65, E(), af=null`, else park on overlap or
 //  `aS.az=100; G(); P|=32|64`; Z[0]==1 →r()→ `i(7)`.
 //  S5/S12: Z[0]==0 && r() → bK?4:11, then same park/release tail.
@@ -10198,7 +10200,8 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
  *  blind, `v()` out-of-play, `l()` zone miss, or own `aA ∉ {0,1}` →
  *  false. On spot: alive player → `av = !av` (verbatim facing flip);
  *  `bn` → `aS.aA&=-9` + `aS.b(aY[0].Z[4],0,0,-1,-1)` projectile (the
- *  `k.aY` pool is unported → inert); `aA=1` + ax11 `i(5)` (ax73
+ *  `k.aY` pool is allocated but never filled — proven-dead → inert);
+ *  `aA=1` + ax11 `i(5)` (ax73
  *  `Z0==3 → i(155)+aq=ak∓60` else `i(154)`); then `af.ax==69 &&
  *  af.S∈{6,2}` → the ax69 bind (freeze both, `af.i(7)+aA=1`,
  *  `aq=af.ak`) else true. */
