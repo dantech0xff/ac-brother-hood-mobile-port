@@ -60,10 +60,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ba = false                   // unused third flag, kept for parity
     val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
     val X = IntArray(4)              // attackbox (t())
-    val Y = IntArray(4)              // context-bounds rect (t() — the
-                                     // stored per-obj bounds row via
-                                     // aa.d(av,i&192); path unmined →
-                                     // stays zeros; aX() slice fills it)
+    val Y = IntArray(4)              // context-bounds rect (t() L22f
+                                     // arm, i.java:962-1140 proven —
+                                     // `aa.d(S,T)=av|(i&C0)<<2` indexes
+                                     // ak_or_al quads; refreshBoxes
+                                     // fills it)
     var tc = 0; var uc = 0           // hitbox center px (a() writes t/u)
     var co = 0                       // consecutive-run-tick counter (S12 arm)
     var aC = 0                       // generic countdown (patrol leg timer etc.)
@@ -3265,8 +3266,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  overrides the arm-level `i(17)` wall-kick — the wall-run
          *  family is only reachable inside these zones. */
         var gE = false
-        /** `i.cu` (i.java static, proven) — set by the ax10 S55 arm's
-         *  `Z[0]!=0` branch (i.java:9857); consumers unmined. */
+        /** `i.cu` (i.java static, proven) — world-freeze flag set by
+         *  the ax10 S55 arm's `Z[0]!=0` branch (i.java:9857); the I()
+         *  L109 early-out (i.java:15294 — every non-ax10 entity skips
+         *  its tick) is wired in `Level0World.tickNpc`. */
         var icu = false
         /** `g.cn` (g.java:35, proven) — per-tick counter incremented in
          *  `e()` (g.java:580) and cleared on the arm at g.java:3757;
@@ -4585,15 +4588,16 @@ interface LevelCellSource {
     fun jNextInt(): Int = 0
     /** `k.b(e)` — deferred entity insert (`pendingInsert` in the world). */
     fun queueInsert(e: Entity) {}
-    /** `k.l(15)` — mission-complete screen-state (level flow `inferred`:
-     *  ported as a flag; the screen transition itself is unmined). */
+    /** `k.l(15)` — mission-complete screen-state → `stateL(15)`
+     *  (Level0World:935). */
     fun missionComplete() {}
 
     // -- ax29 boss FSM (i.aP) statics ---------------------------------
     /** `k.aU` — the active boss entity (aP() re-pins it every tick). */
     var kAU: Entity? get() = null; set(_) {}
     /** `k.E` — held/struggle-UI entity ref; `P|=128` arms at
-     *  counter/stagger moments (producer unmined, `inferred`). */
+     *  counter/stagger moments; producer = the ax71 overlay spawn
+     *  (Level0World:915). */
     var kE: Entity? get() = null; set(_) {}
     /** `k.D` (i.java:2750, proven): the ax34 player-follower overlay
      *  spawned by the L43 player-init arm; `k.V()`/`D()` null it. */
@@ -4629,7 +4633,8 @@ interface LevelCellSource {
     /** `i.cp` — by3 exhaust counter. */
     var iCp: Int get() = 0; set(_) {}
     /** `i.aH`/`i.aI`/`i.aJ` — the slow-mo driver flags (`i.b(int)` /
-     *  `i.O()`); `k.bh[k.aj]` gate is unmined (`inferred`). */
+     *  `i.O()`, i.java:21728/21749 proven); `k.bh[k.aj]==3` =
+     *  `Entity.MISSION_BH[kAj]==3` (missions 1/4). */
     var iAH: Boolean get() = false; set(_) {}
     var iAI: Int get() = 0; set(_) {}
     var iAJ: Int get() = 0; set(_) {}

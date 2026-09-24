@@ -79,8 +79,8 @@ class NpcFsm(val world: LevelCellSource) {
     fun initSoldier(e: Entity, f: List<Int>, w: LevelCellSource) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
         e.az = rf(17)
-        // original: aB = bu[k.au] — difficulty max HP (k.au unmined → index 0)
-        e.aB = BU[0]
+        // aB = bu[k.au] — difficulty max HP (kAu, wired slice 197)
+        e.aB = BU[w.kAu]
         e.Z[14] = rf(4)
         e.Z[0] = rf(10)
         e.Z[1] = 0; e.Z[2] = -1
@@ -7639,7 +7639,7 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
 // -- file-scope tables (companion-private members can't be seen by
 //    top-level extensions; these live here for the ax17 arms) ----------
 /** `i.bv` — civilian max-HP table {100,140,200} (i.java:22317, proven;
- *  `aB = bv[k.au]` at :3011, difficulty au unmined → index 0). */
+ *  `aB = bv[k.au]` at :3011 — `kAu` wired slice 197). */
 private val BV = intArrayOf(100, 140, 200)
 /** `i.J` — finisher/heavy damage {100,100,100} (i.java static{}, proven). */
 private val JD = intArrayOf(100, 100, 100)
@@ -7784,7 +7784,7 @@ fun NpcFsm.initAx17(e: Entity, f: List<Int>) {
     e.Z.fill(0)
     e.Z[1] = 0; e.Z[2] = -1
     e.aG = rf(4); e.az = rf(13); e.Z[21] = rf(14)
-    e.aB = BV[0]                                            // bv[k.au], au=0
+    e.aB = BV[world.kAu]                                    // bv[k.au]
     e.aF = rf(2); e.aD = rf(7); e.m = rf(8); e.oId = rf(9)
     e.setAnim(rf(5))                                        // L395 i(r8[5])
     e.refreshBoxes()                                        // L427 t()
