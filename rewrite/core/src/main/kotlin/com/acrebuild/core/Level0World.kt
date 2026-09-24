@@ -195,8 +195,8 @@ class Level0World(
         private set
     /** `i.br` — mission-0 tutorial-hint "still pending" flags, one per
      *  `A[]={30,31,32}` slot (i.java:164/6181); persisted through
-     *  bA[76..]. All pending until a `c(i)` hint arm fires — the hint
-     *  arm itself is not yet ported. */
+     *  bA[76..]. All pending until a `c(i)` hint arm fires — ported as
+     *  `tutorialHint` (:1658) with callers in NpcFsm. */
     private var hintPending = BooleanArray(3) { true }
 
     override val player = Entity(0, clips[0]).apply { aw = -1 }
@@ -2209,7 +2209,7 @@ class Level0World(
         while (true) {                               // L2 — re-entry for i=22 only
             kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0
             jG = 0                                   // j.g=0 (k.java:2047)
-            if (i == 27) audioStop()                 // e.b() — audio stop (unported)
+            if (i == 27) audioStop()                 // e.b()
             when {
                 i == 9 -> {                          // L7: renderer teardown
                     // `fO=0; ac(); ad(); e.b(); L()` (k.java:1685-1690
@@ -3744,8 +3744,8 @@ class Level0World(
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's
      *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
      *  the original's dialog screen dismisses on input → `k.C.Z()`
-     *  (i.java:19425 `cd[0]=false`) resumes the script. The visual
-     *  `b(9,1+aj,str,str)` draw is unported (`inferred`); the lifecycle
+     *  (i.java:19425 `cd[0]=false`) resumes the script. The
+     *  `b(9,1+aj,str,str)` draw lives in the renderer (jC21 modal); the
      *  contract — arm on 21, dismiss on next press → `resumeScript` —
      *  is what the claim VM observes. The arming tick's own press can't
      *  dismiss: the modal check runs at the top of the NEXT tick, so the

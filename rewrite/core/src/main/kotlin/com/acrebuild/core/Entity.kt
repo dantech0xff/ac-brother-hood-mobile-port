@@ -131,8 +131,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var go = 0                     // g.o  — S36 context zone bottom-y
     var gk = -1                    // g.k  — S36 context param (i.java:12910)
     var gd: Entity? = null         // g.d  — S36 owning trigger (i.java:12912)
-    var gD = false                 // g.D  — S53 gate (g.java:2054; producer
-                                   // arm unported — stays false this slice)
+    var gD = false                 // g.D  — S53 gate (g.java:2054, proven;
+                                   // producers: S12 dismount + S90 launch arms)
     var cFlag = false              // g.C  — ax43 ride-flag (g.java:48;
                                    // o() bind sets true, aV() S50 clears)
     // -- ax4 destructible fields (init arm L161, i.java:3132) --
@@ -902,7 +902,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ad?.releaseCascade(); ad = null
         ae = null; af = null; c = null
     }
-                                   // bit4 = mount request, producers unported
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -1431,8 +1430,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * `d(boolean)` — g.java `private void d(boolean)` (proven): land on the
      * ground cell top. `al = ((W[3]+1)/20)*20 - 1`; variant enters S102
      * (platform-4 land). r8=false path: S16/Q16 or S150 special-cased, else
-     * `i(5)` land-squat; the >20-cell fall-damage hook (`a(21,0,0,this)`)
-     * requires the damage-floatie spawner — flagged `inferred` and skipped.
+     * `i(5)` land-squat; the ≥20-cell fall-damage hook (`a(21,0,0,this)`)
+     * is wired below via `applyHit(21,…)` (op21 raw drain).
      */
     fun land(world: LevelCellSource, platformVariant: Boolean) {
         refreshBoxes()
@@ -4811,7 +4810,8 @@ interface LevelCellSource {
     var iBn: Boolean get() = false; set(_) {}
     /** `k.aY` (k.java:211 + :8425 `new i[3]`, proven) — the 3-slot
      *  projectile/quiver entity pool (`b()`'s `bn` arm fires `aY[0].Z[4]`
-     *  via `aS.b(...)`). Pool unported → always null → the arm is inert. */
+     *  via `aS.b(...)`). Allocated but never filled in the original —
+     *  proven-dead call path → `kAyAt` always null → the arm is inert. */
     fun kAyAt(i: Int): Entity? = null
     /** `i.ce`/`i.bD`/`i.bQ`/`i.cO`/`i.cg`/`i.ch`/`i.z` — `i` statics the
      *  arg-ops write (i.java:153-204). */
@@ -4836,8 +4836,7 @@ interface LevelCellSource {
      *  k.aj!=7` — the kill-stat arm inside op22's ax11/139 branch. */
     fun kStatE(gate: Int) {}
     /** `k.m(int)` (k.java:2346) — camera return-to-player driver, mask-
-     *  gated by `k.ad`; internals are the unported camera system —
-     *  `inferred` stub. */
+     *  gated by `k.ad`; ported as `Level0World.kM` (the real tracker). */
     fun kM(mask: Int) {}
     /** `i.b(int)`/`i.O()` — slow-mo arm/disarm; already ported as
      *  `eventArm`/`eventDisarm` on Entity (no interface entry needed). */
