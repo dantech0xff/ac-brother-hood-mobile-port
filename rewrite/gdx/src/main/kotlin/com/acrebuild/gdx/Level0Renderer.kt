@@ -51,6 +51,7 @@ class Level0Renderer {
     private lateinit var packer: PixmapPacker
     private lateinit var atlas: TextureAtlas
     private val drawScratch = TextureRegion()
+    private val fdScratch = Clip.FrameDraw(0, 0, 0, 0)   // render-loop scratch
     /** `bW`/`y` = pack-1 entries 1/3 (k.java:3966-3967) — the game's two
      *  bitmap fonts. Glyph ids index each clip's OBJECT space (shared
      *  charmap `j.f(2)` = pack-1 entry-2). `l()` → palette variant. */
@@ -233,15 +234,19 @@ class Level0Renderer {
             drawModule(pack, obj, x, y, flags, palette)
             return
         }
-        for ((m0, pf, off) in clip.placements(obj)) {
+        for (k in 0 until clip.placementCount(obj)) {
             // target object index: ap | ((aq & 0xC0) << 2) (b.java:920)
+            val m0 = clip.placementModule(obj, k)
+            val pf = clip.placementFlags(obj, k)
             val m = m0 or ((pf and 0xC0) shl 2)
             var mw = if (m < clip.moduleW.size) clip.moduleWidth(m) else 0
             var mh = if (m < clip.moduleW.size) clip.moduleHeight(m) else 0
             val tf = flags xor pf
             if (tf and 4 != 0) { val tmp = mw; mw = mh; mh = tmp }
-            val dx = if (flags and 1 != 0) -(off.first + mw) else off.first
-            val dy = if (flags and 2 != 0) -(off.second + mh) else off.second
+            val dx = if (flags and 1 != 0) -(clip.placementX(obj, k) + mw)
+                     else clip.placementX(obj, k)
+            val dy = if (flags and 2 != 0) -(clip.placementY(obj, k) + mh)
+                     else clip.placementY(obj, k)
             if (pf and 16 == 0) {
                 drawModule(pack, m, x + dx, y + dy, tf and 15, palette)
             } else {
@@ -260,9 +265,10 @@ class Level0Renderer {
         val clip = clips[pack] ?: clips[-pack] ?: return
         if (anim < 0 || anim >= clip.animCount() ||
             frame < 0 || frame >= clip.frameCount(anim)) return
-        val fd = clip.frameDraw(anim, frame, flags)
-        drawObject(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
-                   fd.transform, 0, palette)
+        clip.frameDraw(anim, frame, flags, fdScratch)
+        drawObject(pack, fdScratch.module and 0x3FFF,
+                   x - fdScratch.dx, y - fdScratch.dy,
+                   fdScratch.transform, 0, palette)
     }
 
     /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
@@ -1769,11 +1775,11 @@ class Level0Renderer {
         for (i in 0 until 5) {
             val x = t[i * 2]; val y = t[i * 2 + 1]
             if (!((x != e.ak && x > -200) || (y != e.al && y > -120))) continue
-            val fd = clip.frameDraw(anim, frame, if (e.av) 1 else 0)
-            val obj = clip.remap(e.remapTable, fd.module)
+            clip.frameDraw(anim, frame, if (e.av) 1 else 0, fdScratch)
+            val obj = clip.remap(e.remapTable, fdScratch.module)
             batch.setColor(1f, 1f, 1f, (255 * (100 - i * 20) / 100) / 255f)
-            drawObject(pack, obj, x - camX - fd.dx, y - camY - fd.dy,
-                       fd.transform, palette = 0)
+            drawObject(pack, obj, x - camX - fdScratch.dx, y - camY - fdScratch.dy,
+                       fdScratch.transform, palette = 0)
             batch.setColor(1f, 1f, 1f, 1f)
         }
     }
@@ -1877,10 +1883,11 @@ class Level0Renderer {
             e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7
         }
 
-        val fd = clip.frameDraw(e.S, e.T, e.drawFlags())
-        val obj = clip.remap(e.remapTable, fd.module)      // az[aA][i11]
+        clip.frameDraw(e.S, e.T, e.drawFlags(), fdScratch)
+        val obj = clip.remap(e.remapTable, fdScratch.module)  // az[aA][i11]
         if (alpha != 255) batch.setColor(1f, 1f, 1f, alpha / 255f)
-        drawObject(pack, obj, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
+        drawObject(pack, obj, e.ak - camX - fdScratch.dx,
+                   e.al - camY - fdScratch.dy, fdScratch.transform,
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
