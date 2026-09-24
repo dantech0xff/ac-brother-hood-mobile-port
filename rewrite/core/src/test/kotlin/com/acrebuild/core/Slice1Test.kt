@@ -10368,6 +10368,31 @@ class Slice89Test {
         w.tick(emptyList())
         assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
     }
+
+    @Test fun `af draw contract — every renderer input is live`() {
+        // jc30 "vẽ đen" regression guard: the renderer reads panelVisible,
+        // menuPanelRect, menuRowCount/Rects/Text, menuI4/I5/I14 and the
+        // footer pair — assert each is armed for jC==30 so the screen
+        // cannot draw blank. (The black-screen report predates the panel
+        // draw landing; this test pins the contract.)
+        val w = world()
+        w.kBA[14] = 7; w.kDt = false; w.kBA[69] = 0   // da=8 → fQ=4 rows
+        w.stateL(30)
+        w.tick(emptyList())
+        assertTrue(w.panelVisible, "jc30 panel must draw")
+        assertEquals(listOf(93, 46, 214), w.menuPanelRect().toList())
+        assertFalse(w.menuPanelZ2(), "af() goes through d() → z2=false")
+        assertFalse(w.menuPanelZ3(), "af() has no 40px title strip")
+        assertEquals(4, w.menuRowCount(), "min(8, fQ=4)")
+        val rects = w.menuRowRects()
+        assertEquals(4, rects.size, "one rect per row")
+        rects.forEach { assertEquals(4, it.size) }
+        assertEquals(30, w.menuI4(0), "non-jc2 row height")
+        assertEquals(170, w.menuI5(), "jc30 column width")
+        assertEquals("LEVEL 1", w.menuRowText(0).first,
+            "d(0,10) + index → 'LEVEL n'")
+        assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
