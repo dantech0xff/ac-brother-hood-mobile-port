@@ -209,6 +209,19 @@ private fun missionPackFor(aj: Int): MissionPack {
         ScriptTables.load(asset("level$aj/scripts.bin")))
 }
 
+private fun settleIntro(w: Level0World) {
+    // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
+    // even with auto-dismiss dialogs; the `I()` L108 gate suspends
+    // non-exempt entities while a claim is `ab()`. Fast-forward until the
+    // claim stays released so tests see the post-intro play state they
+    // were written against.
+    var t = 0; var quiet = 0
+    while (t++ < 400 && quiet < 40) {
+        w.tick(emptyList())
+        quiet = if (w.kC == null) quiet + 1 else 0
+    }
+}
+
 /** L777's `!h(ak/20,al/20) && !h(ak/20,al/20+1) && s==null → i(25)`
  *  fall arm (i.java:6219) — drop spawned entities onto real ground the
  *  way the original's record placement does, else test subjects
@@ -483,6 +496,7 @@ class Level0WorldTest {
 
     @Test fun `assassination finisher kills a weakened locked soldier`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
         repeat(5) { w.tick(emptyList()) }
         // Verbatim weaken chain (i.java:1955): Z[0]==1 marks the soldier
@@ -816,6 +830,7 @@ class Level0WorldTest {
 
     @Test fun `ax44 doors spawn banked and timed cycle runs i16927`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val doors = w.npcs.filter { it.ax == 44 }
         assertEquals(61, doors.size)
         assertEquals(17, doors.count { it.S in 8..13 })
@@ -962,6 +977,7 @@ class Level0WorldTest {
 
     @Test fun `ax4 armed by attack then S6 bursts wisps and self-removes`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val d = w.npcs.first { it.ax == 4 && it.S == 5 }
         d.refreshBoxes()
         // mid-attack body overlap → i(S+1) + k.A(14)
@@ -972,10 +988,14 @@ class Level0WorldTest {
         assertEquals(6, d.S)
         assertTrue(14 in w.sfxLog)
         // drive just this FSM: S6 anim ends → m bursts (m=2 → two m(-1)
-        // wisps via k.b(aK)), kAp[5]+=2, k.s() → az+=2, then k.c(self)
-        repeat(40) { w.npcFsm.tickDestructible(d, w.player) }
-        assertEquals(2, w.kAp[5])
-        assertEquals(2, w.kAz)
+        // wisps via k.b(aK)), kAp[5]+=2, k.s() → az+=2, then k.c(self).
+        // advanceAnim first — the I() preamble owns s() now (i.java:15232).
+        // Baseline: a second ax4-S5 record bursts during settleIntro when
+        // the idle player's X box overlaps it — the counters are global.
+        val apBase = w.kAp[5]; val azBase = w.kAz
+        repeat(40) { d.advanceAnim(); w.npcFsm.tickDestructible(d, w.player) }
+        assertEquals(apBase + 2, w.kAp[5])
+        assertEquals(azBase + 2, w.kAz)
         // pending removal — drain via a tick to drop it from npcs
         w.tick(emptyList())
         assertFalse(w.npcs.contains(d))
@@ -1007,6 +1027,7 @@ class Level0WorldTest {
     // arm shadowing the full bN() port — the S0 collect scan was dead.
     @Test fun `ax74 dispatches to bN collect arm through w tick`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val wisp = Entity(74, null)
         wisp.setPositionPx(w.player.ak + 5, w.player.al)  // dist<20, W∩Y
         wisp.setAnim(0)                                   // S0 collect scan
@@ -5952,6 +5973,7 @@ class Slice54Test {
 
     @Test fun `ax54 trigger latch and offscreen removal (L7-L10)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax54At(w, 0, w.kP + 500, 0)
         e.runnerC = 0                                             // no chain
         // offscreen → v() false; mode 0 → L10 removes after bz latches
@@ -5962,6 +5984,7 @@ class Slice54Test {
 
     @Test fun `ax54 leg arm velocity toward waypoint (L35-L47)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         w.waypointPool.load(listOf(55, 10, 300, 400, 0, 0, 0, 5, 0))  // bt.f=5
         val e = ax54At(w, 0, w.kP + 500, 0, 10)
         e.bY = 100; e.bZ = 50                                     // scroll pos
@@ -5979,6 +6002,7 @@ class Slice54Test {
 
     @Test fun `ax54 arrival dwell then bs advance (L131-L141)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         // waypoint exactly at the entity's scroll pos → same-tick arrive
         w.waypointPool.load(listOf(55, 10, 100, 50, 0, 3, 0, 5, 0))   // d=3
         val e = ax54At(w, 0, w.kP + 500, 0, 10)
@@ -6049,6 +6073,7 @@ class Slice54Test {
 
     @Test fun `ax54 homing caps velocity at the waypoint vector (L123)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         // waypoint 1px ahead of the entity's scroll pos → the cap arms fire
         w.waypointPool.load(listOf(55, 10, 101, 51, 0, 0, 0, 5, 0))
         val e = ax54At(w, 0, w.kP + 500, 0, 10)
@@ -6110,6 +6135,7 @@ class Slice55Test {
 
     @Test fun `ax56 latch is al greater than kP without offset`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax56At(w, 0, w.kP - 100, 0)      // above camera → unarmed
         w.tick(emptyList())
         assertFalse(e.runnerBz)
@@ -6120,6 +6146,7 @@ class Slice55Test {
 
     @Test fun `ax56 decrements Z8 every armed tick (L18)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax56At(w, 100, w.kP + 10, 0, 0, 50, 0,0, 0, 4, 6, 900, 7, 0, 0, 1280)
         e.runnerBz = true
         w.tick(emptyList())
@@ -6128,6 +6155,7 @@ class Slice55Test {
 
     @Test fun `ax56 mode-1 travels toward aq at Z12 speed (L79)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax56At(w, 100, w.kP + 10, 0, 0, 0, 0,0, 0, 4, 6, 900, 7, 1, 5000, 1280)
         e.runnerBz = true
         e.setAnim(13)
@@ -6141,6 +6169,7 @@ class Slice55Test {
 
     @Test fun `ax56 arrival stops and idles (L70)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         // mode 1, offset 0 → aq == ak spawn pos → az() false at S13
         val e = ax56At(w, 100, w.kP + 10, 0, 0, 0, 0,0, 0, 4, 6, 900, 7, 1, 0, 1280)
         e.runnerBz = true
@@ -6169,6 +6198,7 @@ class Slice55Test {
 
     @Test fun `ax56 exit arm S10 (L152)`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax56At(w, 0, w.kP + 10, 0)
         e.runnerBz = true
         e.setAnim(10)
@@ -6594,6 +6624,7 @@ class Slice60Test {
 
     @Test fun `S9 arm resolves ax58 link → Z4=3 lever mode`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val lever = Entity(58, w.clips[20]); lever.aw = 88888
         w.npcs.add(lever)
         val e = ax60At(w, 100, 200, 5, 9, 0, 88888, 40, 0)
@@ -6604,6 +6635,7 @@ class Slice60Test {
 
     @Test fun `S9 arm missing link → i(10) travel + Z0=-1`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val e = ax60At(w, 100, 200, 5, 9, 0, 999999, 40, 0)
         w.tick(emptyList())
         assertEquals(10, e.S, "i(10)")
@@ -6649,6 +6681,7 @@ class Slice60Test {
 
     @Test fun `lever Z4=3 idle lever + latch → unlatch reverse`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val lever = Entity(58, w.clips[20]); lever.aw = 88888
         lever.S = 0                                        // not bf()
         w.npcs.add(lever)
@@ -15594,6 +15627,7 @@ class Slice163Test {
 
     @Test fun `ax4 S29 blast sweep damages melee set and chains sibling`() {
         val w = world()
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
         val d = w.npcs.first { it.ax == 4 }
         d.S = 29; d.refreshBoxes()
         // ax11 melee inside X, aB>0 -> -bu[au]<<1 (kAu=0 -> 600)
@@ -15618,10 +15652,12 @@ class Slice163Test {
         }
         w.npcs += s; w.npcs += sib; w.npcs += g15; w.npcs += boss
         // player OUT of X so applyHit doesn't fire; advanceAnim wraps
-        // T5->6 at U0 so the arm reads T==6&&U==0 -> sfx12
+        // T5->6 at U0 so the arm reads T==6&&U==0 -> sfx12. advanceAnim is
+        // explicit — the I() preamble owns s() now (i.java:15232).
         w.player.setPositionPx(d.X[2] + 500, d.X[3] + 500)
         w.player.refreshBoxes()
         d.T = 5; d.U = 999
+        d.advanceAnim()
         w.npcFsm.tickDestructible(d, w.player)
         assertTrue(s.aB <= 100 - 600, "ax11 aB drained by bu[au]<<1, got ${'$'}${'{'}s.aB}")
         assertEquals(29, sib.S)
@@ -16248,10 +16284,12 @@ class Slice173Test {
     // record exists for one tick then self-removes.
     @Test fun `ax35 self-culls off-camera on first tick like the original`() {
         val w = world()
-        w.stateL(8)
         val e35 = w.npcs.firstOrNull { it.ax == 35 }!!
         val victims = w.npcs.filter { it.ax in intArrayOf(17, 11, 23, 47, 50, 73) }
-        w.tick(listOf())
+        // claim suspension holds its dispatch frozen through the intro
+        // phases; the first post-suspension tick runs the L184-186 cull.
+        settleIntro(w)                 // I() L108 gate: tests run post-intro
+        w.stateL(8)
         assertFalse(w.npcs.contains(e35))
         assertTrue(victims.none { it.deadRelease() })   // sweep hit nothing
     }
@@ -19891,5 +19929,117 @@ class Slice213Test {
         assertEquals(19, p.S, "vault edge -> i(19); S=${p.S}")
         assertEquals(3328, p.ag); assertEquals(-3840, p.ah)
         assertEquals(0, e.S, "zone reset -> S0")
+    }
+}
+
+
+class Slice214Test {
+
+    /**
+     * `I()` preamble (i.java:15165-15260, proven): before the dispatch
+     * every entity runs the y-freeze countdown / `s()` advance (gated
+     * `!k.al || aa==z[12]`), then `m()` (`y=0`) unless claim-suspended,
+     * then `b=1`, then the L108 gate (P|512 / claimer / ax8/ax24 exempt
+     * from claim+u9 suspension). Before this port, claimed procs never
+     * advanced their anim clocks — `r()`-gated arms deadlocked (ax7's
+     * mouth-plant froze at the vault apex, ax46 traps stuck mid-cycle).
+     */
+
+    private fun ax22s(w: Level0World) = w.npcs.filter { it.ax == 22 }
+
+    private fun settle(w: Level0World) {
+        var t = 0
+        while (w.player.ah != 0 && t++ < 600) w.tick(emptyList())
+    }
+
+    @Test fun `ax7 mouthplant swallows and releases through the real tick`() {
+        val w = world()
+        settle(w)
+        val e = w.npcs.firstOrNull { it.ax == 7 }
+            ?: error("level-0 carries no ax7 mouth-plant")
+        val p = w.player
+        // the S0 arm needs player-W ∩ plant-W + !holding — the plant's
+        // trigger rect sits off-anchor, so re-pin the player inside it
+        // each tick while the world settles.
+        var swallowed = false
+        repeat(20) {
+            p.setPositionPx((e.W[0] + e.W[2]) / 2, (e.W[1] + e.W[3]) / 2)
+            p.S = 0; p.ah = 0; p.ag = 0
+            w.tick(emptyList())
+            if (e.S == 1) { swallowed = true; return@repeat }
+        }
+        assertTrue(swallowed, "overlap -> i(1) swallow; e.S=${e.S}")
+        assertTrue(p.P and 64 != 0, "player slot-held P|64 while swallowed")
+        // The S1 arm releases on `r()` — only reachable because the I()
+        // preamble's s() now advances e.T for claimed procs.
+        var released = false
+        var thrownAg = 0
+        repeat(200) {
+            w.tick(emptyList())
+            if (e.S == 0) { released = true; thrownAg = p.ag; return@repeat }
+        }
+        assertTrue(released, "animFinished -> i(0) release + throw; e.S=${e.S} T=${e.T}")
+        assertTrue(released, "S1 arm completed the swallow cycle")
+        assertTrue(thrownAg == 2048 || thrownAg == -2048 || p.S != 313,
+            "release ejects the player (ag=${thrownAg} S=${p.S})")
+    }
+
+    @Test fun `y latch freezes s once then m resets it next tick`() {
+        val w = world()
+        settle(w)
+        val p = w.player
+        val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
+            ?: error("no ax22 record at (1214,636)")
+        p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        w.tick(emptyList())
+        // aOp's >=100 sentinel: skip s() this tick, then m() (not claim-
+        // suspended) resets y to 0 so the next tick advances again.
+        e.y = 101
+        val t0 = e.T
+        w.tick(emptyList())
+        assertEquals(t0, e.T, "y>=100 holds s() for this tick")
+        assertEquals(0, e.y, "m() clears y when not claim-suspended")
+        w.tick(emptyList())
+        assertTrue(e.T != t0 || e.S != 0,
+            "s() resumes the tick after m() clears y (T=${e.T} S=${e.S})")
+    }
+
+    /** A fabricated claim suspension: `k.C` whose `ab()` is true
+     *  (`ca>=0 && !cd[0] && scriptStep>=0`, i.java claim model). */
+    private fun suspendWorld(w: Level0World): Entity =
+        Entity(5, null).also { it.ca = 0; it.scriptStep = 0; w.kC = it }
+
+    @Test fun `claim suspension skips dispatch and the shared tail`() {
+        val w = world()
+        settle(w)
+        // a non-exempt npc (ax4 destructible — no P|512): corrupt W must
+        // stay corrupt while k.C.ab() suspends it.
+        val e = w.npcs.firstOrNull { it.ax == 4 && (it.P and 512) == 0 }
+            ?: error("no non-exempt ax4 on level-0")
+        e.W[0] = -9999; e.W[2] = -9998; e.W[1] = -9997; e.W[3] = -9996
+        suspendWorld(w)
+        w.tick(emptyList())
+        assertEquals(-9999, e.W[0], "suspended: no dispatch, no t() tail")
+        w.kC = null
+        w.tick(emptyList())
+        assertTrue(e.W[0] != -9999 || e.S != 0,
+            "resume -> dispatch + L1f35 rebuild (W=${e.W.toList()} S=${e.S})")
+    }
+
+    @Test fun `P512 zones still dispatch under claim suspension`() {
+        val w = world()
+        settle(w)
+        val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
+            ?: error("no ax22 record at (1214,636)")
+        assertTrue(e.P and 512 != 0, "ax22 is P|512 exempt")
+        val p = w.player
+        p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        suspendWorld(w)
+        var captured = false
+        repeat(40) {
+            w.tick(emptyList())
+            if (p.S == 65) { captured = true; return@repeat }
+        }
+        assertTrue(captured, "P|512 zone still captures under suspension")
     }
 }
