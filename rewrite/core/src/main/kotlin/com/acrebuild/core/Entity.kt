@@ -3506,6 +3506,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         d.settleToGround(world)
     }
 
+    /** `i.u()` (i.java:575-594, proven): `au` = coarse camera-distance
+     *  score — `|ak-(O+200)|/400 + |al-(P+120)|/N`, `N` = 240 for the
+     *  ax13-`aG==4`/ax21 family + ax67 `bk[Z0]==49`, 800-x for `bk==27`,
+     *  else 120. `k.I()` reads it for the eligibility + copy-group arms. */
+    fun recomputeAu(camX: Int, camY: Int, decorClip: (Int) -> Int) {
+        var x = ak - (camX + 200); if (x < 0) x = -x
+        var y = al - (camY + 120); if (y < 0) y = -y
+        au = when {
+            (ax == 13 && aG == 4) || ax == 21 -> x / 400 + y / 240
+            ax == 67 && decorClip(Z[0]) == 49 -> x / 400 + y / 240
+            ax == 67 && decorClip(Z[0]) == 27 -> x / 800 + y / 240
+            else -> x / 400 + y / 120
+        }
+    }
+
     /** `i.bE()` (i.java:18917): waypoint-coords → world — `ak=bY; al=k.P+bZ`. */
     fun posFromWaypoint(world: LevelCellSource) { ak = bY; al = world.kP + bZ }
 
