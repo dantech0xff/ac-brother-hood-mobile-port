@@ -20177,3 +20177,40 @@ class Slice217Test {
         assertTrue(failAt in 1..200, "k.v fails the fall like the original (failAt=$failAt)")
     }
 }
+
+
+class Slice218Test {
+    /**
+     * Slice-218 verdict — the "ax4 crates need p.gI==8" blocker is
+     * misplaced: `gI==8` only gates the interact-scan prompt (PlayerFsm
+     * L200, proven) — and bit-8 never exists on level 0 (`kF0Do` all-5s,
+     * k.java:23861). Crates break via the ATTACK path — `isAttackState`
+     * body overlap or the `player.X` hitbox arming S5→S6 (i.java:6733,
+     * proven) — which needs no equip state. This test drives it through
+     * the real tick + input path, not a direct FSM call.
+     */
+    @Test fun `sword tap breaks the real uid16 crate through the tick path`() {
+        val w = world()
+        settleIntro(w)
+        val d = w.npcs.first { it.ax == 4 && it.aw == 16 }   // (1607,795) S5
+        assertEquals(5, d.S)
+        val p = w.player
+        // stand beside the crate facing it; pin the camera there too so
+        // the au-gate keeps the crate live (slice-216 gate, verbatim).
+        p.setPositionPx(d.ak - 40, d.al)
+        p.av = false
+        w.kO = p.ak - 200; w.kP = p.al - 120
+        // context tap -> 65568 -> ap() I==1 -> i(67) sword swing
+        var brokenAt = -1
+        repeat(120) { t ->
+            val (cx, cy) = w.cellPoint(4)
+            w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
+                          InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
+            w.kO = p.ak - 200; w.kP = p.al - 120
+            if (brokenAt < 0 && !w.npcs.contains(d)) brokenAt = t
+        }
+        assertTrue(brokenAt > 0, "uid16 crate should arm S5→S6, burst, and remove (brokenAt=$brokenAt, dS=${d.S})")
+        // wisps burst on break (m=2 -> up to two m(-1) spawns, i.java:6760)
+        assertTrue(w.kAp[5] >= 2, "wisp counter should pay on break (kAp[5]=${w.kAp[5]})")
+    }
+}
