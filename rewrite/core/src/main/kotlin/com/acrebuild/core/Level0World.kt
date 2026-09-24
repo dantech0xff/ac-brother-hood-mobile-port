@@ -75,6 +75,7 @@ class Level0World(
             10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
                           // modules, proven) — zones still draw nothing
             29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
+            61 to 71,     // ax61 multi-tool (bi[61]=71, proven)
             41 to 30,     // ax41 knockable prop (bi[41]=30, proven)
             8 to 5,       // ax8 knife/param projectiles (bi[8]=5, proven);
                           // bi[12]=8 has no pack-3 entry-008 → ax12 stays
@@ -761,7 +762,10 @@ class Level0World(
             // types join as their clips + init arms get verified.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
                           else ENTITY_CLIP[type]
-            if (clipIdx == null && type != 42) continue
+            // bi[65]=-1 (proven, k.java bi[] table): ax65 is also a
+            // clipless spawn in the original — an invisible marker that
+            // routes to the "Unknown Actor Type" init (L1bc7 → L1bea).
+            if (clipIdx == null && type != 42 && type != 65) continue
             val recSlot = slotOf[i] ?: -1
             // d(true): a `-99` slot was consumed before the checkpoint —
             // the record does not respawn (simple k.java:5972-5975).
@@ -815,8 +819,15 @@ class Level0World(
             else if (type == 74) npcFsm.initAx74(e, f.toList(), this)
             else if (type == 76) npcFsm.initAx76(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
-            else if (type != 37)
+            else if (type == 32) npcFsm.initAx32(e, f.toList(), this)
+            else if (type != 37) {
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
+                // L1bea finish (i.java:11489, proven): every non-{37,70}
+                // record runs `i(r8[5])` — the common tail of every init
+                // arm including L1bc7's "Unknown Actor Type" path that
+                // ax65 routes through. ax68 takes `i(0)` verbatim.
+                if (type != 70) e.setAnim(if (type == 68) 0 else f[5])
+            }
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
             // Z[0]∈{1,2} (red-uniform variant), aH=0 otherwise; the player
             // uses bo[bL][0]=0 for level 0 (bo={{0,-1},{3,1},{5,2},{6,3}},

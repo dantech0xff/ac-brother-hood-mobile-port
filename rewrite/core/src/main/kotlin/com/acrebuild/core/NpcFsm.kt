@@ -6986,7 +6986,7 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
                 if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
                 if (r0.aB > 0) {
                     r0.aB -= Entity.WEAPON_K[w.weaponSlot]
-                    when (r0.iP) {
+                    when (r0.pv) {
                         0 -> if (r0.aB > 0) r0.cGCount = 6
                              else { r0.setAnim(15); r0.cGCount = 0 }
                         2 -> if (r0.aB > 0) r0.cGCount = 6
@@ -9764,6 +9764,25 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
 // S2 damage cycle: `aC` sibling-chain countdown (`k.q(o)` → `i(2)` chain),
 // per-tick `g.d(g.u[k.au])` while overlapping. S3/S5 → i(S+1) once the
 // player hitbox leaves `X`; S4/S6 end anims → `k.c`.
+
+/** ax32 `Lc15` (i.java:8951, proven) — damageable wall/prop init:
+ *  `aA=0; j=0; aB=r8[7]` HP; `aC=r8[8]; aF=r8[9]; p=r8[10]` — the
+ *  subtype latching the bc()/L97 p-switch anims (15/19/25/36); `cG=0`;
+ *  `p != 3 → i.bU += aB` (gauge accumulate — runs BEFORE the bV gate,
+ *  verbatim); `n = aF`; then the `i.bV` kill-bitmap router:
+ *  `bV==1 && p==0 → aB=0`, `bV==2 && p!=3 → aB=0`. Tail `i(r8[5])`. */
+fun NpcFsm.initAx32(e: Entity, f: List<Int>, w: LevelCellSource) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aA = 0; e.j = 0
+    e.aB = rf(7); e.aC = rf(8); e.aF = rf(9)
+    e.pv = rf(10)                                   // i.p — subtype
+    e.cGCount = 0
+    if (e.pv != 3) w.iBU += e.aB
+    e.nl = e.aF
+    if ((w.iBV == 1 && e.pv == 0) || (w.iBV == 2 && e.pv != 3)) e.aB = 0
+    e.setAnim(rf(5))                                // L1bea — i(r8[5])
+    e.refreshBoxes()                                // t()
+}
 
 /** Record init (L361 at i.java:3546, proven): `az=r8[7]`, `aC=r8[8]`
  *  (chain countdown), `o=r8[9]` (sibling aw link), `Z=new int[2]` +

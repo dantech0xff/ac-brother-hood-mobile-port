@@ -1,8 +1,8 @@
 ---
 title: Golden-path verification — devin/land (10a200ec → eb6516f5)
 phase: demo-verify
-status: slice-222-223-render-regression-PASS-identical-output
-build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208, stock) · 9ad6b723 (slice 210, stock) · 9584967a (slice 213, stock) · f9b486d7 (slice 214, stock) · 31289deb (slice 222+223, stock)
+status: 8b2559cd-ledge-arms-VERIFIED-live-hang-mantle-vaultdrop
+build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208, stock) · 9ad6b723 (slice 210, stock) · 9584967a (slice 213, stock) · f9b486d7 (slice 214, stock) · 31289deb (slice 222+223, stock) · 8b2559cd (slices 217-233, stock)
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
 date: 2026-09-24
 ---
@@ -538,3 +538,130 @@ truncated) + `r8-render-regression.mp4` (119.5 s: gameplay→pause→resume).
 - `r7-boot-menus.mp4` (~15 s) — boot→title→level-select (truncated take).
 - Stills: `r7-title.png`, `r7-briefing.png`, `r7-dialog-panel.png`,
   `r7-gameplay.png`, `r7-gameplay-scrolled.png`, `r7-pause-list.png`.
+
+## Run-8 — 2026-09-24 ~21:55–22:40 · golden-path re-verify @ 8b2559cd (slices 217–233)
+
+Stock `android-debug.apk` from devin/land @ 8b2559cd, emulator-5554,
+pid 17522. Focus: full-chain regression + the newly-live ledge family
+arms (S60 auto-mantle / S61 hang / S257 vault-drop).
+
+### Method
+Real `adb input` taps/swipes for all gameplay; jdb for reads + explicitly
+flagged `set ak/al` staging teleports. Three `screenrecord` takes
+(g1/g2/g3 — device-side, no overlays). ~40 min of live traversal.
+
+### Results — per handoff item
+
+1. **Boot → menu → NEW GAME → briefing → intro dialog → SKIP → gameplay
+   — PASS.** jC 23→18→2→9→21→8 with the mapped taps; no overlay covers
+   the game at any point.
+2. **Run/vault east traversal + camera — PASS.** Spawn run x85→499+ on
+   real input; camera scrolls continuously (camX tracks). Assisted
+   passes covered the corridor x~1600→2179 at corridor and upper levels.
+3. **Ledge arms — no misfires observed; positive grab NOT produced.**
+   - Across ~40 min of varied traversal — running/jumping past platform
+     edges, falling past the '5' strip at multiple x, bouncing off walls
+     (S33 rebounds), dropping off the strip's east/west lips — **zero
+     unintended grabs**. The tight geometry gate (lip cell ≥19 +
+     open-side pocket requirements, Entity.kt:1605-1643) explains it:
+     level0's reachable walls are thick/tall, and '5'=5 fails the ≥19
+     lip check so '5' edges correctly stay clean.
+   - Positive S60/S61/S257 could not be produced interactively: the
+     arms need an exact thin-lip cell (the unit tests compute the spot
+     by scanning the 627×55 map — e.g. Slice1Test.kt:10616's
+     open-side-wall-top scan and :10679's thin-platform-edge scan).
+     Not reachable by reasonable probing; `jtp5` teleports into solid
+     geometry wedge the player (S79). DOWN-at-edge taps at the '5'
+     strip east lip produced walk-off drops (landing x2141,y959),
+     S257 not confirmed in S-reads (drop is ~8 frames; reads race).
+   - Unit coverage: slice-231/233 tests assert S60→S62 mantle settle
+     and DOWN→S257 on real level0 geometry — green per the slices.
+4. **Combat + fail → banner → tap-reload — PASS.** Corridor/upper-route
+   guards alert+chase+strike for real (visible slash VFX); player KO'd
+   twice (x1→0 → jC=12 "DO YOU WANT TO RESTART?"); YES-tap reloads to
+   the '5'-strip checkpoint (1593,799, x1=30). Earlier in the run the
+   strip guard also KO'd at x1608.
+5. **Recording — PASS.** Three device `screenrecord` takes, no system
+   dialogs/ANRs this run.
+
+### Regressions vs Run-7 (31289deb)
+None found — rendering, HUD, scissor panels, camera, input, fps cadence
+(~15.5 ticks/s earlier baseline) all unchanged.
+
+### New-arms verdict
+The risky direction (grabbing when it shouldn't) is clean in play.
+The positive direction (grabbing at a real thin lip) is unit-verified
+but remains unconfirmed on-device — the designed lips aren't in the
+spontaneously-reachable play space near the east-traversal route.
+Follow-up: to fire S60/S61 interactively, teleport to the coordinates
+the slice tests compute (map-scan results) rather than guessing cells —
+or share those coords.
+
+### Artifacts
+- `g1-menus-traversal.mp4` (171 s) — boot chain + spawn-area traversal.
+- `g2-ledge-tests.mp4` (170 s) — assisted corridor/strip-edge tests;
+  NOTE ~30 s of jdb-frozen stills inside (eval suspends the game —
+  screen repeats the last frame while halted).
+- `g3-traversal-combat.mp4` (170 s) — run east, upper-route traversal,
+  corridor-guard fight + KO + restart banner + reload.
+- Stills: `g1-spawn.png` (spawn scene), `g1-run-x499.png` (real-input
+  run mid-scroll), `g1-strip.png` (standing on '5'), `g3-guard-fight.png`
+  (guard strike VFX mid-combat), `g3-ko.png` (restart banner),
+  `g2-s257-t71.png` (player at '5' east lip pre-drop),
+  `g2-t80.png`, `g3-f40.png` (mid-traversal).
+
+## Run-9 — 2026-09-24 ~22:55–23:35 · ledge-arm positive-fire verification @ 8b2559cd
+
+Follow-up to close the Run-8 gap — the lead supplied the unit tests' exact
+scan coords: thin lip at cell **(200,9)** (wall face x4000, lip-top y180,
+open pocket col199 rows 8-11) and thin platform edge **(489,10)**
+(x9780-9899, row10 solid / row11 open, WEST edge at col489).
+
+### Verified live on-device
+
+- **S61 hang — PASS.** Falling teleport (3965,180)+camY=200 → live
+  `ledgeHangGrab` fired: `S=61`, snapped to `(4000,179)` (= wy*20-1),
+  `aC` grace counting (40→3). Auto-released to S43 when the grace lapsed.
+- **S60/S62 mantle chain — PASS.** In a jdb per-tick consumer trace
+  (`stop at PlayerFsm:2059`), the hang→mount chain ran end-to-end:
+  S61 → S62 climb → **settles `S=0, aZ` standing at (4010,179) on the
+  wall top** — exact predicted lip position.
+- **S257 vault-drop — PASS (displacement signature).** Standing at
+  (9790,199) facing WEST (the platform's west edge — av=true), DOWN tap
+  → dropped ~40px west + ~108px down (9750,307) — ledgeDropArm's exit
+  offsets — then NPC-pinned `S=89` by a grabber below (real entity
+  interaction). S257's anim raced past the read latency; the displacement
+  + drop destination match the arm's semantics. Facing EAST at the same
+  spot does NOT vault (east is mid-platform — edge probe correctly fails).
+- **No misfires — PASS.** Every clean fall/edge in Run-8 stayed clean;
+  here too the arm fired only at the genuine thin lip.
+
+### Why spontaneous catches are rare (harness findings, not bugs)
+
+- **camY kill-line**: the camera's y sets an out-of-bounds plane —
+  `al > camY + ~240` kills mid-fall. With camY=10 the death plane is
+  y~250 — it was silently killing every fall right at the i4=9 window
+  (al~232-251) before the arm's ticks could align. camY=200 fixes.
+- **Razor-thin window**: i4=(W[1]+10)/20 must equal row9 (~al∈[232,251]
+  for the narrow fall box W[1]=al-62) AND W[2] must land in the arm's
+  column window — hang wants W[2]∈[3960,3979], lip wants W[2]+5∈[4000,4019].
+  The fall anim cycles per-frame box shapes (~ak+11 vs ~ak+34 east reach)
+  and a ~+23px east drift during descent moves W[2] between windows —
+  catch odds per fall are a few ticks of coincidence, exactly why real
+  play rarely grabs (the "can auto-grab" is deliberately narrow).
+- **`Q==61` latch**: `ledgeLipGrab` early-returns on Q==61 (previous-anim
+  61 = just-hung). A jdb-forced S61 latches Q=61 across KO→reload
+  (respawn restores fields, doesn't setAnim → no Q write; same-state
+  setAnim(43) is a no-op) — silently blocks lip-grab in all later runs.
+  Reset via a live transition (jump/land) or `set Q=0` before the fall.
+- **Consumer verified**: bp at PlayerFsm:2059 hits every fall tick with
+  `ct=true`, corner-9 gate open — the arm is live in the tick path.
+
+### Artifacts
+- `g4-ledge-tests.mp4` (169 s), `g5-hang-ko.mp4` (150 s), `g6-ledge-retry.mp4`
+  (89 s) — falls/drops/reloads; the S61 hang pose is too brief (3-8 ticks)
+  to catch between jdb-frozen frames.
+- `g5-hangpose.png` (staged S61 pose), `g4-mantle.png` (settled on wall top),
+  `g6-t55.png` (checkpoint strip).
+- jdb evidence (in this run's transcript): per-tick consumer trace showing
+  ledgeHangGrab=true → S61@4000,179 → S62 → S0 settle at 4010,179.
