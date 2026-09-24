@@ -240,6 +240,123 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.aj = 1536
                 if (p.animFinished()) p.flingAirborne(0, world)
             }
+            // g.java L1ce4 (proven) — S19/S36 air variants: `cv=1` then
+            // the shared L1ce8 air-family tail (same body as airFamily).
+            19, 36 -> {
+                p.cv = true
+                airFamily(p, pad)
+            }
+            // g.java L1ce8 (proven) — S24/S157: the shared air tail
+            // without the `cv` arm.
+            24, 157 -> airFamily(p, pad)
+            // g.java L3078 (proven) — S49 slide-settle: `T>9 → ag=ah=0`
+            // (frame-9 stop), `r() → i(0); E()`; early `return`.
+            49 -> {
+                if (p.T > 9) { p.ag = 0; p.ah = 0 }
+                if (p.animFinished()) { p.setAnim(0); p.eSettle(world) }
+                return
+            }
+            // g.java L169c (proven) — S74 leap-dash: `r() → ak±40; a(0)`;
+            // early `return`.
+            74 -> {
+                if (p.animFinished()) {
+                    p.ak += if (p.av) -40 else 40
+                    p.flingAirborne(0, world)
+                }
+                return
+            }
+            // g.java L2989→L2de0 (proven) — S82-85/S326 corpse-sleep:
+            // `r() → P|=64` (the L2989 label is empty and falls through
+            // to L2de0's arm).
+            82, 83, 84, 85, 326 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L30a9 (proven) — S91 settle: zero all four velocity
+            // fields; `r() → i(0)`; early `return`.
+            91 -> {
+                p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L1a46 (proven) — S92/S101 wall-bounce: zero all,
+            // `r() → av=!av; ag=∓2048 (new facing); aO==20 → ah=0 else
+            // ah=-5120`, then `a(36,36)` re-enters the wall state.
+            92, 101 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    p.av = !p.av
+                    p.ag = if (p.av) -2048 else 2048
+                    p.ah = if (p.aO == 20) 0 else -5120
+                    p.enterStateMasked(36, 36, world)
+                }
+            }
+            // g.java L11c2 (proven) — S122 bind-prep: `r() → a(53,1032)`.
+            122 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.enterStateMasked(53, 1032, world)
+            }
+            // g.java L2eb9 (proven) — S148 knockback-launch: `ah=-5120`;
+            // `r() → i(149)`.
+            148 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ah = -5120
+                if (p.animFinished()) p.setAnim(149)
+            }
+            // g.java L2ed1 (proven) — S149 fling carry: `ag = g.l ? g.l :
+            // ∓1024`; `aj=1536`; `r() → g.l=0; ag=0; i(150)`.
+            149 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ag = if (p.gL != 0) p.gL else (if (p.av) -1024 else 1024)
+                p.aj = 1536
+                if (p.animFinished()) {
+                    p.gL = 0; p.ag = 0; p.setAnim(150)
+                }
+            }
+            // g.java L2f42 (proven) — S152 slide: `ag=∓1024`; `r() →
+            // i(0)`; early `return`.
+            152 -> {
+                p.ag = if (p.av) -1024 else 1024
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L2f13 (proven) — S156 launch-prep: zero all; `r() →
+            // ag=g.l; ah=0; i(157)`; early `return`.
+            156 -> {
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    p.ag = p.gL; p.ah = 0; p.setAnim(157)
+                }
+                return
+            }
+            // g.java L2596 (proven) — S204 victim-dump loop: `r() →
+            // i(203)`; early `return` (skips the shared tail).
+            204 -> {
+                if (p.animFinished()) p.setAnim(203)
+                return
+            }
+            // g.java L305d (proven) — S214 knockback-rise: `ah=-768`;
+            // `r() → ah=0; i(215)`; early `return`.
+            214 -> {
+                p.ah = -768
+                if (p.animFinished()) { p.ah = 0; p.setAnim(215) }
+                return
+            }
+            // g.java L2f66/L311a/L311b (proven) — S225/244/250 fully
+            // inert: the arm is a bare `return` — no flags, no tail.
+            225, 244, 250 -> return
+            // g.java L2b6c (proven) — S282 pinned: `r() → i(38)`; early
+            // `return`.
+            282 -> {
+                if (p.animFinished()) p.setAnim(38)
+                return
+            }
+            // g.java L309c (proven) — S283: `r() → i(0)`; early `return`.
+            283 -> {
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
             // g.java:1938-2015 + L1ab3-L1c33 (proven) — wall-rebound:
             // `cp=true`, `aj=512`; `A()` → ledge snap i(74);
             // direction-toward-av HELD && `ah<0` (still rising) → ct=true +
@@ -1375,6 +1492,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     // -- air family {20,22,23,25,215} (L889 block, proven core) ---------------
     private fun airFamily(p: Entity, pad: Pad) {
         p.cp = true; p.ct = true; p.cw = true
+        if (p.gI == 4) p.z = true              // L1ce8 — I==4 arms z
         p.aj = 1536
         if (p.S == 22 && p.animFinished()) p.P = p.P or 64
         if (p.S == 20) {
