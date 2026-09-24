@@ -29,6 +29,9 @@ class Level0World(
     /** `j.f(2)` charmap bytes (shared `short[]` font map) — builds the
      *  `y` FontClip used for `a(str,str2)` footer dims (:2276-2296). */
     val charmap: ByteArray? = null,
+    /** `k.aj` — mission index (0..7); selects `k.bh[aj]` flying gates,
+     *  `k.d(1+aj)` string table, and the `aj!=7` stat-tally exceptions. */
+    val aj: Int = 0,
 ) : LevelCellSource {
 
     companion object {
@@ -438,7 +441,7 @@ class Level0World(
     // -- marker/sweep globals -------------------------------------------------
     override var cFFlag = false                 // i.cF gauge-full static
     override var playerLinkB: Entity? = null    // g.b marker-engage link
-    override val missionIndex = 0               // k.aj — level 0 = mission 0
+    override val missionIndex get() = aj          // k.aj — mission index
     var statTally0 = 0                          // k.ap[0] kill/stat tally
     override var iBh = 0                        // i.bh static hit-lock
     /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
@@ -778,7 +781,7 @@ class Level0World(
     override var kZ = false                    // k.Z
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
-    override var kAj = 0                       // k.aj — level index 0
+    override var kAj = aj                    // k.aj — mission index 0..7
     /** Slice-43b claim-script VM state (aa() arms): world bounds for the
      *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
      *  the `k.*`/`i.*` statics the arg-op sub-switches write. */

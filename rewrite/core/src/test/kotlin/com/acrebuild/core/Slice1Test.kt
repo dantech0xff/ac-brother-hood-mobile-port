@@ -130,15 +130,16 @@ private fun charmapFont(): FontClip =
     FontClip(Clip.load(asset("clips/clip92/clip.acpk")),
              FontClip.loadCharmap(charmap()), 4)
 
-private fun world(charmap: ByteArray? = null): Level0World {
+private fun world(charmap: ByteArray? = null, aj: Int = 0):
+    Level0World {
     Entity.grabLatch = false                      // static latch — reset per world
     Entity.gq = false                             // g.q wall-run latch
     Entity.gf = null                              // g.f marker FX ref
     Entity.gE = false                             // g.E jump-tail suppress
     Entity.icu = false                            // i.cu static
     // mirror of the game's conversion of decoded assets
-    val level = LevelPack.load(asset("level0/level0.aclv"))
-        val clips = mapOf(
+    val level = LevelPack.load(asset("level$aj/level$aj.aclv"))
+        val clips = mutableMapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
             1 to Clip.load(asset("clips/clip1/clip.acpk")),
             3 to Clip.load(asset("clips/clip3/clip.acpk")),
@@ -173,17 +174,20 @@ private fun world(charmap: ByteArray? = null): Level0World {
             46 to Clip.load(asset("clips/clip46/clip.acpk")),
             92 to Clip.load(asset("clips/clip92/clip.acpk")),
             12 to Clip.load(asset("clips/clip94/clip.acpk")),   // z[12] = entry-012
-            -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
-            -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
-            -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
         )
-    // pack-14 entry-001 level-string table (line-delimited emit)
-    val levelStrings = java.io.File("../generated/level0/strings-1.txt")
+        if (aj == 0) {
+            clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
+            clips[-11] = Clip.load(asset("level0/tileset-11/clip.acpk"))
+            clips[-12] = Clip.load(asset("level0/tileset-12/clip.acpk"))
+        }
+    // pack-14 entry-<aj+1> level-string table (line-delimited emit)
+    val levelStrings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
         .readText().split("\n").filter { it.isNotEmpty() }
         .map { it.replace("\\n", "\n") }
     return Level0World(level, clips, DeterministicRandom(1L),
         levelStrings = levelStrings, charmap = charmap,
-        scripts = ScriptTables.load(asset("level0/scripts.bin")))
+        scripts = ScriptTables.load(asset("level$aj/scripts.bin")),
+        aj = aj)
         .also {
             // the intro claim script's op105 dialogs (k.l(21)) suspend the
             // sim until a dismiss press — emulate an instantly-tapping player
@@ -16211,5 +16215,72 @@ class Slice175Test {
         fsm.initSoldier(e, f, w)
         assertEquals(0, e.Z[13])
         assertTrue(e.scriptBound)
+    }
+}
+
+/** Slice 176 — all-mission pack conversion: `ec[aj]="/6".."/13"` packs
+ *  (k.java:260) load through the same `I(i)`/`H(i)` grid layout with
+ *  `ej[aj*4..+2]` tilesets (k.java:275) and `bh[aj]` layer gating
+ *  (flying missions 1/4 have no ep layer). Asserts each converted pack
+ *  parses, spawns its records, and ticks without exceptions. */
+class Slice176Test {
+
+    // (aj, cols, rows, entityCount) — converter output vs pack dims.
+    private val PACKS = arrayOf(
+        intArrayOf(0, 627, 55, 637),
+        intArrayOf(1, 44, 600, 225),   // FLYING (bh==3)
+        intArrayOf(2, 275, 110, 567),
+        intArrayOf(3, 775, 70, 691),
+        intArrayOf(4, 44, 625, 254),   // FLYING (bh==3)
+        intArrayOf(5, 786, 63, 740),
+        intArrayOf(6, 550, 70, 849),
+        intArrayOf(7, 100, 102, 323),  // Cesare arena (aj==7 stat-gate)
+    )
+
+    @Test fun `all 8 mission packs decode and spawn`() {
+        for ((aj, cols, rows, count) in PACKS) {
+            val w = world(aj = aj)
+            assertEquals(cols, w.level.cols, "level$aj cols")
+            assertEquals(rows, w.level.rows, "level$aj rows")
+            assertEquals(count, w.level.entities.size, "level$aj entities")
+            assertEquals(aj, w.kAj, "level$aj kAj")
+            assertTrue(w.npcs.isNotEmpty(), "level$aj spawned nothing")
+        }
+    }
+
+    @Test fun `bh3 flying flag follows aj`() {
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            assertEquals(aj == 1 || aj == 4, w.bh3, "level$aj bh3")
+        }
+    }
+
+    @Test fun `each pack ticks 120 frames clean`() {
+        // No-collision-exception smoke: flying packs (aj 1/4) run the
+        // ground-rule collision until the `dL` stamp grid (k.java:4405)
+        // is ported, so entities may legitimately cull — this only
+        // asserts the sim advances without throwing.
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            w.stateL(8)
+            repeat(120) { w.tick(emptyList()) }
+        }
+    }
+
+    @Test fun `visual layer gating matches bh table`() {
+        // Layer ids: 0=et, 1=ep, 2=eu, 3=er. Flying packs (aj 1/4) carry
+        // no ep entry (k.java:5244-5264 `I(i)` gate on bh==3); others
+        // carry all four.
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            val ids = w.level.layers.map { it.id }.toSet()
+            if (aj == 1 || aj == 4) {
+                assertEquals(setOf(0, 2, 3), ids,
+                             "level$aj flying layers")
+            } else {
+                assertEquals(setOf(0, 1, 2, 3), ids,
+                             "level$aj grounded layers")
+            }
+        }
     }
 }

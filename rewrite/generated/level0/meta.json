@@ -1,5 +1,8 @@
 {
  "source": "pack-6",
+ "aj": 0,
+ "bh": 4,
+ "flying": false,
  "cols": 627,
  "rows": 55,
  "worldPx": [
