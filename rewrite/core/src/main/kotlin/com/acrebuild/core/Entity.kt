@@ -88,7 +88,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cGCount = 0                  // i.cG int — hit-flash counter on sweep
                                    // targets (distinct from g.cG bool)
     var az = 0
-    var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
+    /** `g.a` (g.java field `a`, proven): THE support/grapple/ride link
+     *  — reads: `o()` ground/vehicle (g.java:6090), crate-edge aF()/aG()
+     *  (g.java:5354), `i.bq` crate-level arm (g.java:805), the S79
+     *  crouch-rope guard (g.java:8488-8497); writes: `a = 0` clears on
+     *  fling/fall/damage, `g.a = r6` binds from entity arms
+     *  (i.java:2714/28616/42048/44789). Split early into `standingOn`
+     *  (support reads) and `ga` (ride writes) — the original is ONE
+     *  field, so the split left every support read dead. `standingOn`
+     *  is now a delegate over `ga`. */
+    var standingOn: Entity?
+        get() = ga
+        set(v) { ga = v }
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
     /** `ac` — resolved link target; writes run `i.a(i)` (i.java:229,
      *  proven): clear `P|256` on the old target, set it on the new. */
@@ -136,9 +147,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aq = 0                     // launch anchor x px (i.aq)
     var ar = 0                     // launch anchor y px (i.ar)
     var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
-    var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
-                                   // i.java:922/937; producers: ax15 bind,
-                                   // Entity:1210/1285 lunge, ax66/72 arms)
+    var ga: Entity? = null         // g.a — the support/grapple/ride link;
+                                   // `standingOn` delegates here (see :91).
+                                   // Producers: ax15 bind, Entity:1210/1285
+                                   // lunge, ax66/72 arms, NpcFsm binds
     var gh: Entity? = null         // g.h — victim link (L2460 S203 arm: the
                                    // marker follows `gh.aw`; v(65568) dumps it)
     // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
@@ -2828,19 +2840,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return false
     }
 
+    /** `k.p(int)` (k.java:13230, proven): lowest set-bit index of `r3`
+     *  — `for r4 in 0..4: (r3>>r4)&1 → return r4; else return 0`.
+     *  `ao()` uses `ar[(p(I)+1)%as]` — the BIT index, not the `ar[]`
+     *  slot: for `ar=[1,2,8,16]` (as=4), `I=8→p=3→ar[0]=1` — the cycle
+     *  skips `ar[3]=16` (verbatim quirk; `indexOf` would cycle 8→16). */
+    private fun kp(r3: Int): Int {
+        for (r4 in 0 until 5) if ((r3 shr r4) and 1 != 0) return r4
+        return 0
+    }
+
     /** `g.ao()` (g.java:3792, proven): weapon-cycle — `v(131072)` edge or
      *  the 355,197,30x26 view button → `k.at==0 && k.as>1 &&
-     *  (k.C==null || P&512)` → `k.at=1`, `h(ar[(p(I)+1)%as])`, sfx 23.
-     *  `k.p(I)` = lowest-set-bit index ≡ position in the sorted-dense
-     *  `ar[]`, so `indexOf` is equivalent. */
+     *  (k.C==null || P&512)` → `k.at=1`, `h(ar[(p(I)+1)%as])`, sfx 23. */
     fun cycleEquip(w: LevelCellSource, pad: Pad): Boolean {
         if (!pad.v(Pad.M_CYCLE) && !w.touchRect(355, 197, 30, 26)) return false
         if (w.actionLock != 0) return false
         if (w.equipCount <= 1) return false
         if (w.cEntity != null && (P and 512) == 0) return false
         w.actionLock = 1
-        val idx = w.equipList.indexOf(gI).let { if (it < 0) 0 else it }
-        requestH(w.equipList[(idx + 1) % w.equipCount], w)
+        requestH(w.equipList[(kp(gI) + 1) % w.equipCount], w)
         w.sfx(23)
         return true
     }
@@ -2853,7 +2872,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `g.o()` (g.java:6090, proven): grounded-or-mounted gate for the
      *  weapon cycle — `aZ` true; `a == null || a.ax == 43` → false;
      *  else `a.ax ∈ {51,15,43}` (the trailing `ax == 43` is unreachable
-     *  dead code — kept verbatim). `g.a` = `standingOn`. */
+     *  dead code — kept verbatim). `g.a` reads via `standingOn` → `ga`. */
     fun groundOrVehicle(): Boolean {
         if (aZ) return true
         val s = standingOn ?: return false

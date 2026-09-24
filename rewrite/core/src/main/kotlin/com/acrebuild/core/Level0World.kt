@@ -472,14 +472,17 @@ class Level0World(
     override var iFlag = true                   // g.i
     override var eFlag = false                  // g.E
 
-    /** `k.q()` (k.java:~4600, proven): rebuild `ar[]`/`as` from `player.gJ`
-     *  — iterates bits 0..4, takes set bits except mask-4, first-empty
-     *  slot in ascending order, then clears the source bit. */
+    /** `k.q()` (k.java:13152, proven): rebuild `ar[]`/`as` from `player.gJ`
+     *  — `as=0; at=0; ar[]=-1`, then bits 0..4 take set bits except
+     *  mask-4, first-empty slot in ascending order, then clears the
+     *  source bit. The `at=0` reset re-arms the cycle button after an
+     *  unlock grant (the port skipped it — `actionLock` could wedge). */
     override fun rebuildEquip() {
+        equipCount = 0
+        actionLock = 0                            // k.at = 0 (verbatim head)
         equipList.fill(-1)
         var rest = player.gJ
         var slot = 0
-        equipCount = 0
         for (r5 in 0 until 5) {
             val r0 = 1 shl r5
             if ((rest and r0) == 0 || r0 == 4) continue
@@ -2266,8 +2269,11 @@ class Level0World(
                 i == 14 -> {
                     if (jC == 8 || jC == 21) scrollBounds()
                     bannerK(1); kAo = false; kAn = false
-                    kFi = -1                           // `if (!e.a())` — unported (inferred)
-                    audioStop()
+                    // k.java:5180 (proven): `if (!e.a()) k.fi = -1` —
+                    // silence the music slot only when no track is live,
+                    // so RESUME's `when(kFi)` replays the paused track.
+                    if (!audioPlaying()) kFi = -1
+                    audioStop()                        // L327 `e.b()`
                 }
                 i == 23 -> { kEc = 19; bannerK(3); kEb = 70; kBw = -1 }
                 i == 5 -> {                                          // (:1806)

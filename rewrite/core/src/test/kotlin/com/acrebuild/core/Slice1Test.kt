@@ -19634,3 +19634,174 @@ class Slice206Test {
         assertFalse(w.kDe)
     }
 }
+
+class Slice208Test {
+
+    // -- g.a unification: `standingOn` delegates to `ga` (one J2ME field) --
+
+    @Test fun `standingOn and ga share the one link slot`() {
+        val p = Entity(0, null)
+        val crate = Entity(51, null)
+        p.standingOn = crate
+        assertSame(crate, p.ga, "support reads bind the same g.a field")
+        p.ga = null
+        assertNull(p.standingOn, "clears land on the same slot")
+        p.ga = Entity(43, null)
+        assertSame(p.ga, p.standingOn, "ride binds are visible to support reads")
+    }
+
+    @Test fun `o gate sees a crate bound through ga`() {
+        val p = Entity(0, null)
+        assertFalse(p.groundOrVehicle(), "no ground, no link")
+        p.ga = Entity(51, null)                      // g.a = crate
+        assertTrue(p.groundOrVehicle(), "g.o() reads a.ax==51")
+        p.ga = Entity(43, null)
+        assertFalse(p.groundOrVehicle(), "ax43 carrier excluded verbatim")
+    }
+
+    @Test fun `enterFall clears the link once`() {
+        val p = Entity(0, null)
+        p.ga = Entity(66, null)
+        p.enterFall()
+        assertNull(p.ga, "g.a = 0 on the fall arm")
+        assertNull(p.standingOn)
+    }
+}
+
+// ============================================================================
+// Slice 209 — equip-cycle verbatim: `k.q()` at-reset + `k.p(I)` bit index
+// ============================================================================
+
+class Slice209Test {
+
+    @Test fun `rebuildEquip resets the action lock`() {
+        val w = world(); val p = w.player
+        // k.q() (k.java:13152): `as=0; at=0; ar[]=-1` head — the port
+        // skipped `at=0`, leaving the cycle button wedged after a grant.
+        p.gJ = 1 or 8
+        w.actionLock = 1
+        w.rebuildEquip()
+        assertEquals(0, w.actionLock, "k.at = 0 (verbatim q() head)")
+        assertEquals(2, w.equipCount)
+        assertEquals(listOf(1, 8, -1, -1, -1), w.equipList.toList())
+    }
+
+    @Test fun `weapon cycle indexes by bit position not slot`() {
+        val w = world(); val p = w.player
+        // k.p(I) = lowest set-bit index; ar[(p(I)+1)%as] for
+        // ar=[1,2,8,16]: I=8 → p=3 → ar[0]=1 — slot-3 equip skipped
+        // (indexOf would land on 16). Verbatim quirk.
+        p.gJ = 1 or 2 or 8 or 16
+        w.rebuildEquip()
+        p.gI = 8
+        val pad = Pad(); pad.queuePress(Pad.M_CYCLE); pad.commit(0)
+        assertTrue(p.cycleEquip(w, pad))
+        assertEquals(1, p.gI, "ar[(p(8)+1)%4] = ar[0] = 1")
+    }
+
+    @Test fun `weapon cycle from the top bit wraps to ar one`() {
+        val w = world(); val p = w.player
+        // I=16 → p=4 → ar[(4+1)%4] = ar[1] = 2 — the original never
+        // reaches ar[0] from 16 (equip-1 is skipped on that hop).
+        p.gJ = 1 or 2 or 8 or 16
+        w.rebuildEquip()
+        p.gI = 16
+        val pad = Pad(); pad.queuePress(Pad.M_CYCLE); pad.commit(0)
+        assertTrue(p.cycleEquip(w, pad))
+        assertEquals(2, p.gI, "ar[(p(16)+1)%4] = ar[1] = 2")
+    }
+}
+
+class Slice210Test {
+
+    /**
+     * Wall-kick chain at the real x2200 corridor face (level0): airborne
+     * contact with direction held -> `cv && aF` latch -> S101 grab -> the
+     * L1a46 auto-bounce (av flip + ag=-2048 + ah=-5120) -> S36 wall air ->
+     * land back on the '05' one-way strip (y800). Proves the grab arm +
+     * kick fire verbatim on real geometry; climbing the 460px face is a
+     * jump-kick cycle (player skill), not a missing arm.
+     */
+    @Test fun `wall kick chain climbs the x2200 face`() {
+        val w = world(); val p = w.player
+        var t = 0
+        while (p.ah != 0 && t++ < 600) w.tick(emptyList())
+        p.setPositionPx(2160, 830)
+        // a real jump carries ~1536-2048 east + rise — spawn mid-arc
+        // close enough that the arc reaches the x2200 face airborne.
+        p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -200; p.aj = 1536
+        p.av = false                               // facing east
+        // hold RIGHT — pad zone 2 emits `2<<2 = 8` = M_TAP_R
+        val q = InputQueue()
+        val (rx, ry) = w.cellPoint(2)
+        q.post(InputQueue.Type.DOWN, rx, ry)
+        var grabbed = false
+        var kicked = false
+        var riseTop = Int.MAX_VALUE
+        repeat(60) {
+            w.tick(q.drainTo(q.headSequence()))
+            if (p.S == 101) grabbed = true
+            if (grabbed && p.S == 36) {
+                kicked = true
+                if (p.al < riseTop) riseTop = p.al
+            }
+            if (kicked && p.al <= 800 && p.ag == 0) return@repeat   // landed
+        }
+        assertTrue(grabbed, "expected S101 grab at the x2200 face, S=${p.S} ak=${p.ak} al=${p.al}")
+        assertTrue(kicked, "expected the L1a46 bounce into S36, S=${p.S}")
+        assertTrue(riseTop < 820, "kick should rise ~74px above grab, top=$riseTop")
+    }
+}
+
+class Slice211Test {
+
+    /** k.java:5180 — pause entry `i==14` runs `if (!e.a()) k.fi = -1`:
+     *  the music slot survives for RESUME only while a track is live. */
+    @Test fun `pause entry keeps the music slot while a track plays`() {
+        val w = world()
+        w.sfx(1)                                   // live track → e.a() true
+        w.kFi = 1
+        w.stateL(14)
+        assertEquals(1, w.kFi, "live track → fi kept for RESUME replay")
+    }
+
+    @Test fun `pause entry silences the music slot when no track plays`() {
+        val w = world()
+        w.kFi = 9
+        w.stateL(14)
+        assertEquals(-1, w.kFi, "no live track → fi = -1")
+    }
+}
+
+class Slice212Test {
+
+    /**
+     * The shaft at x1740-1820 (west face lip y520, east face solid
+     * y420-800): hold east, seed one arc -> S101 grab at x1820 -> the
+     * L1a46 bounce (ag=-2048 west, ah=-5120 rise) arcs into the WEST
+     * face x1740 -> re-grab higher -> bounce back east -> re-grab even
+     * higher. The shaft is a zigzag wall-jump ladder (west face lip at
+     * y520, east roof y420); the '05' strip at y800 is the catch. */
+
+    @Test fun `kick chain regrabs higher on the x1820 face`() {
+        val w = world(); val p = w.player
+        var t = 0
+        while (p.ah != 0 && t++ < 600) w.tick(emptyList())
+        p.setPositionPx(1790, 700)             // mid-shaft, face x1820 spans y420-800
+        p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -300; p.aj = 1536
+        p.av = false                            // facing east toward x1820
+        val q = InputQueue()
+        val (rx, ry) = w.cellPoint(2)
+        q.post(InputQueue.Type.DOWN, rx, ry)   // hold east the whole time
+        val grabs = mutableListOf<Pair<Int, Int>>()   // (tick, al) of each grab
+        repeat(300) { tt ->
+            w.tick(q.drainTo(q.headSequence()))
+            if (p.S == 101 && (grabs.isEmpty() || tt - grabs.last().first > 3))
+                grabs += tt to p.al
+        }
+        assertTrue(grabs.size >= 2, "expected repeated grabs, got ${grabs}")
+        val first = grabs.first().second
+        assertTrue(grabs.any { it.second < first - 40 },
+            "expected a grab well above the first (al=$first): ${grabs}")
+    }
+}
