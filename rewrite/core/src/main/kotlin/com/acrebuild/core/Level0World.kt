@@ -372,7 +372,7 @@ class Level0World(
     /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
      *  = autoscroll/flying on missions 1 and 4. */
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
-    val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
+    override val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
      *  `inferred` — orig's u is written by script ops). */
     var dlgU = 0
@@ -584,6 +584,26 @@ class Level0World(
         }
         player.setAnim(0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
+        run {
+            val rec = level.playerRecord()
+            // i.java:2415-2427 (proven) — the ax25 flying player-slot
+            // init (runs after the shared vel-clear): `az=202`,
+            // `g.e(90)` (x1), `aA=2`, `aB=3`, `ah=-2560`, `aq=ar=-1`,
+            // `ad` = retype-26 companion at the record pos (the glider
+            // visual n() mirrors each tick). Keys off the record type
+            // like the original's entity-init dispatch — `kAj` isn't
+            // assigned yet when init{} runs, so `bh3` reads stale here.
+            if (rec != null && rec[0] == 25) {
+                player.az = 202; player.x1 = 90
+                player.aA = 2; player.aB = 3
+                player.ah = -2560
+                player.aq = -1; player.ar = -1
+                player.ad = Entity(26, clips[ENTITY_CLIP[26] ?: 15]).apply {
+                    setPositionPx(if (rec.size > 2) rec[2] else player.ak,
+                                  if (rec.size > 3) rec[3] else player.al)
+                }
+            }
+        }
         player.gt = 0; player.bh = 0
         // ax10-published player statics (i.java:2492-2512 level-init clears)
         player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
@@ -618,6 +638,9 @@ class Level0World(
         for (f in level.entities) {
             if (f.isEmpty()) continue
             if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
+            // the 0/25 player-slot record becomes `aS`, not a bb[] npc
+            // (inferred — `k.aS` is built from it, not spawned twice).
+            if (f[0] == 0 || f[0] == 25) continue
             if (f.size < 7) continue
             // Retype head (i.java:2640-2651, proven): ax11 records whose
             // spawn anim r8[5]∈{80,93} become ax47 ledge sentinels; ax17
@@ -945,7 +968,7 @@ class Level0World(
     override var kBg = -1                   // k.bG=-1 (:310) — one-shot music slot
     override var kBH = -1                   // k.bH=-1 (:311) — saved music slot
     var kAk = 0                             // k.ak (:66) — flying group marker
-    var kQ = 0                              // k.Q (:42) — flying scroll count
+    override var kQ = 0                     // k.Q (:42) — flying scroll count
     override var kV = -7                    // k.V=-7 (:49) — camera watch
     var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
     /** `k.dL` (k.java:82, proven) — bh==3 stamp grid, 21 cols × 13
@@ -1179,7 +1202,7 @@ class Level0World(
     var kBF = true
     /** `k.ee[]` — per-mission music table (k.java:8436, proven):
      *  `B()` plays `ee[aj]` (or track 9 when `aJ==1`). */
-    val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
+    override val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
     /** `h.a[34]` — per-slot duration ms the original uses to fake a
      *  "still playing" check (h.java:8, proven). */
     private val hA = intArrayOf(38958, 14569, 7449, 16958, 9682, 11837,
@@ -1241,6 +1264,13 @@ class Level0World(
     override var iBD = false                     // i.bD static
     override var iBB = false                     // i.bB static (revive arm)
     override var iBC = false                     // i.bC static
+    override var iBk = false                     // i.bk — wisp-burst latch
+    override var iAK: Entity? = null             // i.aK — flap-puff child
+    override var kAI = 0                         // k.aI — flap cooldown
+    override var kAG = 0                         // k.aG — aE decay divider
+    override var kBB = 0                         // k.bB — burst-phase int
+    override var kBC = 0                         // k.bC
+    override var kBD = 0                         // k.bD — bank-anim tier
     override var iBE = 0                         // i.bE static
     override var iBF = 0                         // i.bF static
     override var iBG = -1                        // i.bG static
@@ -1975,7 +2005,7 @@ class Level0World(
      *  `cy=j.c; j.c=i` plus the `al` world-freeze flag. `i=22` re-enters
      *  the loop once (medal screen after a stamp). */
     override fun screenL(n: Int) = stateL(n)
-    fun stateL(iArg: Int) {
+    override fun stateL(iArg: Int) {
         var i = iArg
         while (true) {                               // L2 — re-entry for i=22 only
             kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0

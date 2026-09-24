@@ -96,10 +96,15 @@ class LevelPack private constructor(
     val worldW: Int get() = cols * cellPx
     val worldH: Int get() = rows * cellPx
 
-    /** Player spawn: first record with raw type 0 (routed to `g(short[])`). */
+    /** Player spawn: first record with raw type 0 or 25 (the flying
+     *  player-slot record on bh3 packs — k.java:4647). */
     fun playerSpawn(): Pair<Int, Int>? =
         entities.firstOrNull { it.isNotEmpty() && (it[0] == 0 || it[0] == 25) }
             ?.let { it[2] to it[3] }
+    /** The raw 0/25 player-slot record (the ax25 record feeds the
+     *  flying-player init: `ad` companion + `az/aA/aB/ah` — i.java:2415). */
+    fun playerRecord(): IntArray? =
+        entities.firstOrNull { it.isNotEmpty() && (it[0] == 0 || it[0] == 25) }
 
     companion object {
         fun load(data: ByteArray): LevelPack {

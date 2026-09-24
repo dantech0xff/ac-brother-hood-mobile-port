@@ -4443,6 +4443,34 @@ interface LevelCellSource {
     var iAH: Boolean get() = false; set(_) {}
     var iAI: Int get() = 0; set(_) {}
     var iAJ: Int get() = 0; set(_) {}
+    /** `i.bk` (i.java:158, proven) — wisp-burst latch: `n()`'s S18 arm
+     *  sets it on `i(20)`; the S20 case gates the `5×e(true)` burst and
+     *  clears it on `r()`; the S0 arm's `e(false)` flap requires `!bk`. */
+    var iBk: Boolean get() = false; set(_) {}
+    /** `i.aK` — pooled flap-puff child spawned by `g.e(boolean)` (the
+     *  `a(24,40,6|7,az-1)` wisp the player leaves while flapping). */
+    var iAK: Entity? get() = null; set(_) {}
+    /** `k.aI` (k.java:234, proven) — `n()` flap cooldown: `++` per tick,
+     *  the `e(false)` auto-flap requires `k.aI >= 10` and resets it. */
+    var kAI: Int get() = 0; set(_) {}
+    /** `k.aG` — `k.aE` decay divider (n() head: `aH<0 → aG--`;
+     *  `aG<=0 → aG=6; aE--`). */
+    var kAG: Int get() = 0; set(_) {}
+    /** `k.bB`/`k.bC`/`k.bD` (k.java:119-123, proven) — burst-phase ints:
+     *  `bB==0 && bC==0` gates the glide-recovery `i(4)`; `bD>=15` picks
+     *  the heavy bank anims (30/31) over the light ones (33/32). */
+    var kBB: Int get() = 0; set(_) {}
+    var kBC: Int get() = 0; set(_) {}
+    var kBD: Int get() = 0; set(_) {}
+    /** `k.bh[k.aj]==3` — flying level; gates the `g.n()` flight arms. */
+    val bh3: Boolean get() = false
+    /** `k.ee[]` — per-mission BGM table (`B()` plays `ee[aj]`). */
+    val kEE: IntArray get() = IntArray(0)
+    /** `k.Q` — flying camera lookahead flag (C() sets 230 on bh3); the
+     *  glide arm uses ≥230 = auto-descend, >117/<230 = climb/dive gates. */
+    var kQ: Int get() = 0; set(_) {}
+    /** `k.l(i)` — screen-state driver (`l(12)` = mission fail). */
+    fun stateL(i: Int) {}
     /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
     var kBj: Int get() = 0; set(_) {}
     /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by
