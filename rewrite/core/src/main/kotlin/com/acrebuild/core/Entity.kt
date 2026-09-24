@@ -240,7 +240,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var projK = false              // i.k — lobbed-arc phase flag (ba())
     var cHWaypoints: Array<IntArray>? = null  // i.cH — homing waypoint
                                               // table on the owner (af)
-    var iP = 0                     // i.p — ax32 sub-type (bc() anim pick)
     var cIDone = false             // i.cI — attack-script done (bool)
     var cJDone = false             // i.cJ — transition ack (bool)
     var cHGrid: Array<IntArray>? = null   // i.cH — int[7][2] knife targets
