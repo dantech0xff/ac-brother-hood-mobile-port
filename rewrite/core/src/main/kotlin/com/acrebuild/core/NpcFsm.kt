@@ -9784,6 +9784,144 @@ fun NpcFsm.initAx32(e: Entity, f: List<Int>, w: LevelCellSource) {
     e.refreshBoxes()                                // t()
 }
 
+/** ax16 `L595` (i.java:7988, proven): request-marker init — `az=200`
+ *  default; the request-marker anims {31,32,33} override to `az=-1`.
+ *  Shared `i(r8[5])` finish. */
+fun NpcFsm.initAx16(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = if (rf(5) in 31..33) -1 else 200
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax21 `Lc8c` (i.java:9017, proven): mission-director init — only when
+ *  `r8[5] <= 1`: `aA=0; j=0; az=r8[8]; aB=r8[7]; Z[0..3]=r8[9..12]`,
+ *  `Z[4]=r8[24]`, `Z[5..15]=r8[13..23]`; registers `k.B=r7`; then MUTATES
+ *  THE RECORD (`r8[0]→48`, `r8[5]→0`) and spawns `ad=new i(r8)` — the
+ *  ax48 in-mission director delegate (Ld7c→i(0)). S>1 records take only
+ *  the L1bea finish. */
+fun NpcFsm.initAx21(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    if (rf(5) > 1) { e.setAnim(rf(5)); return }      // gate → plain finish
+    e.aA = 0; e.j = 0
+    e.az = rf(8); e.aB = rf(7)
+    e.Z[0] = rf(9); e.Z[1] = rf(10); e.Z[2] = rf(11); e.Z[3] = rf(12)
+    e.Z[4] = rf(24)
+    for (i in 5..15) e.Z[i] = rf(i + 8)              // Z[5..15] = r8[13..23]
+    w.kB = e                                         // k.B = r7
+    e.ad = Entity(48, w.clipFor(13)).apply {         // mutated record → new i(r8)
+        aw = e.aw; setPositionPx(e.ak, e.al); P = e.P; av = e.av
+        setAnim(0)                                   // Ld7c → L1bea → i(0)
+        refreshBoxes()
+    }
+    e.setAnim(0)                                     // mutated r8[5]=0 → i(0)
+    e.refreshBoxes()
+}
+
+/** ax29 `L10a8` (i.java:9671, proven): boss-duel init — `az=100`,
+ *  `aB=800` (boss HP), `aD=2`, `m=2`, `aC=30`, `aF=30`, `n=60`,
+ *  `Z[0..4]={r8[4], r8[7], r8[8], r8[9], r8[10]}`; `r8[5]!=30 → k.aU=r7`
+ *  (boss handle). */
+fun NpcFsm.initAx29(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 100; e.aB = 800; e.aD = 2; e.m = 2
+    e.aC = 30; e.aF = 30; e.nl = 60
+    e.Z[0] = rf(4); e.Z[1] = rf(7); e.Z[2] = rf(8)
+    e.Z[3] = rf(9); e.Z[4] = rf(10)
+    if (rf(5) != 30) w.kAU = e
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax41 `L1172` (i.java:9799, proven): `az=r8[7]; P|=0x1000` (knockable
+ *  prop flag). */
+fun NpcFsm.initAx41(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7); e.P = e.P or 4096
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax43 `L11e8` (i.java:9872, proven): ride-carrier init —
+ *  `Z[0..2]=r8[8..10]`; `r8[8]!=-1 → h(k.s(r8[8]))` (bind the linked
+ *  claim script); `az=r8[7]`. */
+fun NpcFsm.initAx43(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(8); e.Z[1] = rf(9); e.Z[2] = rf(10)
+    if (rf(8) != -1) e.bindScript(w.kSIndex(rf(8)), w)
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax51 `Ldbc` (i.java:9213, proven): crate init — `az=r8[7]`;
+ *  `Z[0]=0; Z[1]=r8[8]` (the generic Z-fill's `Z[0]=r8[7]` was WRONG —
+ *  the original hardcodes Z[0]=0); `r8[5]==8 → P|=0x80` (sensor flag);
+ *  `Z[1]!=-1 → h+k(k.s(Z[1]))` (linked-entity claim pair). */
+fun NpcFsm.initAx51(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = 0; e.Z[1] = rf(8)
+    if (rf(5) == 8) e.P = e.P or 128
+    if (e.Z[1] != -1) {
+        e.bindScript(w.kSIndex(e.Z[1]), w)             // h(k.s(Z[1]))
+        e.scriptKeyStep(w.kSIndex(e.Z[1]), w)          // k(k.s(Z[1]))
+    }
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax58 `L1540` (i.java:10402, proven): lever/counterweight init —
+ *  `Z[0]=r8[7]`; `Z[0]!=-1 → h(k.s(Z[0]))` + `P|=0x210` (512|16);
+ *  `az=0`. */
+fun NpcFsm.initAx58(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(7)
+    if (e.Z[0] != -1) {
+        e.bindScript(w.kSIndex(e.Z[0]), w)
+        e.P = e.P or 512 or 16
+    }
+    e.az = 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax61 `La53` (i.java:8673, proven): `az=101` only. */
+fun NpcFsm.initAx61(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 101
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax66 `L17cd` (i.java:10819, proven): moving-platform init —
+ *  `az=r8[9]`; then three Z arms keyed on the record anim r8[5]:
+ *  - S∈{12,14,19} (L17ed): `Z[0]=r8[8], Z[1]=r8[10],
+ *    aC=(S==14?Z[0]:Z[1]), Z[4]=r8[7], r8[4]==999→aA=999, P|=0x10`
+ *  - S∈[6,10]∪[24,28] (L186f): `Z[0]=r8[8], Z[1]=Z[0], Z[2]=ak, Z[3]=al`
+ *  - else (L18a3): `Z[0]=r8[7]`
+ *  All three then `P|=0x200` (L18b4) → `i(r8[5])`. */
+fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(9)
+    val s = rf(5)
+    if (s == 12 || s == 14 || s == 19) {
+        e.Z[0] = rf(8); e.Z[1] = rf(10)
+        e.aC = if (s == 14) e.Z[0] else e.Z[1]
+        e.Z[4] = rf(7)
+        if (rf(4) == 999) e.aA = 999
+        e.P = e.P or 16
+    } else if ((s in 6..10) || (s in 24..28)) {
+        e.Z[0] = rf(8); e.Z[1] = e.Z[0]
+        e.Z[2] = e.ak; e.Z[3] = e.al
+    } else {
+        e.Z[0] = rf(7)
+    }
+    e.P = e.P or 512
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
 /** Record init (L361 at i.java:3546, proven): `az=r8[7]`, `aC=r8[8]`
  *  (chain countdown), `o=r8[9]` (sibling aw link), `Z=new int[2]` +
  *  `Z[1]=r8[4]` (trap-type flag) — the Z re-alloc to 2 slots is folded
