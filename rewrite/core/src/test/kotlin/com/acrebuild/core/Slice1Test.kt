@@ -10674,6 +10674,38 @@ class Slice89Test {
             assertEquals(0, n19, "level$aj contains type-19 cells")
         }
     }
+
+    @Test
+    fun `down at a thin platform edge vault-drops into S257`() {
+        val w = world()
+        w.stateL(8)
+        // ledgeDrop257 needs: support cell aQ ∈ {20,5} (shifted probe =
+        // the cell under the feet), aR == 0 below it (thin platform),
+        // and open space two cells out one row below in the facing dir.
+        var px = -1; var py = -1
+        outer@ for (y in 2 until w.level.rows - 2) {
+            for (x in 2 until w.level.cols - 3) {
+                if (w.level.collisionCell(x, y) >= 19 &&
+                    w.level.collisionCell(x, y + 1) == 0 &&
+                    w.level.collisionCell(x, y - 1) == 0 &&
+                    w.level.collisionCell(x, y - 2) == 0 &&
+                    w.level.collisionCell(x + 2, y + 1) < 12) { px = x; py = y; break@outer }
+            }
+        }
+        assertTrue(px >= 0, "no thin platform edge in level0")
+        val p = w.player
+        p.S = 0
+        p.av = false                            // face right, toward the drop
+        p.ak = px * 20 + 10
+        p.al = py * 20 - 1                      // feet on the platform top
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        assertEquals(257, p.S, "DOWN at the thin edge arms the vault-drop")
+        var guard = 0
+        while (guard++ < 80 && p.S == 257) w.tick(emptyList())
+        assertNotEquals(257, p.S, "vault-drop anim must end")
+        assertTrue(p.al > py * 20, "drop carries the player below the ledge")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
