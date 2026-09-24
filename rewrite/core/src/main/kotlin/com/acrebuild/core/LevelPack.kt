@@ -34,12 +34,36 @@ class LevelPack private constructor(
 
     private val et: Layer = layers.first { it.id == 0 }
 
+    /** `k.bp`/`k.bq` — the et grid dims in *cells* (`bt=bp`, `bu=bq` in
+     *  `I(i)` k.java:5251-5252; `br/bs` are the px forms). */
+    val etCols: Int get() = et.cols
+    val etRows: Int get() = et.rows
+
+    /** `k.dL` (k.java:82, proven) — the bh==3 stamp grid: 21×13
+     *  source-tile indices backing `g()`'s flying remap. Owned by the
+     *  world (allocated in `I(aj)`/`U()`, stamped by `k.h`); `null` on
+     *  grounded packs. */
+    var flyingGrid: IntArray? = null
+
     /**
-     * `k.g(x, y)` — collision query in *cell* coordinates. Out-of-bounds
-     * returns 20 (solid border sentinel), exactly like the original
-     * (`k.java:5284`; the `bh[aj]==3` remap is unused on level 0).
+     * `k.g(x, y)` — collision query in *cell* coordinates (k.java:5284,
+     *  proven). Out-of-bounds returns 20 (solid border sentinel).
+     *  bh==3 arm: `cy<0 → 0`, then `et[dL[cx%21][cy%13]]` — the visible
+     *  stamp table, so collision matches the wrapped backdrop. A
+     *  negative `dL` slot (un-stamped negative row) is air — the
+     *  original's `et[neg]` would throw; J2ME never reaches it because
+     *  negative rows return earlier.
      */
     fun collisionCell(cx: Int, cy: Int): Int {
+        val dl = flyingGrid
+        if (dl != null) {
+            if (cx < 0 || cx >= et.cols || cy >= et.rows) return 20
+            if (cy < 0) return 0
+            val idx = dl[(cx % 21) * 13 + (cy % 13)]
+            if (idx < 0 || idx >= et.cells.size) return 0
+            val v = et.cells[idx]
+            return if (v == 255) 0 else v
+        }
         if (cx < 0 || cx >= et.cols || cy >= et.rows) return 20
         if (cy < 0) return 20
         // original `k` load remaps 255 -> 0 (proven)

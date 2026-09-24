@@ -774,8 +774,8 @@ class Level0World(
     override var kAE = 0                       // k.aE
     override var kAF = 0                         // k.aF — meter fill
     override var kAH = 0                       // k.aH
-    override var kAR = 0                       // k.aR — chase row
-    override val kBu: Int get() = level.worldH // k.bu — level height px
+    override var kAR = -1                      // k.aR=-1 (:244) — flying copy band
+    override val kBu: Int get() = level.etRows // k.bu — et height CELLS (`bu=bq`)
     /** `k.bk[]` ax67 per-kind clip table (k.java:268 proven,
      *  i.java:1945 `aa = k.r(bk[r8[7]])`) — same table as `decorClip`. */
     override fun kBk(i: Int): Int = NpcFsm.decorClip(i)
@@ -822,6 +822,103 @@ class Level0World(
             loadedAj = mission
             pendingCommands += Command.MissionLoaded(mission)
         }
+        applyG2()
+        kDN = -1; kDO = -1; kDP = -1; kDQ = -1
+        flyingRestamp()
+    }
+
+    /** `k.h(i,i2,i3,i4)` (k.java:4372-4407, proven): stamps the
+     *  [col i..i3]×[row i2..i4] window into `dL`. Source row `i5` is the
+     *  row itself while `aR<0`; once a copy band is armed the row remaps
+     *  through `(i6%20) + ((bu/20-1 - dS|aR) * 20)` and rows crossing
+     *  `dT` advance `aR`/`dU`. The `a(dK,…)` blit per cell is
+     *  renderer-side (`dL` is the only state `g()` reads). */
+    private fun kH(c0: Int, r0: Int, c1: Int, r1: Int) {
+        val dl = flyingDL ?: return
+        val bt = level.etCols
+        val bu = level.etRows
+        var i6 = r0
+        while (i6 <= r1) {
+            var i7 = i6 % 13
+            val i5: Int
+            if (kAR < 0) {
+                i5 = i6
+            } else {
+                if (i6 < kDT) {
+                    kDS = kAR
+                    if (kDR < 0 || kDR > kAR) {
+                        kAR++
+                    } else {
+                        kDU += (kAR - kDR) + 1
+                        kAR = kDR
+                    }
+                    kDT -= 20
+                }
+                var s = if (i6 < kDT || i6 >= kDT + 20)
+                    (i6 % 20) + (((bu / 20) - 1) - kDS) * 20
+                else
+                    (i6 % 20) + (((bu / 20) - 1) - kAR) * 20
+                if (s < 0) {
+                    val i8 = s % 20
+                    s = i8
+                    if (i8 < 0) s += 20
+                }
+                i5 = s
+            }
+            var i9 = c0
+            while (i9 <= c1) {
+                val i10 = i9 % 21
+                if (i7 < 0) i7 += 13
+                dl[i10 * 13 + i7] = i9 + (i5 * bt)
+                i9++
+            }
+            i6++
+        }
+    }
+
+    /** The stamp-window half of `k.b(z2)` (k.java:2695-2752, proven):
+     *  the `et` backdrop trails the camera at parallax
+     *  `(O*(bt-21))/(bp-21)` / `(P*(bu-13))/(bq-13)`; exposed edges
+     *  re-stamp incrementally via `kH()`, `dM` forces a full pass.
+     *  Called once per tick when `bh3` (the original ran it inside the
+     *  render — collision only needs it once a tick). */
+    private fun flyingRestamp() {
+        val dl = flyingDL ?: return
+        val bp = level.etCols
+        val bq = level.etRows
+        val bt = bp
+        val bu = bq
+        if (bp <= 21 || bq <= 13) return          // `/(bp-21)`/`/(bq-13)`
+                                                // would throw — the
+                                                // original's catch aborts
+        var i2 = (camX * (if (bt < 21) 0 else bt - 21)) / (bp - 21)
+        var i3 = (camY * (bu - 13)) / (bq - 13)
+        if (i3 < 0) i3 -= 20
+        val i5 = i2 / 20
+        var i6 = i5
+        var i7 = ((i2 + 400) - 1) / 20
+        var i8 = i7
+        val i9 = i3 / 20
+        val i10 = ((i3 + 240) - 1) / 20
+        if (i3 < 0) i3 += 20
+        var c0 = i5; var r0 = i9; var c1 = i7; var r1 = i10
+        if (c0 < 0) { c0 = 0; i6 = 0 } else if (c0 > bt - 1) c0 = bt - 1
+        if (r0 > bu - 1) r0 = bu - 1
+        // (bh3 keeps r0<0 — negative rows stamp the wrap band; g()
+        //  returns 0 above the world before consulting dL.)
+        if (!flyingDM && (c0 != kDN || c1 != kDP)) {
+            if (c1 < kDN || c0 > kDP) flyingDM = true
+            else if (c0 < kDN) { i6 = kDN; kH(c0, r0, kDN - 1, r1) }
+            else if (c1 > kDP) { i8 = kDP; kH(kDP + 1, r0, c1, r1) }
+        }
+        if (!flyingDM && (r0 != kDO || r1 != kDQ)) {
+            if (r1 < kDO || r0 > kDQ) flyingDM = true
+            else if (r0 < kDO) kH(i6, r0, i8, kDO - 1)
+            else if (r1 > kDQ) kH(i6, kDQ + 1, i8, r1)
+        }
+        if (flyingDM) { flyingDM = false; kH(c0, r0, c1, r1) }
+        kDN = c0; kDO = r0; kDP = c1; kDQ = r1
+        parallaxX = i2; parallaxY = i3
     }
 
     /** `a(false)` (k.java:5173, proven): the fail-retry full reload —
@@ -851,6 +948,29 @@ class Level0World(
     var kQ = 0                              // k.Q (:42) — flying scroll count
     override var kV = -7                    // k.V=-7 (:49) — camera watch
     var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
+    /** `k.dL` (k.java:82, proven) — bh==3 stamp grid, 21 cols × 13
+     *  rows of source `et` indices; allocated by the `U()`/`G(2)` arm,
+     *  stamped by `kH()`. Lives on `level.flyingGrid` so `g()` sees it. */
+    var flyingDL: IntArray? = null
+        private set
+    /** `k.dN/dO/dP/dQ` — last stamped stamp-space rect (cells). */
+    var kDN = -1; var kDO = -1; var kDP = -1; var kDQ = -1
+    /** `k.dM` — full-restamp flag (`U()` sets it; big view jumps too). */
+    var flyingDM = true
+
+    /** `G(2)` = `U(); bh==3 → dL=new int[21][13]` (k.java:4359-4365,
+     *  proven): the flying stamp grid — `dM=true` forces a full
+     *  restamp on the next `flyingRestamp`. Runs on every `I(aj)`
+     *  load AND once at world init (the constructor pack counts). */
+    private fun applyG2() {
+        flyingDL = if (bh3) IntArray(21 * 13).also { level.flyingGrid = it }
+                   else null.also { level.flyingGrid = null }
+        flyingDM = true
+    }
+    /** The `b(z2)` parallax offset the stamp window trails — renderer
+     *  uses the same pair to place the flying `et` backdrop. */
+    var parallaxX = 0; var parallaxY = 0
+        private set
     var kDA: Entity? = null                 // k.dA — HUD indicator entity
     /** `k.ef[]` (k.java:264, proven) — all-false trail-enable table:
      *  `if (ef[aj]) ab()` at the jc9 exit is dead code in this build. */
@@ -4123,54 +4243,56 @@ class Level0World(
         player.integrate()
         player.advanceAnim()
 
-        for (n in npcs) {
-            if (n.ax == 44) npcFsm.tickDoor(n, player)
-            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
-            else if (n.ax == 4) npcFsm.tickDestructible(n, player)
-            else if (n.ax == 67) npcFsm.tickDecor(n, player)
-            else if (n.ax == 14) npcFsm.tickPickup(n, player)
-            else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
-            else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
-            else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
-            else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
-            else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
-            else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
-            else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
-            else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
-            else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
-            else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
-            else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
-            else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
-            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
-            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
-            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
-            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
-            else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
-            else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
-            else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
-
-            else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
-            else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
-            else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
-            else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
-            else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
-            else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
-            else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
-            else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
-            else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
-            else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
-            else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
-            else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
-            else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
-            else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
-            else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
-            else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
-
-            else npcFsm.tick(n, player)
-            // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
-            // every entity except soldiers (11) and civilians (17).
-            if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
+        if (bh3) {
+            // `k.I()` bh3 arm (k.java:2529-2572, proven): every entity
+            // re-scores `au` via `u()`; only eligible entities
+            // `((P&256)==0 && ((au<2 && !(P&32)) || (P&16)))` tick, and
+            // copy-group members (`ay==group`) are consumed into
+            // `ak`/`dR`. When a tick consumes nothing and `dU` is
+            // pending, the whole world shifts `dU` bands — camera,
+            // player, and `dT` together.
+            var consumed = 0
+            for (n in npcs) {
+                n.recomputeAu(camX, camY, ::kBk)
+                if ((n.P and 256) == 0 &&
+                    ((n.au < 2 && (n.P and 32) == 0) || (n.P and 16) != 0)) {
+                    if (kAk == 0 && n.au < 1 && n.ay > 0) {
+                        kAk = n.ay
+                        for (m in npcs) {
+                            if (m.ay == kAk) {
+                                kDR = m.aG
+                                // `bb[i4].v()` — the result is discarded
+                                // (proven dead-read); only its internal
+                                // `u()` side-effect matters.
+                                m.recomputeAu(camX, camY, ::kBk)
+                            }
+                        }
+                    }
+                    if (n.ay == kAk) n.ay = -1
+                    if (n.ay == -1) {
+                        consumed++
+                        tickNpc(n)
+                        // `bb[i3].ac/.ab.I()` — linked entities tick via
+                        // the link even when they sit in `bb[]` too
+                        // (verbatim double-tick quirk, kept).
+                        n.ac?.let { if (it.ax != 10) tickNpc(it) }
+                        n.ab?.let { tickNpc(it) }
+                    }
+                }
+            }
+            if (consumed == 0 && kDU != 0) {
+                val i5 = kDU * 400
+                camB += i5
+                camY = camB
+                player.al += i5
+                player.syncAd(this)
+                kDT += kDU * 20
+                kDU = 0
+                kDR = -1
+                kAk = 0
+            }
+        } else {
+            for (n in npcs) tickNpc(n)
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
@@ -4201,6 +4323,7 @@ class Level0World(
             kD()
         }
         l142Tail()          // L142-L200 — runs on both camera arms
+        flyingRestamp()     // b(z2) stamp-window update (bh3 only)
 
         // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
         // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
@@ -4228,10 +4351,63 @@ class Level0World(
         }
     }
 
+    /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
+     *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
+    private fun tickNpc(n: Entity) {
+        if (n.ax == 44) npcFsm.tickDoor(n, player)
+        else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
+        else if (n.ax == 4) npcFsm.tickDestructible(n, player)
+        else if (n.ax == 67) npcFsm.tickDecor(n, player)
+        else if (n.ax == 14) npcFsm.tickPickup(n, player)
+        else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
+        else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
+        else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
+        else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
+        else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
+        else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
+        else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
+        else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
+        else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
+        else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
+        else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
+        else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+        else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+        else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
+        else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+        else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
+        else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
+        else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
+        else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
+        else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
+
+        else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
+        else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
+        else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
+        else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
+        else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
+        else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
+        else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
+        else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
+        else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
+        else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
+        else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
+        else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
+        else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
+        else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
+        else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
+        else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
+
+        else npcFsm.tick(n, player)
+        // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
+        // every entity except soldiers (11) and civilians (17).
+        if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
+    }
+
     // Second init block: runs after every property initializer, so the
     // C() init `m(ad)` snap (k.java:2343) sees kAe/kAd in their set state.
     init {
         kM(2)
+        applyG2()   // `G(2)` runs for the constructor pack too
     }
 }
 
