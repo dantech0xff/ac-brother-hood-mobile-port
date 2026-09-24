@@ -2808,7 +2808,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `g.h(int)` (g.java:5270, proven): request/consume — when `r4!=0`
      *  requires `J&r4` pending; sets `I=r4`, forces `k.at=1`, and when the
      *  mount link's `ab` is an ax16 request entity runs its `H()` consume
-     *  (internals unmined — recorded via `consumedH`). `r4==1` → true;
+     *  (`ab.p()` + `ab = null` — i.java:15150, proven, ported as
+     *  `consumeH`). `r4==1` → true;
      *  `S!=38` → true; `S==38` repeats the consume and returns false. */
     fun requestH(r4: Int, w: LevelCellSource): Boolean {
         if (r4 != 0 && (gJ and r4) == 0) return false
@@ -3945,18 +3946,27 @@ open class Entity(val ax: Int, var clip: Clip?) {
         w.iCk?.let { it.az = az2; it.av = av }
     }
 
-    /** `i.b(int)` (i.java:7607, proven head): slow-mo driver arm —
-     *  `aH=true, aI=r3, k.aw=0`; the `k.bh[k.aj]==3` block copies
-     *  `aJ=k.X`/`k.W` and divides `k.X` — table unmined (`inferred`,
-     *  port keeps the flag writes only). */
+    /** `i.b(int)` (i.java:21728, proven): slow-mo driver arm —
+     *  `aH=true, aI=r3, k.aw=0`; `k.bh[k.aj]==3` (missions 1/4) saves
+     *  `k.X→aJ` (or `k.W` when set) and scales `k.X /= r3`. Same body
+     *  as `eventArm` — i.java has one `b(int)`. */
     fun timewarp(w: LevelCellSource, r3: Int) {
         w.iAH = true; w.iAI = r3; w.kAw = 0
+        if (Entity.MISSION_BH[w.kAj] != 3) return
+        w.iAJ = w.kX
+        if (w.kW != 0) { w.iAJ = w.kW; w.kX = w.kW; w.kW = 0 }
+        w.kX /= r3
     }
 
-    /** `i.O()` (i.java:7623, proven head): slow-mo driver release —
-     *  `aH=false, k.aw=0` (`k.bh[k.aj]` gate unmined, `inferred`). */
+    /** `i.O()` (i.java:21749, proven): slow-mo driver release —
+     *  `aH=false, k.aw=0`; `k.bh[k.aj]==3` restores `k.X` from `aJ` (or
+     *  `k.W`) and clears `aJ`. Same body as `eventDisarm`. */
     fun timewarpOff(w: LevelCellSource) {
         w.iAH = false; w.kAw = 0
+        if (Entity.MISSION_BH[w.kAj] != 3) return
+        if (w.kW != 0) w.iAJ = w.kW
+        if (w.iAJ != 0) w.kX = w.iAJ
+        w.iAJ = 0
     }
 
     /** `k.o()` (k.java:3429, proven): input-lock arm `am=true,dd=false`. */
@@ -4858,15 +4868,16 @@ interface LevelCellSource {
     /** `i.bi` — ax64 grab-hitlag flag (set by the S2 hold arm,
      *  i.java:15686). */
     var iBi: Boolean get() = false; set(_) {}
-    /** `av()` + `k.aX[50]` (i.java:7813, k.java:8423, proven): the pooled
-     *  shot-slot allocator — `P&128` marks free slots. Returns null when
-     *  all slots are live. Slot ax/clip are `inferred` (the original pool
-     *  is ax-generic; clip5 stands in as the shared projectile clip). */
-    fun allocShot(): Entity? = null
-    /** `k.aX` pool step (`inferred` — the pooled-shot tick path is
-     *  unmined): ballistic `am+=ag; an+=ah; ah+=kY`, `aC--` lifetime →
-     *  `P|=128` frees the slot. */
-    fun tickShotPool() {}
+    /** `k.aX[]` pooled ax24 shot slots (i.java:2837 `k.aW=50`, seeded by
+     *  an ax24-S0 record's constructor arm and `k.b`-inserted into the
+     *  entity list — they tick through the normal ax24 `ba()` FSM, there
+     *  is no separate pool step). `P&128` set = free slot. Null until a
+     *  level seeds the pool. */
+    val pooledShots: Array<Entity?>? get() = null
+    /** `i.av()` (i.java:22155, proven): index of the first pool slot
+     *  whose `P&128` is set (free), else -1. Arming a slot clears bit
+     *  128 (`P&=-129`, i.java:22203). */
+    fun allocPooledShot(): Int = -1
     /** `k.aD` (k.java:169) — the HUD fuse-bar entity singleton (drawn at
      *  k.java:4073 as `120*(Z[1]-Z[2])/Z[1]`). ax27 claims/releases it. */
     var kAD: Entity? get() = null; set(_) {}

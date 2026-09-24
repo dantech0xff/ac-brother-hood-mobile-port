@@ -788,6 +788,7 @@ class Level0World(
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
             else if (type == 7) npcFsm.initAx7(e, f.toList(), this)
+            else if (type == 8) npcFsm.initAx8(e, f.toList())
 
             else if (type == 42) npcFsm.initAx42(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
@@ -1574,27 +1575,12 @@ class Level0World(
     }
     override var iBi = false                     // i.bi — ax64 grab hitlag
     override val gS = false                      // g.s — cutscene (no producer)
-    /** `k.aX` pooled-shot slots (k.java:8423 `aW=50`, proven) — lazily
-     *  grown to 50 `new i()`-blank slots (ax=0, clipless — the ax64
-     *  tether/barrage spawn config never touches ax/aa; `inferred`); the
-     *  spawner's `P &= -129` un-reserves the slot → `P&128` = free. */
-    val shotPool = ArrayList<Entity>()
-    override fun allocShot(): Entity? {
-        if (shotPool.size < 50) shotPool += Entity(0, null).apply { P = P or 128 }
-        return shotPool.firstOrNull { (it.P and 128) != 0 }
-    }
-    override fun tickShotPool() {
-        for (s in shotPool) {
-            if ((s.P and 128) != 0) continue
-            s.aC--
-            if (s.aC < 0) { s.P = s.P or 128; continue }   // slot freed
-            s.am += s.ag; s.an += s.ah
-            s.ah += kY                                     // k.Y bias (0 today)
-            s.N = s.am; s.O = s.an
-            s.ak = s.am shr 8; s.al = s.an shr 8
-            s.refreshBoxes()
-        }
-    }
+    /** `k.aX` projection (i.java:2837, proven): the pool array is
+     *  `projectilePool` — seeded by `initAx24` on an S0 ax24 record,
+     *  slots `k.b`-inserted so they tick as ordinary ax24 `ba()`
+     *  entities. No separate pool step exists in the original. */
+    override val pooledShots: Array<Entity?>? get() = projectilePool
+    override fun allocPooledShot(): Int = projectileAlloc()
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
@@ -4569,7 +4555,8 @@ class Level0World(
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()
         }
-        tickShotPool()                            // k.aX pool step (inferred)
+        // pooled k.aX shots tick inside the npc pass (ax24 ba()) — no
+        // separate step exists in the original (i.java:2837 proven).
         if (pendingInsert.isNotEmpty()) {         // k.b(aK) drain
             npcs += pendingInsert
             pendingInsert.clear()
@@ -4625,6 +4612,9 @@ class Level0World(
     /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
      *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
     private fun tickNpc(n: Entity) {
+        // `i.cu` world-freeze (i.java:15294 L109, proven): while the ax10
+        // S55 claim zone holds it, every non-ax10 entity skips `I()`.
+        if (Entity.icu && n.ax != 10) return
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
         else if (n.ax == 4) npcFsm.tickDestructible(n, player)
@@ -4648,6 +4638,7 @@ class Level0World(
         else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
         else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
         else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
+        else if (n.ax == 8) npcFsm.tickAx8(n, this, player)
         else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
         else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
