@@ -580,8 +580,100 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             257 -> ledgeDropArm(p)            // L1770
-            63 -> {                           // climb-up end — inferred arm
-                if (p.animFinished()) p.setAnim(0)
+            // g.java L2b3b (proven) — S56 grab-settle: `ah=ag=0`; anim end
+            // → any key held (`u(127999)`) → i(65) shimmy, else i(59)
+            // hang-idle.
+            56 -> {
+                // arm sets no latch flags — clears them to model the
+                // head-clear (the tick head's universal true-set is a
+                // slice-168 deviation; without this, postTail's cq-jump
+                // gate would hijack edges the original routes here).
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    if (pad.u(127999)) p.setAnim(65) else p.setAnim(59)
+                }
+            }
+            // g.java L2421 (proven) — S60 ledge-hang: when it didn't
+            // arrive via the S63 climb (Q!=63) or UP/toward-wall is held
+            // → i(62) climb-up; always latches `cu`.
+            60 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.Q != 63 || pad.u(Pad.M_UP) ||
+                    (p.av && pad.u(4114)) || (!p.av && pad.u(8264))) {
+                    p.setAnim(62)
+                }
+                p.cu = true
+            }
+            // g.java L2460 (proven) — S61/S203 shared ledge-hang:
+            // `ag=ah=0`. S61 counts `aC` down — the one-shot `aC==0`
+            // tick, a lost front cell (`e<12`) with no `ga` link, or
+            // `v(33024)` all take the drop-release `H();G();al+=W3-W1;
+            // a(0)` (an ax43 carrier link blocks it). S203 (victim
+            // carry) skips `aC` and instead tracks `g.h`: link gone/dead
+            // → `G()`; alive → `k.c(ak,al-85,gh.aw)` marker + `v(65568)`
+            // dumps the victim (`G();i(204);gh.ak=ak±10;gh=null`).
+            // Shared tail: UP/toward-wall edge → `H();G();i(62)`.
+            61, 203 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ag = 0; p.ah = 0
+                var drop = false
+                if (p.S != 203) {
+                    p.aC--
+                    if (p.aC == 0) {
+                        drop = true                            // grace expired
+                    } else {
+                        val cell = p.e(world,
+                            (p.ak + if (p.av) -10 else 10) / 20,
+                            (p.al + 10) / 20)
+                        if (cell >= 12) {
+                            if (pad.v(33024)) drop = true      // manual release
+                        } else if (p.ga == null || pad.v(33024)) {
+                            drop = true                        // edge lost / link-drop
+                        }
+                    }
+                } else if (pad.v(33024)) {
+                    drop = true
+                }
+                if (drop && !(p.ga != null && p.ga!!.ax == 43)) {
+                    p.dropHeld()                               // H()
+                    p.releaseAe()                              // G()
+                    p.al += p.W[3] - p.W[1]
+                    p.flingAirborne(0, world)                  // a(0)
+                }
+                if (p.S == 203) {
+                    val h = p.gh
+                    if (h == null || h.deadRelease()) {
+                        p.releaseAe()                          // L2558 — G()
+                    } else {
+                        world.showPrompt(p.ak, p.al - 85, h.aw)// k.c(ak,al-85,aw)
+                        if (pad.v(65568)) {
+                            p.releaseAe()
+                            p.setAnim(204)
+                            h.ak = p.ak + (if (p.av) 10 else -10)
+                            p.gh = null
+                        }
+                    }
+                }
+                if (pad.v(Pad.M_UP) || (p.av && pad.v(4114)) ||
+                    (!p.av && pad.v(8264))) {
+                    p.dropHeld(); p.releaseAe()                // H(); G()
+                    p.setAnim(62)
+                }
+            }
+            // g.java L25b5 (proven) — S62 climb-up finish: `r()` → step
+            // ±10 then `a(aO>12 ? 79 : 0, 9)` settle.
+            62 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) {
+                    p.ak += if (p.av) -10 else 10
+                    p.enterStateMasked(if (p.aO > 12) 79 else 0, 9, world)
+                }
+            }
+            // g.java L25a5 (proven) — S63 climb anim end → i(60) hang.
+            63 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.setAnim(60)
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
             // S357 scripted leap (g.java:4154, proven): `ag=3328` but

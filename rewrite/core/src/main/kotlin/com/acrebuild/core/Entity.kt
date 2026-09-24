@@ -139,6 +139,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
                                    // i.java:922/937; producers: ax15 bind,
                                    // Entity:1210/1285 lunge, ax66/72 arms)
+    var gh: Entity? = null         // g.h — victim link (L2460 S203 arm: the
+                                   // marker follows `gh.aw`; v(65568) dumps it)
     // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
     var bZ = 0                     // i.bZ lifecycle counter (aX L23 linked
                                    // arm — used by the ax14/pickup path)
