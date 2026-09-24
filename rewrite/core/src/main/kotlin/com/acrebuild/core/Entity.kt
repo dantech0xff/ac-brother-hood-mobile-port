@@ -390,6 +390,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
     }
 
+    /** `i.J()` (i.java:7002-7020, proven): the ax71 companion overlay
+     *  (`k.E`) — mirrors the player's `ak`/`al` + facing bit each tick,
+     *  then hides (`P|128`) once its anim has finished; while the anim
+     *  still runs it stays visible unless the `j.c==21` dialog is up
+     *  without the `k.u==8` skip key held. */
+    fun followJ(p: Entity, world: LevelCellSource) {
+        ak = p.ak
+        al = p.al
+        if (p.av) P = P or 1 else P = P and -2
+        if (!animFinished()) {
+            if (world.jC != 21 || world.padHeldWord() == 8) return
+        }
+        P = P or 128
+    }
+
     /** `i.a(anim,x,y)` (i.java:9810, proven): spawn the clip-9 ax14 marker
      *  `anim` into `ae` (occupied `ae` → no-op); az=302, av=false. */
     fun spawnMarker(w: LevelCellSource, anim: Int, x: Int, y: Int) {
@@ -3229,6 +3244,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.cu` (i.java static, proven) — set by the ax10 S55 arm's
          *  `Z[0]!=0` branch (i.java:9857); consumers unmined. */
         var icu = false
+        /** `g.cn` (g.java:35, proven) — per-tick counter incremented in
+         *  `e()` (g.java:580) and cleared on the arm at g.java:3757;
+         *  NEVER READ anywhere — write-only. Ported for parity. */
+        var gCn = 0
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
          *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */
@@ -3737,6 +3756,32 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         w.queueInsert(aK)
         return aK
+    }
+
+    /**
+     * `i.b(int,int,int,int,int)` (i.java:4818-4845, proven) — the knife/
+     * projectile spawn: `a(5,1,8,300)` child, `W/X/Y` boxes re-seeded
+     * from the thrower, `n=1`, `aG=r7` (script uid), `P|128`, `Z` wiped
+     * with `Z[2]=Z[3]=-1`. `aG==-1` → plain insert; otherwise
+     * `h(k.s(aG))` binds the claim script + `P|512` (the `Z[1]>=16`
+     * early-out is dead code — `Z[1]==0` here). Args `r8..r11` are
+     * accepted but unused verbatim — every caller passes `0,0,-1,-1`.
+     * `proven-dead` call path: both callers gate on `k.aY[0] != null`
+     * and no bytecode ever assigns `k.aY[i]` a non-null entity.
+     */
+    fun spawnKnife(world: LevelCellSource, aG: Int) {
+        val aK = spawnChildFx(world, 5, 1, 8, 300)
+        System.arraycopy(W, 0, aK.W, 0, W.size)
+        aK.aE = 0; aK.aF = 0; aK.nl = 1
+        aK.aG = aG; aK.aD = 0; aK.m = 0
+        aK.P = aK.P or 128
+        aK.Z.fill(0); aK.Z[2] = -1; aK.Z[3] = -1
+        if (aK.aG != -1) {
+            if (aK.Z[1] >= 16) { world.queueInsert(aK); return }   // L5 — dead
+            aK.bindScript(world.kSIndex(aK.aG), world)             // h(k.s(aG))
+            aK.P = aK.P or 512
+        }
+        world.queueInsert(aK)                                      // k.b(aK)
     }
 
     /** `i.a(ax,clip,anim,face,x,y,az)` (i.java:6898, proven): the ax8
@@ -4748,6 +4793,13 @@ interface LevelCellSource {
     /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
      *  — distinct from `padHeld`/`k.v` which reads the edge set `bB`. */
     fun padDown(mask: Int): Boolean = false
+    /** `k.u` raw HELD word `bC` (k.java:119, proven) — `padDown(mask)`
+     *  answers masked tests; `k.u == <bits>` comparisons (i.java:7017
+     *  `k.u == 8`) need the raw value. */
+    fun padHeldWord(): Int = 0
+    /** `j.c` (j.java static, proven) — the screen state (21 = dialog).
+     *  Read-only interface view; `Level0World` owns the var. */
+    val jC: Int get() = 0
     /** `k.x(mask)` (k.java:7224, proven): double-tap-window edge (`eM`). */
     fun padTap(mask: Int): Boolean = false
     /** `k.w(mask)` (k.java:7217, proven): released-input `(eM & mask) != 0`

@@ -10185,9 +10185,11 @@ private fun spotB(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     if (!w.gG()) e.av = !e.av                       // verbatim flip
     if (w.iBn) {
         p.aA = p.aA and -9
-        // `aS.b(aY[0].Z[4],0,0,-1,-1)` — inert while the k.aY pool
-        // is unported (kAyAt(0) → null).
-        w.kAyAt(0)
+        // `aS.b(aY[0].Z[4],0,0,-1,-1)` (i.java:1589-1590) — proven-dead
+        // call path: `k.aY` is allocated but never filled (k.java:8425;
+        // nulled at i.java:2541), so `kAyAt(0)` is always null and the
+        // throw never fires. Verbatim for parity.
+        w.kAyAt(0)?.let { p.spawnKnife(w, it.Z[4]) }
     }
     e.aA = 1
     when (e.ax) {

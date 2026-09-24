@@ -71,6 +71,36 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // player drops below it, or enters a `c(S)` grounded state.
         if ((Entity.entBq != 0 && p.al > Entity.entBq) || p.S in GROUNDED_C)
             Entity.entBq = 0
+        // g.java:535-583 (proven) — the pre-dispatch L33-L88 block:
+        // `k.E.J()` companion overlay follow (:535-537, i.java:7002), the
+        // `aA|256` alert window + `aA|16` cooldown (:538-575), dead →
+        // `i(50)` (:576), `cn++` (:580) + `k.aA`-gated `aA|=1` (:581-583).
+        world.kE?.followJ(p, world)
+        if ((p.aA and 256) != 0) {
+            if (p.Z[1] >= 120) {
+                // proven-dead call path — `k.aY` is allocated but never
+                // filled (k.java:8425; only nulled at i.java:2541), so
+                // the knife throw never fires; ported verbatim so the
+                // |256 → |16 flip still runs.
+                if (world.iBn) world.kAyAt(0)?.let { p.spawnKnife(world, it.Z[4]) }
+                p.aA = (p.aA and -257) or 16
+            }
+            // L48-L53: `Z[1]` decays unless the alert is blind (`i.bn`
+            // && player `aA&8`); the Z[1]>=120 throw above also decays
+            // on the same gate verbatim (the L46 arm falls into L48).
+            if (!(world.iBn && (p.aA and 8) != 0)) {
+                p.Z[1]--
+                if (p.Z[1] <= 0) p.Z[1] = 0
+            }
+        }
+        if ((p.aA and 16) != 0) {
+            if (p.Z[0] <= 0) p.Z[0] = 3000
+            p.Z[0] -= 62                                  // `Z[0] -= j.f`
+            if (p.Z[0] <= 0) p.aA = (p.aA and -17) or 256
+        }
+        if (world.playerDead()) p.setAnim(50)               // g.java:576
+        Entity.gCn++                                        // g.java:580 (dead)
+        if (world.kAA > 0 && p.aA > 1) p.aA = p.aA or 1   // g.java:581-583
         if (world.bh3) flightTick(p, pad)                      // g.n() bh3 arms
         else { dispatch(p, pad); postTail(p, pad) }
         // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =

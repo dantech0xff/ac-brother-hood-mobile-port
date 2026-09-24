@@ -216,6 +216,14 @@ class Level0World(
     // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
     // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
     var projectilePool: Array<Entity?>? = null
+    /** `k.aY` (k.java:211 + :8425 `new i[3]`, proven) — the 3-slot
+     *  projectile/knife pool. PROVEN-DEAD upstream: allocated but no
+     *  bytecode ever writes a non-null entity into it — the throw call
+     *  sites only gate on `aY[0] != null` (g.java:541, i.java:1588).
+     *  Kept so the dead knife calls port verbatim; nulled per-slot by
+     *  `i.D()` (i.java:2541). Declared before init{} — spawnEntities()
+     *  calls `kAY.fill(null)`. */
+    private val kAY = arrayOfNulls<Entity>(3)
 
     /** `k.ap[]` progress counters (k.java:4314/L() proven): `k.e(r5,uid)`
      *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
@@ -678,6 +686,7 @@ class Level0World(
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
+        kAY.fill(null)                            // k.aY (i.java:2541)
         // i.D() tail — the modeled statics that must not survive a reload:
         iZ = true                                   // i.z = true
         iBn = false                                 // i.bn = false
@@ -959,6 +968,8 @@ class Level0World(
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
     override var kE: Entity? = null            // k.E
+    override fun kAyAt(i: Int): Entity? = kAY.getOrNull(i)
+    override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
     override var iBy = 0                       // i.by — boss phase tier
@@ -1177,7 +1188,7 @@ class Level0World(
      *  k.java:576; 10 is the level-select screen, NOT play); 12 fail;
      *  13/31 win; 15 complete stats; 16/17 frozen; 21 dialog; 22
      *  medal-unlock; 5 win-stats build; others per `stateL`. */
-    var jC = 8                           // j.c — in-play screen state
+    override var jC = 8                    // j.c — in-play screen state
         private set
     var kCy = 0                        // cy — previous j.c, written at commit
     private var kCz = false            // cz — u==8 dialog-tail flag
