@@ -2836,22 +2836,29 @@ class Level0World(
             }
         }
     }
+    /** Row label (k.java:6046-6140, proven). `j.c==19` →
+     *  `d(0,10)+" "+(row+1)` = "LEVEL n"; every other state →
+     *  `d(0, eA[bv][i21])` + per-string suffix arms where `i21` is the
+     *  `m(bv,row)`-resolved index (verbatim `i21=0` pin for row0&jC==2 —
+     *  m already returns 0 there, kept as a comment for provenance).
+     *  Suffixes: 32/33/34 & 103 → `bW.l(3)` pal (the source also blinks
+     *  z[12] beside 32/33/34 while `!eJ` — draw-side icon, unported);
+     *  83/84 → ": "+d(0, bE/bF?21:20); 97 → ": "+d(0,35+au);
+     *  123 → ": "+d(0,124+(cm==1?0:1)). */
     fun menuRowText(i13: Int): Pair<String, Int> {
-        if (jC == 19) {
-            val iM = menuM(kBv, i13)
-            var strD = d0(kEA[kBv][iM]) ?: "?"
-            var pal = 0
-            when (kEA[kBv][iM]) {
-                32, 33, 34 -> pal = 3
-                83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
-                84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
-                97 -> strD += ": " + (d0(35 + kAu) ?: "")
-                103 -> pal = 3
-                123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
-            }
-            return strD to pal
+        if (jC == 19) return "${d0(10) ?: "LEVEL"} ${i13 + 1}" to 0
+        val iM = menuM(kBv, i13)
+        var strD = d0(kEA[kBv][iM]) ?: "?"
+        var pal = 0
+        when (kEA[kBv][iM]) {
+            32, 33, 34 -> pal = 3
+            83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
+            84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
+            97 -> strD += ": " + (d0(35 + kAu) ?: "")
+            103 -> pal = 3
+            123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
         }
-        return "${d0(10) ?: "LEVEL"} ${i13 + 1}" to 0
+        return strD to pal
     }
     /** jc19 sub-label `d(0, eX[eW[i13]])` drawn on `y` (:6092).
      *  `eW={2,2,1,1,2,0,3,2,2}` `eX={51,52,53,54}` (:299-300). */

@@ -10065,10 +10065,10 @@ class Slice86Test {
         assertEquals(listOf(206, 117, 214, 30), r[1].toList())
     }
 
-    @Test fun `non-19 rows render LEVEL n`() {
+    @Test fun `jc19 rows render LEVEL n`() {
         val w = world()
-        w.stateL(12)
-        // j.c==12 → strD = d(0,10)+" "+(i13+1) = "LEVEL n" (k.java:6078)
+        w.stateL(19)
+        // j.c==19 → strD = d(0,10)+" "+(i13+1) = "LEVEL n" (k.java:6046-6062)
         assertEquals("LEVEL 1", w.menuRowText(0).first)
         assertEquals("LEVEL 2", w.menuRowText(1).first)
     }
@@ -10389,8 +10389,10 @@ class Slice89Test {
         rects.forEach { assertEquals(4, it.size) }
         assertEquals(30, w.menuI4(0), "non-jc2 row height")
         assertEquals(170, w.menuI5(), "jc30 column width")
-        assertEquals("LEVEL 1", w.menuRowText(0).first,
-            "d(0,10) + index → 'LEVEL n'")
+        // jc30 rows = d(0, eA[5][row]) — bannerK(5) on stateL(30)
+        // (k.java:6095+, proven) — mission names, NOT 'LEVEL n'
+        assertEquals(w.d0(106), w.menuRowText(0).first)
+        assertEquals(w.d0(107), w.menuRowText(1).first)
         assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
     }
 }
