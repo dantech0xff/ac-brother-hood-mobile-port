@@ -2674,9 +2674,8 @@ class Level0World(
         }
     }
 
-    /** Row hit-test for the touch-confirm (`inferred` layout — the
-     *  orig's rects live in the unported draw proc at :6020-6120; rows
-     *  stack at ~36px inside the `b(93,67,214)` panel). */
+    /** Row hit-test for the touch-confirm — layout proven: `menuRowRects`
+     *  mirrors the ported `b()` draw proc's `i9` walk (k.java:5977-6148). */
     fun menuRowAt(y: Int): Int {
         if (kEy <= 0) return -1
         // `c(i,i9,i3,i4)` per drawn row (k.java:6117 — the b() loop's own
@@ -2841,8 +2840,8 @@ class Level0World(
      *  `d(0, eA[bv][i21])` + per-string suffix arms where `i21` is the
      *  `m(bv,row)`-resolved index (verbatim `i21=0` pin for row0&jC==2 —
      *  m already returns 0 there, kept as a comment for provenance).
-     *  Suffixes: 32/33/34 & 103 → `bW.l(3)` pal (the source also blinks
-     *  z[12] beside 32/33/34 while `!eJ` — draw-side icon, unported);
+     *  Suffixes: 32/33/34 & 103 → `bW.l(3)` pal (the z[12] blink beside
+     *  32/33/34 under `!eJ` draws in the renderer — slice 226);
      *  83/84 → ": "+d(0, bE/bF?21:20); 97 → ": "+d(0,35+au);
      *  123 → ": "+d(0,124+(cm==1?0:1)). */
     fun menuRowText(i13: Int): Pair<String, Int> {
