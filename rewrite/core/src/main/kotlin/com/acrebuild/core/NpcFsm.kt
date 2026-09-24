@@ -234,12 +234,15 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
-    /** `b(k.aS)` simplified: alert-zone box + facing + same band. */
+    /** `b(k.aS)` simplified: alert-zone box + facing + same band. The
+     *  original's `a(this.W, aS.W)` is a rect-overlap test between the
+     *  Z[9..12] zone and the player's collision box — not a point test —
+     *  so a player hugging the zone edge still alerts. */
     private fun seesPlayer(e: Entity, player: Entity): Boolean {
         // same-row within one cell of height
         if (abs(player.al - e.al) / 20 > 1) return false
-        if (player.ak < e.Z[9] || player.ak > e.Z[10]) return false
-        if (player.al < e.Z[11] || player.al > e.Z[12]) return false
+        if (player.W[2] < e.Z[9] || player.W[0] > e.Z[10]) return false
+        if (player.W[3] < e.Z[11] || player.W[1] > e.Z[12]) return false
         // facing must cover the player
         if (e.av && player.ak > e.ak) return false
         if (!e.av && player.ak < e.ak) return false

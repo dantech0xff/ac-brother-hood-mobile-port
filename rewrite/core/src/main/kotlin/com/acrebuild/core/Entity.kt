@@ -47,6 +47,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aj: Int = 0                  // axel y
     var S: Int = 0                   // anim/state index
     var T: Int = 0                   // frame
+    var asSlot = -98                 // i.as — bf[] save-image slot (record
+                                     // order among non-{0,25,55,70}; -98 =
+                                     // runtime-spawned, no slot)
     var U: Int = 0                   // tick-in-frame
     var Q: Int = 0                   // previous anim
     var P: Int = 0                   // flag word
