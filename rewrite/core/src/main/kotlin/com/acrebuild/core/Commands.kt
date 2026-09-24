@@ -23,4 +23,10 @@ sealed interface Command {
      *  the gdx launcher exits the app on drain (core can't kill the
      *  process itself). */
     object QuitApp : Command
+
+    /** The `I(aj)`/`G(i)` pack swap (k.java:5244/:4740, proven
+     *  semantic): a different mission's pack was just loaded — adapters
+     *  must refresh mission-bound resources (tileset clips, level-bound
+     *  caches). Emitted only when the pack actually changed. */
+    data class MissionLoaded(val aj: Int) : Command
 }
