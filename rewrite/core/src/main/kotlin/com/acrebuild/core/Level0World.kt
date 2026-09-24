@@ -1626,6 +1626,36 @@ class Level0World(
     }
     var dialogLine = -1                                // last b(9,·) str arg
 
+    /** `k.b(10,1,str,str)` (k.java:349-404 r5==10 arm, proven): the u10
+     *  single-page dialog — `u=10`; `w = a(d(1,str),0,true,10)+1` where
+     *  `r9!=9` writes the page digit `bN[0]=charAt(0)-'0'` and z2 wraps at
+     *  300; `D(0)`; `bQ=true`; `z()`; always true (str!=-1). The jC21
+     *  machine's `dlgU==10` arm already advances pages on M_CONTEXT. */
+    fun tutorialDialog(strRef: Int): Boolean {
+        if (strRef == -1) return false
+        val str = levelString(1, strRef) ?: ""
+        dlgU = 10
+        dlgBN[0] = (str.getOrNull(0) ?: '0') - '0'        // (:420-423)
+        val iA = dlgLoadPage(str, 0, 300)
+        dlgW = iA + 1
+        dlgD(0)
+        dlgBQ = true
+        dlgZ()
+        return true
+    }
+
+    /** `i.c(int)` (i.java:7724-7756, proven): tutorial hint — level-0
+     *  only (`k.aj!=0` → skip), one-shot per `br[r6]`; shows the u10 page
+     *  `d(1, A[r6])` (A={30,31,32}) and enters screen 21 on success;
+     *  `k.E.P|=128` marks the prompt. */
+    override fun tutorialHint(r6: Int) {
+        if (kAj != 0) return
+        if (r6 !in hintPending.indices || !hintPending[r6]) return
+        kE?.let { it.P = it.P or 128 }
+        hintPending[r6] = false
+        if (tutorialDialog(TUTORIAL_STRS[r6])) stateL(21)
+    }
+
     /** `a(String,int,boolean,int)` (k.java:374-401, proven) — wraps `str`
      *  at `width` (caller's resolved `i3`: z2 → 300, else 220) into
      *  `bM[]` pages of ≤3 wrapped lines starting at slot `i`, copying
@@ -3658,6 +3688,7 @@ class Level0World(
     override var iBf = false                       // i.bf engage latch
     override var iX = 0                            // i.x — every-3rd-hit static
     override var iBx: Entity? = null               // i.bx grab-QTE holder
+    override var grabHolder: Entity? = null         // g.h — grab holder
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
     override var iL = -1                           // i.L
@@ -4637,3 +4668,7 @@ private val CAM_B_DOWN_STATES = intArrayOf(28, 29, 315, 318)
 private val CAM_B_CENTER_STATES = intArrayOf(
     148, 149, 150, 210, 59, 65,
     258, 259, 260, 261, 262, 263, 264, 265, 266)
+
+/** `i.A[]` (i.java:22313, proven): u10 tutorial string indices for
+ *  `i.c(int)` — {grab=30, counter-kill=31, weakened-finish=32}. */
+private val TUTORIAL_STRS = intArrayOf(30, 31, 32)

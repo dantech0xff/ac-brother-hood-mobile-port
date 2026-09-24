@@ -1633,6 +1633,97 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ae = null
     }
 
+    /**
+     * `i.b()` (i.java:1268-1279, proven): corner-support probe — refresh
+     * boxes (`t()`) then read the four W-corner cells into the scratch
+     * fields `aT` (top-left) / `aU` (top-right) / `aV` (bottom-left) /
+     * `aW` (bottom-right); true iff ANY corner cell `>= 12` (solid). The
+     * S85 hit-react uses it to skip the freeze+kick when fully over a pit.
+     * NOT a LOS/attack probe — misnamed in older notes.
+     */
+    fun cornerSupported(w: LevelCellSource): Boolean {
+        refreshBoxes()
+        val left = W[0]; val right = W[2]; val top = W[1]; val bot = W[3]
+        aT = e(w, left / 20, top / 20)
+        aU = e(w, right / 20, top / 20)
+        aV = e(w, left / 20, bot / 20)
+        aW = e(w, right / 20, bot / 20)
+        return aT >= 12 || aU >= 12 || aV >= 12 || aW >= 12
+    }
+
+    /**
+     * `i.g(int,int)` (i.java:6881-6896, proven): mash gauge — `bl += 8`
+     * on `k.v(mask)` EDGE (a press), `bl--` otherwise; clamps `<0→0` and
+     * `>=80→80` returning true at the cap. r6 arg is dead in the original.
+     */
+    fun mashGauge(mask: Int, w: LevelCellSource): Boolean {
+        if (w.padHeld(mask)) bl += 8 else bl--   // k.v = EDGE presses (bB)
+        if (bl < 0) bl = 0
+        if (bl >= 80) { bl = 80; return true }
+        return false
+    }
+
+    /**
+     * `i.y()` (i.java:1211-1217, proven): travel-side wall flag —
+     * `ag<0→bb` (left wall), `ag>0→bc` (right wall), `ag==0→` facing side
+     * (`av→bb`, `!av→bc`).
+     */
+    fun yWall(): Boolean = when {
+        ag < 0 -> bb
+        ag > 0 -> bc
+        else -> if (av) bb else bc
+    }
+
+    /**
+     * `i.aF()` (i.java:9192-9219, proven): ledge-edge probe — true when
+     * `standingOn` is an ax51 crate (`crateEdge`), else the foot cell at
+     * the facing edge is `∈{20,5}`: `e(W[2]/20+1,(W[3]+10)/20)` when `av`,
+     * `e(W[0]/20-1,·)` when `!av`.
+     */
+    fun aF(w: LevelCellSource): Boolean {
+        if (standingOn?.ax == 51 || entBq != 0) return true
+        val cy = (W[3] + 10) / 20
+        val cx = if (av) W[2] / 20 + 1 else W[0] / 20 - 1
+        val c = e(w, cx, cy)
+        return c == 20 || c == 5
+    }
+
+    /**
+     * `i.aG()` (i.java:9221-9251, proven): `aF()` mirror — the off-facing
+     * edge (av polarity flipped).
+     */
+    fun aG(w: LevelCellSource): Boolean {
+        if (standingOn?.ax == 51 || entBq != 0) return true
+        val cy = (W[3] + 10) / 20
+        val cx = if (av) W[0] / 20 - 1 else W[2] / 20 + 1
+        val c = e(w, cx, cy)
+        return c == 20 || c == 5
+    }
+
+    /**
+     * `i.aI()` (i.java:9284-9336, proven): victim throws the player out
+     * of the grab — on `a(aS.W, W)` overlap the player flings
+     * (`ag=∓3328`, `ah=-6656`, `i(243)`) while self recoils
+     * (`ag=0`, `ah=5120`, `aj=1536`), then the cell-20 edge nudge and
+     * `i(184)` + `aB=0`. Returns true when the throw fired.
+     */
+    fun throwFromGrab(w: LevelCellSource): Boolean {
+        val p = w.player
+        if (!overlapStrict(p.W, W)) return false
+        p.ag = if (p.av) -3328 else 3328                 // L7-L8 (aS.av)
+        p.ah = -6656
+        p.setAnim(243)
+        ag = 0; ah = 5120; aj = 1536
+        if (e(w, ak / 20, al / 20) == 20) {              // L11-L24 edge nudge
+            val leftHalf = (ak % 20) <= 10               // r02
+            val side = e(w, ak / 20 + if (leftHalf) -1 else 1, al / 20)
+            if (side == 0) ak = (ak / 20) * 20 + if (leftHalf) -1 else 1
+        }
+        setAnim(184)
+        aB = 0
+        return true
+    }
+
     /** `i.g(i)` (i.java:7758, proven): is `o` on my facing side —
      *  `r0 = o.ak < ak` (other left) then `r0 == av`; with this port's
      *  `av` = "facing/mirroring left" that reads "other is in front". */
@@ -4177,6 +4268,10 @@ interface LevelCellSource {
      *  `bO=flag`, `bN[0]=idx>0?idx:-1`, then `b(9,1+aj,str,str)`;
      *  `inferred` return = accepted. */
     fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean = false
+    /** `i.c(int)` (i.java:7724, proven): the u10 tutorial-hint request —
+     *  level-0 only (`k.aj!=0` → skip), one-shot per `br[r6]`; shows
+     *  `k.b(10,1,A[r6],A[r6])` (A={30,31,32}) and `k.l(21)`. */
+    fun tutorialHint(r6: Int) {}
     var bO: Int get() = 0; set(_) {}
     var bN0: Int get() = 0; set(_) {}
     /** `k.n(int)` (k.java:2869): `cO/cP` screen-transition statics —
@@ -4711,6 +4806,9 @@ interface LevelCellSource {
     var iX: Int get() = 0; set(_) {}
     /** `i.bx` (i.java:132) — entity holding the grab-QTE (S147). */
     var iBx: Entity? get() = null; set(_) {}
+    /** `g.h` (i.java:5174/5765, proven) — the entity currently holding
+     *  the player in a grab (set on grab bind, released at S96 expiry). */
+    var grabHolder: Entity? get() = null; set(_) {}
     /** `k.aA` — shared engage/alert countdown (`aC()` zeroes it). */
     var kAA: Int get() = 0; set(_) {}
     /** `g.z` — player-side latch cleared on grab-entry/leap re-arm. */
