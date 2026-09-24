@@ -52,19 +52,22 @@ RES = ROOT / "reconstructed-project" / "resources"
 SPR = RES / "sprites-decoded"
 OUT = ROOT / "rewrite" / "generated"
 
-# Level 0 = pack-6; visual layers ep/eu/er map to pack-15 tileset clips via
-# k.ej[0..3] = {11,10,12,10}: slot order in k.G() is [ep-clip, eu-clip,
-# er-clip, ?] — verified assignment below follows the G(8) read order:
-#   entries 4/8/11 = ep/eu/er, clips ej[0],ej[1],ej[2] = 11,10,12 (ej[3]
-#   repeats the eu tileset for an unused 4th layer slot).
-# Confidence: high-confidence (draw order); flag-plane pairing is proven
-# (each visual slot is followed by dims+flags entries).
-LEVEL_PACK = 6
-TILESETS = {"ep": 11, "eu": 10, "er": 12}
+# Mission packs: `ec[aj]` = "/6".."/13" (k.java:260) — mission aj loads
+# pack 6+aj. Per mission `ej[aj*4..+3]` (k.java:275) picks the pack-15
+# tileset clips {ep, eu, er, slot4-unused}; `bh[aj]` (k.java:263 =
+# {4,3,4,4,3,4,4,4,4}) gates layers in `I(i)` (k.java:5244-5264):
+#   bh==3 (flying, aj∈{1,4}) → no ep layer (entries 4/5/6 absent);
+#   bh==2 (unused) → no eu; er always (bh==4 || bh==3 both emit).
+# Entry indices are fixed across packs (I(i)/H(i) reads):
+#   records=0, et cells=1 dims=2 flags=3, ep=4/5/6, eu=8/9/10, er=11/12/13,
+#   scripts(k.by)=7.
+EJ = [11, 10, 12, 10, 3, 3, 4, 3, 6, 5, 7, 5, 6, 5, 7, 5,
+      3, 3, 4, 4, 1, 0, 2, 0, 8, 10, 9, 10, 11, 10, 12, 10]
+BH = [4, 3, 4, 4, 3, 4, 4, 4, 4]
 LAYER_ENTRIES = {"et": 1, "ep": 4, "eu": 8, "er": 11}
 FLAG_ENTRIES = {"et": 3, "ep": 6, "eu": 10, "er": 13}
 DIM_ENTRIES = {"et": 2, "ep": 5, "eu": 9, "er": 12}
-VISUAL_LAYERS = ["ep", "eu", "er"]
+SCRIPT_ENTRY = 7
 
 CLIPS = {
     "clip0": ("pack-3", "entry-000-marker-130"),   # player (z[0])
@@ -184,7 +187,7 @@ def clip_remaps(clip_id, object_count):
     return tables
 
 
-def pack_clip(pack, entry_dir, out_dir, clip_id):
+def pack_clip(pack, entry_dir, out_dir, clip_id, remap=True):
     meta_path = SPR / pack / entry_dir / "metadata.json"
     meta = json.loads(meta_path.read_text())
     secs = {s["id"]: s for s in meta["sections"]}
@@ -267,8 +270,9 @@ def pack_clip(pack, entry_dir, out_dir, clip_id):
     # (u16 src, u16 dst) overlays on an identity short[ab]. Sources are
     # raw pack blobs, `marker>=127` = LZMA-alone payload (the extractor's
     # rule): clip-0 gets pack-4's 4 tables (k.eh={0},k.ei={4});
-    # clip-52 gets pack-5's entry-0 (k.java:5044).
-    remaps = clip_remaps(clip_id, len(rects_meta))
+    # clip-52 gets pack-5's entry-0 (k.java:5044). Entity clips only —
+    # pack-15 tileset clip ids collide numerically but never get tables.
+    remaps = clip_remaps(clip_id, len(rects_meta)) if remap else []
     blob += struct.pack("<B", len(remaps))
     for table in remaps:
         blob += struct.pack("<H", len(table))
@@ -289,15 +293,23 @@ def pack_clip(pack, entry_dir, out_dir, clip_id):
           f"{len(bounds_quads)} bounds")
 
 
-def pack_level():
-    pack_dir = RES / "decoded" / f"pack-{LEVEL_PACK}"
+def pack_level(aj):
+    pack_num = 6 + aj                            # ec[aj] (k.java:260)
+    flying = BH[aj] == 3
+    # ej[aj*4..+2] = {ep, eu, er} tileset clips (k.java:275,4775-4803)
+    tilesets = {"ep": EJ[aj * 4], "eu": EJ[aj * 4 + 1],
+                "er": EJ[aj * 4 + 2]}
+    visual_layers = ["eu", "er"] if flying else ["ep", "eu", "er"]
+
+    pack_dir = RES / "decoded" / f"pack-{pack_num}"
+    layer_keys = ["et"] + visual_layers
     dims = {k: json.loads((pack_dir /
             f"entry-{DIM_ENTRIES[k]:03d}-dimensions.json").read_text())
-            for k in LAYER_ENTRIES}
+            for k in layer_keys}
     cols, rows = dims["et"]["width"], dims["et"]["height"]
 
     records = json.loads(
-        (RES / "levels-decoded" / f"pack-{LEVEL_PACK}" / "records.json")
+        (RES / "levels-decoded" / f"pack-{pack_num}" / "records.json")
         .read_text())["entities"]["records"]
     entities = [[f["java_i16"] for f in r["fields"]] for r in records]
 
@@ -307,9 +319,11 @@ def pack_level():
 
     # Cells are u8 tile indices. Each visual layer carries its own dims
     # (eu is a small 21x13 backdrop grid) and a packed 2-bit flag plane.
-    # layerId: 0=et(collision), 1=ep, 2=eu, 3=er
+    # layerId is the FIXED entry space (k.java:5244-5264 I(i)):
+    # 0=et(collision), 1=ep, 2=eu, 3=er — flying packs leave a hole at 1.
+    LAYER_IDS = {"et": 0, "ep": 1, "eu": 2, "er": 3}
     layers = [("et", 0, 0, True)] + [
-        (k, i + 1, TILESETS[k], True) for i, k in enumerate(VISUAL_LAYERS)]
+        (k, LAYER_IDS[k], tilesets[k], True) for k in visual_layers]
     blob += struct.pack("<B", len(layers))
     for key, lid, tileset, has_flags in layers:
         lw, lh = dims[key]["width"], dims[key]["height"]
@@ -335,45 +349,52 @@ def pack_level():
         blob += struct.pack("<H", len(fields))
         blob += struct.pack(f"<{len(fields)}h", *fields)
 
-    out = OUT / "level0"
+    out = OUT / f"level{aj}"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "level0.aclv").write_bytes(bytes(blob))
+    (out / f"level{aj}.aclv").write_bytes(bytes(blob))
     # per-level string table — `k.d(1+k.aj, idx)` (k.java:486) resolves
-    # through j.g to pack-14 entry-<level>; level 0 → entry-001.
-    strings_src = (RES / "decoded" / "pack-14" / "entry-001-strings.json")
-    (out / "strings-1.json").write_text(strings_src.read_text())
+    # through j.g to pack-14 entry-<aj+1>; level aj → entry-{aj+1:03d}.
+    strings_src = (RES / "decoded" / "pack-14" /
+                   f"entry-{aj + 1:03d}-strings.json")
+    (out / f"strings-{aj + 1}.json").write_text(strings_src.read_text())
     # line-delimited variant for the gdx loader (no JSON dep): inner
     # newlines escaped as \n so one string = one line.
     _strings = json.loads(strings_src.read_text())
-    (out / "strings-1.txt").write_text(
+    (out / f"strings-{aj + 1}.txt").write_text(
         "\n".join(s.replace("\n", "\\n") for s in _strings) + "\n")
     (out / "meta.json").write_text(json.dumps({
-        "source": f"pack-{LEVEL_PACK}", "cols": cols, "rows": rows,
+        "source": f"pack-{pack_num}", "aj": aj, "bh": BH[aj],
+        "flying": flying, "cols": cols, "rows": rows,
         "worldPx": [cols * 20, rows * 20], "entities": len(entities),
-        "layers": {k: {"entry": LAYER_ENTRIES[k], "tileset": TILESETS.get(k),
+        "layers": {k: {"entry": LAYER_ENTRIES[k],
+                       "tileset": tilesets.get(k),
                        "dims": [dims[k]["width"], dims[k]["height"]]}
-                   for k in LAYER_ENTRIES},
-        "strings": "pack-14/entry-001-strings.json",
-        "scripts": "pack-6/entry-007 (k.by/bz/eH, k.java:6196)"}, indent=1))
+                   for k in layer_keys},
+        "strings": f"pack-14/entry-{aj + 1:03d}-strings.json",
+        "scripts": f"pack-{pack_num}/entry-007 (k.by/bz/eH, k.java:6196)"},
+        indent=1))
     # `j.e(7)` of the mission pack → k.by/bz/eH script tables
     # (k.java:6190-6320) — carried raw; ScriptTables.load parses it.
     (out / "scripts.bin").write_bytes(
-        (pack_dir / "entry-007-marker-003.bin").read_bytes())
+        (pack_dir /
+         f"entry-{SCRIPT_ENTRY:03d}-marker-003.bin").read_bytes())
 
-    for name, clip in TILESETS.items():
+    for name, clip in tilesets.items():
         src_dir = next((SPR / "pack-15").glob(f"entry-{clip:03d}-*"))
         # full clip pack (cells index the composite-object space)
         pack_clip("pack-15", src_dir.name, out / f"tileset-{clip}",
-                    clip)
-    print(f"level0: {cols}x{rows} cells, {len(entities)} entities, "
-          f"tilesets {sorted(set(TILESETS.values()))}")
+                    clip, remap=False)
+    print(f"level{aj}: {cols}x{rows} cells, {len(entities)} entities, "
+          f"layers {layer_keys}, tilesets {sorted(set(tilesets.values()))}"
+          f"{' FLYING' if flying else ''}")
 
 
 def main():
     for name, (pack, entry) in CLIPS.items():
         pack_clip(pack, entry, OUT / "clips" / name,
                   int(name[4:]))
-    pack_level()
+    for aj in range(8):
+        pack_level(aj)
     print("convert_slice1: ok")
 
 

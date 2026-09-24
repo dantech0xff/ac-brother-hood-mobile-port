@@ -1,0 +1,49 @@
+{
+ "source": "pack-12",
+ "aj": 6,
+ "bh": 4,
+ "flying": false,
+ "cols": 550,
+ "rows": 70,
+ "worldPx": [
+  11000,
+  1400
+ ],
+ "entities": 849,
+ "layers": {
+  "et": {
+   "entry": 1,
+   "tileset": null,
+   "dims": [
+    550,
+    70
+   ]
+  },
+  "ep": {
+   "entry": 4,
+   "tileset": 8,
+   "dims": [
+    550,
+    70
+   ]
+  },
+  "eu": {
+   "entry": 8,
+   "tileset": 10,
+   "dims": [
+    21,
+    13
+   ]
+  },
+  "er": {
+   "entry": 11,
+   "tileset": 9,
+   "dims": [
+    550,
+    70
+   ]
+  }
+ },
+ "strings": "pack-14/entry-007-strings.json",
+ "scripts": "pack-12/entry-007 (k.by/bz/eH, k.java:6196)"
+}
