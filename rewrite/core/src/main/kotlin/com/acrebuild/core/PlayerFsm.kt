@@ -115,6 +115,23 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             78, 80 -> {                       // L771
                 if (p.animFinished()) p.setAnim(if (p.S == 78) 79 else 1)
             }
+            // g.java:3011-3024 L1301 (proven) — S8 hit-connect lock:
+            // the struck victim drives `k.aS.i(8)` on W∩X overlap
+            // (i.java:1777/1914/1976/6040/6065/8090/10363/10425); the
+            // player back-steps ±1280 opposite `av`, plays the footstep
+            // `k.A(11)` at frame 1 (`T==1&&U==0`), and on `r()` sets
+            // `P|=64` then `l()`/`aw()` resume. `i.f(this)` clamps the
+            // scroll wall; the arm falls into the L1926 tail below.
+            8 -> {
+                if (p.T == 1 && p.U == 0) world.sfx(11)          // L1303
+                p.aj = 0; p.ah = 0
+                p.ag = if (p.av) 1280 else -1280
+                if (p.animFinished()) {                          // r()
+                    p.P = p.P or 64
+                    if (!l(p, pad)) aw(p, pad)
+                }
+                world.scrollWallClamp(p)                         // i.f(this)
+            }
             // g.java:1313-1352 (proven) — dismount/swing: `D=false`,
             // `co++`, then inside `ag!=0 && aO==0`: `A()` ladder snap →
             // i(74); side-strip ∈[19,24) → edge-count i8 picks i(107/
@@ -660,6 +677,16 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     p.flingAirborne(0, world)
                 }
             }
+        }
+        // L1926-L1946 shared tail (g.java:3460-3473, proven) — the
+        // universal post-arm block every `goto L1926` arm flows into.
+        // `ab` releases when the linked partner reaches S14 (skipped on
+        // S9's own arm); `aO==6` (head cell = drop-through type) fires
+        // op18 `g.a(); i(43)` unless standing in/on a type-2 cell.
+        if (p.S != 9 && p.ab?.S == 14) p.ab = null              // L1926-L1933
+        if (p.aR != 2 && p.aO != 2 &&
+            p.e(world, p.ak / 20, p.al / 20) != 2) {           // L() i.java:7191
+            if (p.aO == 6) p.applyHit(18, 0, p, world)         // a(18,0,0,this)
         }
         interactScan(p)     // az() — g/ci/at interact maintenance+scan
         mountEntry(p, pad)  // L1947 — mount/assassinate context arm
