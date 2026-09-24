@@ -1173,7 +1173,7 @@ class Level0Renderer {
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
         // ticks `bJ--` + recomputes the ARGB ramp — k.java:2522-2526).
-        if (world.kBJ > 0 && world.kDe) {
+        if (world.kBj > 0 && world.kDe) {
             val df = world.kDf
             batch.setColor(((df ushr 16) and 0xFF) / 255f,
                            ((df ushr 8) and 0xFF) / 255f,

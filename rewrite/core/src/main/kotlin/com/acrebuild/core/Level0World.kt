@@ -368,12 +368,12 @@ class Level0World(
      *  action buttons; cleared = the player-relative invisible wheel.
      *  (The `mounted` accessor name is historical — it IS `k()`.) */
     var cm = 1
-    /** `k.bJ`/`k.de`/`k.df` (k.java:194-195/318, proven) — the full-screen
-     *  damage flash: `I()` ticks `bJ--` and recomputes `df` as an ARGB
-     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the only
-     *  producer so far is the boss-grab `k.bJ = 6` (i.java:8869, arm
-     *  unported). `de` clears in `f()` reload (k.java:5131). */
-    var kBJ = 0
+    /** `k.de`/`k.df` (k.java:195/318, proven) — the full-screen damage
+     *  flash state: `I()` ticks `kBj--` and recomputes `df` as an ARGB
+     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the
+     *  producer is the boss-grab `k.bJ = 6` (i.java:31851 — ported at
+     *  NpcFsm.kt grab-lose arm). `de` clears in `f()` reload (:5131).
+     *  The `k.bJ` field itself is the iface `kBj` below (:1505). */
     var kDe = false
     var kDf = -1
     override val mounted: Boolean get() = cm == 1
@@ -4597,9 +4597,9 @@ class Level0World(
 
         // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
         // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
-        if (kBJ > 0) {
-            kBJ--
-            val c = (120 * kBJ) / 8
+        if (kBj > 0) {
+            kBj--
+            val c = (120 * kBj) / 8
             kDe = true
             kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
         }
