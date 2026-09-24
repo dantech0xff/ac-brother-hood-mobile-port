@@ -53,7 +53,10 @@ class Level0Game : ApplicationAdapter() {
      *  swap, the mission's `ej` tileset clips replace the old ones in
      *  the shared clip map (negative keys), then the atlas repacks. */
     private fun loadMissionTilesets(clips: HashMap<Int, Clip>) {
-        val ids = world.level.layers.map { it.tilesetClip }.toSet()
+        // `et` (id==0) carries the null sentinel 0, not a real tileset —
+        // exclude it; a real `tileset-0` exists only on level5's eu.
+        val ids = world.level.layers.filter { it.id != 0 }
+            .map { it.tilesetClip }.toSet()
         clips.keys.removeAll { it < 0 && -it !in ids }
         for (ts in ids) {
             clips[-ts] = Clip.load(
@@ -126,10 +129,14 @@ class Level0Game : ApplicationAdapter() {
         // index each tileset clip's composite-object space. Negated keys:
         // entity clips share this map via k.bi[] whose values collide
         // with the tileset ids.
-        for (ts in level.layers.map { it.tilesetClip }.toSet()) {
+        // firstPackTilesetDir already carries the "level0" prefix; the
+        // et collision layer (id==0) has tilesetClip=0 = null sentinel —
+        // exclude it or the load asks for a nonexistent tileset-0.
+        for (ts in level.layers.filter { it.id != 0 }
+                .map { it.tilesetClip }.toSet()) {
             clips[-ts] = Clip.load(
                 Gdx.files.internal(
-                    "level${firstPackTilesetDir}/tileset-$ts/clip.acpk")
+                    "${firstPackTilesetDir}/tileset-$ts/clip.acpk")
                     .readBytes())
         }
         world = Level0World(level, clips, DeterministicRandom(SEED),
