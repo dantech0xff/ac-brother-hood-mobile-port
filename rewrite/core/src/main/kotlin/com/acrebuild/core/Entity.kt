@@ -47,6 +47,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aj: Int = 0                  // axel y
     var S: Int = 0                   // anim/state index
     var T: Int = 0                   // frame
+    var asSlot = -98                 // i.as — bf[] save-image slot (record
+                                     // order among non-{0,25,55,70}; -98 =
+                                     // runtime-spawned, no slot)
     var U: Int = 0                   // tick-in-frame
     var Q: Int = 0                   // previous anim
     var P: Int = 0                   // flag word
@@ -3506,6 +3509,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         d.settleToGround(world)
     }
 
+    /** `i.u()` (i.java:575-594, proven): `au` = coarse camera-distance
+     *  score — `|ak-(O+200)|/400 + |al-(P+120)|/N`, `N` = 240 for the
+     *  ax13-`aG==4`/ax21 family + ax67 `bk[Z0]==49`, 800-x for `bk==27`,
+     *  else 120. `k.I()` reads it for the eligibility + copy-group arms. */
+    fun recomputeAu(camX: Int, camY: Int, decorClip: (Int) -> Int) {
+        var x = ak - (camX + 200); if (x < 0) x = -x
+        var y = al - (camY + 120); if (y < 0) y = -y
+        au = when {
+            (ax == 13 && aG == 4) || ax == 21 -> x / 400 + y / 240
+            ax == 67 && decorClip(Z[0]) == 49 -> x / 400 + y / 240
+            ax == 67 && decorClip(Z[0]) == 27 -> x / 800 + y / 240
+            else -> x / 400 + y / 120
+        }
+    }
+
     /** `i.bE()` (i.java:18917): waypoint-coords → world — `ak=bY; al=k.P+bZ`. */
     fun posFromWaypoint(world: LevelCellSource) { ak = bY; al = world.kP + bZ }
 
@@ -4428,6 +4446,34 @@ interface LevelCellSource {
     var iAH: Boolean get() = false; set(_) {}
     var iAI: Int get() = 0; set(_) {}
     var iAJ: Int get() = 0; set(_) {}
+    /** `i.bk` (i.java:158, proven) — wisp-burst latch: `n()`'s S18 arm
+     *  sets it on `i(20)`; the S20 case gates the `5×e(true)` burst and
+     *  clears it on `r()`; the S0 arm's `e(false)` flap requires `!bk`. */
+    var iBk: Boolean get() = false; set(_) {}
+    /** `i.aK` — pooled flap-puff child spawned by `g.e(boolean)` (the
+     *  `a(24,40,6|7,az-1)` wisp the player leaves while flapping). */
+    var iAK: Entity? get() = null; set(_) {}
+    /** `k.aI` (k.java:234, proven) — `n()` flap cooldown: `++` per tick,
+     *  the `e(false)` auto-flap requires `k.aI >= 10` and resets it. */
+    var kAI: Int get() = 0; set(_) {}
+    /** `k.aG` — `k.aE` decay divider (n() head: `aH<0 → aG--`;
+     *  `aG<=0 → aG=6; aE--`). */
+    var kAG: Int get() = 0; set(_) {}
+    /** `k.bB`/`k.bC`/`k.bD` (k.java:119-123, proven) — burst-phase ints:
+     *  `bB==0 && bC==0` gates the glide-recovery `i(4)`; `bD>=15` picks
+     *  the heavy bank anims (30/31) over the light ones (33/32). */
+    var kBB: Int get() = 0; set(_) {}
+    var kBC: Int get() = 0; set(_) {}
+    var kBD: Int get() = 0; set(_) {}
+    /** `k.bh[k.aj]==3` — flying level; gates the `g.n()` flight arms. */
+    val bh3: Boolean get() = false
+    /** `k.ee[]` — per-mission BGM table (`B()` plays `ee[aj]`). */
+    val kEE: IntArray get() = IntArray(0)
+    /** `k.Q` — flying camera lookahead flag (C() sets 230 on bh3); the
+     *  glide arm uses ≥230 = auto-descend, >117/<230 = climb/dive gates. */
+    var kQ: Int get() = 0; set(_) {}
+    /** `k.l(i)` — screen-state driver (`l(12)` = mission fail). */
+    fun stateL(i: Int) {}
     /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
     var kBj: Int get() = 0; set(_) {}
     /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by

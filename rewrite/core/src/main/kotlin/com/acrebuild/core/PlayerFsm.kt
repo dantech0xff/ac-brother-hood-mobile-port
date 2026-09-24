@@ -71,8 +71,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // player drops below it, or enters a `c(S)` grounded state.
         if ((Entity.entBq != 0 && p.al > Entity.entBq) || p.S in GROUNDED_C)
             Entity.entBq = 0
-        dispatch(p, pad)
-        postTail(p, pad)
+        if (world.bh3) flightTick(p, pad)                      // g.n() bh3 arms
+        else { dispatch(p, pad); postTail(p, pad) }
         // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =
         // one cell) — without it long descents tunnel through floors.
         if (p.ah > 5120) p.ah = 5120
@@ -1313,6 +1313,233 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.g == null) p.g = e                            // L260
             }
         }
+    }
+
+    // === g.n() (g.java:5603-6113, proven) — the flying player tick =======
+    // Runs instead of the grounded dispatch when `bh[aj]==3` (`I()` case 25
+    // → `k.aS.n()`, i.java:5215 — the ax25 record IS the player slot,
+    // k.java:4647). Flight S-space 0-33: S0 glide, S4/5 climb/dive, S17/18
+    // burst-entry, S20-23 wisp-burst chain, S24 stall, S2/24 stall-fail,
+    // S26/28/29 intro anims, S30-33 banks, S1/9/12/27 hit-recoveries, S3.
+    //
+    // JADX's switch groups are lossy (its own header warns "Can't fix
+    // incorrect switch cases order") — the glide arm is transcribed for
+    // S ∈ {0,4,5,17,18} so the inner `S==18`/`S==17`/`z4` checks are all
+    // reachable (`inferred` group cover; the S3/S20-24/26-33 cases are
+    // single-valued as printed).
+    private fun flightTick(p: Entity, pad: Pad) {
+        var z2 = true
+        var z3 = true
+        world.kAI++
+        // B() (k.java:1619, proven): mission BGM — `aJ==1 → z(9)` else
+        // `z(ee[aj])`; per-tick in n(), audioPlay dedups the live track.
+        if (world.kAJ == 1) world.sfx(9) else { val t = world.kEE[world.kAj]; if (t != -1) world.sfx(t) }
+        if (world.iBe) {
+            world.kX = 0
+            if (p.animFinished() || !flightAliveV(p)) { world.stateL(12); return }
+            return
+        }
+        // `i.bh--` (n():5615) runs in tick() for both modes — not repeated.
+        if (world.kAH < 0) world.kAG--
+        if (world.kAG <= 0) { world.kAG = 6; world.kAE-- }
+        if (world.kAE < 0) world.kAE = 0
+        else if (world.kAE <= 25 && world.kAF == 0 && world.kAH < 0 && (world.iAJ == 0 || world.kW != 0)) {
+            if (world.kW != 0) { world.iAJ = world.kW; world.kW = 0 } else world.iAJ = world.kX
+            world.kX = world.iAJ shr 1
+        }
+        if (world.kAE <= 0 && world.kAH < 0) {
+            if (p.S != 24) {
+                world.iBB = true; world.iBC = false; world.iBD = false
+                world.iBF = 90; world.iBE = 999; world.iBG = -1
+                p.setAnim(24)
+            }
+            p.x1 = 0
+        } else if (p.x1 <= 0) p.setAnim(2)
+        if (world.iBB) { p.aq = -1; p.ar = -1 }
+
+        when (p.S) {
+            0, 4, 5, 17, 18 -> {
+                if (p.S == 0 && p.animFinished()) p.T = (p.clip?.frameCount(0) ?: 0) - 2
+                if (!world.iBi || Entity.gE) {
+                    if (world.kQ >= 230) {
+                        z3 = false
+                        p.ah = if (world.iAH) world.kY * world.iAI else world.kY
+                    }
+                } else {
+                    if (world.kAw == 20) world.kAw = 0            // aC()
+                    if (world.iAH && world.kQ >= 230) { p.ah = world.kY shl 1; z3 = false }
+                    if (!world.iBB && pad.v(1)) world.sfx(28)     // k.A(28) = z(28)
+                    if (p.S == 18) { p.av = p.ak > world.kO + 200; p.setAnim(20); world.iBk = true }
+                    else if (p.S == 17) p.setAnim(4)
+                    val z4 = p.S != 3 && p.S != 0 && p.S != 18 && p.S != 17 && p.S != 20
+                    if (!world.iBk && p.Q != 18 && world.kAI >= 10 && z4) { world.kAI = 0; flap(p, false) }
+                    if (pad.u(4112)) {
+                        if (p.ag > -2048) p.ag -= 768
+                        if (p.ag < -2048) p.ag = -2048
+                        z2 = false
+                        if (z4) p.setAnim(if (world.kBD >= 15) 30 else 33)
+                        p.av = false
+                    }
+                    if (pad.u(8256)) {
+                        if (p.ag < 2048) p.ag += 768
+                        if (p.ag > 2048) p.ag = 2048
+                        z2 = false
+                        if (z4) p.setAnim(if (world.kBD >= 15) 31 else 32)
+                        p.av = false                            // verbatim quirk — right-bank also faces left
+                    }
+                    if (pad.u(16388) && world.kQ > 117) {
+                        if (p.ah > -2048 + world.kY) p.ah -= 768
+                        if (p.ah < -2048 + world.kY) p.ah = -2048 + world.kY
+                        z3 = false; p.av = false
+                        if (z4) p.setAnim(4)
+                    }
+                    if (pad.u(33024) && world.kQ < 230) {
+                        if (p.ah < 2048 + world.kY) p.ah += 768
+                        if (p.ah > 2048 + world.kY) p.ah = 2048 + world.kY
+                        z3 = false; p.av = false
+                        if (z4) p.setAnim(5)
+                    }
+                    if (world.kBB == 0 && world.kBC == 0 && p.animFinished() && z4) { p.av = false; p.setAnim(4) }
+                    if (p.aq != -1 && p.ar != -1) {
+                        p.ah = 0; p.ag = 0; z3 = false; z2 = false
+                        if (p.aq < p.ak && !p.bb) {
+                            p.ak -= 10
+                            if (z4) { val i2 = world.kBD; world.kBD = i2 + 1; p.setAnim(if (i2 >= 15) 30 else 33) }
+                        } else if (p.aq > p.ak && !p.bc) {
+                            p.ak += 10
+                            if (z4) { val i3 = world.kBD; world.kBD = i3 + 1; p.setAnim(if (i3 >= 15) 31 else 32) }
+                        }
+                        p.ar += world.kX
+                        p.al += world.kX
+                        if (p.ar < p.al) { p.al -= 10; if (z4) p.setAnim(4) }
+                        else if (p.ar > p.al) { p.al += 10; if (z4) p.setAnim(5) }
+                        if ((p.aq < p.ak && p.aT >= 10) || (p.aq > p.ak && p.aU >= 10)) p.aq = p.ak
+                        if ((p.ar < p.al && world.kQ <= 117) || (p.ar > p.al && world.kQ >= 230)) p.ar = p.al
+                        if (Math.abs(p.aq - p.ak) <= 10) p.ak = p.aq
+                        if (Math.abs(p.ar - p.al) <= 10) p.al = p.ar
+                        if (p.ak == p.aq && p.al == p.ar) { p.aq = -1; p.ar = -1 }
+                    }
+                }
+            }
+            1, 9, 12, 27 -> {
+                world.kAw = 20
+                if (p.animFinished()) {
+                    if (world.iBB) { world.iBB = false; world.iBG = -1; p.az = 202 }
+                    if (world.kAw == 20) world.kAw = 0          // aC()
+                    p.setAnim(4)
+                }
+            }
+            2, 24 -> {
+                p.ag = p.ag shr 1; p.ah = p.ah shr 1
+                z2 = false; z3 = false
+                if (p.animFinished() || !flightAliveV(p)) world.stateL(12)
+            }
+            3 -> {
+                if (p.animFinished()) p.setAnim(4)
+                else {
+                    p.av = false
+                    if (p.S == 0) p.T = (p.clip?.frameCount(0) ?: 0) - 2   // proven-dead inside case 3
+                    // `if (!i.bi) { if (k.Q >= 230) {} }` — empty arm, proven-dead
+                }
+            }
+            20 -> {
+                if (world.iBk) {
+                    if (p.T == 5) repeat(5) { flap(p, true) }
+                    world.iBB = true; world.iBE = 999
+                    if (p.T <= 10) { world.iBC = true; world.iBD = true }
+                    else { world.iBC = false; world.iBD = false; world.iBG = 100 }
+                }
+                if (p.animFinished()) { world.iBB = false; world.iBG = -1; world.iBk = false; p.setAnim(4) }
+            }
+            21 -> {
+                world.kAw = 20
+                if (p.animFinished()) { world.iBB = true; world.iBC = true; world.iBD = true; world.iBE = 999; p.setAnim(22) }
+                bankSteer(p, pad)
+            }
+            22 -> {
+                world.kAw = 20
+                if (p.animFinished()) { world.iBB = true; world.iBC = false; world.iBD = false; world.iBE = 999; world.iBG = 100; p.setAnim(23) }
+                bankSteer(p, pad)
+            }
+            23 -> {
+                world.kAw = 20
+                if (p.animFinished()) { world.iBB = false; world.iBG = -1; p.setAnim(4) }
+            }
+            26 -> {
+                world.kAw = 20
+                if (p.animFinished()) p.T = (p.clip?.frameCount(p.S) ?: 0) - 2
+            }
+            28 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(29) }
+            29 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(26) }
+            30, 31, 32, 33 -> p.av = false                      // `S==0`/`!bi` arms are empty, proven-dead
+            else -> {}
+        }
+        if (z2) {
+            if (p.ag > 768) p.ag -= 768
+            else if (p.ag < -768) p.ag += 768
+            else p.ag = 0
+        }
+        if (z3) {
+            if (p.ah > 768 + world.kY) p.ah -= 768
+            else if (p.ah < -768 + world.kY) p.ah += 768
+            else p.ah = world.kY
+        }
+        if (p.ad != null) {
+            p.ad!!.av = p.av; p.ad!!.P = p.P
+            p.ad!!.ak = p.ak + 20
+            p.ad!!.S = p.S; p.ad!!.T = p.T; p.ad!!.al = p.al
+            p.ad!!.ag = p.ag; p.ad!!.ah = p.ah
+            p.ad!!.ai = p.ai; p.ad!!.aj = p.aj
+        }
+    }
+
+    /** `n()`'s shared steering block (g.java:5900-5916, proven) — the
+     *  S21/S22 cases carry the same `u(4112)`/`u(8256)` ±768 arms. */
+    private fun bankSteer(p: Entity, pad: Pad) {
+        if (pad.u(4112)) {
+            if (p.ag > -2048) p.ag -= 768
+            if (p.ag < -2048) p.ag = -2048
+            p.av = false
+        }
+        if (pad.u(8256)) {
+            if (p.ag < 2048) p.ag += 768
+            if (p.ag > 2048) p.ag = 2048
+            p.av = false
+        }
+    }
+
+    /** `g.e(boolean)` (g.java:6044-6079, proven) — the flap puff: spawn
+     *  `a(24,40,6|7,az-1)` into the `k.b` pool, aim at scroll position
+     *  (burst) or straight up-100 (flap). */
+    private fun flap(p: Entity, burst: Boolean) {
+        val wisp = p.spawnChildFx(world, 24, 40, if (burst) 7 else 6, p.az - 1)
+        wisp.av = false
+        wisp.ak = p.ak; wisp.al = p.W[1] - 3
+        wisp.am = wisp.ak; wisp.ao = wisp.ak; wisp.an = wisp.al
+        if (burst) {
+            wisp.ao = world.kO + (rng?.nextRange(70, 330) ?: 200)
+            wisp.ap = world.kP + (rng?.nextRange(110, 130) ?: 120)
+            wisp.ag = ((wisp.ao - wisp.am) shl 8) / 10
+            wisp.ah = ((wisp.ap - wisp.an) shl 8) / 10 + world.kY
+            wisp.aC = 10
+        } else {
+            wisp.ap = wisp.al - 100; wisp.ag = 0; wisp.ah = -3840 + world.kX
+        }
+        wisp.refreshBoxes()                                        // iVar3.t()
+        wisp.P = wisp.P or 16
+        wisp.af = p
+        wisp.bR = false
+        world.iAK = wisp
+        world.queueInsert(wisp)                                // k.b(aK)
+    }
+
+    /** `i.v()` ax25 tail (i.java:597-640, proven subset) — the flying
+     *  player stays "alive" while its `Y` box overlaps the camera rect
+     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The special-ax arms
+     *  and the `u()`/`au>i` screen-score guard are NPC-side, unported. */
+    private fun flightAliveV(p: Entity): Boolean {
+        val ac = world.kAc ?: return true
+        return p.Y[0] <= ac[2] && p.Y[2] >= ac[0] && p.Y[1] <= ac[3] && p.Y[3] >= ac[1]
     }
 
     companion object {

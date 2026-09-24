@@ -5,6 +5,7 @@ import com.acrebuild.core.DeterministicRandom
 import com.acrebuild.core.InputQueue
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
+import com.acrebuild.core.MissionPack
 import com.acrebuild.core.ScriptTables
 import com.acrebuild.core.TickEngine
 import com.badlogic.gdx.ApplicationAdapter
@@ -27,13 +28,45 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var world: Level0World
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
+    private val firstPackTilesetDir = "level0"
     private val save = SaveBridge("asbr-save.bin")
     private val audio = AudioBridge()
     private var accumulatorMs = 0L
 
+    /** `I(aj)` pack provider (k.java:5244, proven): one mission pack
+     *  = level ACLV + `k.d(1+aj)` strings + `j.e(7)` scripts — the
+     *  `G(i)` stages collapsed into one synchronous read (the original
+     *  spreads them across load-screen frames). */
+    private fun missionPack(aj: Int): MissionPack {
+        val level = LevelPack.load(
+            Gdx.files.internal("level$aj/level$aj.aclv").readBytes())
+        val strings = Gdx.files.internal("level$aj/strings-${aj + 1}.txt")
+            .readString("UTF-8").split("\n")
+            .filter { it.isNotEmpty() }
+            .map { it.replace("\\n", "\n") }
+        val scripts = ScriptTables.load(
+            Gdx.files.internal("level$aj/scripts.bin").readBytes())
+        return MissionPack(level, strings, scripts)
+    }
+
+    /** The `G(4..7)` tileset arms (k.java:4775-4830, proven): on a pack
+     *  swap, the mission's `ej` tileset clips replace the old ones in
+     *  the shared clip map (negative keys), then the atlas repacks. */
+    private fun loadMissionTilesets(clips: HashMap<Int, Clip>) {
+        val ids = world.level.layers.map { it.tilesetClip }.toSet()
+        clips.keys.removeAll { it < 0 && -it !in ids }
+        for (ts in ids) {
+            clips[-ts] = Clip.load(
+                Gdx.files.internal(
+                    "level${world.loadedAj}/tileset-$ts/clip.acpk")
+                    .readBytes())
+        }
+        renderer.rebuildTilesets()
+    }
+
     override fun create() {
-        val levelBytes = Gdx.files.internal("level0/level0.aclv").readBytes()
-        val level = LevelPack.load(levelBytes)
+        val firstPack = missionPack(0)
+        val level = firstPack.level
         val clips = HashMap<Int, Clip>()
         clips[0] = Clip.load(Gdx.files.internal("clips/clip0/clip.acpk").readBytes())
         clips[91] = Clip.load(Gdx.files.internal("clips/clip91/clip.acpk").readBytes())
@@ -89,25 +122,21 @@ class Level0Game : ApplicationAdapter() {
         clips[23] = Clip.load(Gdx.files.internal("clips/clip23/clip.acpk").readBytes())   // ax66 platform
         clips[28] = Clip.load(Gdx.files.internal("clips/clip28/clip.acpk").readBytes())   // ax51 crate
         clips[44] = Clip.load(Gdx.files.internal("clips/clip44/clip.acpk").readBytes())   // ax31
-        // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
-        // each tileset clip's composite-object space. Negated keys: entity
-        // clips share this map via k.bi[] whose values 10/11 collide with
-        // the tileset ids.
-        for (ts in intArrayOf(10, 11, 12)) {
+        // pack-15 tilesets bound via k.ej[aj*4..+2] (k.java:275); cells
+        // index each tileset clip's composite-object space. Negated keys:
+        // entity clips share this map via k.bi[] whose values collide
+        // with the tileset ids.
+        for (ts in level.layers.map { it.tilesetClip }.toSet()) {
             clips[-ts] = Clip.load(
-                Gdx.files.internal("level0/tileset-$ts/clip.acpk").readBytes())
+                Gdx.files.internal(
+                    "level${firstPackTilesetDir}/tileset-$ts/clip.acpk")
+                    .readBytes())
         }
-        // `j.g` level-string table — line-delimited, `\n`-escaped inside.
-        val levelStrings = Gdx.files.internal("level0/strings-1.txt")
-            .readString("UTF-8").split("\n")
-            .filter { it.isNotEmpty() }
-            .map { it.replace("\\n", "\n") }
-        // `j.e(7)` claim-script table (k.by/bz/eH, k.java:6196).
-        val scripts = ScriptTables.load(
-            Gdx.files.internal("level0/scripts.bin").readBytes())
         world = Level0World(level, clips, DeterministicRandom(SEED),
-            levelStrings = levelStrings, scripts = scripts,
-            charmap = Gdx.files.internal("fonts/charmap.bin").readBytes())
+            levelStrings = firstPack.levelStrings,
+            scripts = firstPack.scripts,
+            charmap = Gdx.files.internal("fonts/charmap.bin").readBytes(),
+            aj = 0, packLoader = { aj -> missionPack(aj) })
         // e(false) (k.java:4045): load the /ASBR record at boot — nop
         // when no record exists (orig swallows the same path).
         save.read()?.let { world.saveLoad(it) }
@@ -150,6 +179,13 @@ class Level0Game : ApplicationAdapter() {
                     Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
                 is com.acrebuild.core.Command.StopAudio ->
                     Gdx.app.log(TAG, "audio: e.b() stop channel")
+                is com.acrebuild.core.Command.MissionLoaded -> {
+                    @Suppress("UNCHECKED_CAST")
+                    loadMissionTilesets(world.clips as HashMap<Int, Clip>)
+                    Gdx.app.log(TAG, "mission ${c.aj}: ${world.level.entities.size} " +
+                        "records, ${world.level.cols}x${world.level.rows}, " +
+                        "npcs=${world.npcs.size}")
+                }
                 is com.acrebuild.core.Command.PersistBA -> {
                     save.write(c.record)
                     Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")

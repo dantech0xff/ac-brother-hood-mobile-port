@@ -173,6 +173,8 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
             42 to Clip.load(asset("clips/clip42/clip.acpk")),
             46 to Clip.load(asset("clips/clip46/clip.acpk")),
             92 to Clip.load(asset("clips/clip92/clip.acpk")),
+            15 to Clip.load(asset("clips/clip15/clip.acpk")),   // bi[26] glider
+            16 to Clip.load(asset("clips/clip16/clip.acpk")),   // bi[25] ax25 player
             12 to Clip.load(asset("clips/clip94/clip.acpk")),   // z[12] = entry-012
         )
         if (aj == 0) {
@@ -187,12 +189,23 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
     return Level0World(level, clips, DeterministicRandom(1L),
         levelStrings = levelStrings, charmap = charmap,
         scripts = ScriptTables.load(asset("level$aj/scripts.bin")),
-        aj = aj)
+        aj = aj, packLoader = { a -> missionPackFor(a) })
         .also {
             // the intro claim script's op105 dialogs (k.l(21)) suspend the
             // sim until a dismiss press — emulate an instantly-tapping player
             it.autoDismissDialog = true
         }
+}
+
+/** `I(aj)` provider for tests — the same `level<aj>` asset triplet the
+ *  gdx launcher assembles in `missionPack`. */
+private fun missionPackFor(aj: Int): MissionPack {
+    val strings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
+        .readText().split("\n").filter { it.isNotEmpty() }
+        .map { it.replace("\\n", "\n") }
+    return MissionPack(
+        LevelPack.load(asset("level$aj/level$aj.aclv")), strings,
+        ScriptTables.load(asset("level$aj/scripts.bin")))
 }
 
 class Level0WorldTest {
@@ -576,7 +589,10 @@ class Level0WorldTest {
         assertEquals(cp.al + 5, w.player.al)
     }
 
-    @Test fun `checkpoint re-homes live npcs and keeps pre-checkpoint dead dead`() {
+    @Test fun `checkpoint stamps live npc state and keeps pre-checkpoint dead dead`() {
+        // k.a(bb[i],as) is a save-image WRITE, not a re-home — the live
+        // entity does not move; the restore re-materializes it at the
+        // stamped position (simple i.java:13535+, k.java:4604).
         val w = world()
         val cp = w.checkpoints.first()
         val live = w.npcs.first { it.ax == 11 }
@@ -586,9 +602,11 @@ class Level0WorldTest {
         w.player.setPositionPx(cp.ak, cp.al + 5)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed)
-        assertEquals(live.homeX, live.ak, "live npc re-homed on checkpoint save")
+        assertEquals(live.homeX + 400, live.ak,
+            "checkpoint pickup must not move the live npc")
         assertEquals(139, dead.S, "pre-checkpoint corpse stays dead")
-        // reload: the pre-checkpoint kill stays dead (as==-98 / br[])
+        // reload: the live npc re-materializes at its stamped position,
+        // the corpse's own stamped S=139 keeps it dead.
         val (dx, dy) = damageSpot(w)
         w.player.setPositionPx(dx, dy)
         repeat(20) {
@@ -598,7 +616,89 @@ class Level0WorldTest {
         w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
+        val restored = w.npcs.first { it.aw == live.aw }
+        assertEquals(live.homeX + 400, restored.ak,
+            "live npc restored at its checkpoint-image position")
         assertEquals(139, w.npcs.first { it.aw == dead.aw }.S)
+    }
+
+    @Test fun `removed entity does not respawn through checkpoint restore`() {
+        // k.c() tombstones bg[as] → the aY() propagation writes -99 into
+        // bf → d(true) skips spawning the record entirely (k.java:5974).
+        val w = world()
+        val cp = w.checkpoints.first()
+        val victim = w.npcs.first { it.ax == 11 }
+        w.removeEntity(victim)
+        w.tick(emptyList())                    // drain pendingRemove
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed)
+        w.resetLevel(true)
+        assertNull(w.npcs.firstOrNull { it.aw == victim.aw },
+            "k.c()-removed record stays tombstoned through d(true)")
+    }
+
+    @Test fun `checkpoint arms the tip marquee and tombstones its own record`() {
+        // k.y() → fS=0 (tip marquee) — i.java:13482 / k.java:1027.
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertEquals(0, w.kFS, "aY() arms the fS tip-marquee counter")
+        // The fired record's slot tombstones → after reload the rebuilt
+        // checkpoint list marks it consumed again (no second fire).
+        w.resetLevel(true)
+        assertTrue(w.checkpoints.first { it.aw == cp.aw }.consumed,
+            "consumed ax2 record does not re-fire after restore")
+    }
+
+    @Test fun `ax11 alert fixup on checkpoint restore`() {
+        // k.java:5996-6005: ax11 (P&32)==0 && S!=2 && (Z[5]>0||Z[6]>0)
+        // → S=3,T=0 — the alert-resume fixup on restore.
+        val w = world()
+        val cp = w.checkpoints.first()
+        val npc = w.npcs.first {
+            it.ax == 11 && (it.P and 32) == 0 &&
+                (it.Z.getOrElse(5) { 0 } > 0 || it.Z.getOrElse(6) { 0 } > 0)
+        }
+        npc.S = 7                                   // mid-chase at pickup
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        w.resetLevel(true)
+        val r = w.npcs.first { it.aw == npc.aw }
+        assertEquals(3, r.S, "alerted soldier resumes patrol state 3")
+        assertEquals(0, r.T)
+    }
+
+    @Test fun `mission switch drops the checkpoint pointer and snapshot`() {
+        // a(bA,16,(short)0) parity: a new mission must not inherit a
+        // stale checkpoint (would teleport the player mid-level).
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertNotNull(w.checkpointSnap)
+        w.loadMission(1)
+        assertNull(w.checkpointSnap, "mission switch clears the snapshot")
+        assertEquals(0, w.kBA[16], "mission switch clears bA[16] pointer")
+    }
+
+    @Test fun `checkpoint restore rebinds the linked ax5 director`() {
+        // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — level-0's
+        // own ax2 records carry Z[0]=-1 (dead arm), so inject a linked
+        // checkpoint pointing at the real aw=36 ax5 record.
+        val w = world()
+        val dir = w.npcs.firstOrNull { it.ax == 5 && it.aw == 36 }
+            ?: return // record not spawned in this fixture
+        val cp = Level0World.Checkpoint(900, w.player.ak + 4, w.player.al, z0 = 36)
+        w.checkpoints = w.checkpoints + cp
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed); assertEquals(36, w.kG)
+        w.resetLevel(true)
+        val r = w.npcs.first { it.ax == 5 && it.aw == 36 }
+        assertTrue((r.P and 16) != 0, "linked director re-arms P|16")
+        assertSame(r, w.kC, "linked director re-binds script context")
     }
 
     @Test fun `iframes block a second drain for 10 ticks`() {
@@ -10824,21 +10924,25 @@ class Slice97Test {
         assertEquals(-1, w.kAE, "aE = aH(-1) poisons the meter (k.java:4216)")
         assertEquals(0, w.kAH)
         tickClean(w, 1)
-        assertEquals(-1, w.kAE, "aE<0 → arm dead")
+        // slice 180: n() runs now — `aE<0 → aE=0` (g.java:5621) eats the
+        // poison value; with aH==0 the stall gate stays closed.
+        assertEquals(0, w.kAE, "n() clamps the poisoned aE back to 0")
     }
 
     @Test fun `alert meter aF trickle`() {
         val w = bh3World()
         w.kAE = 50; w.kAH = -1; w.kAF = 7
         tickClean(w, 1)
-        assertEquals(53, w.kAE, "+3/tick")
+        // slice 180: n()'s aG decay divider (kAG=0 → -1 → reset+aE--) also
+        // runs: -1 + +3 → 52. Subsequent ticks decay only every 6th.
+        assertEquals(52, w.kAE, "aE-- divider + aF trickle +3")
         assertEquals(4, w.kAF)
         tickClean(w, 1)
-        assertEquals(56, w.kAE)
+        assertEquals(55, w.kAE)
         tickClean(w, 1)
-        assertEquals(57, w.kAE, "remainder <3 → aE += aF")
+        assertEquals(56, w.kAE, "remainder <3 → aE += aF")
         assertEquals(0, w.kAF)
-        assertEquals(57, w.alertFill, "i4 = min(aE,100)")
+        assertEquals(56, w.alertFill, "i4 = min(aE,100)")
     }
 
     @Test fun `alertFill caps at 100`() {
@@ -14034,11 +14138,14 @@ class Slice141Test {
     }
 
     private fun climbZone(s: Int = 10, cfg: (Entity) -> Unit = {}): Entity {
-        // W[3]=140 → dy = p.W[1]-140; band Z[0]=-60..Z[1]=0 (player top
-        // 60..0 px above the zone bottom = climbing window)
+        // W[3]=140 → dy = p.W[1]-140; record-style band Z[1]=50..Z[0]=180
+        // (proven records carry Z[0]>Z[1] — level1 {180,50,0,90,30} —
+        // smali: dy<=Z[1] → out, dy>=Z[0] → out; the window is the
+        // player's top sitting 50..180 px BELOW the zone bottom, the
+        // approach-from-below perch).
         val z = Entity(10, null); z.S = s
         z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
-        z.Z[0] = -60; z.Z[1] = 0; z.Z[2] = 10; z.Z[3] = 90; z.Z[4] = 7
+        z.Z[0] = 180; z.Z[1] = 50; z.Z[2] = 10; z.Z[3] = 90; z.Z[4] = 7
         cfg(z); return z
     }
 
@@ -14052,7 +14159,7 @@ class Slice141Test {
     @Test fun `S10 in-band locks input and parks the hand L323`() {
         val w = S141World()
         val z = climbZone()
-        val p = mk(200, 100)                     // W[1]=84 → dy=-56 ∈ [-60,0]
+        val p = mk(200, 250)                     // W[1]=234 → dy=94 ∈ (50,180)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertTrue(w.kAm, "k.o() input lock")
         assertNotNull(p.ae, "hand indicator spawned at view center")
@@ -14063,7 +14170,7 @@ class Slice141Test {
     @Test fun `S10 pad press arms the climb L3b3`() {
         val w = S141World()
         val z = climbZone()
-        val p = mk(200, 100)
+        val p = mk(200, 250)                     // dy=94 ∈ band
         val pad = Pad(); pad.queuePress(1); pad.commit(0)
         NpcFsm(w).tickTrigger(z, w, p, pad)
         assertTrue(w.iBB, "i.bB armed")
@@ -14107,7 +14214,7 @@ class Slice141Test {
     @Test fun `S10 off-zone climb finish resets progress L4b2`() {
         val w = S141World(); w.iBB = true; w.iBi = true; w.iBF = -1
         val z = climbZone()
-        val p = mk(200, 300)                     // dy=144 > Z[1], no overlap
+        val p = mk(200, 350)                     // dy=194 ≥ Z[0], no overlap
         p.W[0] = 300; p.W[2] = 320               // outside zone W
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertEquals(28, p.S)
@@ -14133,8 +14240,8 @@ class Slice141Test {
     @Test fun `S10 below zone unlocks without removing L573`() {
         val w = S141World(); w.iBB = true; w.iBF = 95; w.kAm = true
         val z = climbZone()
-        val p = mk(200, 300)
-        p.W[0] = 300; p.W[2] = 320               // no overlap, dy=144 > Z0
+        val p = mk(200, 350)
+        p.W[0] = 300; p.W[2] = 320               // no overlap, dy=194 ≥ Z[0]
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertTrue(w.removed.isEmpty())
         assertFalse(w.kAm)
@@ -15072,12 +15179,18 @@ class Slice152Test {
         // bytes are stamped from live globals at write time — compare to
         // the snapshot the checkpoint captured
         val s = w.checkpointSnap!!
-        assertEquals(1, w.kBA[15])
+        assertEquals(cp.aw, w.kBA[16], "bA[16] = checkpoint record id")
+        assertEquals(0, w.kBA[15], "aY() must not arm the has-save flag")
+        assertEquals(cp.ak, w.kBA[18]); assertEquals(cp.al + 5, w.kBA[20])
+        assertEquals(s.gJ, w.kBA[24]); assertEquals(s.gI, w.kBA[26])
         assertEquals(s.kAx, w.kBA[28]); assertEquals(s.kAy, w.kBA[30])
         assertEquals(s.kAz, w.kBA[32]); assertEquals(s.kAN, w.kBA[34])
+        assertEquals(s.ap[0], w.kBA[36]); assertEquals(s.ap[3], w.kBA[38])
+        assertEquals(s.ap[2] / 16, w.kBA[40]); assertEquals(s.ap[4], w.kBA[42])
         assertEquals(44, w.kBA[50])
         assertEquals(s.ap[5], w.kBA[52 + (2 shl 1)])
         assertEquals(1, w.kBA[68]); assertEquals(1, w.kBA[79])
+        for (i in 0..2) assertEquals(1, w.kBA[76 + i], "i.br[i] pending=1")
     }
 
     @Test fun `reload restores snapshot globals and flags`() {
@@ -16267,6 +16380,70 @@ class Slice176Test {
         }
     }
 
+    @Test fun `loadMission swaps pack strings and entities`() {
+        val w = world()
+        w.stateL(8)
+        w.loadMission(7)                                  // Cesare arena
+        assertEquals(7, w.kAj)
+        assertEquals(7, w.loadedAj)
+        assertEquals(7, w.missionIndex)
+        assertEquals(100, w.level.cols)
+        assertEquals(102, w.level.rows)
+        assertEquals(323, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "level7 spawned nothing")
+        assertFalse(w.bh3, "aj7 is grounded")
+        assertTrue(w.drainCommands().any {
+            it is Command.MissionLoaded && it.aj == 7 },
+            "MissionLoaded not emitted")
+    }
+
+    @Test fun `loadMission flying pack gates bh3 and drops ep`() {
+        val w = world()
+        w.stateL(8)
+        w.loadMission(1)
+        assertEquals(1, w.loadedAj)
+        assertTrue(w.bh3, "aj1 is flying (bh==3)")
+        assertEquals(setOf(0, 2, 3), w.level.layers.map { it.id }.toSet())
+        assertEquals(225, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "level1 spawned nothing")
+    }
+
+    @Test fun `same-pack loadMission is a reload not a swap`() {
+        val w = world()
+        w.stateL(8)
+        w.drainCommands()
+        w.loadMission(0)                                  // already level0
+        assertEquals(0, w.loadedAj)
+        assertTrue(w.drainCommands().none { it is Command.MissionLoaded },
+            "same-pack swap must not emit MissionLoaded")
+        assertEquals(637, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "respawn produced no entities")
+    }
+
+    @Test fun `stats survive a mission swap`() {
+        // `I(aj)` reloads pack+entities but `kBA`/`kAp` are world statics
+        // — the original keeps them across F(aj) (save bytes persist).
+        val w = world()
+        w.stateL(8)
+        w.kBA[14] = 6                                     // unlock marker
+        val n = w.npcs.size
+        w.loadMission(5)
+        assertEquals(6, w.kBA[14], "kBA wiped on mission swap")
+        assertNotEquals(n, w.npcs.size,
+            "level5 entity set should differ from level0")
+    }
+
+    @Test fun `strings follow the swapped pack`() {
+        val w = world()
+        w.stateL(8)
+        val before = w.levelStrings.firstOrNull { it.isNotEmpty() }
+        w.loadMission(2)
+        val after = w.levelStrings.firstOrNull { it.isNotEmpty() }
+        assertNotNull(after)
+        assertNotEquals(before, after,
+            "level2 strings should differ from level0")
+    }
+
     @Test fun `visual layer gating matches bh table`() {
         // Layer ids: 0=et, 1=ep, 2=eu, 3=er. Flying packs (aj 1/4) carry
         // no ep entry (k.java:5244-5264 `I(i)` gate on bh==3); others
@@ -16282,5 +16459,321 @@ class Slice176Test {
                              "level$aj grounded layers")
             }
         }
+    }
+}
+
+class Slice178Test {
+
+    /** Force `j.c=8` each tick — level1's intro u9 dialog otherwise pops
+     *  on tick 1 and the play arm (which holds the bh3 entity pass)
+     *  early-returns for the rest of the dialog. Also pins the player at
+     *  camera center: the bh3 autoscroll camera otherwise outruns the
+     *  (wingless test) player and `k.l(12)` fails the mission. */
+    private fun tickPlay(w: Level0World, n: Int = 1) {
+        repeat(n) {
+            w.stateL(8)
+            w.player.al = w.camY + 120; w.player.ah = 0
+            w.tick(emptyList())
+        }
+    }
+
+    @Test fun `flying pack allocates the dL stamp grid`() {
+        // `G(2)`/`U()` (k.java:4359-4365, proven): `bh==3 → dL=int[21][13]`.
+        val w = world(aj = 1)
+        assertNotNull(w.level.flyingGrid, "bh3 must allocate dL")
+        assertEquals(21 * 13, w.level.flyingGrid!!.size)
+        assertNull(world().level.flyingGrid, "level0 stays grounded")
+    }
+
+    @Test fun `first ticks fill the stamp window`() {
+        val w = world(aj = 1)
+        tickPlay(w, 2)
+        val dl = w.level.flyingGrid!!
+        assertTrue(dl.any { it != 0 }, "dL should stamp view cells")
+        // `aR<0 → i5=i6` identity rows: slot (cx%21, cy%13) caches
+        // `cx + cy*etCols` for the parallax-view window.
+        val px = w.parallaxX / 20; val py = w.parallaxY / 20
+        assertEquals(px + py * w.level.etCols, dl[(px % 21) * 13 + (py % 13)],
+            "top-left stamp slot = linear et index")
+    }
+
+    @Test fun `collisionCell resolves through the stamp grid`() {
+        val w = world(aj = 1)
+        tickPlay(w, 2)
+        val et = w.level.layers.first { it.id == 0 }
+        val dl = w.level.flyingGrid!!
+        // pick a cell inside the current stamp window so `dL` holds a
+        // live et index (wrap-band slots can point past et — `g()` then
+        // returns 0 via its own `i4>=len` guard).
+        val cx = w.parallaxX / 20 + 1; val cy = w.parallaxY / 20 + 1
+        val stamped = dl[(cx % 21) * 13 + (cy % 13)]
+        val expected = if (stamped < 0 || stamped >= et.cells.size) 0
+                       else et.cells[stamped].let { if (it == 255) 0 else it }
+        assertEquals(expected, w.level.collisionCell(cx, cy),
+            "g() bh3 = et[dL[x%21][y%13]]")
+        assertEquals(0, w.level.collisionCell(0, -5),
+            "bh3: above the world is air, not solid")
+        assertEquals(20, w.level.collisionCell(-1, 0), "x<0 = solid")
+        assertEquals(20, w.level.collisionCell(0, et.rows), "cy>=rows = solid")
+    }
+
+    @Test fun `grounded levels keep direct et indexing`() {
+        val w = world()
+        val et = w.level.layers.first { it.id == 0 }
+        assertNull(w.level.flyingGrid)
+        val cy = et.rows - 2; val cx = 1
+        val direct = et.cells[cy * et.cols + cx].let { if (it == 255) 0 else it }
+        assertEquals(direct, w.level.collisionCell(cx, cy))
+        assertEquals(20, w.level.collisionCell(0, -1),
+            "grounded: above world = solid sentinel")
+    }
+
+    @Test fun `parallax tracks the camera one to one on level1`() {
+        val w = world(aj = 1)
+        tickPlay(w, 3)
+        // `i2 = O*(bt-21)/(bp-21)`, `i3 = P*(bu-13)/(bq-13)` — level1's
+        // et is 44x600 → both fractions are 1:1.
+        assertEquals(w.camX, w.parallaxX)
+        assertEquals(w.camY, w.parallaxY)
+    }
+
+    @Test fun `au scores camera distance in screen units`() {
+        val w = world(aj = 1)
+        val e = w.npcs.first()
+        e.ak = w.camX + 200; e.al = w.camY + 120
+        e.recomputeAu(w.camX, w.camY) { i -> w.kBk(i) }
+        assertEquals(0, e.au, "center of view = distance 0")
+        e.ak += 800
+        e.recomputeAu(w.camX, w.camY) { i -> w.kBk(i) }
+        assertTrue(e.au >= 2, "two x-screens out should be au>=2")
+    }
+
+    @Test fun `on-screen copy member arms the group then consumes`() {
+        // `k.I()` (k.java:2536-2550, proven): an eligible entity with
+        // `au<1 && ay>0` adopts `ak=ay`, members get `dR=aG` + `u()`, then
+        // `ay==ak → -1` marks them consumed so they tick this frame.
+        val w = world(aj = 1)
+        val e = w.npcs.first()
+        val e2 = w.npcs.drop(1).first()
+        e.ak = w.camX + 200; e.al = w.camY + 120; e.P = 0; e.ay = 5
+        e2.ak = w.camX + 260; e2.al = w.camY + 120; e2.P = 0; e2.ay = 5
+        e2.aG = 9
+        tickPlay(w)
+        assertEquals(-1, e.ay, "first member consumed")
+        assertEquals(-1, e2.ay, "second member consumed")
+        assertEquals(9, w.kDR, "member aG lands on dR")
+    }
+
+    @Test fun `dU world shift applies on a quiet tick`() {
+        // k.java:2560-2570 (proven): `i2==0 && dU!=0` → `cB+=dU*400`,
+        // `P=cB`, `aS.al+=i5; aS.b(true)`, `dT+=dU*20`, `dU=dR=ak` reset.
+        val w = world(aj = 1)
+        tickPlay(w, 2)
+        w.npcs.clear()                                  // nothing to consume
+        // slice 180: flightTick's z3 tail holds ah at kY — integrate drifts
+        // al by kY>>8 = -7/tick. Seat the latch + pin ah=kY so the drift is
+        // exact (O's sub-256 residue would otherwise alternate -3/-4).
+        w.iBi = true
+        w.kDU = 2
+        w.stateL(8)
+        w.player.ah = w.kY
+        val al0 = w.player.al; val dT0 = w.kDT
+        w.tick(emptyList())
+        assertEquals(al0 + 800 - 7, w.player.al, "player teleports dU*400 (+flight drift)")
+        assertEquals(dT0 + 40, w.kDT, "copy boundary shifts dU*20")
+        assertEquals(0, w.kDU)
+        assertEquals(-1, w.kDR)
+        assertEquals(0, w.kAk)
+    }
+}
+
+class Slice179Test {
+
+    private fun tickPlay(w: Level0World, n: Int = 1) {
+        repeat(n) {
+            w.stateL(8)
+            w.player.al = w.camY + 120; w.player.ah = 0
+            w.tick(emptyList())
+        }
+    }
+
+    @Test fun `stampAt resolves view cells and guards wrap band`() {
+        val w = world(aj = 1)
+        tickPlay(w, 2)
+        // in-window logical cell → live et index
+        val cx = w.parallaxX / 20 + 1; val cy = w.parallaxY / 20 + 1
+        assertTrue(w.level.stampAt(cx, cy) >= 0)
+        // wrap-band / unmapped slots guard to -1 like g()'s i4>=len arm
+        val et = w.level.layers.first { it.id == 0 }
+        val dl = w.level.flyingGrid!!
+        val bad = (0 until 21 * 13).firstOrNull { dl[it] >= et.cells.size }
+        if (bad != null) {
+            val bx = bad / 13; val by = bad % 13
+            assertEquals(-1, w.level.stampAt(bx, by))
+        }
+    }
+
+    @Test fun `stampAt is -1 on grounded packs`() {
+        assertEquals(-1, world().level.stampAt(1, 1))
+    }
+}
+
+class Slice180Test {
+
+    /** i.java:2415-2427 (proven) — the ax25 flying player-slot init arm. */
+    @Test fun `level1 spawn applies the ax25 init`() {
+        val w = world(aj = 1)
+        val p = w.player
+        assertEquals(202, p.az, "az=202")
+        assertEquals(90, p.x1, "g.e(90) sets x[1]")
+        assertEquals(2, p.aA); assertEquals(3, p.aB)
+        assertEquals(-2560, p.ah, "ah=-2560 entry velocity")
+        assertEquals(-1, p.aq); assertEquals(-1, p.ar)
+        assertNotNull(p.ad, "`ad` = retype-26 glider companion")
+        assertEquals(26, p.ad!!.ax)
+        assertEquals(201, p.ad!!.az, "ax26 init arm (i.java:2429): az=201")
+        assertEquals(1, p.ad!!.aw, "`new i(sArr)` — ad inherits the record uid")
+        assertEquals(4, p.ad!!.S, "ad i(r8[5]) before the per-tick mirror")
+        assertEquals(w.clipFor(16), p.clip, "bi[25]=16 — glider-suit clip")
+        val g0 = world(aj = 0)
+        assertEquals(g0.clipFor(0), g0.player.clip,
+            "grounded packs keep clip0")
+        assertFalse(w.npcs.any { it.ax == 0 || it.ax == 25 },
+            "player-slot record must not double-spawn into bb[]")
+        assertNull(world(aj = 0).player.ad, "grounded levels carry no ad")
+    }
+
+    /** g.java:5603+ n() S∈{0,4,5,17,18}: no steering → `ah=kY` descent. */
+    @Test fun `glide descends at kY and decays bank to zero`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230                                        // bh3 camera init
+        val p = w.player; p.setAnim(0); p.ag = -2048; p.ah = 0
+        val pad = Pad()
+        w.playerFsm.tick(p, pad)
+        assertEquals(w.kY, p.ah, "no-input glide = kY descent")
+        assertEquals(-1280, p.ag, "ag decays 768 toward 0 (-2048+768)")
+        w.playerFsm.tick(p, pad)
+        assertEquals(-512, p.ag)
+        w.playerFsm.tick(p, pad)
+        assertEquals(0, p.ag, "bank settles to 0")
+    }
+
+    /** g.java:5746-5798: steering/climb/dive arms (verbatim quirks kept). */
+    @Test fun `steering banks and climbs with verbatim clamps`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230                                        // bh3 camera init
+        w.iBi = true                                      // seat latch (i.java:15216/9571) — steering arm
+        val p = w.player; p.setAnim(0); p.ag = 0; p.ah = 0
+        val pad = Pad()
+        pad.held = 4112                                   // u(4112) left
+        p.setAnim(4)                                      // z4 state → bank anim applies
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ag, "left bank -768/tick")
+        // clip16's S32/S33 are 1-frame poses — the i(33) arm fires
+        // (Q stamps 33) but the `kBB==0&&kBC==0&&r()&&z4→i(4)` recover
+        // arm resets to the glide state in the same tick (verbatim).
+        assertEquals(33, p.Q, "kBD<15 → light left bank i(33)")
+        assertEquals(4, p.S, "1-frame bank blip → recover arm resets S")
+        pad.held = 0                                      // release — held keys re-steer
+        // S4's glide case keeps decaying the banked ag (z2 tail).
+        w.playerFsm.tick(p, pad)
+        assertEquals(0, p.ag, "bank impulse decays via tail")
+        p.setAnim(4)
+        pad.held = 8256                                   // u(8256) right
+        w.playerFsm.tick(p, pad)
+        assertEquals(768, p.ag, "right bank +768/tick")
+        assertEquals(32, p.Q, "kBD<15 → light right bank i(32)")
+        // climb: u(16388) gated kQ>117 — kQ=230 on bh3. S32 has no exit
+        // arm (verbatim g.java:6013-6020: `av=false` + dead ifs only) —
+        // restore the glide state first.
+        p.setAnim(4)
+        pad.held = 16388
+        p.ah = 0
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ah, "climb ah-=768")
+        repeat(4) { w.playerFsm.tick(p, pad) }
+        assertEquals(-2048 + w.kY, p.ah, "climb clamps at -2048+kY")
+        assertTrue(p.S == 4, "climb → i(4)")
+        // dive: u(33024) gated kQ<230 — kQ==230 fails the gate (verbatim).
+        // With bi set the gated-off dive leaves the z3 tail: -768/tick.
+        pad.held = 33024
+        p.ah = 0
+        p.setAnim(4)
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ah, "dive gated off → tail decel only")
+        repeat(2) { w.playerFsm.tick(p, pad) }
+        assertEquals(w.kY, p.ah, "tail settles at kY")
+    }
+
+    /** g.java:5610-5644 stall arms: aE<=0 && aH<0 → i(24) → stateL(12). */
+    @Test fun `stall arms the failsafe and fails on clip end`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        val p = w.player; p.setAnim(0)
+        w.kAE = 0; w.kAH = -1                       // stall-grace exhausted
+        w.playerFsm.tick(p, Pad())
+        assertEquals(24, p.S, "kAE<=0 && kAH<0 → i(24)")
+        assertEquals(0, p.x1, "stall zeroes the meter")
+        assertTrue(w.iBB, "stall arms bB + the 999/kB/kG markers")
+        // S24 failsafe: off-camera → !v() → stateL(12).
+        p.setPositionPx(p.ak, w.camY + 4000); p.refreshBoxes()
+        w.playerFsm.tick(p, Pad())
+        assertEquals(12, w.jC, "stall fail → k.l(12)")
+    }
+
+    /** g.java:5837-5867 + tail: `ad` mirror + waypoint homing. */
+    @Test fun `ad companion mirrors and homing steps ak al`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        val p = w.player; p.setAnim(0); p.ag = 10; p.ah = w.kY
+        w.iBB = true                                 // bank-lock latch
+        w.playerFsm.tick(p, Pad())
+        val ad = p.ad!!
+        assertEquals(p.ak + 20, ad.ak, "ad.ak = ak+20")
+        assertEquals(p.al, ad.al); assertEquals(p.ag, ad.ag)
+        assertEquals(p.ah, ad.ah); assertEquals(p.S, ad.S)
+        assertEquals(-1, p.aq); assertEquals(-1, p.ar,
+            "iBB consumes the waypoint target")
+        // homing arm: aq/ar set → ak/al step toward them at ±10.
+        val al0 = p.al
+        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false; w.iBi = true
+        w.playerFsm.tick(p, Pad())
+        assertEquals(p.aq - 15, p.ak, "ak steps +10 toward aq")
+        // verbatim: ar/al both += kX(-7), then ar<al → al-=10, then
+        // (ar>al && kQ>=230) → ar=al. Net: al = al0 - 7 - 10.
+        assertEquals(al0 - 17, p.al, "al steps via scroll + chase")
+        assertEquals(p.al, p.ar, "ar snaps to al (kQ>=230 arm)")
+    }
+
+    /** g.java:5678-5700 flap arm: cooldown + !iBk + z4 → e(false). */
+    @Test fun `auto-flap spawns the puff and arms flap velocity`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        w.iBi = true                                 // seat latch — flap lives in bi&&!E
+        val p = w.player; p.setAnim(4); w.kAI = 11   // cooldown elapsed
+        p.ah = w.kY                                  // z4 glide condition
+        w.kBB = 1                                    // !bB==0&&bC==0 → skip
+        val before = w.pendingInsert.size
+        w.playerFsm.tick(p, Pad())
+        val wisp = w.iAK
+        assertNotNull(wisp, "flap spawns the ax24 clip-40 puff")
+        assertTrue(w.pendingInsert.size > before, "puff queued via k.b")
+        assertEquals(-3840 + w.kX, wisp!!.ah, "puff velocity -3840+kX")
+        assertTrue(wisp.P and 16 != 0, "wisp P|=16")
+        assertEquals(0, w.kAI, "cooldown reset")
+    }
+
+    /** grounded world must not run the flight tick. */
+    @Test fun `bh3 gate keeps grounded dispatch`() {
+        val w = world(aj = 0)
+        val p = w.player; p.setAnim(0); p.ah = 0
+        w.stateL(8)
+        w.playerFsm.tick(p, Pad())
+        assertNotEquals(2, p.aA, "aA stays grounded-default (no ax25 init)")
     }
 }

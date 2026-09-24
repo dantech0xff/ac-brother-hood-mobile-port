@@ -17,22 +17,48 @@ package com.acrebuild.core
  *   bottom-third        → held 33024 (down/crouch)
  * A second press inside ~8 ticks sets the `x()` double-tap bits via Pad.
  */
-class Level0World(
+/** One mission's pack payload — the `I(aj)`/`G(i)`-staged resources
+ *  (k.java:5244/:4740): the ACLV level, the `j.g` string table
+ *  (`k.d(1+aj)` → pack-14 entry-aj+1), and the `j.e(7)` script tables. */
+class MissionPack(
     val level: LevelPack,
+    val levelStrings: List<String>,
+    val scripts: ScriptTables?,
+)
+
+class Level0World(
+    level: LevelPack,
     val clips: Map<Int, Clip>,
     val rng: DeterministicRandom,
     /** `j.g` level-string table (pack-14 entry-001 for level 0). */
-    val levelStrings: List<String> = emptyList(),
+    levelStrings: List<String> = emptyList(),
     /** `k.by`/`k.bz`/`k.eH` script tables (`j.e(7)` of the mission pack,
      *  k.java:6196). Null = no scripts (spawn smoke/tests w/o assets). */
-    val scripts: ScriptTables? = null,
+    scripts: ScriptTables? = null,
     /** `j.f(2)` charmap bytes (shared `short[]` font map) — builds the
      *  `y` FontClip used for `a(str,str2)` footer dims (:2276-2296). */
     val charmap: ByteArray? = null,
-    /** `k.aj` — mission index (0..7); selects `k.bh[aj]` flying gates,
-     *  `k.d(1+aj)` string table, and the `aj!=7` stat-tally exceptions. */
-    val aj: Int = 0,
+    /** `k.aj` at world-init — the pack `level` was converted from;
+     *  the mutable mission index lives on `kAj`. */
+    aj: Int = 0,
+    /** `I(aj)` pack provider (k.java:5244, proven): invoked by
+     *  `loadMission` when `kAj` targets another mission's pack. Null =
+     *  single-pack world (tests, minimal smoke worlds). */
+    val packLoader: ((Int) -> MissionPack)? = null,
 ) : LevelCellSource {
+
+    /** The currently-loaded mission pack — `var` so `loadMission`
+     *  (`I(aj)`) can swap it. */
+    var level: LevelPack = level
+        private set
+    var levelStrings: List<String> = levelStrings
+        private set
+    var scripts: ScriptTables? = scripts
+        private set
+    /** Which mission's pack `level` holds — distinct from `kAj`, which
+     *  the menu/win arms mutate *before* `I(aj)` runs at play entry. */
+    var loadedAj = aj
+        private set
 
     companion object {
         const val VIEW_W = 400
@@ -130,28 +156,48 @@ class Level0World(
      *  k.java:1804) → reload(), our only level (`inferred` milestone). */
     val won get() = jC == 13 || jC == 31
 
-    /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id. */
-    data class Checkpoint(val aw: Int, val ak: Int, val al: Int, var consumed: Boolean = false)
+    /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id,
+     *  `z0` = Z[0] — the linked ax5 uid written to `k.G` on pickup;
+     *  `slot` = the record's bf[] slot index (d(z2) `r102` order —
+     *  ax2 entities take a slot like any other record). */
+    data class Checkpoint(val aw: Int, val ak: Int, val al: Int, val z0: Int,
+                          var slot: Int = -1, var consumed: Boolean = false)
 
     /** Snapshot written into bA[16..] by aY()/i.X() — i.java:18631
      *  (write side i.java:13488-13500, read side k.java:5185-5203):
      *  pos/facing (18-22), g.J/g.I (24/26), ap[0,3,2/16,4] + ap[5] at
      *  52+aj*2, ax/ay/az/aN/aL (28-34, 50), aZ/bn flags (68/79),
-     *  br[] dead set (76+). All fields now modeled. */
+     *  br[] hint flags (76+), plus k.G (the checkpoint's Z[0] link uid). */
     data class Snapshot(val aw: Int, val ak: Int, val al: Int,
                         val av: Boolean, val x1: Int,
                         val gJ: Int, val gI: Int, val ap: IntArray,
                         val kAx: Int, val kAy: Int, val kAz: Int,
                         val kAN: Int, val kAL: Int,
-                        val kAZ: Boolean, val iBn: Boolean)
+                        val kAZ: Boolean, val iBn: Boolean,
+                        val kG: Int, val br: BooleanArray)
 
-    val checkpoints: List<Checkpoint> = level.entities
-        .filter { it.size >= 4 && it[0] == 2 }
-        .map { Checkpoint(it[1], it[2], it[3]) }
+    /** Rebuilt from `level.entities` on every spawn (a mission switch
+     *  rebinds `level`, so these must recompute with it). */
+    var checkpoints: List<Checkpoint> = emptyList()
     var checkpointSnap: Snapshot? = null
         private set
-    private var checkpointDead: Set<Int> = emptySet()  // br[]-equivalent
-                                                       // dead at save time
+    /** `k.bf` — the d(z2) entity save-image (k.java:4604): per-slot state
+     *  `S,T,ak,al,aA,P,bz,bs,av` at `slot*22`; `-99` tombstone = consumed. */
+    private var slotImage = IntArray(0)
+    /** `k.bg` — per-slot consumed marks: `k.c()` sets -99 (k.java:4576),
+     *  aY() propagates them into `slotImage`, `d(false)` resets all to 0
+     *  (k.java:4633). */
+    private var slotFlags = IntArray(0)
+    /** `k.G` — the last fired checkpoint's `Z[0]` (linked ax5 uid);
+     *  the d(z2) restore arm re-fires `q(G).N()` when >0
+     *  (k.java:5177-5181). */
+    var kG = 0
+        private set
+    /** `i.br` — mission-0 tutorial-hint "still pending" flags, one per
+     *  `A[]={30,31,32}` slot (i.java:164/6181); persisted through
+     *  bA[76..]. All pending until a `c(i)` hint arm fires — the hint
+     *  arm itself is not yet ported. */
+    private var hintPending = BooleanArray(3) { true }
 
     override val player = Entity(0, clips[0]).apply { aw = -1 }
     override val npcs = ArrayList<Entity>()
@@ -232,6 +278,9 @@ class Level0World(
     val pendingInsert = ArrayList<Entity>()     // k.b() drain buffer
     override fun removeEntity(e: Entity) {
         pendingRemove += e
+        // k.c(iVar) (k.java:4576): `bg[as]=-99` — the record's save-image
+        // slot tombstones immediately; the next aY() propagates it to bf.
+        if (e.asSlot >= 0 && e.asSlot < slotFlags.size) slotFlags[e.asSlot] = -99
         if (player.gd === e) player.gd = null
         if (lockTarget === e) lockTarget = null
         if (claimed === e) clearClaim()
@@ -346,7 +395,7 @@ class Level0World(
     /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
      *  = autoscroll/flying on missions 1 and 4. */
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
-    val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
+    override val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
      *  `inferred` — orig's u is written by script ops). */
     var dlgU = 0
@@ -441,7 +490,8 @@ class Level0World(
     // -- marker/sweep globals -------------------------------------------------
     override var cFFlag = false                 // i.cF gauge-full static
     override var playerLinkB: Entity? = null    // g.b marker-engage link
-    override val missionIndex get() = aj          // k.aj — mission index
+    override val missionIndex get() = kAj         // k.aj — follows the
+                                                  // mutable mission field
     var statTally0 = 0                          // k.ap[0] kill/stat tally
     override var iBh = 0                        // i.bh static hit-lock
     /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
@@ -512,16 +562,26 @@ class Level0World(
                              val mask: Int, val mode: Int,
                              val linkCond: Int, val linkUid: Int)
 
-    val scrollTriggers: MutableList<ScrollTrigger> = level.entities
-        .filter { it.size >= 19 && it[0] == 37 }
-        .map { f ->
-            ScrollTrigger(
-                intArrayOf(f[2] + f[7], f[3] + f[8],
-                           f[2] + f[7] + f[9], f[3] + f[8] + f[10]),
-                intArrayOf(f[2] + f[11], f[3] + f[12],
-                           f[2] + f[11] + f[13], f[3] + f[12] + f[14]),
-                f[15], f[18], f[16], f[17])
-        }.toMutableList()
+    /** Rebuilt from `level.entities` on every spawn — a mission switch
+     *  rebinds `level`, so the trigger set must recompute with it. */
+    var scrollTriggers: MutableList<ScrollTrigger> = mutableListOf()
+        private set
+
+    private fun rebuildRecordStructs() {
+        checkpoints = level.entities
+            .filter { it.size >= 4 && it[0] == 2 }
+            .map { Checkpoint(it[1], it[2], it[3], if (it.size > 7) it[7] else -1) }
+        scrollTriggers = level.entities
+            .filter { it.size >= 19 && it[0] == 37 }
+            .map { f ->
+                ScrollTrigger(
+                    intArrayOf(f[2] + f[7], f[3] + f[8],
+                               f[2] + f[7] + f[9], f[3] + f[8] + f[10]),
+                    intArrayOf(f[2] + f[11], f[3] + f[12],
+                               f[2] + f[11] + f[13], f[3] + f[12] + f[14]),
+                    f[15], f[18], f[16], f[17])
+            }.toMutableList()
+    }
 
     // k.R/k.T/k.S/k.U — camera scroll bounds written by ax37 triggers
     // (consumed at k.java:2430-2486: camX∈[R, S-400], camY∈[T, U-240];
@@ -549,21 +609,61 @@ class Level0World(
             kAx = s.kAx; kAy = s.kAy; kAz = s.kAz
             kAN = s.kAN; kAL = s.kAL
             kAZ = s.kAZ; iBn = s.iBn
+            // bA[76+i] → i.br[i] restore (structured k.java:5200).
+            for (i in 0..2) hintPending[i] = s.br[i]
+            // `k.G` rides the snapshot — the reload's q(G) arm re-fires
+            // the checkpoint's linked ax5 director (k.java:5177).
+            kG = s.kG
         } else {
             val spawn = level.playerSpawn() ?: (100 to 200)
             player.setPositionPx(spawn.first, spawn.second)
             player.av = false
             player.x1 = 90
+            // grounded packs: the ax0 player keeps clip0 (undoes an
+            // earlier ax25 clip16 slot on mission switch).
+            player.clip = clips[0]
         }
         player.setAnim(0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
+        run {
+            val rec = level.playerRecord()
+            // i.java:2415-2427 (proven) — the ax25 flying player-slot
+            // init (runs after the shared vel-clear): `az=202`,
+            // `g.e(90)` (x1), `aA=2`, `aB=3`, `ah=-2560`, `aq=ar=-1`,
+            // `ad` = retype-26 companion at the record pos (the glider
+            // visual n() mirrors each tick). Keys off the record type
+            // like the original's entity-init dispatch — `kAj` isn't
+            // assigned yet when init{} runs, so `bh3` reads stale here.
+            if (rec != null && rec[0] == 25) {
+                player.az = 202; player.x1 = 90
+                player.aA = 2; player.aB = 3
+                player.ah = -2560
+                player.aq = -1; player.ar = -1
+                // bi[25]=16 (proven): the ax25 player slots the
+                // glider-suit clip, not the grounded clip0.
+                player.clip = clips[ENTITY_CLIP[25] ?: 16]
+                // `sArr[0]=26; ad=new i(sArr)` — the companion inits as a
+                // full entity from the mutated record: ax26 → `az=201`
+                // (i.java:2429) and `i(r8[5])` (mirrored to the player S
+                // every tick anyway — n() tail).
+                player.ad = Entity(26, clips[ENTITY_CLIP[26] ?: 15]).apply {
+                    aw = if (rec.size > 1) rec[1] else 0
+                    az = 201
+                    setAnim(if (rec.size > 5) rec[5] else 0)
+                    setPositionPx(if (rec.size > 2) rec[2] else player.ak,
+                                  if (rec.size > 3) rec[3] else player.al)
+                }
+            } else {
+                player.ad = null
+            }
+        }
         player.gt = 0; player.bh = 0
         // ax10-published player statics (i.java:2492-2512 level-init clears)
         player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
         player.gB = false; player.gL = 0; player.gA = false
     }
 
-    private fun spawnEntities() {
+    private fun spawnEntities(restoreFromImage: Boolean = false) {
         npcs.clear()
         pendingRemove.clear()
         pendingInsert.clear()
@@ -588,9 +688,48 @@ class Level0World(
         camAf = 0; camAg = 0                        // k.af = k.ag = 0
         kAE = 100; kAF = 0; kAH = -1                // k.aE/aF/aH
         kN()                                        // k.n(-1) — wall release
-        for (f in level.entities) {
+        rebuildRecordStructs()
+
+        // d(z2) slot map (simple k.java:5941-6080, proven): every record
+        // outside types {0,25,55} takes an `as` slot in FILE order — the
+        // original spawns each through `new i`/`new g` with no size or
+        // clip filter, so records our port skips still consume slots.
+        // ax70 aliases the previous slot verbatim (`bb[bc-1].as=r102-1`).
+        var slot = 0
+        val slotOf = HashMap<Int, Int>()
+        level.entities.forEachIndexed { i, f ->
+            when {
+                f.isEmpty() || f[0] == 0 || f[0] == 25 || f[0] == 55 -> slotOf[i] = -1
+                f[0] == 70 -> slotOf[i] = slot - 1
+                else -> slotOf[i] = slot++
+            }
+        }
+        // d(false) resets every `bg` mark; the bf buffer itself is a live
+        // image — reallocate only when the record set changes size.
+        if (!restoreFromImage) slotFlags = IntArray(slot)
+        if (slotImage.size != slot * 22) slotImage = IntArray(slot * 22)
+        // ax2 checkpoint records take slots too — bind them so a fired
+        // checkpoint's own record tombstones (k.c(this) → bg[as]=-99).
+        level.entities.forEachIndexed { i, f ->
+            if (f.size >= 4 && f[0] == 2) {
+                checkpoints.firstOrNull { it.aw == f[1] }?.slot = slotOf[i] ?: -1
+            }
+        }
+        // a consumed checkpoint's record is tombstoned in the image —
+        // on a restored spawn it must not re-fire (the ax2 entity never
+        // respawns under d(true), so the trigger can't fire again).
+        if (restoreFromImage) for (cp in checkpoints) {
+            if (!cp.consumed && cp.slot >= 0 &&
+                cp.slot * 22 < slotImage.size && slotImage[cp.slot * 22] == -99)
+                cp.consumed = true
+        }
+
+        for ((i, f) in level.entities.withIndex()) {
             if (f.isEmpty()) continue
             if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
+            // the 0/25 player-slot record becomes `aS`, not a bb[] npc
+            // (inferred — `k.aS` is built from it, not spawned twice).
+            if (f[0] == 0 || f[0] == 25) continue
             if (f.size < 7) continue
             // Retype head (i.java:2640-2651, proven): ax11 records whose
             // spawn anim r8[5]∈{80,93} become ax47 ledge sentinels; ax17
@@ -610,8 +749,14 @@ class Level0World(
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
                           else ENTITY_CLIP[type]
             if (clipIdx == null && type != 42) continue
+            val recSlot = slotOf[i] ?: -1
+            // d(true): a `-99` slot was consumed before the checkpoint —
+            // the record does not respawn (simple k.java:5972-5975).
+            if (restoreFromImage && recSlot >= 0 &&
+                recSlot * 22 < slotImage.size && slotImage[recSlot * 22] == -99) continue
             val e = Entity(type, if (clipIdx == null) null else clips[clipIdx]).apply {
                 aw = f[1]
+                asSlot = recSlot
                 setPositionPx(f[2], f[3])
                 homeX = f[2]; homeY = f[3]
                 P = f[6]
@@ -662,15 +807,69 @@ class Level0World(
             // uses bo[bL][0]=0 for level 0 (bo={{0,-1},{3,1},{5,2},{6,3}},
             // k.java:8450) — every other spawned type keeps aH=0.
             if (type == 11 && (e.Z[0] == 1 || e.Z[0] == 2)) e.palette = 1
-            // br[] parity: entities already dead when the checkpoint fired
-            // stay dead through the reload (as==-98 persisted).
-            if (checkpointDead.contains(e.aw)) e.setAnim(139)
+            // bf[] arm (k.java:5972-6030): on a restored spawn, apply the
+            // checkpoint-image state (+ fixups); ax60 Z[4]==2 pistons
+            // re-stamp fresh instead. On a fresh spawn, `a(e,slot)`
+            // stamps the just-inited state into the image — exactly the
+            // original's L10-L78 vs L103-L117 split.
+            if (restoreFromImage && recSlot >= 0 && recSlot * 22 < slotImage.size) {
+                if (type == 60 && e.Z.size > 4 && e.Z[4] == 2) stampImage(e)
+                else applyImage(e)
+            } else if (recSlot >= 0) stampImage(e)
             npcs += e
         }
         // R() (i.java:8131 proven): after all entities+waypoints load,
         // ax54/ax30 runners resolve their Z[1..4] uid chain via aw().
         for (e in npcs) if (e.ax == 54 || e.ax == 30)
             npcFsm.resolveRunnerWaypoints(e, this)
+    }
+
+    /** `k.a(iVar,i)` (structured k.java:4604-4616, proven): stamp the
+     *  entity's live state into the `bf` save-image at `as*22` —
+     *  {0:S, 2:T, 4:ak, 6:al, 8:aA, 12:P, 16:bz, 17:bs, 21:av},
+     *  booleans as 0/1. */
+    private fun stampImage(e: Entity) {
+        val s = e.asSlot
+        if (s < 0 || s * 22 + 21 >= slotImage.size) return
+        val i = s * 22
+        slotImage[i] = e.S; slotImage[i + 2] = e.T
+        slotImage[i + 4] = e.ak; slotImage[i + 6] = e.al
+        slotImage[i + 8] = e.aA; slotImage[i + 12] = e.P
+        slotImage[i + 16] = if (e.runnerBz) 1 else 0
+        slotImage[i + 17] = e.bs
+        slotImage[i + 21] = if (e.av) 1 else 0
+    }
+
+    /** `d(true)` restore arm (simple k.java:5980-6030, proven): read the
+     *  `bf` image back into the entity — {S,T,ak,al,aA,P,bz,bs,av} —
+     *  then the verbatim fixups:
+     *   - ax27 `S==6` → `S=4` (sentry falls back to walk);
+     *   - ax11 `(P&32)==0 && Z!=null && S!=2 && (Z[5]>0||Z[6]>0)` →
+     *     `S=3,T=0` (alert resume);
+     *   - ax21 → `aA=0`;
+     *   - ax35/69/11/73 → `t()` (refresh interaction boxes). */
+    private fun applyImage(e: Entity) {
+        val s = e.asSlot
+        if (s < 0 || s * 22 + 21 >= slotImage.size) return
+        val i = s * 22
+        e.S = slotImage[i]; e.T = slotImage[i + 2]
+        e.setPositionPx(slotImage[i + 4], slotImage[i + 6])
+        e.aA = slotImage[i + 8]; e.P = slotImage[i + 12]
+        e.runnerBz = slotImage[i + 16] != 0
+        e.bs = slotImage[i + 17]
+        e.av = slotImage[i + 21] != 0
+        when (e.ax) {
+            27 -> if (e.S == 6) e.S = 4
+            11 -> {
+                if ((e.P and 32) == 0 && e.S != 2 &&
+                    (e.Z.getOrElse(5) { 0 } > 0 || e.Z.getOrElse(6) { 0 } > 0)) {
+                    e.S = 3; e.T = 0
+                }
+                e.refreshBoxes()
+            }
+            21 -> e.aA = 0
+            35, 69, 73 -> e.refreshBoxes()
+        }
     }
 
     /** Player-ctor `k.b` inserts (k.java:2748-2779): kD/kE spawn at the
@@ -747,8 +946,8 @@ class Level0World(
     override var kAE = 0                       // k.aE
     override var kAF = 0                         // k.aF — meter fill
     override var kAH = 0                       // k.aH
-    override var kAR = 0                       // k.aR — chase row
-    override val kBu: Int get() = level.worldH // k.bu — level height px
+    override var kAR = -1                      // k.aR=-1 (:244) — flying copy band
+    override val kBu: Int get() = level.etRows // k.bu — et height CELLS (`bu=bq`)
     /** `k.bk[]` ax67 per-kind clip table (k.java:268 proven,
      *  i.java:1945 `aa = k.r(bk[r8[7]])`) — same table as `decorClip`. */
     override fun kBk(i: Int): Int = NpcFsm.decorClip(i)
@@ -782,6 +981,131 @@ class Level0World(
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
     override var kAj = aj                    // k.aj — mission index 0..7
+
+    /** `G(3)` = `I(aj)` (k.java:5244, proven): the staged loader's
+     *  pack swap — level/strings/scripts move to mission `aj`'s pack.
+     *  Emits `MissionLoaded` only on a real pack change. */
+    private fun loadPackI(mission: Int) {
+        val pack = packLoader?.invoke(mission) ?: return
+        if (mission != loadedAj) {
+            level = pack.level
+            levelStrings = pack.levelStrings
+            scripts = pack.scripts
+            loadedAj = mission
+            pendingCommands += Command.MissionLoaded(mission)
+        }
+        applyG2()
+        kDN = -1; kDO = -1; kDP = -1; kDQ = -1
+        flyingRestamp()
+    }
+
+    /** `k.h(i,i2,i3,i4)` (k.java:4372-4407, proven): stamps the
+     *  [col i..i3]×[row i2..i4] window into `dL`. Source row `i5` is the
+     *  row itself while `aR<0`; once a copy band is armed the row remaps
+     *  through `(i6%20) + ((bu/20-1 - dS|aR) * 20)` and rows crossing
+     *  `dT` advance `aR`/`dU`. The `a(dK,…)` blit per cell is
+     *  renderer-side (`dL` is the only state `g()` reads). */
+    private fun kH(c0: Int, r0: Int, c1: Int, r1: Int) {
+        val dl = flyingDL ?: return
+        val bt = level.etCols
+        val bu = level.etRows
+        var i6 = r0
+        while (i6 <= r1) {
+            var i7 = i6 % 13
+            val i5: Int
+            if (kAR < 0) {
+                i5 = i6
+            } else {
+                if (i6 < kDT) {
+                    kDS = kAR
+                    if (kDR < 0 || kDR > kAR) {
+                        kAR++
+                    } else {
+                        kDU += (kAR - kDR) + 1
+                        kAR = kDR
+                    }
+                    kDT -= 20
+                }
+                var s = if (i6 < kDT || i6 >= kDT + 20)
+                    (i6 % 20) + (((bu / 20) - 1) - kDS) * 20
+                else
+                    (i6 % 20) + (((bu / 20) - 1) - kAR) * 20
+                if (s < 0) {
+                    val i8 = s % 20
+                    s = i8
+                    if (i8 < 0) s += 20
+                }
+                i5 = s
+            }
+            var i9 = c0
+            while (i9 <= c1) {
+                val i10 = i9 % 21
+                if (i7 < 0) i7 += 13
+                dl[i10 * 13 + i7] = i9 + (i5 * bt)
+                i9++
+            }
+            i6++
+        }
+    }
+
+    /** The stamp-window half of `k.b(z2)` (k.java:2695-2752, proven):
+     *  the `et` backdrop trails the camera at parallax
+     *  `(O*(bt-21))/(bp-21)` / `(P*(bu-13))/(bq-13)`; exposed edges
+     *  re-stamp incrementally via `kH()`, `dM` forces a full pass.
+     *  Called once per tick when `bh3` (the original ran it inside the
+     *  render — collision only needs it once a tick). */
+    private fun flyingRestamp() {
+        val dl = flyingDL ?: return
+        val bp = level.etCols
+        val bq = level.etRows
+        val bt = bp
+        val bu = bq
+        if (bp <= 21 || bq <= 13) return          // `/(bp-21)`/`/(bq-13)`
+                                                // would throw — the
+                                                // original's catch aborts
+        var i2 = (camX * (if (bt < 21) 0 else bt - 21)) / (bp - 21)
+        var i3 = (camY * (bu - 13)) / (bq - 13)
+        if (i3 < 0) i3 -= 20
+        val i5 = i2 / 20
+        var i6 = i5
+        var i7 = ((i2 + 400) - 1) / 20
+        var i8 = i7
+        val i9 = i3 / 20
+        val i10 = ((i3 + 240) - 1) / 20
+        if (i3 < 0) i3 += 20
+        var c0 = i5; var r0 = i9; var c1 = i7; var r1 = i10
+        if (c0 < 0) { c0 = 0; i6 = 0 } else if (c0 > bt - 1) c0 = bt - 1
+        if (r0 > bu - 1) r0 = bu - 1
+        // (bh3 keeps r0<0 — negative rows stamp the wrap band; g()
+        //  returns 0 above the world before consulting dL.)
+        if (!flyingDM && (c0 != kDN || c1 != kDP)) {
+            if (c1 < kDN || c0 > kDP) flyingDM = true
+            else if (c0 < kDN) { i6 = kDN; kH(c0, r0, kDN - 1, r1) }
+            else if (c1 > kDP) { i8 = kDP; kH(kDP + 1, r0, c1, r1) }
+        }
+        if (!flyingDM && (r0 != kDO || r1 != kDQ)) {
+            if (r1 < kDO || r0 > kDQ) flyingDM = true
+            else if (r0 < kDO) kH(i6, r0, i8, kDO - 1)
+            else if (r1 > kDQ) kH(i6, kDQ + 1, i8, r1)
+        }
+        if (flyingDM) { flyingDM = false; kH(c0, r0, c1, r1) }
+        kDN = c0; kDO = r0; kDP = c1; kDQ = r1
+        parallaxX = i2; parallaxY = i3
+    }
+
+    /** `a(false)` (k.java:5173, proven): the fail-retry full reload —
+     *  `X();I(aj)` pack swap + `V();d(z2)` entity/stat restore. Called
+     *  by the `eC==25` restart-confirm arm via `reloadCheckpoint`. */
+    fun loadMission(mission: Int) {
+        kAj = mission
+        // a(bA,16,(short)0) parity (k.java:6735 L54 fresh arm): a mission
+        // switch drops the checkpoint pointer — without this a prior
+        // mission's snapshot would respawn the player mid-level in the
+        // new pack.
+        checkpointSnap = null; kG = 0; kBA[16] = 0
+        loadPackI(mission)
+        reload()
+    }
     /** Slice-43b claim-script VM state (aa() arms): world bounds for the
      *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
      *  the `k.*`/`i.*` statics the arg-op sub-switches write. */
@@ -798,9 +1122,32 @@ class Level0World(
     override var kBg = -1                   // k.bG=-1 (:310) — one-shot music slot
     override var kBH = -1                   // k.bH=-1 (:311) — saved music slot
     var kAk = 0                             // k.ak (:66) — flying group marker
-    var kQ = 0                              // k.Q (:42) — flying scroll count
+    override var kQ = 0                     // k.Q (:42) — flying scroll count
     override var kV = -7                    // k.V=-7 (:49) — camera watch
     var kDU = 0; var kDR = -1; var kDS = 0; var kDT = 0 // flying-cam dU/dR/dS/dT
+    /** `k.dL` (k.java:82, proven) — bh==3 stamp grid, 21 cols × 13
+     *  rows of source `et` indices; allocated by the `U()`/`G(2)` arm,
+     *  stamped by `kH()`. Lives on `level.flyingGrid` so `g()` sees it. */
+    var flyingDL: IntArray? = null
+        private set
+    /** `k.dN/dO/dP/dQ` — last stamped stamp-space rect (cells). */
+    var kDN = -1; var kDO = -1; var kDP = -1; var kDQ = -1
+    /** `k.dM` — full-restamp flag (`U()` sets it; big view jumps too). */
+    var flyingDM = true
+
+    /** `G(2)` = `U(); bh==3 → dL=new int[21][13]` (k.java:4359-4365,
+     *  proven): the flying stamp grid — `dM=true` forces a full
+     *  restamp on the next `flyingRestamp`. Runs on every `I(aj)`
+     *  load AND once at world init (the constructor pack counts). */
+    private fun applyG2() {
+        flyingDL = if (bh3) IntArray(21 * 13).also { level.flyingGrid = it }
+                   else null.also { level.flyingGrid = null }
+        flyingDM = true
+    }
+    /** The `b(z2)` parallax offset the stamp window trails — renderer
+     *  uses the same pair to place the flying `et` backdrop. */
+    var parallaxX = 0; var parallaxY = 0
+        private set
     var kDA: Entity? = null                 // k.dA — HUD indicator entity
     /** `k.ef[]` (k.java:264, proven) — all-false trail-enable table:
      *  `if (ef[aj]) ab()` at the jc9 exit is dead code in this build. */
@@ -1009,7 +1356,7 @@ class Level0World(
     var kBF = true
     /** `k.ee[]` — per-mission music table (k.java:8436, proven):
      *  `B()` plays `ee[aj]` (or track 9 when `aJ==1`). */
-    val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
+    override val kEE = intArrayOf(5, 2, 3, 3, 2, 4, 5, 1)
     /** `h.a[34]` — per-slot duration ms the original uses to fake a
      *  "still playing" check (h.java:8, proven). */
     private val hA = intArrayOf(38958, 14569, 7449, 16958, 9682, 11837,
@@ -1071,6 +1418,13 @@ class Level0World(
     override var iBD = false                     // i.bD static
     override var iBB = false                     // i.bB static (revive arm)
     override var iBC = false                     // i.bC static
+    override var iBk = false                     // i.bk — wisp-burst latch
+    override var iAK: Entity? = null             // i.aK — flap-puff child
+    override var kAI = 0                         // k.aI — flap cooldown
+    override var kAG = 0                         // k.aG — aE decay divider
+    override var kBB = 0                         // k.bB — burst-phase int
+    override var kBC = 0                         // k.bC
+    override var kBD = 0                         // k.bD — bank-anim tier
     override var iBE = 0                         // i.bE static
     override var iBF = 0                         // i.bF static
     override var iBG = -1                        // i.bG static
@@ -1554,27 +1908,33 @@ class Level0World(
         }
     }
     /** `i.X()` (i.java:18631, proven): writes the checkpoint slot into
-     *  `bA` — aw/pos/facing, g.J/g.I, ap[0,3,2/16,4] + ap[5] at 52+aj*2,
-     *  ax/ay/az/aN/aL (unmodeled — mission-script globals), aZ/bn flags,
-     *  br[] dead set, then re-stamps `k.a(bb[i], bb[i].as)` on every
-     *  non-consumed entity (skipped: as==-98 corpses, ax==70). */
+     *  `bA` — `bA[16]=aw` is the checkpoint POINTER d(z2) reads
+     *  (k.java:5176); then pos/facing, g.J/g.I, ap[0,3,2/16,4] + ap[5]
+     *  at 52+aj*2, ax/ay/az/aN/aL, aZ/bn flags, br[] hint flags, and the
+     *  `k.a(bb[i],as)` entity-image stamps (in fireCheckpoints).
+     *  `bA[15]` is NOT written here — it's the has-save flag armed only
+     *  by the mission-complete `a(bA,15,1)` at k.java:3430/4494. */
     private fun writeIX(aw: Int): Snapshot {
-        kBA[15] = 1                          // bA[15]=1 — checkpoint-exists
-                                             // flag read by l(15)'s r82
-                                             // (i.java:2077, proven)
-        // i.java:13488-13500 (proven): stamp the mission globals + flags
-        // into the buffer — ax/ay/az/aN u16, aL, ap[5] at 52+aj*2,
-        // aZ/bn booleans, br[] dead set (the entity re-stamp loop stays
-        // on `checkpointDead`/fireCheckpoints).
+        // i.java:13488-13500 (proven): the serializer arm —
+        kBA[16] = aw                         // bA[16]=aw — checkpoint ptr
+        kBA[18] = player.ak; kBA[20] = player.al
+        kBA[22] = if (player.av) 1 else 0
+        kBA[24] = player.gJ; kBA[26] = player.gI
+        kBA[36] = kAp[0]; kBA[38] = kAp[3]
+        kBA[40] = kAp[2] / 16                // ap[2] stored ÷16
+        kBA[42] = kAp[4]
         kBA[28] = kAx; kBA[30] = kAy
         kBA[32] = kAz; kBA[34] = kAN
         kBA[50] = kAL
         kBA[52 + (kAj shl 1)] = kAp[5]
         kBA[68] = if (kAZ) 1 else 0          // j.a(k.bA,68,aZ?1:0)
         kBA[79] = if (iBn) 1 else 0          // j.a(k.bA,79,bn?1:0)
+        for (i in 0..2)                      // i.br[] → bA[76+i]
+            kBA[76 + i] = if (hintPending[i]) 1 else 0
         return Snapshot(aw, player.ak, player.al, player.av, player.x1,
                         player.gJ, player.gI, kAp.copyOf(),
-                        kAx, kAy, kAz, kAN, kAL, kAZ, iBn)
+                        kAx, kAy, kAz, kAN, kAL, kAZ, iBn,
+                        kG, hintPending.copyOf())
     }
 
     /**
@@ -1805,7 +2165,7 @@ class Level0World(
      *  `cy=j.c; j.c=i` plus the `al` world-freeze flag. `i=22` re-enters
      *  the loop once (medal screen after a stamp). */
     override fun screenL(n: Int) = stateL(n)
-    fun stateL(iArg: Int) {
+    override fun stateL(iArg: Int) {
         var i = iArg
         while (true) {                               // L2 — re-entry for i=22 only
             kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0
@@ -2216,7 +2576,12 @@ class Level0World(
      *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
      *  Maps to our `reload()` (`inferred`). */
     override fun resetLevel(full: Boolean) { reloadCheckpoint(full) }
-    private fun reloadCheckpoint(full: Boolean) { reload() }
+    /** `a(z2)` (k.java:5173, proven): `false` = `a(false)` full
+     *  reload (`X();I(aj)` + `V();d(z2)`); `true` = `a(true)`
+     *  checkpoint restore (no `I(aj)`). */
+    private fun reloadCheckpoint(full: Boolean) {
+        if (full) reload() else loadMission(kAj)
+    }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm
      *  dispatch. `v(131072)` = back key (our `M_CYCLE` — no zone emitter
@@ -2777,6 +3142,7 @@ class Level0World(
             if (kBw == -1) kBw = 0
             kAj = kBw
             kBA[16] = 0                              // a(bA,16,(short)0)
+            checkpointSnap = null; kG = 0            // …and the snap it meant
             if (kEgFlags[kAj]) {
                 kFF = 19
                 stateL(30)
@@ -3014,9 +3380,16 @@ class Level0World(
      *  l(8); z(23); F(aj)`. `dl`/`A[]` are resource-management
      *  releases with no port equivalents (eager decode). */
     private fun menuJc9() {
+        // `G(j.g)` staged loader (k.java:4741-5090): the two stages that
+        // matter at runtime — `G(3)=I(aj)` pack swap and `G(164)=d(false)`
+        // entity spawn — run on their `j.g` ticks; every other stage is
+        // a resource load the converter already emitted.
+        if (jG == 3L) loadPackI(kAj)
+        if (jG == 164L) { spawnEntities(); postSpawn() }
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
             kBg = 0                                  // bG = 0
             kBA[16] = 0                              // a(bA,16,(short)0)
+            checkpointSnap = null; kG = 0            // …the snap's twin
             kAx = kDB; kAy = kDC; kAN = kDF          // ax=dB;ay=dC;aN=dF
             player.x1 = kAx                          // g.e(ax) → x[1]=ax
             camResetC()                              // C()
@@ -3352,28 +3725,43 @@ class Level0World(
     override var kSBound: Int get() = boundMaxX; set(v) { boundMaxX = v }
 
     /**
-     * ax2 `aY()` (i.java:13477): W-rect overlap (`a(this.W, k.aS.W)`) —
-     * modeled as the player crossing the record's cell — saves the
-     * checkpoint snapshot into bA, self-removes, and re-materializes
-     * every entity to its home slot (`k.a(bb[i], bb[i].as)`).
-     * `k.y()` (checkpoint sfx/flash) unported — no audio hook yet.
+     * ax2 `aY()` (simple i.java:13477-13550, proven): the checkpoint
+     * trigger. Gate: `bh[aj]==3 → (k.ak!=0 || cp.al<aS.al)` else the
+     * entity-W∩player-W overlap — our cell-cross is the overlap
+     * approximation already used here. On fire:
+     *  1. `k.y()` → `fS=0` arms the tip-marquee (k.java:1027-1039);
+     *  2. `k.G = Z[0]` — linked ax5 uid, re-fired on restore;
+     *  3. bA serializer (`i.X()`, writeIX) — `bA[16]=aw` is the
+     *     checkpoint pointer d(z2) reads;
+     *  4. `k.c(this)` — the record tombstones its own `bg` slot;
+     *  5. stamp loop — every live `bb[i]` with `as!=-98 && ax!=70`
+     *     has its live state written into `bf` via `k.a(e,as)`
+     *     (a snapshot WRITE — entities do NOT move);
+     *  6. `bg[i]==-99 → bf[i*22]=-99` — removal tombstones propagate.
      */
     private fun fireCheckpoints() {
         for (cp in checkpoints) {
             if (cp.consumed) continue
-            if (Math.abs(cp.ak - player.ak) > cellPx) continue
-            if (player.al < cp.al - cellPx) continue
+            // bh3 autoscroll gate (i.java:13481): only while the flying
+            // entity has started AND the checkpoint is below the player.
+            if (bh3) { if (kAk != 0 || cp.al < player.al) continue }
+            else if (Math.abs(cp.ak - player.ak) > cellPx ||
+                     player.al < cp.al - cellPx) continue
             cp.consumed = true
+            kFS = 0                                   // k.y()
+            kG = cp.z0                                // k.G = Z[0]
             checkpointSnap = writeIX(cp.aw)
-            checkpointDead = npcs.filter { it.S == 139 }.map { it.aw }.toSet()
-            // k.a(bb[i], bb[i].as): re-materialize each entity at its home
-            // slot — original skips as==-98 (consumed/dead) and ax==70
-            // (proven i.java:13535+); our -98 equivalent = S139 corpse.
+            // k.c(this): the record's own slot tombstones.
+            if (cp.slot >= 0 && cp.slot < slotFlags.size) slotFlags[cp.slot] = -99
+            // The `k.a(bb[i],as)` stamp loop — live state into `bf`.
             for (n in npcs) {
-                if (n.ax == 70 || n.S == 139) continue
-                n.setPositionPx(n.homeX, n.homeY)
-                // doors re-materialize at their record's base bank (Z[4]=f5)
-                n.setAnim(if (n.ax == 44) n.Z[4] else 0)
+                if (n.asSlot < 0 || n.ax == 70 || pendingRemove.contains(n)) continue
+                stampImage(n)
+            }
+            // bg → bf tombstone propagation (i.java:13543-13547).
+            for (s in slotFlags.indices) {
+                if (slotFlags[s] == -99 && s * 22 < slotImage.size)
+                    slotImage[s * 22] = -99
             }
         }
     }
@@ -3390,10 +3778,18 @@ class Level0World(
     private fun reload() {
         // Original order: i.D() full static reset → k.a(z2) bA/stat
         // restore → respawn. Reversed, D() would clobber the restore.
-        spawnEntities()                         // i.D()
+        // `d(bA[16]!=0)` — the checkpoint pointer decides the spawn mode:
+        // snap!=null → d(true) restore-from-image, else d(false) fresh.
+        spawnEntities(checkpointSnap != null)   // i.D()
         statsReset()                            // L() + a(z2) restore arm
         resetPlayerToSpawn()                    // bA pos/globals restore
         postSpawn()                             // k.b ctor inserts
+        // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — the
+        // checkpoint's linked ax5 director re-binds script context.
+        if (checkpointSnap != null && kG > 0) {
+            val q = findByAw(kG)
+            if (q != null && q.ax == 5) { q.P = q.P or 16; q.bindContext(this) }
+        }
         jC = 8                                   // back to play (j.c==8)
         kAl = false
         kDe = false                               // f() `de=false` (:5131)
@@ -4062,54 +4458,56 @@ class Level0World(
         player.integrate()
         player.advanceAnim()
 
-        for (n in npcs) {
-            if (n.ax == 44) npcFsm.tickDoor(n, player)
-            else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
-            else if (n.ax == 4) npcFsm.tickDestructible(n, player)
-            else if (n.ax == 67) npcFsm.tickDecor(n, player)
-            else if (n.ax == 14) npcFsm.tickPickup(n, player)
-            else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
-            else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
-            else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
-            else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
-            else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
-            else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
-            else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
-            else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
-            else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
-            else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
-            else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
-            else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
-            else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
-            else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
-            else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
-            else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
-            else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
-            else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
-            else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
-            else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
-
-            else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
-            else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
-            else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
-            else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
-            else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
-            else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
-            else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
-            else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
-            else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
-            else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
-            else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
-            else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
-            else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
-            else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
-            else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
-            else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
-
-            else npcFsm.tick(n, player)
-            // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
-            // every entity except soldiers (11) and civilians (17).
-            if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
+        if (bh3) {
+            // `k.I()` bh3 arm (k.java:2529-2572, proven): every entity
+            // re-scores `au` via `u()`; only eligible entities
+            // `((P&256)==0 && ((au<2 && !(P&32)) || (P&16)))` tick, and
+            // copy-group members (`ay==group`) are consumed into
+            // `ak`/`dR`. When a tick consumes nothing and `dU` is
+            // pending, the whole world shifts `dU` bands — camera,
+            // player, and `dT` together.
+            var consumed = 0
+            for (n in npcs) {
+                n.recomputeAu(camX, camY, ::kBk)
+                if ((n.P and 256) == 0 &&
+                    ((n.au < 2 && (n.P and 32) == 0) || (n.P and 16) != 0)) {
+                    if (kAk == 0 && n.au < 1 && n.ay > 0) {
+                        kAk = n.ay
+                        for (m in npcs) {
+                            if (m.ay == kAk) {
+                                kDR = m.aG
+                                // `bb[i4].v()` — the result is discarded
+                                // (proven dead-read); only its internal
+                                // `u()` side-effect matters.
+                                m.recomputeAu(camX, camY, ::kBk)
+                            }
+                        }
+                    }
+                    if (n.ay == kAk) n.ay = -1
+                    if (n.ay == -1) {
+                        consumed++
+                        tickNpc(n)
+                        // `bb[i3].ac/.ab.I()` — linked entities tick via
+                        // the link even when they sit in `bb[]` too
+                        // (verbatim double-tick quirk, kept).
+                        n.ac?.let { if (it.ax != 10) tickNpc(it) }
+                        n.ab?.let { tickNpc(it) }
+                    }
+                }
+            }
+            if (consumed == 0 && kDU != 0) {
+                val i5 = kDU * 400
+                camB += i5
+                camY = camB
+                player.al += i5
+                player.syncAd(this)
+                kDT += kDU * 20
+                kDU = 0
+                kDR = -1
+                kAk = 0
+            }
+        } else {
+            for (n in npcs) tickNpc(n)
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
@@ -4140,6 +4538,7 @@ class Level0World(
             kD()
         }
         l142Tail()          // L142-L200 — runs on both camera arms
+        flyingRestamp()     // b(z2) stamp-window update (bh3 only)
 
         // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
         // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
@@ -4167,10 +4566,63 @@ class Level0World(
         }
     }
 
+    /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
+     *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
+    private fun tickNpc(n: Entity) {
+        if (n.ax == 44) npcFsm.tickDoor(n, player)
+        else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
+        else if (n.ax == 4) npcFsm.tickDestructible(n, player)
+        else if (n.ax == 67) npcFsm.tickDecor(n, player)
+        else if (n.ax == 14) npcFsm.tickPickup(n, player)
+        else if (n.ax == 16) npcFsm.tickRequestMarker(n, player, pad)
+        else if (n.ax == 21) npcFsm.tickDirector(n, player, pad)
+        else if (n.ax == 29) npcFsm.tickBoss(n, player, pad)
+        else if (n.ax == 61) npcFsm.tickAx61(n, this, player)
+        else if (n.ax == 41) npcFsm.tickKnockable(n, this, player)
+        else if (n.ax == 66) npcFsm.tickPlatform(n, this, player)
+        else if (n.ax == 51) npcFsm.tickPushable(n, this, player)
+        else if (n.ax == 22) npcFsm.tickZoneInteract(n, this, player)
+        else if (n.ax == 5) npcFsm.tickMissionLogic(n, this, player)
+        else if (n.ax == 27) npcFsm.tickAx27(n, this, player)
+        else if (n.ax == 40) npcFsm.tickAx40(n, this, player)
+        else if (n.ax == 9) npcFsm.tickAx9(n, this, player)
+        else if (n.ax == 6) npcFsm.tickAx6(n, this, player)
+        else if (n.ax == 19) npcFsm.tickAx19(n, this, player)
+        else if (n.ax == 35) npcFsm.tickAx35(n, this, player)
+        else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
+        else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
+        else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
+        else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
+        else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
+
+        else if (n.ax == 78) npcFsm.tickAx78(n, this, player)
+        else if (n.ax == 54 || n.ax == 30) npcFsm.tickAx54(n, this, player)
+        else if (n.ax == 56) npcFsm.tickAx56(n, this, player)
+        else if (n.ax == 24) npcFsm.tickAx24(n, this, player)
+        else if (n.ax == 58) npcFsm.tickAx58(n, this, player)
+        else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
+        else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
+        else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
+        else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
+        else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
+        else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
+        else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
+        else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
+        else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
+        else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
+        else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
+
+        else npcFsm.tick(n, player)
+        // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
+        // every entity except soldiers (11) and civilians (17).
+        if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
+    }
+
     // Second init block: runs after every property initializer, so the
     // C() init `m(ad)` snap (k.java:2343) sees kAe/kAd in their set state.
     init {
         kM(2)
+        applyG2()   // `G(2)` runs for the constructor pack too
     }
 }
 

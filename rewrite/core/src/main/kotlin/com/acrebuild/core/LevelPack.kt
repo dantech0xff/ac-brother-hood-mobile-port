@@ -34,17 +34,50 @@ class LevelPack private constructor(
 
     private val et: Layer = layers.first { it.id == 0 }
 
+    /** `k.bp`/`k.bq` — the et grid dims in *cells* (`bt=bp`, `bu=bq` in
+     *  `I(i)` k.java:5251-5252; `br/bs` are the px forms). */
+    val etCols: Int get() = et.cols
+    val etRows: Int get() = et.rows
+
+    /** `k.dL` (k.java:82, proven) — the bh==3 stamp grid: 21×13
+     *  source-tile indices backing `g()`'s flying remap. Owned by the
+     *  world (allocated in `I(aj)`/`U()`, stamped by `k.h`); `null` on
+     *  grounded packs. */
+    var flyingGrid: IntArray? = null
+
     /**
-     * `k.g(x, y)` — collision query in *cell* coordinates. Out-of-bounds
-     * returns 20 (solid border sentinel), exactly like the original
-     * (`k.java:5284`; the `bh[aj]==3` remap is unused on level 0).
+     * `k.g(x, y)` — collision query in *cell* coordinates (k.java:5284,
+     *  proven). Out-of-bounds returns 20 (solid border sentinel).
+     *  bh==3 arm: `cy<0 → 0`, then `et[dL[cx%21][cy%13]]` — the visible
+     *  stamp table, so collision matches the wrapped backdrop. A
+     *  negative `dL` slot (un-stamped negative row) is air — the
+     *  original's `et[neg]` would throw; J2ME never reaches it because
+     *  negative rows return earlier.
      */
     fun collisionCell(cx: Int, cy: Int): Int {
+        val dl = flyingGrid
+        if (dl != null) {
+            if (cx < 0 || cx >= et.cols || cy >= et.rows) return 20
+            if (cy < 0) return 0
+            val idx = dl[(cx % 21) * 13 + (cy % 13)]
+            if (idx < 0 || idx >= et.cells.size) return 0
+            val v = et.cells[idx]
+            return if (v == 255) 0 else v
+        }
         if (cx < 0 || cx >= et.cols || cy >= et.rows) return 20
         if (cy < 0) return 20
         // original `k` load remaps 255 -> 0 (proven)
         val v = et.cells[cy * et.cols + cx]
         return if (v == 255) 0 else v
+    }
+
+    /** `dL` stamp lookup for a LOGICAL cell (renderer bh3 arm): the et
+     *  index `dL[cx%21][cy%13]` resolves to, or -1 when unset / pointing
+     *  past the et plane (`g()`'s own `i4<0||i4>=len → 0` guard). */
+    fun stampAt(cx: Int, cy: Int): Int {
+        val dl = flyingGrid ?: return -1
+        val idx = dl[(cx % 21) * 13 + (cy % 13)]
+        return if (idx < 0 || idx >= et.cells.size) -1 else idx
     }
 
     /** Pixel-space convenience: `k.g(x/20, y/20)`. */
@@ -63,10 +96,15 @@ class LevelPack private constructor(
     val worldW: Int get() = cols * cellPx
     val worldH: Int get() = rows * cellPx
 
-    /** Player spawn: first record with raw type 0 (routed to `g(short[])`). */
+    /** Player spawn: first record with raw type 0 or 25 (the flying
+     *  player-slot record on bh3 packs — k.java:4647). */
     fun playerSpawn(): Pair<Int, Int>? =
         entities.firstOrNull { it.isNotEmpty() && (it[0] == 0 || it[0] == 25) }
             ?.let { it[2] to it[3] }
+    /** The raw 0/25 player-slot record (the ax25 record feeds the
+     *  flying-player init: `ad` companion + `az/aA/aB/ah` — i.java:2415). */
+    fun playerRecord(): IntArray? =
+        entities.firstOrNull { it.isNotEmpty() && (it[0] == 0 || it[0] == 25) }
 
     companion object {
         fun load(data: ByteArray): LevelPack {
