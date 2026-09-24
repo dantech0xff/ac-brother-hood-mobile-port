@@ -1282,6 +1282,11 @@ class Level0World(
     var kDF = 0                        // k.dF — misc byte (bA[48])
     var kBG = 0                        // k.bG — score flag (Q case14)
     var kEJ = false                    // k.eJ — tutorial done (bA[10])
+    var kLoading = false               // `f.bF` — the IGP-thread loadingMsg
+                                       //  (d(0,24)="LOADING") painted centered
+                                       //  by the f-loop (f.java:1857-1863); set
+                                       //  by `f.a(d(0,24),0)` call sites, cleared
+                                       //  on stateL away from jC==27
     var kDM = false                    // k.dM — resume flag
     var kCm = 0                        // k.cm — control-style flag
                                      // (inferred distinct from mount cm)
@@ -2248,7 +2253,8 @@ class Level0World(
                     val hasCheckpoint = kBA[15] == 1                     // r82
                     if (nextUnlocked && !hasCheckpoint && ex != 10) i = 10
                 }
-                (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — unported
+                (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — the mission
+                                                                                                //  music/init picker (k.java:2021)
                 i == 8 && kCy == 17 -> i = 17
                 i == 29 -> {
                     bannerK(2)
@@ -2307,6 +2313,7 @@ class Level0World(
               (i == 21 && dlgU != 8 && dlgU != 9)
         if (i == 21 && dlgU == 8) kCz = true
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
+        if (i != 27) kLoading = false               // `bF` clears on IGP-exit (f.java:1399)
         if (!kCz) inputReset()
         kCz = false
         // aggregate flag keyed on the ENTRY state — l(15) may redirect to
@@ -2497,7 +2504,6 @@ class Level0World(
         kBw = -1; kDs--
     }
 
-    /** `e(true)` — RMS save flush; unported → stub (`inferred`). */
     /** `ag()` (k.java:6358-6389, proven) — jC==10 mission poster card:
      *  `u=8`; `i(0,120)` card overlay (frame12 + black fill, `u==8`
      *  suppresses its hint arm); `A[4]` frame `i+4` at (0,200,119) —
@@ -2597,8 +2603,12 @@ class Level0World(
         if (kAu == 2 && kBA[69] == 0) kAu = 0
         hasSaveRecord = true
     }
-    /** `f.a(str,0)` — "LOADING" overlay proc; unported → stub. */
-    private fun loadingShow() { /* f.a(d(0,24),0) — unported */ }
+    /** `f.a(d(0,24),0)` (f.java:879+, proven call-site shape) — sets the
+     *  IGP thread's `bF` loadingMsg; the f-loop paints it centered
+     *  HCENTER|BOTTOM with a white progress outline (f.java:1857-1863).
+     *  The IGP machinery itself is proven-dead (shop); the LOADING
+     *  overlay is real UI — rendered from `kLoading`. */
+    fun loadingShow() { kLoading = true }
     /** `W()` (structured :5093) — full game teardown on quit-to-menu:
      *  clips/claims/director/records released. Light port: drop the
      *  entity pools (level reload re-spawns) (`inferred` coverage). */
@@ -3386,7 +3396,10 @@ class Level0World(
     private fun igpBlit() { }
     /** `f.a(String,int)` (f.java:759, proven) — `enterIGP(msg,lang)`,
      *  the vendor store intent; no IGP layer on this target → no-op. */
-    private fun enterIgp() { }
+    /** `f.a(d(0,24),0)` store intent (k.java:1410/4786) — same call as
+     *  `loadingShow()`; the overlay shows while entering the IGP state.
+     *  The shop thread itself stays dead. */
+    fun enterIgp() { kLoading = true }
 
     /** `k.a()` case 6 (k.java:844-858, proven) — the ABOUT screen's
      *  tick. `cb=true`; `f(false)`/`d(0,7)`/`bW.l(1)`/`j.a(cd,…)` are

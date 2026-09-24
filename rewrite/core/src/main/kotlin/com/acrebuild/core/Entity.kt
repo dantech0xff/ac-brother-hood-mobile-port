@@ -527,7 +527,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  rise:run ratio r04/r03 → 272/273/274/275 arcs), then compute the
      *  per-tick step (cC,cD) that carries the player onto the target
      *  over the anim's cE frames. `F = r8` links the target for the
-     *  mount/grab consumer arms (g.java:4303+, unported).
+     *  mount/grab consumer arms (g.java:4303+; ported — mountEntry/lungeTick).
      *  `cy = j.b(-cz, cA)` keeps the original's arg order verbatim
      *  (inferred sign convention — resolved when the throw arm lands).
      */
