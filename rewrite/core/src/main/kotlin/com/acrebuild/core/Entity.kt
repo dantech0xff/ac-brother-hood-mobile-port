@@ -1462,9 +1462,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * (i.java:4446+; op subset reachable in slice 3, `proven` bodies,
      * deferrals flagged):
      *   4  melee-contact — rewrites to 18 when the target is mid-attack
-     *      (`g.b(S)`); `g.a()` blocking would counter via `c(attacker)` —
-     *      deferred (block input unmined); passive target falls through to
-     *      the `k.A(18)` hurt-mark (recorded on `hitsTaken`).
+     *      (`g.b(S)`); `g.a()` = `playerDamageable` (pays the meter) and
+     *      the victim `r9.c(r13)` hit-reacts on the attacker; `L423 →
+     *      k.A(18)` hurt-mark sfx (see the op-4 arm at :3330).
      *   18 `i(43)` — hit interrupt into tumble.   20 `i(43)` — knockdown.
      *   26 launch: `av=attacker.av; ag=±4096; ah=-4096; aj=1536; a(43,32)`
      *   29 stumble: `av=attacker.av; i(10); ag=∓1536`
@@ -3320,19 +3320,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
             r10 = 18; ag = 0
         }
         when (r10) {
-            // i.a(op4) (i.java:4540-4590, proven): `aS.S∈{284,285,50}`
-            // early-return; `r13.ax==61 && g.a(r13) → c(r13)` boss counter;
-            // `S!=9 → g.a() && r13.ax∉{17,50,61} → c(r13)`; `L139 → A(18)`
-            // hurt sfx fires unconditionally at the tail.
+            // i.a(op4) (i.java:14722-14772, proven): `k.E.P|=128` head;
+            // `aS.S∈{284,285,50}` early-return (aS=player — all callers
+            // hit the player so S==aS.S); `r13.ax==61 && g.a(r13) →
+            // r9.c(r13)` boss arm; `r9.S!=9 → g.a() && r13.ax∉{17,50,61}
+            // → r9.c(r13)` — the VICTIM hit-reacts on the attacker (was
+            // inverted: it staggered the attacker on its own landed
+            // hits); `L423 → A(18)` hurt sfx fires unconditionally.
             4 -> {
+                world.kE?.let { it.P = it.P or 128 }         // k.E.P |= 128
                 if (S == 284 || S == 285 || S == 50) return
                 if (attacker != null && attacker.ax == 61 &&
                     playerDamageable(attacker, world)) {
-                    attacker.counteredBy(this, world)
+                    counteredBy(attacker, world)             // r9.c(r13)
                 }
                 if (S != 9 && playerDamageable(g, world) && attacker != null &&
                     attacker.ax != 17 && attacker.ax != 50 && attacker.ax != 61) {
-                    attacker.counteredBy(this, world)
+                    counteredBy(attacker, world)             // r9.c(r13)
                 }
                 world.sfx(18)
             }

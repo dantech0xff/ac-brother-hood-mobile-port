@@ -9259,11 +9259,12 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
 //
 // Record (L321, i.java:3474): Z[0..9] = r8[7..16]; Z[1] = r8[8] + 7;
 // aC = Z[8]; az = 301; then L395 `i(r8[5])` + L427 `t()`.
-// bi[64] = -1 (k.java static table) → record-spawned ax64 is clipless;
-// gameplay spawns come through `i.a(ax,clip,…)` (i.java:6898) which binds
-// `aa` per call site — the spawn sites are unmined and level-0's pack-6
-// record set carries no ax64 entries, so W may be degenerate (the original
-// has the same behaviour for clipless instances).
+// bi[64] = -1 (k.java static table) → record-spawned ax64 is clipless.
+// Proven-dead in this build: no `new i` with `ax=64` exists anywhere in
+// the bytecode (the only gameplay bindings are `i.a(ax,clip,…)` aK and
+// the `cr[][]` pool respawns at i.java:34240-34840 — none carry ax64),
+// and no ax64 record appears in any of packs 6-13's records.json.
+// `aa` staying null (as `k.r(bi[64])`→`k.r(-1)`) is faithful.
 // Z[2..5] = waypoint uids (patrol chain), Z[6] = death-anim pick (S4/S5),
 // Z[7] = post-arrival hop (S6) vs drop (S3), Z[8] = stalk budget (S7),
 // Z[9] = barrage interval.

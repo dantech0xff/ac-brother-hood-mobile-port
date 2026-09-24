@@ -523,7 +523,7 @@ class Level0WorldTest {
             "S216 victim should sit in S85 with the launch eaten by g() (S=${s.S}, ag=${s.ag})")
     }
 
-    @Test fun `npc strike on a metered player counters the attacker`() {
+    @Test fun `npc strike on a metered player pays meter and staggers the player`() {
         val w = world()
         // pick a soldier whose strike-adjacent position passes i.c()'s
         // wall guard (open-air spots legitimately block the drain)
@@ -539,16 +539,17 @@ class Level0WorldTest {
         }
         s ?: return
         s.setAnim(12)
-        var staggered = false
+        var playerHit = false
         for (i in 0 until 300) {
             w.player.setPositionPx(s.ak + sdx, s.al)
             w.player.refreshBoxes()
             w.player.ag = 0; w.player.ah = 0
             w.tick(emptyList())
-            if (s.S == 9) { staggered = true; break }
+            // op4 arm → r9.c(r13): the VICTIM (player) hit-reacts (S9)
+            if (w.player.S == 9) { playerHit = true; break }
         }
-        assertTrue(staggered, "strike on metered player should counter → attacker S9")
-        assertTrue(w.player.x1 < 90, "counter should pay meter u[0]=5 (x1=${w.player.x1})")
+        assertTrue(playerHit, "strike on metered player → r9.c(r13) → player S9")
+        assertTrue(w.player.x1 < 90, "g.a() pays meter u[0]=5 (x1=${w.player.x1})")
     }
 
     @Test fun `player knocked out at zero meter shows fail screen then reloads`() {
@@ -7474,8 +7475,9 @@ class Slice64Test {
         w.player.setAnim(0); w.player.refreshBoxes()
         e.T = 3
         w.npcFsm.tickAx47(e, w, w.player)
-        // a(4,…) on the player counter-staggers the sentinel (op4 arm).
-        assertEquals(9, e.S, "op4 → counteredBy → S9 stagger")
+        // a(4,…) on the player → r9.c(r13): the PLAYER hit-reacts (S9);
+        // the sentinel keeps pouncing (slice-201 inversion fix).
+        assertEquals(9, w.player.S, "op4 → r9.c(r13) → player S9")
         // all pounce anims end at T==3 — the last frame always coincides
         // with the hit arm (i.java:1005x: hit BEFORE the r() check).
         val w2 = world()
@@ -7483,7 +7485,8 @@ class Slice64Test {
         w2.player.setPositionPx(100, 229); w2.player.setAnim(0); w2.player.refreshBoxes()
         finish(e2)                                 // T=3 last frame → hit then r()
         w2.npcFsm.tickAx47(e2, w2, w2.player)
-        assertEquals(9, e2.S, "hit landed → counteredBy S9 (re-arms r())")
+        assertEquals(9, w2.player.S, "hit landed → player S9")
+        assertEquals(120, e2.S, "pounce r() → S120")
 
         val w3 = world()
         val e3 = ax47At(w3, 100, 200, 0, 121)
