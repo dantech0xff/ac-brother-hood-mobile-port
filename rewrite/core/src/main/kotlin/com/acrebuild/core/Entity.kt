@@ -4581,12 +4581,14 @@ interface LevelCellSource {
     var kAR: Int
     /** `k.bu` — level pixel height used by the `aR` row formula. */
     val kBu: Int get() = 0
-    /** `k.bk[]` — per-record type table read by `u()`'s ax67 arms
-     *  (`inferred` — table unmined; default 0). */
+    /** `k.bk[]` — per-record clip table read by `u()`'s ax67 arms;
+     *  wired to `NpcFsm.decorClip` (Level0World:964). */
     fun kBk(i: Int): Int = NpcFsm.decorClip(i)
-    /** `j.a(lo,hi)` (j.java:328, proven): `lo + |nextInt| % (hi-lo)`. */
+    /** `j.a(lo,hi)` (j.java:322, proven): `lo + |nextInt| % (hi-lo)`;
+     *  Level0World wires `rng.nextInt` (Java-LCG). */
     fun jRand(lo: Int, hi: Int): Int = lo
-    /** `j.j.nextInt()` — raw RNG (bG scatter/homing arms). */
+    /** `j.j.nextInt()` — raw RNG (bG scatter/homing arms);
+     *  Level0World:965 wires `rng.nextInt()`. */
     fun jNextInt(): Int = 0
     /** `k.b(e)` — deferred entity insert (`pendingInsert` in the world). */
     fun queueInsert(e: Entity) {}
