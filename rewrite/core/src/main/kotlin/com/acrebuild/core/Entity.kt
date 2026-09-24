@@ -202,6 +202,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
     var b = false                  // i.b — ridden/carried latch (bm() tail)
+    var scriptBound = false        // i.d — latched when the record's Z[13]
+                                   // script claim binds at init
+                                   // (i.java:2266); released inside the
+                                   // S117 claim-release arm (i.java:5147)
     // -- mission-director + barrage fields (i.java:18003+, bD/bG/d/p/g) ------
     var ao = 0                     // i.ao — floatie aim target x
     var ap = 0                     // i.ap — floatie aim target y

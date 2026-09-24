@@ -73,8 +73,10 @@ class NpcFsm(val world: LevelCellSource) {
             if (kind >= 0 && kind < BK.size) BK[kind] else -1
     }
 
-    /** ax11/73 record init (L120). `f` = the entity record fields. */
-    fun initSoldier(e: Entity, f: List<Int>) {
+    /** ax11/73 record init (i.java:2230-2271 + ctor tail :2860-2900,
+     *  proven). `f` = the entity record fields; `w` for the Z[13] claim
+     *  bind + `a(true)`/`E()` settle tails. */
+    fun initSoldier(e: Entity, f: List<Int>, w: LevelCellSource) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
         e.az = rf(17)
         // original: aB = bu[k.au] — difficulty max HP (k.au unmined → index 0)
@@ -93,7 +95,23 @@ class NpcFsm(val world: LevelCellSource) {
         e.Z[12] = e.al + e.Z[16] + e.Z[18]
         e.Z[19] = rf(18)
         e.Z[21] = rf(19)              // corpse-drop linked uid (i.java:3061)
-        e.setAnim(0)
+        e.Z[20] = 0
+        // hardened/weakened records double HP (proven :2256-2258)
+        if (e.Z[0] == 1 || e.ax == 73) e.aB = e.aB shl 1
+        e.Z[13] = rf(16)
+        // script-claim bind (proven :2263-2267): h/k(k.s(Z[13])) +
+        // d=true + cd[7] — bindScript allocates cd + sets cd[7] itself.
+        if (e.Z[13] != -1) {
+            e.bindScript(w.kSIndex(e.Z[13]), w)
+            e.scriptKeyStep(w.kSIndex(e.Z[13]), w)
+            e.scriptBound = true
+        }
+        if (rf(5) == 33) e.P = e.P or 16                       // :2269
+        e.setAnim(rf(5))                                        // i(sArr[5])
+        e.refreshBoxes()                                        // t()
+        // ctor tail for ax11 (proven :2895-2898): a(true); E()
+        e.collideSides(w, true)
+        e.settleToGround(w)
     }
 
     /**
@@ -230,8 +248,23 @@ class NpcFsm(val world: LevelCellSource) {
 
     // -- per-tick ------------------------------------------------------------
 
+    /** `aH()` corpse-family set (i.java:7287-7298, proven): states that
+     *  are already on the death path — exempt from the `aB<=0 → i(0)`
+     *  re-entry at `I()` head. */
+    private val AH_STATES = intArrayOf(0, 20, 21, 106, 107, 117, 139, 168, 169, 176)
+
     fun tick(e: Entity, player: Entity) {
+        // `I()` covers only the shared soldier family {11,17,23,47,50,73}
+        // (i.java dispatch, proven); every other ax gets a dedicated arm or
+        // the no-op default (L897) — the dispatch `else` branch funnels
+        // unclaimed types here, so gate them out.
+        if (e.ax != 11 && e.ax != 17 && e.ax != 23 && e.ax != 47 &&
+            e.ax != 50 && e.ax != 73) return
         e.collideSides(world, true)
+        // `I()` head (i.java:4024, proven): aB<=0 on any live state →
+        // i(0) death entry. Without this an S85/SC hurt soldier recovered
+        // at aB=0 instead of dying.
+        if (e.aB <= 0 && e.S != 184 && e.S !in AH_STATES) e.setAnim(0)
         when (e.S) {
             2, 3, 92 -> patrolArm(e, player)
             4, 22 -> chaseArm(e, player)
@@ -283,25 +316,36 @@ class NpcFsm(val world: LevelCellSource) {
                 e.ag = 0; e.ah = 0; e.P = e.P or 512; e.aA = 2
                 if (e.aB <= 0) e.setAnim(0)
             }
-            106, 107 -> {
-                // victim of the assassination finisher (S183/184 player arm
-                // drags us). r() → corpse flags; the player's arm sets aB=0.
-                e.ag = 0; e.ah = 0; e.P = e.P or 512; e.aA = 2
-                if (e.animFinished() || e.aB <= 0) {
-                    e.P = e.P and -17; e.P = e.P or 32 or 64
-                    if (e.aB <= 0) e.setAnim(0)
-                    if (world.lockTarget === e) world.lockTarget = null
-                }
-            }
-            0 -> {
-                // L633 dormant/death arm (live portion): a(true), G(), P|=512,
-                // ag=ah=0, aA=2. aB<=0 → corpse chain i(139) (proven L685).
-                e.ag = 0; e.ah = 0; e.P = e.P or 512
+            0, 106, 107, 135 -> {
+                // Shared death/dormant arm (i.java:4044-4096, proven):
+                // a(true), G(), P|=512, ab=null, ag=ah=0 (+crate ride),
+                // aA=2, hit-frame blood fx on 106/107, r() → corpse or freeze.
+                e.collideSides(world, true)                  // a(true)
+                e.releaseAe()                                // G()
+                e.P = e.P or 512
+                if (e.ab != null) e.ab = null
+                e.ag = 0; e.ah = 0
+                if (e.s != null && e.s!!.ax == 51 && e.s!!.ag != 0) e.ag = e.s!!.ag
                 e.aA = 2
-                if (e.animFinished()) {
-                    when {
-                        e.aB <= 0 -> { e.setAnim(139); corpseDrop(e) }
-                        else -> e.setAnim(3)                    // inferred activation
+                if (e.S == 106 && (e.T == 1 || e.T == 5 || e.T == 7)) {
+                    e.spawnFx8(world, 50, 1, e.av, e.ak, e.al - 40, 300)
+                    if (world.kBK) e.spawnFx8(world, 59, 1, e.av, e.ak, e.al - 40, 300)
+                }
+                if (e.S == 107 && (e.T == 2 || e.T == 5)) {
+                    e.spawnFx8(world, 50, 1, e.av, e.ak, e.al - 40, 300)
+                    if (world.kBK) e.spawnFx8(world, 59, 1, e.av, e.ak, e.al - 40, 300)
+                }
+                if (e.animFinished()) {                       // r()
+                    if (e.aB > 0) e.aB = 0
+                    if (world.lockTarget === e) world.lockTarget = null   // aN
+                    if (world.player.gb === e) world.player.gb = null     // g.b
+                    if (e.S != 106 && e.S != 107 && e.S != 135) {
+                        e.setAnim(139)
+                        world.statTally(e.aw)                 // k.e(0,aw)
+                    } else {
+                        e.P = e.P and -17; e.P = e.P or 32 or 64
+                        if (world.kBK) e.spawnFx8(world, 59, 2, e.av,
+                            if (e.av) e.ak + 18 else e.ak - 18, e.al, e.az - 1)
                     }
                 }
             }
