@@ -209,6 +209,13 @@ private fun missionPackFor(aj: Int): MissionPack {
         ScriptTables.load(asset("level$aj/scripts.bin")))
 }
 
+/** `P|16` — the director's keep-live flag: the `k.I()` eligibility gate
+ *  (k.java L25f/L26d) ticks the entity even when `au>=2` off-camera.
+ *  Tests pin it on entities they exercise directly so the verbatim
+ *  au/park gate doesn't freeze them while the camera sits at spawn —
+ *  the same mechanism the original claim scripts use to keep actors live. */
+private fun keepLive(e: Entity) { e.P = e.P or 16 }
+
 private fun settleIntro(w: Level0World) {
     // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
     // even with auto-dismiss dialogs; the `I()` L108 gate suspends
@@ -398,7 +405,14 @@ class Level0WorldTest {
         val soldiers = w.npcs.filter { it.ax == 11 }
         assertTrue(soldiers.isNotEmpty(), "expected ax11 records in level 0")
         val homes = soldiers.map { it.ak }
-        repeat(120) { w.tick(emptyList()) }
+        // au>=2 entities freeze verbatim (k.java L25f) and ax11 owns
+        // P|16 itself — hold the player beside a soldier so the camera
+        // keeps it in-play, exactly like a real walk-by.
+        val s0 = soldiers.first()
+        repeat(120) {
+            w.player.setPositionPx(s0.ak + 20, s0.al)
+            w.tick(emptyList())
+        }
         val moved = soldiers.zip(homes).count { (e, hx) -> kotlin.math.abs(e.ak - hx) > 8 }
         assertTrue(moved > 0, "no soldier patrolled: ${soldiers.map { it.S }}")
     }
@@ -498,6 +512,10 @@ class Level0WorldTest {
         val w = world()
         settleIntro(w)                 // I() L108 gate: tests run post-intro
         val s = w.npcs.firstOrNull { it.ax == 11 } ?: return
+        // the player is about to stand next to this soldier — put the
+        // camera where it would be (k.O/k.P) so u() scores it in-play;
+        // ax11's own arm clears P|16 when aA==0 so keep-live can't help.
+        w.kO = s.ak - 200; w.kP = s.al - 120
         repeat(5) { w.tick(emptyList()) }
         // Verbatim weaken chain (i.java:1955): Z[0]==1 marks the soldier
         // weaken-eligible; a hit leaving aB<=bu → C() flips Z0=2 + S144.
@@ -561,6 +579,7 @@ class Level0WorldTest {
             if (s != null) break
         }
         s ?: return
+        keepLive(s!!)
         s.setAnim(12)
         var playerHit = false
         for (i in 0 until 300) {
@@ -837,6 +856,7 @@ class Level0WorldTest {
         // cycling door: S0 → S1 on first tick (all timers zero → Z3<0
         // advances immediately), then anim-gated S1→S2→S3→S0 loop.
         val d = doors.first { it.Z[4] == 0 }
+        keepLive(d)
         repeat(2) { w.tick(emptyList()) }
         val seen = mutableSetOf(d.S)
         repeat(60) { w.tick(emptyList()); seen += d.S }
@@ -851,6 +871,7 @@ class Level0WorldTest {
     @Test fun `ax44 closed door crushes player into S50 i16927`() {
         val w = world()
         val door = w.npcs.first { it.ax == 44 && it.S in 8..13 }
+        keepLive(door)
         door.refreshBoxes()
         // stand the player inside the crusher's hitbox (W is anchor-offset)
         w.player.setPositionPx((door.W[0] + door.W[2]) / 2, door.W[3] - 1)
@@ -5902,6 +5923,7 @@ class Slice54Test {
         w.npcFsm.initAx54(e, f, w)
         e.setPositionPx(x, y)
         w.npcs.add(e)
+        keepLive(e)
         return e
     }
 
@@ -6098,6 +6120,7 @@ class Slice55Test {
         while (f.size < 22) f += 0
         w.npcFsm.initAx56(e, f, w)
         w.npcs.add(e)
+        keepLive(e)
         return e
     }
 
@@ -6600,6 +6623,7 @@ class Slice60Test {
         e.setPositionPx(x, y)
         w.npcFsm.initAx60(e, rec.toList(), w)
         w.npcs.add(e)
+        keepLive(e)
         return e
     }
 
@@ -16245,6 +16269,7 @@ class Slice172Test {
         for (t in 0 until 60) w.tick(listOf())
         val p = w.player
         val zone = w.npcs.firstOrNull { it.aw == 252 }!!
+        keepLive(zone)
         p.ak = 12300; p.al = 500
         p.N = p.ak shl 8; p.O = p.al shl 8
         p.ag = 0; p.ah = 0
@@ -16285,6 +16310,7 @@ class Slice173Test {
     @Test fun `ax35 self-culls off-camera on first tick like the original`() {
         val w = world()
         val e35 = w.npcs.firstOrNull { it.ax == 35 }!!
+        keepLive(e35)               // P|16: the cull arm must run once
         val victims = w.npcs.filter { it.ax in intArrayOf(17, 11, 23, 47, 50, 73) }
         // claim suspension holds its dispatch frozen through the intro
         // phases; the first post-suspension tick runs the L184-186 cull.
@@ -16404,6 +16430,7 @@ class Slice175Test {
         val w = world()
         w.stateL(8)
         val g = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        keepLive(g)
         g.setAnim(0)
         w.lockTarget = g
         var ticks = 0
@@ -16419,6 +16446,7 @@ class Slice175Test {
         val w = world()
         w.stateL(8)
         val g = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        keepLive(g)
         standOn(w, g)          // record spawns may hover over a pit;
                                // L777's !h&&!h arm then fires i(25)
         g.setAnim(106)
@@ -19876,6 +19904,8 @@ class Slice213Test {
         w.tick(emptyList())
         val zones = ax22s(w).filter { it.S == 0 }
         assertTrue(zones.isNotEmpty())
+        zones.forEach(::keepLive)
+        w.tick(emptyList())          // one I() so the shared tail rebuilds W
         for (z in zones) {
             // clip14 frame rect = [-6,-10,34,33]; `t()` folds the frame's
             // per-frame anchor (dx sign flips on av) so pin the dims and
@@ -19895,6 +19925,7 @@ class Slice213Test {
         // hopscotch anchor (1214,636) — the wall-face capture zone.
         val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
             ?: error("no ax22 record at (1214,636)")
+        keepLive(e)
         val p = w.player
         // a free-anim standing state inside the zone's clip rect
         p.setPositionPx(e.ak, e.al)
@@ -19915,6 +19946,7 @@ class Slice213Test {
         while (w.player.ah != 0 && t++ < 600) w.tick(emptyList())
         val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
             ?: error("no ax22 record at (1214,636)")
+        keepLive(e)
         val p = w.player
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
         var t2 = 0
@@ -19957,6 +19989,7 @@ class Slice214Test {
         settle(w)
         val e = w.npcs.firstOrNull { it.ax == 7 }
             ?: error("level-0 carries no ax7 mouth-plant")
+        keepLive(e)
         val p = w.player
         // the S0 arm needs player-W ∩ plant-W + !holding — the plant's
         // trigger rect sits off-anchor, so re-pin the player inside it
@@ -19990,6 +20023,7 @@ class Slice214Test {
         val p = w.player
         val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
             ?: error("no ax22 record at (1214,636)")
+        keepLive(e)
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
         w.tick(emptyList())
         // aOp's >=100 sentinel: skip s() this tick, then m() (not claim-
@@ -20031,6 +20065,7 @@ class Slice214Test {
         settle(w)
         val e = ax22s(w).firstOrNull { it.ak == 1214 && it.al == 636 }
             ?: error("no ax22 record at (1214,636)")
+        keepLive(e)
         assertTrue(e.P and 512 != 0, "ax22 is P|512 exempt")
         val p = w.player
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
@@ -20070,6 +20105,7 @@ class Slice215Test {
         val w = world()
         settleIntro(w)
         val e = w.npcs.first { it.ax == 7 && it.aw == 12 }
+        keepLive(e)
         assertEquals(intArrayOf(1318, 456, 1334, 472).toList(), e.W.toList())
         assertFalse(e.av)                       // record P=0 -> throws east
         val p = w.player
@@ -20106,3 +20142,4 @@ class Slice215Test {
         assertFalse(p.bd)
     }
 }
+
