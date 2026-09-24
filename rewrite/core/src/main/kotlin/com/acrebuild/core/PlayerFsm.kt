@@ -1606,6 +1606,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * (g.java:687-712, proven): standing inside a type-19 cell with an
      * open side (aV==0 → face left; aW==0 → face right) snaps `ak` to the
      * open side's grid edge — the ledge pull-up entry.
+     * PROVEN-DEAD on shipped content: the == 19 checks are exact and no
+     * level pack's `et` grid contains a type-19 cell, so the S63 entry
+     * never fires; kept verbatim for parity.
      */
     private fun wallClimb(p: Entity): Boolean {
         when {
