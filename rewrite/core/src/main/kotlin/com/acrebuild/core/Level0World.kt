@@ -614,7 +614,7 @@ class Level0World(
                 P = f[6]
                 av = (f[6] and 1) != 0
             }
-            if (type == 11) npcFsm.initSoldier(e, f.toList())
+            if (type == 11) npcFsm.initSoldier(e, f.toList(), this)
             else if (type == 44) npcFsm.initDoor(e, f.toList())
             else if (type == 10) npcFsm.initTrigger(e, f.toList())
             else if (type == 4) npcFsm.initDestructible(e, f.toList())
