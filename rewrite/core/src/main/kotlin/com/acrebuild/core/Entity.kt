@@ -88,7 +88,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cGCount = 0                  // i.cG int — hit-flash counter on sweep
                                    // targets (distinct from g.cG bool)
     var az = 0
-    var standingOn: Entity? = null   // `a` — entity stood upon (null in slice 2)
+    /** `g.a` (g.java field `a`, proven): THE support/grapple/ride link
+     *  — reads: `o()` ground/vehicle (g.java:6090), crate-edge aF()/aG()
+     *  (g.java:5354), `i.bq` crate-level arm (g.java:805), the S79
+     *  crouch-rope guard (g.java:8488-8497); writes: `a = 0` clears on
+     *  fling/fall/damage, `g.a = r6` binds from entity arms
+     *  (i.java:2714/28616/42048/44789). Split early into `standingOn`
+     *  (support reads) and `ga` (ride writes) — the original is ONE
+     *  field, so the split left every support read dead. `standingOn`
+     *  is now a delegate over `ga`. */
+    var standingOn: Entity?
+        get() = ga
+        set(v) { ga = v }
     var platform: Entity? = null     // `s` — linked platform/rope (null here)
     /** `ac` — resolved link target; writes run `i.a(i)` (i.java:229,
      *  proven): clear `P|256` on the old target, set it on the new. */
@@ -136,9 +147,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aq = 0                     // launch anchor x px (i.aq)
     var ar = 0                     // launch anchor y px (i.ar)
     var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
-    var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
-                                   // i.java:922/937; producers: ax15 bind,
-                                   // Entity:1210/1285 lunge, ax66/72 arms)
+    var ga: Entity? = null         // g.a — the support/grapple/ride link;
+                                   // `standingOn` delegates here (see :91).
+                                   // Producers: ax15 bind, Entity:1210/1285
+                                   // lunge, ax66/72 arms, NpcFsm binds
     var gh: Entity? = null         // g.h — victim link (L2460 S203 arm: the
                                    // marker follows `gh.aw`; v(65568) dumps it)
     // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
@@ -2853,7 +2865,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `g.o()` (g.java:6090, proven): grounded-or-mounted gate for the
      *  weapon cycle — `aZ` true; `a == null || a.ax == 43` → false;
      *  else `a.ax ∈ {51,15,43}` (the trailing `ax == 43` is unreachable
-     *  dead code — kept verbatim). `g.a` = `standingOn`. */
+     *  dead code — kept verbatim). `g.a` reads via `standingOn` → `ga`. */
     fun groundOrVehicle(): Boolean {
         if (aZ) return true
         val s = standingOn ?: return false
