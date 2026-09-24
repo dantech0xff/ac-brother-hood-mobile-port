@@ -589,7 +589,10 @@ class Level0WorldTest {
         assertEquals(cp.al + 5, w.player.al)
     }
 
-    @Test fun `checkpoint re-homes live npcs and keeps pre-checkpoint dead dead`() {
+    @Test fun `checkpoint stamps live npc state and keeps pre-checkpoint dead dead`() {
+        // k.a(bb[i],as) is a save-image WRITE, not a re-home — the live
+        // entity does not move; the restore re-materializes it at the
+        // stamped position (simple i.java:13535+, k.java:4604).
         val w = world()
         val cp = w.checkpoints.first()
         val live = w.npcs.first { it.ax == 11 }
@@ -599,9 +602,11 @@ class Level0WorldTest {
         w.player.setPositionPx(cp.ak, cp.al + 5)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed)
-        assertEquals(live.homeX, live.ak, "live npc re-homed on checkpoint save")
+        assertEquals(live.homeX + 400, live.ak,
+            "checkpoint pickup must not move the live npc")
         assertEquals(139, dead.S, "pre-checkpoint corpse stays dead")
-        // reload: the pre-checkpoint kill stays dead (as==-98 / br[])
+        // reload: the live npc re-materializes at its stamped position,
+        // the corpse's own stamped S=139 keeps it dead.
         val (dx, dy) = damageSpot(w)
         w.player.setPositionPx(dx, dy)
         repeat(20) {
@@ -611,7 +616,89 @@ class Level0WorldTest {
         w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
+        val restored = w.npcs.first { it.aw == live.aw }
+        assertEquals(live.homeX + 400, restored.ak,
+            "live npc restored at its checkpoint-image position")
         assertEquals(139, w.npcs.first { it.aw == dead.aw }.S)
+    }
+
+    @Test fun `removed entity does not respawn through checkpoint restore`() {
+        // k.c() tombstones bg[as] → the aY() propagation writes -99 into
+        // bf → d(true) skips spawning the record entirely (k.java:5974).
+        val w = world()
+        val cp = w.checkpoints.first()
+        val victim = w.npcs.first { it.ax == 11 }
+        w.removeEntity(victim)
+        w.tick(emptyList())                    // drain pendingRemove
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed)
+        w.resetLevel(true)
+        assertNull(w.npcs.firstOrNull { it.aw == victim.aw },
+            "k.c()-removed record stays tombstoned through d(true)")
+    }
+
+    @Test fun `checkpoint arms the tip marquee and tombstones its own record`() {
+        // k.y() → fS=0 (tip marquee) — i.java:13482 / k.java:1027.
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertEquals(0, w.kFS, "aY() arms the fS tip-marquee counter")
+        // The fired record's slot tombstones → after reload the rebuilt
+        // checkpoint list marks it consumed again (no second fire).
+        w.resetLevel(true)
+        assertTrue(w.checkpoints.first { it.aw == cp.aw }.consumed,
+            "consumed ax2 record does not re-fire after restore")
+    }
+
+    @Test fun `ax11 alert fixup on checkpoint restore`() {
+        // k.java:5996-6005: ax11 (P&32)==0 && S!=2 && (Z[5]>0||Z[6]>0)
+        // → S=3,T=0 — the alert-resume fixup on restore.
+        val w = world()
+        val cp = w.checkpoints.first()
+        val npc = w.npcs.first {
+            it.ax == 11 && (it.P and 32) == 0 &&
+                (it.Z.getOrElse(5) { 0 } > 0 || it.Z.getOrElse(6) { 0 } > 0)
+        }
+        npc.S = 7                                   // mid-chase at pickup
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        w.resetLevel(true)
+        val r = w.npcs.first { it.aw == npc.aw }
+        assertEquals(3, r.S, "alerted soldier resumes patrol state 3")
+        assertEquals(0, r.T)
+    }
+
+    @Test fun `mission switch drops the checkpoint pointer and snapshot`() {
+        // a(bA,16,(short)0) parity: a new mission must not inherit a
+        // stale checkpoint (would teleport the player mid-level).
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertNotNull(w.checkpointSnap)
+        w.loadMission(1)
+        assertNull(w.checkpointSnap, "mission switch clears the snapshot")
+        assertEquals(0, w.kBA[16], "mission switch clears bA[16] pointer")
+    }
+
+    @Test fun `checkpoint restore rebinds the linked ax5 director`() {
+        // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — level-0's
+        // own ax2 records carry Z[0]=-1 (dead arm), so inject a linked
+        // checkpoint pointing at the real aw=36 ax5 record.
+        val w = world()
+        val dir = w.npcs.firstOrNull { it.ax == 5 && it.aw == 36 }
+            ?: return // record not spawned in this fixture
+        val cp = Level0World.Checkpoint(900, w.player.ak + 4, w.player.al, z0 = 36)
+        w.checkpoints = w.checkpoints + cp
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertTrue(cp.consumed); assertEquals(36, w.kG)
+        w.resetLevel(true)
+        val r = w.npcs.first { it.ax == 5 && it.aw == 36 }
+        assertTrue((r.P and 16) != 0, "linked director re-arms P|16")
+        assertSame(r, w.kC, "linked director re-binds script context")
     }
 
     @Test fun `iframes block a second drain for 10 ticks`() {
@@ -15092,12 +15179,18 @@ class Slice152Test {
         // bytes are stamped from live globals at write time — compare to
         // the snapshot the checkpoint captured
         val s = w.checkpointSnap!!
-        assertEquals(1, w.kBA[15])
+        assertEquals(cp.aw, w.kBA[16], "bA[16] = checkpoint record id")
+        assertEquals(0, w.kBA[15], "aY() must not arm the has-save flag")
+        assertEquals(cp.ak, w.kBA[18]); assertEquals(cp.al + 5, w.kBA[20])
+        assertEquals(s.gJ, w.kBA[24]); assertEquals(s.gI, w.kBA[26])
         assertEquals(s.kAx, w.kBA[28]); assertEquals(s.kAy, w.kBA[30])
         assertEquals(s.kAz, w.kBA[32]); assertEquals(s.kAN, w.kBA[34])
+        assertEquals(s.ap[0], w.kBA[36]); assertEquals(s.ap[3], w.kBA[38])
+        assertEquals(s.ap[2] / 16, w.kBA[40]); assertEquals(s.ap[4], w.kBA[42])
         assertEquals(44, w.kBA[50])
         assertEquals(s.ap[5], w.kBA[52 + (2 shl 1)])
         assertEquals(1, w.kBA[68]); assertEquals(1, w.kBA[79])
+        for (i in 0..2) assertEquals(1, w.kBA[76 + i], "i.br[i] pending=1")
     }
 
     @Test fun `reload restores snapshot globals and flags`() {
