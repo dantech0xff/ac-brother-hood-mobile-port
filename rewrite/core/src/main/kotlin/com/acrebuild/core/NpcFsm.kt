@@ -4077,7 +4077,8 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                     r05.setAnim(4)
                     r05.ak = e.Z[(r93 shl 1) + 16]
                     r05.al = w.kP + e.Z[(r93 shl 1) + 17]
-                    // `aG < 10000 → r05.aw()` — i.aw() unmined (inferred)
+                    // L92: `r8.Z[1] < 10000 → r8.aw()` (i.java:51396)
+                    if (r05.Z[1] < 10000) materializeWaypoints(r05, w)
                     r05.iE = false; r05.bs = 0
                     r05.P = r05.P or 16
                     r05.aC = r05.Z[6]
@@ -9285,7 +9286,9 @@ fun NpcFsm.initAx64(e: Entity, f: List<Int>) {
  *  (ax64 arm, L15), anim = `dirIndex5`, `P` flags {&-129,&-33,|16,|1 on
  *  left}, af=spawner, c=player, aC=`n`, `k.A(16)` sfx. `av()`==-1 → skip. */
 private fun ax64Tether(e: Entity, p: Entity, w: LevelCellSource) {
-    val s = w.allocShot() ?: return                  // i.java:8641 L33
+    val si = w.allocPooledShot()                     // i.java:8641 L33: av()
+    if (si == -1) return
+    val s = w.pooledShots?.get(si) ?: return
     s.am = (p.W[0] + p.W[2]) shl 7                   // W-center <<8 (sum<<7)
     s.an = (p.W[1] + p.W[3]) shl 7
     s.ao = (e.W[0] + e.W[2]) shl 7
@@ -9319,7 +9322,9 @@ private fun ax64Tether(e: Entity, p: Entity, w: LevelCellSource) {
  *  `k.A(16)`. count spread arc (r7>1) unused by ax64's `a(1,false)` —
  *  `inferred` for the r7>1 geometry which is omitted here. */
 private fun ax64Barrage(e: Entity, p: Entity, w: LevelCellSource) {
-    val s = w.allocShot() ?: return                  // L140: pool empty
+    val si = w.allocPooledShot()                     // L140: av() pool empty
+    if (si == -1) return
+    val s = w.pooledShots?.get(si) ?: return
     s.am = (e.W[0] + e.W[2]) shl 7
     s.an = (e.W[1] + e.W[3]) shl 7
     s.ao = (p.W[0] + p.W[2]) shl 7                   // r8=false → player arm
@@ -10208,4 +10213,57 @@ private fun spotB(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
     af.setAnim(7); af.aA = 1; e.aq = af.ak
     return true
+}
+
+// ============================================================
+// slice 197 — ax8 ar() + i.aw() waypoint materialization
+// ============================================================
+
+/** `ar()` (i.java:21786, proven) — ax8 helper volume.
+ *  `g.f == this && r()` → `P|=64` (marker echo-fade).
+ *  Clip-59 variant (`aa == k.r(59)`): `S∈{2,6,8} && r() && aw==-1` →
+ *  `P|=32|P|=64`; any other S with `r() && aw==-1` → `k.c(this)`.
+ *  Non-59 clip: `S==4 && W∩aS.W && aS.S != 317` → `aS.a(4,0,0,this)`
+ *  player damage; `r() && aw==-1` → `k.c(this)`. */
+fun NpcFsm.tickAx8(e: Entity, w: LevelCellSource, p: Entity) {
+    if (Entity.gf === e && e.animFinished()) e.P = e.P or 64     // L9
+    if (e.clip === w.clipFor(59)) {                             // L19: aa == k.r(59)
+        if (e.S == 2 || e.S == 6 || e.S == 8) {                 // L3f
+            if (e.animFinished() && e.aw == -1) e.P = e.P or 32 or 64
+            return
+        }
+        if (e.animFinished() && e.aw == -1) w.removeEntity(e)   // L65
+        return
+    }
+    if (e.S == 4) {                                             // L79
+        e.refreshBoxes()                                        // t()
+        if (Entity.overlapStrict(e.W, p.W) && p.S != 317)
+            p.applyHit(4, 0, e, w)                              // aS.a(4,0,0,this)
+    }
+    if (e.animFinished() && e.aw == -1) w.removeEntity(e)       // Lac
+}
+
+/** `i.aw()` (i.java:23083, proven): materialize the Z[1..4] waypoint
+ *  refs — `c.a(uid)` lookup; on a hit `Z[i+1] = c.j` (the uid the copy
+ *  is about to mint), `c.a(node,this)` = entity-x-shifted clone
+ *  appended to the pool, `C++` (resolved-chain length). */
+fun materializeWaypoints(e: Entity, w: LevelCellSource) {
+    for (i in 0 until 4) {
+        val node = w.waypoints.find(e.Z[i + 1]) ?: continue
+        e.Z[i + 1] = w.waypoints.nextDerived                    // c.j
+        w.waypoints.addDerived(node, e)                         // c.a(node, this)
+        e.runnerC++                                             // C++
+    }
+}
+
+/** `i(short[])` case-8 → L94b (i.java:8204→:8220, proven): the shared
+ *  record-field map arm — `aE=f[4]`, `aF=f[11]`, `o=f[12]`, `p=f[13]`,
+ *  `aG=f[14]`, `ay=f[15]` — then the L1bea tail `i(r8[5])` + L1d58
+ *  `t()` (ax8 skips every special-case). */
+fun NpcFsm.initAx8(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
+    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
 }
