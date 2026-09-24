@@ -486,7 +486,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             20, 22, 23, 25, 215 -> airFamily(p, pad)
-            43, 252 -> fallArm(p)               // L1045 — S252 shares it
+            // shared fall case (g.java:1400 `case 16/35/43/150/252`)
+            16, 35, 43, 150, 252 -> fallArm(p, pad)
             // g.java:2736-2757 (proven) — S102 wall-cling: grounded →
             // `l()` input-consume; else `aC` counts down — on expiry or
             // wall-contact lost (`aR!=4`) `a(0)` fling + `al+=21` drop;
@@ -1280,13 +1281,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.S == 22 && p.ah >= 0 && p.ah + p.aj < 0) p.setAnim(23)
     }
 
-    // -- S43 fall arm (L1045, proven core) ------------------------------------
-    private fun fallArm(p: Entity) {
+    // -- shared fall arm `case 16/35/43/150/252` (g.java:1400-1475) ----------
+    private fun fallArm(p: Entity, pad: Pad) {
         world.scrollWallClamp(p)               // g.java:1406 — i.f(this) head
         p.cv = true; p.cp = true; p.ct = true; p.cw = true
         if (p.S == 43 && p.hitWall()) { p.ai = 0; p.ag = 0 }
+        if (p.gI == 4) p.z = true              // g.java:1414 — I==4 arms z
         if (p.S == 43 && p.animFinished()) p.P = p.P or 64
-        // L1421/L1430 — marker-3 feet cell: crate-top dismount probe
+        // L1421 — marker-3 feet cell: crate-top dismount probe
         // (g.c = world.gc contact link; i.bq = Entity.entBq)
         if (p.aQ == 3) {
             val c = world.gc
@@ -1296,13 +1298,48 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.setAnim(147)                                  // i(147)
                 Entity.entBq = 0                                // i.bq = 0
             }
-        } else if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) {
-            p.land(world, p.aR == 4 || p.aS == 4)
-        } else if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5 ||
+        } else if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23 ||
+                   p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5 ||
                    p.aR == 4 || p.aS == 4) {
             p.land(world, p.aR == 4 || p.aS == 4)
         } else {
             p.aj = 1536
+            // g.java:1428-1445 (proven) — L1425 bound catch: falling inside
+            // an S36 context zone (gk!=-1 while `al<go || go==0`) re-binds
+            // instead of falling. gk==0 → a(29,32) ride state (snap to gn);
+            // gk==1 → snap onto the owner entity gd → i(315) carrier pose.
+            if (p.gk != -1 && ((p.go != 0 && p.al < p.go) || p.go == 0)) {
+                if (p.gk == 0) {
+                    p.enterStateMasked(29, 32, world)           // a(29,32)
+                } else if (p.gk == 1) {
+                    p.gd?.let { d ->                            // g.d
+                        p.ak = d.W[0]
+                        p.refreshBoxes()                        // t()
+                        p.setAnim(315)
+                        p.av = d.av
+                        p.ak = if (d.av) d.W[2] else d.W[0]
+                    }
+                }
+                p.ag = 0
+                if (p.gn != 0 && p.gk == 0) p.ak = p.gn
+                p.ah = 1536; p.aj = 0
+            } else if (p.hitWall() && (
+                        pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
+                        pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R) ||
+                        pad.u(Pad.M_UP) || pad.v(Pad.M_UP))) {
+                // g.java:1447-1455 (proven) — L1430 wall-grip tap block:
+                // bound states (cv&&aF!=0&&!ba) exit the case; else the
+                // tap drags fall drift to ±512.
+                if (p.aF != 0 && !p.ba) return
+                if (p.ag != 0) p.ag = if (p.ag > 0) 512 else -512
+            }
+            // g.java:1465 (proven): states outside {43,150,35,29,252}
+            // sharing this arm resolve to i(35) on anim end — the S16
+            // door-glide → loop-fall S35 route.
+            if (p.S != 43 && p.S != 150 && p.S != 35 && p.S != 29 &&
+                p.S != 252 && p.animFinished()) {
+                p.setAnim(35)
+            }
         }
     }
 
