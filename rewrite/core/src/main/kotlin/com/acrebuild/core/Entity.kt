@@ -4840,6 +4840,9 @@ interface LevelCellSource {
     /** `k.o(int)` (k.java:4304, proven): `ap[r5]++` progress slot; `r5==3`
      *  is gated on `k.aj == 7` in the original. */
     fun kCount(slot: Int) {}
+    /** `k.e(int,int)` (k.java:12222, proven): `ap[0]++` when `r6>0`
+     *  and `k.aj != 7` — the kill credit; `r5` is unused verbatim. */
+    fun countKill(uid: Int) {}
     /** `k.az` — collect-streak counter consumed by `k.s()` (k.java:5338,
      *  proven); also the medal-band driver `ax = 30 + tier*15` → `g.f`/`g.e`
      *  refill — see `kCollectStreak`. */

@@ -229,7 +229,7 @@ class Level0World(
      *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
      *  verbatim — always slot 0). */
     override val kAp = IntArray(6)
-    fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
+    override fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
 
     var kDg = 0                           // k.dg — mission-frame counter (timer)
     var kAy = 30                          // k.ay — sync byte (bA[46])

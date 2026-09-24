@@ -357,6 +357,358 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.animFinished()) p.setAnim(0)
                 return
             }
+            // ---- slice 196: the last unported g.e() arms -------------
+            // g.java L2b66/L2b69/L2f63 (proven) — S59/S65/S164/S211:
+            // bare `goto L353d` — no arm, no L351e settle; only the
+            // shared tail runs. Empty arm so `else` can't fling them.
+            59, 65, 164, 211 -> { }
+            // g.java L1320 (proven) — S209 vehicle ride: no mount →
+            // a(0) fling. `al` rides the mount (ax66 S11/S12 → own al,
+            // else W[1]+1); last-frame on ax60 snaps ak; on anim end
+            // ak re-centers and ax66-S12 exits to S228 (Z[0]>0) or
+            // S358; else i(0). Early `return` on every path.
+            209 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                val a = p.standingOn
+                if (a == null) { p.flingAirborne(0, world); return }
+                p.al = if (a.ax == 66 && (a.S == 11 || a.S == 12)) a.al
+                       else a.W[1] + 1
+                val c = p.clip
+                if (c != null && p.T == c.frameCount(p.S) - 1 &&
+                    a.ax == 60) {
+                    p.ak = a.ak; p.setAnim(0)
+                }
+                if (p.animFinished()) {
+                    p.ak = if (a.ax == 66 && (a.S == 11 || a.S == 12)) a.ak
+                           else (a.W[0] + a.W[2]) shr 1
+                    if (a.ax == 66 && a.S == 12) {
+                        p.setAnim(if (a.Z[0] > 0) 228 else 358)
+                        return
+                    }
+                    p.setAnim(0); return
+                }
+                return
+            }
+            // g.java L2f67 (proven) — S216 dive-attack windup: T∈[2,3]
+            // drives `ag=∓5120`; facing-cell probe (aT/aU) → a(0)
+            // fling; `r() → ag>>=1, i(217), P|=64`; early `return`.
+            216 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ag = if (p.T in 2..3) (if (p.av) -5120 else 5120) else 0
+                if ((p.av && p.aT != 0) || (!p.av && p.aU != 0)) {
+                    p.flingAirborne(0, world)
+                }
+                if (p.animFinished()) {
+                    p.ag = p.ag shr 1
+                    p.setAnim(217)
+                    p.P = p.P or 64
+                }
+                return
+            }
+            // g.java L2fd8 (proven) — S217 dive-attack descent: T==0 →
+            // `aj=1536`; floor (aR/aO==2 or feet-cell==2) with no
+            // mount → `ah=aj=0`, `x1=0` (g.e(0)), `i(50)`, `return`;
+            // else `aZ||aR==5` → `bd=1, a(1), P&=~64`, zero vel;
+            // `r() → i(0)`; early `return`.
+            217 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.T == 0) p.aj = 1536
+                if ((p.aR == 2 || p.aO == 2 ||
+                     p.e(world, p.ak / 20, p.al / 20) == 2) &&
+                    p.standingOn == null) {
+                    p.ah = 0; p.aj = 0; p.x1 = 0; p.setAnim(50); return
+                }
+                if (p.aZ || p.aR == 5) {
+                    p.bd = true
+                    p.flingAirborne(1, world)
+                    p.P = p.P and -65
+                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                }
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L32b3 (proven) — S258 wall-perch: UP-edge →
+            // i(259); L/R edges (2/8 taps or 4112/8256 held) → `av`
+            // pick + i(261); DOWN-edge → `a(0)` + `al+=10` (a(0) itself
+            // adds +10 — the double-drop is verbatim); `return`.
+            258 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (pad.v(16388)) { p.setAnim(259); return }
+                if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
+                    if (pad.v(2) || pad.v(4112)) p.av = true
+                    else if (pad.v(8) || pad.v(8256)) p.av = false
+                    p.setAnim(261); return
+                }
+                if (pad.v(33024)) { p.flingAirborne(0, world); p.al += 10 }
+                return
+            }
+            // g.java L3334 (proven) — perch launch: `r()` → S259 goes
+            // straight up (`ag=0, ah=-7680, i(263)`); S261 goes to the
+            // side (`ag=∓3072, ah=-7680, i(264)`); `return`.
+            259, 261 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) {
+                    if (p.S == 259) {
+                        p.ag = 0; p.ah = -7680; p.setAnim(263); return
+                    }
+                    p.ag = if (p.av) -3072 else 3072
+                    p.ah = -7680
+                    p.setAnim(264)
+                }
+                return
+            }
+            // g.java L323b (proven) — perch-entry transitions: same
+            // input fork as S258 (UP→259, dir→av+261) but falls into
+            // `r() → i(258)` on anim end; `return`.
+            260, 262 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (pad.v(16388)) p.setAnim(259)
+                else if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
+                    if (pad.v(2) || pad.v(4112)) p.av = true
+                    else if (pad.v(8) || pad.v(8256)) p.av = false
+                    p.setAnim(261)
+                }
+                if (p.animFinished()) p.setAnim(258)
+                return
+            }
+            // g.java L3386 (proven) — perch up-launch: `cw=1`, `aj=
+            // 2560`; `ah>=0` → 264→i(266), 263→i(265); `av()` wall
+            // resolve; `y()` grab → `ai=ag=0` + `a(0)`; tail.
+            263, 264 -> {
+                p.cw = true
+                p.aj = 2560
+                if (p.ah >= 0) {
+                    if (p.S == 264) p.setAnim(266)
+                    else if (p.S == 263) p.setAnim(265)
+                }
+                p.airWallResolve(world)
+                if (p.climbCheck()) {
+                    p.ai = 0; p.ag = 0
+                    p.flingAirborne(0, world)
+                }
+            }
+            // g.java L33da (proven) — launch descent: `r() → a(0)`;
+            // `av()`; `y()` → `ai=ag=0` + `a(0)`; tail.
+            265, 266 -> {
+                if (p.animFinished()) p.flingAirborne(0, world)
+                p.airWallResolve(world)
+                if (p.climbCheck()) {
+                    p.ai = 0; p.ag = 0
+                    p.flingAirborne(0, world)
+                }
+            }
+            // g.java Lc88 (proven) — S267 carry-init: `g.t=100`; if af
+            // is not an ax27/ax10 target, `i.ae()` (standingOn or a
+            // W∩kAc ax∈{17,11,23,50,73} carry-check) must pass or →
+            // `g.t=0, i(0)`; `E()` when airborne; walks to the target
+            // centre (`ag=∓1024`, av toward it) until |dx|≤4 → snap,
+            // `av=0`, ax10→i(291) else i(268)+af.i(1); `return`.
+            267 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.gt = 100
+                val f = p.af
+                if (f == null || (f.ax != 27 && f.ax != 10)) {
+                    if (!carryAvailable(p)) { p.gt = 0; p.setAnim(0); return }
+                }
+                if (!p.aZ) p.eSettle(world)
+                val f2 = p.af!!
+                val cx = if (f2.ax == 10) (f2.W[0] + f2.W[2]) shr 1
+                         else (f2.X[0] + f2.X[2]) shr 1
+                val dx = cx - p.ak
+                if (kotlin.math.abs(dx) <= 4) {
+                    p.ak = cx; p.av = false
+                    if (f2.ax == 10) p.setAnim(291)
+                    else { p.setAnim(268); f2.setAnim(1) }
+                } else if (dx < 0) {
+                    p.av = true; p.ag = -1024
+                } else {
+                    p.av = false; p.ag = 1024
+                }
+                return
+            }
+            // g.java Ld69 (proven) — S268 hostage-carry walk: `ag=ah=
+            // 0`; body only when `r() || T≥len-2`; needs af ax27;
+            // marker 102 (ae) hovers 85px overhead; `af.i(2)+az=-2`
+            // once; anim-end → `T=len-1,U=0`; `g.g` within 60 → marker
+            // 8, else release it; `k.u()` edge (+r9/g.g fork) →
+            // `af.i(1), k.v(), G()`, return; `r9 && v(65568) && g.g` →
+            // `G(), af snaps to player, i(3), i(270), A(13)`; `return`.
+            268 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ag = 0; p.ah = 0
+                val c = p.clip
+                val nearEnd = p.animFinished() ||
+                    (c != null && p.T >= c.frameCount(p.S) - 2)
+                if (!nearEnd) return
+                val f = p.af
+                if (f == null || f.ax != 27) return
+                if ((p.ae == null || p.ae!!.S != 102) && f.S != 1) {
+                    p.releaseAe()
+                    p.spawnMarker(world, 102, p.ak, p.al - 85)
+                }
+                p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                if (f.S != 2 && p.az != -2) {
+                    f.setAnim(2); p.az = -2; return
+                }
+                p.T = (c?.frameCount(p.S) ?: 0) - 1; p.U = 0
+                var r9 = 0
+                val gg = p.g
+                if (gg != null) {
+                    r9 = if (kotlin.math.abs(gg.ak - p.ak) >= 60) 0 else 1
+                    if (r9 == 1) {
+                        if (p.ae == null || p.ae!!.S != 8) {
+                            p.releaseAe()
+                            p.spawnMarker(world, 8, p.ak, p.al - 85)
+                        }
+                    } else if (p.ae != null && p.ae!!.S == 8) p.releaseAe()
+                } else if (p.ae != null && p.ae!!.S == 8) p.releaseAe()
+                if (padAnyEdge(pad) && (r9 == 0 || p.g == null)) {
+                    f.setAnim(1); world.clearLatches(); p.releaseAe(); return
+                }
+                if (r9 != 0 && pad.v(65568) && p.g != null) {
+                    p.releaseAe()
+                    f.ak = p.ak; f.al = p.al; f.setAnim(3)
+                    p.setAnim(270); world.sfx(13)
+                }
+                return
+            }
+            // g.java Lf19 (proven) — S269 carry-drop: `g.t=0`; `r()` &&
+            // af ax27 → `i(0)+E()+af.i(2)+af=null`; shared tail.
+            269 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.gt = 0
+                if (p.animFinished()) {
+                    val f = p.af
+                    if (f != null && f.ax == 27) {
+                        p.setAnim(0); p.eSettle(world)
+                        f.setAnim(2); p.af = null
+                    }
+                }
+            }
+            // g.java Lf50 (proven) — S270 grab-QTE lead-in: `g.t=0`;
+            // no `g.g` → `i(0)` + tail; `g.g` forced to S133; `r()` →
+            // `i(271)`, `g.g.i(145)`, `bl=5`; `return` (with-gg only).
+            270 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.gt = 0
+                val gg = p.g
+                if (gg == null) {
+                    p.setAnim(0)
+                } else {
+                    if (gg.S != 133) gg.setAnim(133)
+                    if (p.animFinished()) {
+                        p.setAnim(271); gg.setAnim(145); p.bl = 5
+                    }
+                    return
+                }
+            }
+            // g.java Lf94 (proven) — S271 grab-QTE mash: `g.t=0`; no
+            // `g.g` → `i(0)` + tail; `g.g` → S134; marker 8 overhead;
+            // `v(65568)` → `bl+=2` else `j.g%2==0` → `bl--`; `bl<0` →
+            // release, `i(0)`, `g.g.i(5)`, `aA=1`, `Q()`; `bl>=10` →
+            // release, `P&=~64`, `i(0)`, `g.g.aB=0`, `i(135)`,
+            // `k.e(0,aw)` kill credit, `k.o(3)` stat; `return` (with-gg).
+            271 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.gt = 0
+                val gg = p.g
+                if (gg == null) {
+                    p.setAnim(0)
+                } else {
+                    if (gg.S != 134) gg.setAnim(134)
+                    if (p.ae == null || p.ae!!.S != 8) {
+                        p.releaseAe()
+                        p.spawnMarker(world, 8, p.ak, p.al - 85)
+                    }
+                    p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                    if (pad.v(65568)) p.bl += 2
+                    else if (world.jG % 2 == 0L) p.bl -= 1
+                    if (p.bl < 0) {
+                        p.bl = 0; p.releaseAe(); p.setAnim(0)
+                        gg.setAnim(5); gg.aA = 1; gg.facePlayer(world)
+                        return
+                    }
+                    if (p.bl >= 10) {
+                        p.bl = 0; p.releaseAe(); p.P = p.P and -65
+                        p.setAnim(0)
+                        gg.aB = 0; gg.setAnim(135)
+                        world.countKill(p.aw); world.kCount(3)
+                        return
+                    }
+                    return
+                }
+            }
+            // g.java Lc7a (proven) — S280: `r() → i(38)`; `return`.
+            280 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (p.animFinished()) p.setAnim(38)
+                return
+            }
+            // g.java La41 (proven) — S286/287 knife-aim hold: airborne
+            // w/o mount → `a(0)`; `v(65568)` queues `R` (286→287,
+            // 287→286); `r()` → `i(R!=-1?R:0)`, `R=-1`; `return`.
+            286, 287 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                if (!p.aZ && p.standingOn == null) {
+                    p.flingAirborne(0, world); return
+                }
+                if (pad.v(65568)) {
+                    p.R = -1
+                    if (p.S == 286) p.R = 287
+                    else if (p.S == 287) p.R = 286
+                }
+                if (p.animFinished()) {
+                    p.setAnim(if (p.R != -1) p.R else 0)
+                    p.R = -1
+                }
+                return
+            }
+            // g.java Lb10 (proven) — S291 drag-carry: `ag=ah=0`; body
+            // when `r() || T≥len-2` else tail; needs af ax10; markers
+            // 102+8; `k.u()` fork → `i(285), af=null, k.v(), G()`;
+            // `r9&&v(65568)&&g.g` → `G(), af=null, i(270), A(13)`;
+            // every exit → shared tail (L353d).
+            291 -> {
+                p.cp = false; p.cq = false; p.ct = false; p.cw = false
+                p.ag = 0; p.ah = 0
+                val c = p.clip
+                if (p.animFinished() ||
+                    (c != null && p.T >= c.frameCount(p.S) - 2)) {
+                    val f = p.af
+                    if (f != null && f.ax == 10) {
+                        p.T = (c?.frameCount(p.S) ?: 0) - 1; p.U = 0
+                        if (p.ae == null || p.ae!!.S != 102) {
+                            p.releaseAe()
+                            p.spawnMarker(world, 102, p.ak, p.al - 85)
+                        }
+                        p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                        var r9 = 0
+                        val gg = p.g
+                        if (gg != null) {
+                            r9 = if (kotlin.math.abs(gg.ak - p.ak) >= 60) 0 else 1
+                            if (r9 == 1) {
+                                if (p.ae == null || p.ae!!.S != 8) {
+                                    p.releaseAe()
+                                    p.spawnMarker(world, 8, p.ak, p.al - 85)
+                                }
+                            } else if (p.ae != null && p.ae!!.S == 8) {
+                                p.releaseAe()
+                            }
+                        } else if (p.ae != null && p.ae!!.S == 8) {
+                            p.releaseAe()
+                        }
+                        if (padAnyEdge(pad) && (r9 == 0 || p.g == null)) {
+                            p.setAnim(285); p.af = null
+                            world.clearLatches(); p.releaseAe()
+                        } else if (r9 != 0 && pad.v(65568) && p.g != null) {
+                            p.releaseAe(); p.af = null
+                            p.setAnim(270); world.sfx(13)
+                        }
+                    }
+                }
+            }
+            // g.java L92e (proven) — S313: bare `return`.
+            313 -> return
             // g.java:1938-2015 + L1ab3-L1c33 (proven) — wall-rebound:
             // `cp=true`, `aj=512`; `A()` → ledge snap i(74);
             // direction-toward-av HELD && `ah<0` (still rising) → ct=true +
@@ -1490,6 +1842,36 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     }
 
     // -- air family {20,22,23,25,215} (L889 block, proven core) ---------------
+    /** `i.ae()` (i.java:59138, proven) — carry-available scan:
+     * `g.a != null` → true; else any entity with ax∈{17,11,23,50,73}
+     * passing `i.h()`. `i.h()` (i.java:59097): `W∩k.ac` overlap, then
+     * per-type: ax11/73 → `!P() && aA≥1`; ax17/50 → true; else false. */
+    private fun carryAvailable(p: Entity): Boolean {
+        if (p.standingOn != null) return true
+        for (e in world.npcs) {
+            when (e.ax) {
+                17, 11, 23, 50, 73 -> if (carryClaimable(e)) return true
+            }
+        }
+        return false
+    }
+
+    private fun carryClaimable(e: Entity): Boolean {
+        val r = world.kAc ?: return false
+        if (!Entity.overlapI(e.W, r)) return false
+        return when (e.ax) {
+            11, 73 -> !e.deadRelease() && e.aA >= 1
+            17, 50 -> true
+            else -> false
+        }
+    }
+
+    /** `k.u()` (k.java:20271, proven) — any `bB` edge EXCEPT the two
+     *  soft-key bits (0x20000/0x40000): `bB!=0 && !(bB&0x20000) &&
+     *  !(bB&0x40000)`. */
+    private fun padAnyEdge(pad: Pad): Boolean =
+        pad.bB != 0 && pad.bB and 0x20000 == 0 && pad.bB and 0x40000 == 0
+
     private fun airFamily(p: Entity, pad: Pad) {
         p.cp = true; p.ct = true; p.cw = true
         if (p.gI == 4) p.z = true              // L1ce8 — I==4 arms z
