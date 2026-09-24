@@ -202,7 +202,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                    // player death, g.java:3914)
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
-    var b = false                  // i.b — ridden/carried latch (bm() tail)
+    var b = false                  // i.b — bounds-dirty flag: movers set it,
+                                 // I()'s default arm L1f35 calls t() on it
+                                 // (i.java:18904, proven)
     var scriptBound = false        // i.d — latched when the record's Z[13]
                                    // script claim binds at init
                                    // (i.java:2266); released inside the

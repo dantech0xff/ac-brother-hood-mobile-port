@@ -258,11 +258,10 @@ class NpcFsm(val world: LevelCellSource) {
 
     fun tick(e: Entity, player: Entity) {
         // `I()` covers only the shared soldier family {11,17,23,47,50,73}
-        // (i.java dispatch, proven); every other ax gets a dedicated arm or
-        // the no-op default (L897) — the dispatch `else` branch funnels
-        // unclaimed types here, so gate them out.
+        // (i.java dispatch :15493, proven); every other ax reaches the
+        // dispatch's `default:` label L1f35 — a small tail, not a no-op.
         if (e.ax != 11 && e.ax != 17 && e.ax != 23 && e.ax != 47 &&
-            e.ax != 50 && e.ax != 73) return
+            e.ax != 50 && e.ax != 73) { defaultArm(e, player); return }
         // L70-L78 (i.java:4886-4898, proven): the fixed-point integrator
         // runs at the TOP of I() for every entity — under `aH` slow-mo it
         // swaps to the aI-divided variant (L72→L75, i.java:6370-6384).
@@ -857,6 +856,22 @@ class NpcFsm(val world: LevelCellSource) {
      *  the penetration — player falling or entity rising → feet land on
      *  the entity's top edge; player rising into it → pushed under; else
      *  side-push to the nearer open edge with velocity zeroed. */
+    /**
+     * `I()` `default:` arm L1f35→L1f76 (i.java:18904-18939, proven): every
+     * ax without a case — the 26 no-op types PLUS the four unreachable
+     * labels L1e35/L1f1d/L1f13/L1f27 (ax 28/31/75/45, which `goto L1f35`
+     * too, proven) — still gets the shared tail: `if (b) t()` box refresh
+     * on the dirty flag, the `av` facing bit into `P|1`, then the
+     * `a(k.aS, P, W)` player push (pushL897's own `ax!=0`/`P&4096` gates
+     * cover the original's `if (ax==0) skip`). No `s()` advance —
+     * unclaimed entities never animate.
+     */
+    fun defaultArm(e: Entity, player: Entity) {
+        if (e.b) e.refreshBoxes()
+        if (e.av) e.P = e.P or 1 else e.P = e.P and -2
+        pushL897(e, player)
+    }
+
     private fun pushL897(e: Entity, p: Entity) {
         if (e.ax == 0) return                                    // L909
         if (e.P and 4096 == 0) return                            // L5
