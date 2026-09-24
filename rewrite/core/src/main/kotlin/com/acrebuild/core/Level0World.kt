@@ -2860,6 +2860,11 @@ class Level0World(
         }
         return strD to pal
     }
+    /** Resolved `eA[bv][i21]` index for row `i13` (k.java:6095) — used by
+     *  the `z[12]` blink gate (strings 32/33/34 only) and palette arms.
+     *  -1 under jC==19 (LEVEL-n rows bypass the table). */
+    fun menuRowEntry(i13: Int): Int =
+        if (jC == 19) -1 else kEA[kBv][menuM(kBv, i13)]
     /** jc19 sub-label `d(0, eX[eW[i13]])` drawn on `y` (:6092).
      *  `eW={2,2,1,1,2,0,3,2,2}` `eX={51,52,53,54}` (:299-300). */
     fun menuRowSub(i13: Int): String? {

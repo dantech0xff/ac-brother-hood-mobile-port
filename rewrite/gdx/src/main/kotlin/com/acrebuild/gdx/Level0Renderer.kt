@@ -820,7 +820,8 @@ class Level0Renderer {
 
     /** `b(i,i2,i3,z2,z3)` (k.java:5903-6150, proven) — the menu panel +
      *  row renderer. The `c()→bw` tap hook is the world's `menuRowAt`;
-     *  the j.c==2 side soft-buttons are unported (jC==2 unreachable). */
+     *  the j.c==2 per-row side icons are drawn below (clip-93 frames
+     *  9/5 and 4/0 for row-0/others — k.java:5903-6150). */
     private fun menuPanel(world: Level0World, x: Int, y: Int, w: Int,
                           z2: Boolean, z3: Boolean) {
         val clipA2 = clips[93]
@@ -914,6 +915,13 @@ class Level0Renderer {
                 drawText(strA, i14 - menuEz, i9 + (i4 shr 1) + i15,
                          3, palette = pal, pack = 91)
                 clipReset()
+            }
+            // z[12] blink marker beside strings 32/33/34 (k.java:6080-6092,
+            // proven): drawn only while `!eJ`, phase `j.g%10 > 5`, at
+            // (rowTextX+86, rowCenterY-7) — clip-12 anim 1 frame 0.
+            if (world.menuRowEntry(i13) in 32..34 && !world.kEJ &&
+                (world.jG % 10) > 5) {
+                drawFrame(12, 1, 0, i14 + 86, i9 + (i4 shr 1) - 7, 0)
             }
             if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
                 var i16 = i10 / 2

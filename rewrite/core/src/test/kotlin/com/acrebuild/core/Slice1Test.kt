@@ -10395,6 +10395,15 @@ class Slice89Test {
         assertEquals(w.d0(107), w.menuRowText(1).first)
         assertEquals(w.d0(79) to w.d0(17), w.menuFooter())
     }
+
+    @Test fun `menuRowEntry resolves eA table indices`() {
+        val w = world()
+        w.stateL(30)                                 // bannerK(5) → bv=5
+        assertEquals(106, w.menuRowEntry(0))
+        assertEquals(107, w.menuRowEntry(1))
+        w.stateL(19)                                  // LEVEL-n arm: no table
+        assertEquals(-1, w.menuRowEntry(0))
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
