@@ -1861,6 +1861,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     private fun airFamily(p: Entity, pad: Pad) {
         p.cp = true; p.ct = true; p.cw = true
+        // L1ce4 (proven): `cv=1` — only the L1ce4-entry states arm cv:
+        // {18,19,23,36} direct + 22 via L1cc5. S20/24/25/157/215 enter at
+        // L1ce8 and never arm cv — their wall-grab rides S215 or aF
+        // alone.
+        if (p.S == 22 || p.S == 23) p.cv = true
         if (p.gI == 4) p.z = true              // L1ce8 — I==4 arms z
         p.aj = 1536
         if (p.S == 22 && p.animFinished()) p.P = p.P or 64
@@ -1868,24 +1873,38 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.ag = if (p.av) -2048 else 2048
             p.ah = -5120
         }
-        if (!p.hitWall()) {
-            p.airWallResolve(world)
-            // L1fb3 (proven): `ah <= 0 → skip` — the land block runs
-            // while FALLING (ah > 0). aR>=12 reaches L1ffb through every
-            // path (the aQ/aQ!=23 detours collapse back into it), so the
-            // effective condition is the L1fd9 list; d(0) — no ==4 arg
-            // (the aR==4/aS==4 variant lives only in the fall arm L2136).
-            if (p.ah > 0) {
-                if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
-                    if (p.S == 215) { p.enterFall(0, world); p.av = !p.av }
-                    else p.land(world, false)
-                }
+        // L1e3e/L1e6e (g.java:4578-4630, proven): y() (hitWall) gates ONLY
+        // the wall-grab — `cv && aF!=0` (armed by the postTail cv producer
+        // on the previous tick's dir/up input) or S215, plus side cell 20
+        // → L1e94 grab (snap + aK marker + i(101), goto L353d). Grab not
+        // met → L1f84 drift clamp for S25/15/19 under wall contact, then
+        // L1fb3 runs av()+land either way (contact or not).
+        if (p.hitWall()) {
+            if (((p.cv && p.aF != 0) || p.S == 215) && !p.ba &&
+                (if (p.av) p.aT == 20 else p.aU == 20)) {
+                wallGrabSnap(p, flipOn215 = true)
+                return
             }
-            // g.java:1600 (proven): i.f(this) caps the !y() free-air path.
-            // The cv/aF-bound climb sites (:1614/:1645) sit in unported
-            // branches — those climb states have their own arms.
-            world.scrollWallClamp(p)
+            if ((p.S == 25 || p.S == 15 || p.S == 19) && p.ag != 0) {
+                p.ag = if (p.ag > 0) 512 else -512
+            }
         }
+        p.airWallResolve(world)                         // av()
+        // L1fb3 (proven): `ah <= 0 → skip` — the land block runs
+        // while FALLING (ah > 0). aR>=12 reaches L1ffb through every
+        // path (the aQ/aQ!=23 detours collapse back into it), so the
+        // effective condition is the L1fd9 list; d(0) — no ==4 arg
+        // (the aR==4/aS==4 variant lives only in the fall arm L2136).
+        if (p.ah > 0) {
+            if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
+                if (p.S == 215) { p.enterFall(0, world); p.av = !p.av }
+                else p.land(world, false)
+            }
+        }
+        // g.java:1600 (proven): i.f(this) caps the !y() free-air path.
+        // The cv/aF-bound climb sites (:1614/:1645) sit in unported
+        // branches — those climb states have their own arms.
+        world.scrollWallClamp(p)
         if (p.animFinished() && p.S != 215 && p.S != 22) {
             p.enterFall(0, world)
             p.collideSides(world, true)
@@ -1941,10 +1960,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                         pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
                         pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R) ||
                         pad.u(Pad.M_UP) || pad.v(Pad.M_UP))) {
-                // g.java:1447-1455 (proven) — L1430 wall-grip tap block:
-                // bound states (cv&&aF!=0&&!ba) exit the case; else the
-                // tap drags fall drift to ±512.
-                if (p.aF != 0 && !p.ba) return
+                // g.java:5049-5125 (proven) — L2231/L2268 wall-grab check:
+                // `cv && aF!=0 && !ba` + side cell 20 → L2298 grab (snap +
+                // aK marker + i(101), no S215 flip here); grab conditions
+                // failing fall through to L2361 — the ±512 drift clamp.
+                if (p.cv && p.aF != 0 && !p.ba &&
+                    (if (p.av) p.aT == 20 else p.aU == 20)) {
+                    wallGrabSnap(p, flipOn215 = false)
+                    return
+                }
                 if (p.ag != 0) p.ag = if (p.ag > 0) 512 else -512
             }
             // g.java:1465 (proven): states outside {43,150,35,29,252}
@@ -1959,6 +1983,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- post-switch tail (g.e() L2083 block, proven) -------------------------
     private fun postTail(p: Entity, pad: Pad) {
+        // g.java:7968-7974 (proven) — L3852: head cell 7/9 drops the jump
+        // latch before the cq-gate reads it (sits ahead of L38b8 in the
+        // original tail).
+        if (p.aO == 7 || p.aO == 9) p.cq = false
         // g.java:788 (proven): the shared jump tail is `cq && !E` — the
         // ax10-S55 suppress zone holds `g.E` so wall-run-family arms
         // (S102/332/317) keep their own `i(17)`/`i(50)` transitions.
@@ -1998,6 +2026,61 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.aA and 4 != 0) p.aA = p.aA and 4.inv()
         // L2057: `z && i.bn==false && E==false → ap()` context dispatch
         if (p.z && !bn && !world.eFlag) p.contextDispatch(world, pad)
+        // -- L3a2d-L3ad8 flag consumers (g.java:8197-8303, proven) -------
+        // L3a2d: `cp && (aO==9||aP==9) && aQ==9` corner-9 gate skips the
+        // whole consumer; otherwise `ct` fires the ledge-mount probes —
+        // ak()/al() snap + i(60)/i(61) inside — and zeroes motion on a
+        // mount (the probe side effects ARE the corner-stop).
+        if (!(p.cp && (p.aO == 9 || p.aP == 9) && p.aQ == 9) &&
+            p.ct && (p.ledgeLipGrab(world) || p.ledgeHangGrab(world))) {
+            p.ag = 0; p.ah = 0; p.aj = 0
+        }
+        // L3a71: `cu && v(33024)` (DOWN edge) → a(2560) fast-drop; a held
+        // ax14 support drops its link via i.H().
+        if (p.cu && pad.v(Pad.M_DOWN)) {
+            p.flingAirborne(2560, world)
+            if (p.ab?.ax == 14) p.dropHeld()
+        }
+        // L3a9d: `cv && (u|v)(16388|8|2)` → aF=1 — the grab-intent latch
+        // the L1e94/L2298 wall-grab sites consume on later ticks. aF is
+        // deliberately NOT in the e() head clear — it persists.
+        if (p.cv && (pad.u(Pad.M_UP) || pad.v(Pad.M_UP) ||
+                     pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
+                     pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R))) p.aF = 1
+        // L3ad8: `cw && aO==5` → i(280) ceiling grab — zero all motion and
+        // snap `al` onto the ceiling grid row.
+        if (p.cw && p.aO == 5) {
+            p.setAnim(280)
+            p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+            p.al = (p.W[1] / 20) * 20 + 10
+        }
+    }
+
+    /**
+     * `L1e94`/`L2298` (g.java:4633-4730 / :5125-5210, proven): the shared
+     * wall-grab body — consumes the `aF` intent latch, zeroes motion
+     * (`ag=ah=ai=aj=0`), flips `av` when entered from S215 (air family
+     * only — the fall site has no S215 check), snaps `ak` onto the
+     * wall-edge grid (`av: ((W[0]+20)/20)*20+1`; `!av:`
+     * `((W[2]-20)/20)*20+19`), spawns the ax8/clip5/S17/az201 marker via
+     * the `aK` child factory (`P=512`, t() before P per the original),
+     * `k.b()`-inserts it, then `i(101)` — the S101 cling state.
+     */
+    private fun wallGrabSnap(p: Entity, flipOn215: Boolean) {
+        p.aF = 0
+        p.ag = 0; p.ah = 0; p.ai = 0; p.aj = 0
+        if (flipOn215 && p.S == 215) p.av = !p.av
+        p.ak = if (p.av) (p.W[0] + 20) / 20 * 20 + 1
+               else (p.W[2] - 20) / 20 * 20 + 19
+        val aK = p.spawnChildFx(world, 8, 5, 17, 201)   // a(8,5,17,201)
+        aK.av = p.av
+        aK.N = p.ak shl 8; aK.O = p.al shl 8
+        aK.ak = p.ak; aK.al = p.al
+        aK.aj = 0; aK.ai = 0; aK.ah = 0; aK.ag = 0
+        aK.refreshBoxes()                                // aK.t()
+        aK.P = 512
+        world.queueInsert(aK)                            // k.b(aK)
+        p.setAnim(101)
     }
 
     /**
