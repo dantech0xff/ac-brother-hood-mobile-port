@@ -10564,6 +10564,53 @@ class Slice89Test {
         assertTrue(p.S == 0 || p.S == 79,
             "settle lands a grounded state on the wall top")
     }
+
+    @Test
+    fun `hang release arms drop the player off the wall`() {
+        val w = world()
+        w.stateL(8)
+        // same wall-top pocket the grab test scans for.
+        var wx = -1; var wy = -1
+        outer@ for (y in 6 until w.level.rows - 3) {
+            for (x in 2 until w.level.cols - 1) {
+                if (w.level.collisionCell(x, y) >= 19 &&
+                    w.level.collisionCell(x, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y) == 0 &&
+                    w.level.collisionCell(x - 1, y + 1) == 0 &&
+                    w.level.collisionCell(x - 1, y + 2) == 0 &&
+                    w.level.collisionCell(x - 2, y - 1) == 0 &&
+                    w.level.collisionCell(x - 2, y) == 0 &&
+                    w.level.collisionCell(x - 2, y + 1) == 0 &&
+                    w.level.collisionCell(x - 2, y + 2) == 0) { wx = x; wy = y; break@outer }
+            }
+        }
+        assertTrue(wx >= 0, "no open-side wall top in level0")
+        val p = w.player
+        fun rideToHang() {
+            p.S = 43; p.ah = 2560; p.av = false
+            p.ak = (wx - 2) * 20 + 5
+            p.al = wy * 20 - 80
+            var g = 0
+            while (g++ < 80 && p.S == 43) w.tick(emptyList())
+            assertEquals(61, p.S, "the fall must auto-grab the wall lip")
+        }
+
+        // arm 1 — front cell still ≥12 + v(33024) DOWN edge → manual
+        // release (PlayerFsm.kt S61 arm).
+        rideToHang()
+        assertTrue(p.aC > 0, "hang arms the grace counter")
+        w.pad.queuePress(Pad.M_DOWN)
+        w.tick(emptyList())
+        // release → `H();G();al += W3-W1;a(0)` — the masked S43 fling.
+        assertEquals(43, p.S, "DOWN edge releases the hang into a fall")
+
+        // arm 2 — idle hang: aC-- runs each tick; aC==0 → auto drop.
+        rideToHang()
+        var guard = 0
+        while (guard++ < 60 && p.S == 61) w.tick(emptyList())
+        assertEquals(43, p.S, "aC grace expiry drops into the same fling")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
