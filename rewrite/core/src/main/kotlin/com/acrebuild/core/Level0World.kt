@@ -1731,14 +1731,16 @@ class Level0World(
         lastMoveX >= x && lastMoveY >= y &&
             lastMoveX <= x + w && lastMoveY <= y + h &&
             (lastMoveX != -1 || lastMoveY != -1)
-    /** `k.j()` (k.java:579, proven): inside the bottom strip when
-     *  `H∈[36,364] && I∈(204,240)`; otherwise true iff `I∈[0,204]`.
-     *  (`ce/cf/cg` margins inferred at 36 — the `b.d+30` variant unmined.) */
+    /** `k.j()` (k.java:925, proven): false when no touch; the footer
+     *  button span `ce<=H<=400-cf` on the strip row `240-cg < I < 240`
+     *  → true; everywhere else → `0<=I<=240-cg`. Margins `ce/cf` are the
+     *  soft-key label widths persisted by `a(str,str2)` (`b.d+30` or 36;
+     *  init 60/60, `cg=37` — k.java:23630-23635). */
     override fun pointerStrip(): Boolean {
         val hx = lastTouchX; val hy = lastTouchY
         if (hx == -1 && hy == -1) return false
-        return if (hx < 36 || hx > 364 || hy <= 204 || hy >= 240)
-            hy in 0..204
+        return if (hx < kCe || hx > 400 - kCf || hy <= 240 - kCg || hy >= 240)
+            hy in 0..240 - kCg
         else true
     }
     /** `i.a(8,59,S,facing,x,y,az)` (i.java:6898, proven) — op111's
@@ -2685,12 +2687,14 @@ class Level0World(
      *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
      *  the same 67 (`inferred` — call sites unmined). */
     fun menuPanelY(): Int = menuPanelRect()[1]
-    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :6218):
-     *  jc12/13 `b(93,67,214,true,true)`; jc14 bv3 `b(93,67)` / bv4
-     *  `b(93,86)` / else `b(93,30)` (:1124-1129); jc19 `d(14,47,180)`;
+    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :1957-1964,
+     *  :2948-2950, :6218): jc12/13 `b(93,67,214,true,true)`; jc14 bv3
+     *  `b(93,67)` / bv4 `b(93,86)` / else `b(93,30)` (:1124-1129);
+     *  jc2 `d(93,45,214)` (case-2 arm); jc19 `d(14,47,180)`;
      *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
      *  (:1440); other states `inferred` (93,67,214). */
     fun menuPanelRect(): IntArray = when (jC) {
+        2 -> intArrayOf(93, 45, 214)
         14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
         19 -> intArrayOf(14, 47, 180)
         23, 28 -> intArrayOf(93, 120, 214)
@@ -2707,8 +2711,8 @@ class Level0World(
     /** Panel visible this frame: jc12/13 (kAl'd) plus the footer states
      *  drawn unconditionally each frame (:1124-1185, :6218-6227). */
     val panelVisible: Boolean
-        get() = menuVisible || jC == 14 || jC == 19 || jC == 23 ||
-            jC == 28 || jC == 29 || jC == 30  // af() `d(93,46,214)` (:6254)
+        get() = menuVisible || jC == 2 || jC == 14 || jC == 19 ||
+            jC == 23 || jC == 28 || jC == 29 || jC == 30
     fun menuPanelZ3(): Boolean = when {
         jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
         jC == 12 || jC == 13 -> true
@@ -2763,9 +2767,13 @@ class Level0World(
      *  97 → `": "+d(0,35+au)`; 103 → `l(3)`; 123 → `": "+d(0,124+k()?0:1)`);
      *  non-19 → `d(0,10)+" "+(i13+1)` = "LEVEL n". */
     /** `ce`/`cf` footer widths (k.java:2271-2296, proven): measured via
-     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36. */
-    var kCe = -1
-    var kCf = -1
+     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36.
+     *  Init 60/60 (k.java:23630) and persist between footer draws — the
+     *  statics keep their last value when `a(str,str2)` isn't called. */
+    var kCe = 60
+    var kCf = 60
+    /** `cg` strip height (k.java:23635): 37, never reassigned. */
+    val kCg = 37
     /** `y` font for the footer measure — same clip as renderer's fontY
      *  (pack-1 entry-3 = clip92 + shared charmap). Null in tests without
      *  assets → footer labels still returned, dims fall back to 36. */
@@ -2809,7 +2817,6 @@ class Level0World(
     private fun footerQ() {
         val fl = menuFooter()
         val left = fl.first
-        kCe = -1; kCf = -1
         if (left != null && left != "" && jC != 21 && jC != 8) {
             kCe = footerLeftDim(left)
             if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
@@ -3680,9 +3687,10 @@ class Level0World(
      *  dismiss: the modal check runs at the top of the NEXT tick, so the
      *  first fresh press edge is the dismiss — no cooldown needed. */
     val dialogModal get() = jC == 21
-    /** Screen-21 dismiss → back to the previous state (`inferred` — the
-     *  original's l()-based return target is unmined). */
-    private fun leaveDialog() { jC = kCy; kAl = false }
+    /** Screen-21 dismiss → `l(8)` (proven exit shared by the u9 arm
+     *  :975-1007 and the u∈{0,4} panels; entering 21 from play leaves
+     *  `cy=8` anyway). */
+    private fun leaveDialog() { stateL(8); kAl = false }
     /** Test-harness flag — when true, a modal dialog resolves the same
      *  tick (emulates the player instantly tapping the screen-21 dismiss
      *  edge). Real gameplay leaves it false: a press is required. */
