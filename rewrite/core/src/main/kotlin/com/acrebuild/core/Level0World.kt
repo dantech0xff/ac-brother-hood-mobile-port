@@ -809,6 +809,7 @@ class Level0World(
             else if (type == 47) npcFsm.initAx47(e, f.toList())
             else if (type == 50) npcFsm.initAx50(e, f.toList())
             else if (type == 17) npcFsm.initAx17(e, f.toList())
+            else if (type == 22) npcFsm.initAx22(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 64) npcFsm.initAx64(e, f.toList())
             else if (type == 74) npcFsm.initAx74(e, f.toList(), this)
@@ -4633,6 +4634,13 @@ class Level0World(
         // `i.cu` world-freeze (i.java:15294 L109, proven): while the ax10
         // S55 claim zone holds it, every non-ax10 entity skips `I()`.
         if (Entity.icu && n.ax != 10) return
+        // `I()` preamble L85→La5 (i.java:15250, proven): `b = true` every
+        // tick — the box-dirty flag is a per-tick suppress latch, not a
+        // persistent one. Arms that manage W themselves (ax15, ax60,
+        // ax66 ride states) clear `b` inside their proc to keep the tail
+        // from rebuilding it.
+        n.b = true
+        var claimed = true
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
         else if (n.ax == 4) npcFsm.tickDestructible(n, player)
@@ -4677,7 +4685,13 @@ class Level0World(
         else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
         else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
 
-        else npcFsm.tick(n, player)
+        else { npcFsm.tick(n, player); claimed = false }
+        // `I()` dispatch tail L1f35 (i.java:18904-18934, proven): every
+        // arm `goto L1f35` — `if (b) t()` box refresh, the `av` facing bit
+        // into `P|1`, then the `a(k.aS, P, W)` player push. The fallback
+        // branch is excluded: `npcFsm.tick` already runs the same tail —
+        // the L849 superset for soldiers or defaultArm for unclaimed ax.
+        if (claimed) npcFsm.defaultArm(n, player)
         // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
         // every entity except soldiers (11) and civilians (17).
         if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
