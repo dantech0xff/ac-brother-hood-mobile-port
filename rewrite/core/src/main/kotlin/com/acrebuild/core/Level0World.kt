@@ -581,6 +581,9 @@ class Level0World(
             player.setPositionPx(spawn.first, spawn.second)
             player.av = false
             player.x1 = 90
+            // grounded packs: the ax0 player keeps clip0 (undoes an
+            // earlier ax25 clip16 slot on mission switch).
+            player.clip = clips[0]
         }
         player.setAnim(0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
@@ -598,10 +601,22 @@ class Level0World(
                 player.aA = 2; player.aB = 3
                 player.ah = -2560
                 player.aq = -1; player.ar = -1
+                // bi[25]=16 (proven): the ax25 player slots the
+                // glider-suit clip, not the grounded clip0.
+                player.clip = clips[ENTITY_CLIP[25] ?: 16]
+                // `sArr[0]=26; ad=new i(sArr)` — the companion inits as a
+                // full entity from the mutated record: ax26 → `az=201`
+                // (i.java:2429) and `i(r8[5])` (mirrored to the player S
+                // every tick anyway — n() tail).
                 player.ad = Entity(26, clips[ENTITY_CLIP[26] ?: 15]).apply {
+                    aw = if (rec.size > 1) rec[1] else 0
+                    az = 201
+                    setAnim(if (rec.size > 5) rec[5] else 0)
                     setPositionPx(if (rec.size > 2) rec[2] else player.ak,
                                   if (rec.size > 3) rec[3] else player.al)
                 }
+            } else {
+                player.ad = null
             }
         }
         player.gt = 0; player.bh = 0

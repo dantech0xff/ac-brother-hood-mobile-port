@@ -173,6 +173,8 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
             42 to Clip.load(asset("clips/clip42/clip.acpk")),
             46 to Clip.load(asset("clips/clip46/clip.acpk")),
             92 to Clip.load(asset("clips/clip92/clip.acpk")),
+            15 to Clip.load(asset("clips/clip15/clip.acpk")),   // bi[26] glider
+            16 to Clip.load(asset("clips/clip16/clip.acpk")),   // bi[25] ax25 player
             12 to Clip.load(asset("clips/clip94/clip.acpk")),   // z[12] = entry-012
         )
         if (aj == 0) {
@@ -14049,11 +14051,14 @@ class Slice141Test {
     }
 
     private fun climbZone(s: Int = 10, cfg: (Entity) -> Unit = {}): Entity {
-        // W[3]=140 → dy = p.W[1]-140; band Z[0]=-60..Z[1]=0 (player top
-        // 60..0 px above the zone bottom = climbing window)
+        // W[3]=140 → dy = p.W[1]-140; record-style band Z[1]=50..Z[0]=180
+        // (proven records carry Z[0]>Z[1] — level1 {180,50,0,90,30} —
+        // smali: dy<=Z[1] → out, dy>=Z[0] → out; the window is the
+        // player's top sitting 50..180 px BELOW the zone bottom, the
+        // approach-from-below perch).
         val z = Entity(10, null); z.S = s
         z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
-        z.Z[0] = -60; z.Z[1] = 0; z.Z[2] = 10; z.Z[3] = 90; z.Z[4] = 7
+        z.Z[0] = 180; z.Z[1] = 50; z.Z[2] = 10; z.Z[3] = 90; z.Z[4] = 7
         cfg(z); return z
     }
 
@@ -14067,7 +14072,7 @@ class Slice141Test {
     @Test fun `S10 in-band locks input and parks the hand L323`() {
         val w = S141World()
         val z = climbZone()
-        val p = mk(200, 100)                     // W[1]=84 → dy=-56 ∈ [-60,0]
+        val p = mk(200, 250)                     // W[1]=234 → dy=94 ∈ (50,180)
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertTrue(w.kAm, "k.o() input lock")
         assertNotNull(p.ae, "hand indicator spawned at view center")
@@ -14078,7 +14083,7 @@ class Slice141Test {
     @Test fun `S10 pad press arms the climb L3b3`() {
         val w = S141World()
         val z = climbZone()
-        val p = mk(200, 100)
+        val p = mk(200, 250)                     // dy=94 ∈ band
         val pad = Pad(); pad.queuePress(1); pad.commit(0)
         NpcFsm(w).tickTrigger(z, w, p, pad)
         assertTrue(w.iBB, "i.bB armed")
@@ -14122,7 +14127,7 @@ class Slice141Test {
     @Test fun `S10 off-zone climb finish resets progress L4b2`() {
         val w = S141World(); w.iBB = true; w.iBi = true; w.iBF = -1
         val z = climbZone()
-        val p = mk(200, 300)                     // dy=144 > Z[1], no overlap
+        val p = mk(200, 350)                     // dy=194 ≥ Z[0], no overlap
         p.W[0] = 300; p.W[2] = 320               // outside zone W
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertEquals(28, p.S)
@@ -14148,8 +14153,8 @@ class Slice141Test {
     @Test fun `S10 below zone unlocks without removing L573`() {
         val w = S141World(); w.iBB = true; w.iBF = 95; w.kAm = true
         val z = climbZone()
-        val p = mk(200, 300)
-        p.W[0] = 300; p.W[2] = 320               // no overlap, dy=144 > Z0
+        val p = mk(200, 350)
+        p.W[0] = 300; p.W[2] = 320               // no overlap, dy=194 ≥ Z[0]
         NpcFsm(w).tickTrigger(z, w, p, Pad())
         assertTrue(w.removed.isEmpty())
         assertFalse(w.kAm)
@@ -16533,6 +16538,13 @@ class Slice180Test {
         assertEquals(-1, p.aq); assertEquals(-1, p.ar)
         assertNotNull(p.ad, "`ad` = retype-26 glider companion")
         assertEquals(26, p.ad!!.ax)
+        assertEquals(201, p.ad!!.az, "ax26 init arm (i.java:2429): az=201")
+        assertEquals(1, p.ad!!.aw, "`new i(sArr)` — ad inherits the record uid")
+        assertEquals(4, p.ad!!.S, "ad i(r8[5]) before the per-tick mirror")
+        assertEquals(w.clipFor(16), p.clip, "bi[25]=16 — glider-suit clip")
+        val g0 = world(aj = 0)
+        assertEquals(g0.clipFor(0), g0.player.clip,
+            "grounded packs keep clip0")
         assertFalse(w.npcs.any { it.ax == 0 || it.ax == 25 },
             "player-slot record must not double-spawn into bb[]")
         assertNull(world(aj = 0).player.ad, "grounded levels carry no ad")
@@ -16566,16 +16578,20 @@ class Slice180Test {
         p.setAnim(4)                                      // z4 state → bank anim applies
         w.playerFsm.tick(p, pad)
         assertEquals(-768, p.ag, "left bank -768/tick")
-        assertTrue(p.S == 33, "kBD<15 → light left bank i(33)")
-        // S33 is outside the glide case — no bank arm; the z2 tail
-        // decays ag back to 0 one step per tick (verbatim).
+        // clip16's S32/S33 are 1-frame poses — the i(33) arm fires
+        // (Q stamps 33) but the `kBB==0&&kBC==0&&r()&&z4→i(4)` recover
+        // arm resets to the glide state in the same tick (verbatim).
+        assertEquals(33, p.Q, "kBD<15 → light left bank i(33)")
+        assertEquals(4, p.S, "1-frame bank blip → recover arm resets S")
+        pad.held = 0                                      // release — held keys re-steer
+        // S4's glide case keeps decaying the banked ag (z2 tail).
         w.playerFsm.tick(p, pad)
-        assertEquals(0, p.ag, "S33: bank impulse decays via tail")
+        assertEquals(0, p.ag, "bank impulse decays via tail")
         p.setAnim(4)
         pad.held = 8256                                   // u(8256) right
         w.playerFsm.tick(p, pad)
         assertEquals(768, p.ag, "right bank +768/tick")
-        assertTrue(p.S == 32, "kBD<15 → light right bank i(32)")
+        assertEquals(32, p.Q, "kBD<15 → light right bank i(32)")
         // climb: u(16388) gated kQ>117 — kQ=230 on bh3. S32 has no exit
         // arm (verbatim g.java:6013-6020: `av=false` + dead ifs only) —
         // restore the glide state first.

@@ -723,7 +723,11 @@ class NpcFsm(val world: LevelCellSource) {
             10 -> {
                 if (w.iBe) { w.removeEntity(e); return }              // L318
                 val dy = player.W[1] - e.W[3]                         // L323
-                if (dy <= e.Z[1] && dy >= e.Z[0]) {                   // in band
+                // `dy<=Z[1] → L3e7; dy>=Z[0] → L3e7` (proven smali):
+                // in-band is Z[1] < dy < Z[0] — records carry
+                // Z[0]>Z[1] (level1 {180,50,…}), so an inclusive
+                // `Z[0]<=dy<=Z[1]` read would be unsatisfiable.
+                if (dy > e.Z[1] && dy < e.Z[0]) {                     // in band
                     if (w.iBB) return                                 // → L1ec7
                     e.lockInput(w)                                    // k.o()
                     val handUp = player.ae != null &&
