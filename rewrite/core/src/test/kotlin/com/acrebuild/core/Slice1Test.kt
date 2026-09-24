@@ -10504,6 +10504,66 @@ class Slice89Test {
         assertTrue(p.S == 37 || p.S == 38 || p.S == 43,
             "shimmy holds, returns to S38, or drops at the bar's end")
     }
+
+    // Slice 229 — ledge auto-grab + climb-mount chain (g.java:8197
+    // L3a2d consumer + i.al() g.java:209-239 + S61/S62 arms — proven):
+    // falling past a wall top fires `ct && ledgeHangGrab`: the facing
+    // column one cell out must hold ≥19 at hand row with air above and
+    // the player's own column open → snap `ak` to the wall edge, hang
+    // `al = lip*20-1` in S61. `v(16388)` → `H();G();i(62)` climb-up;
+    // S62's `r()` steps `ak±10` into `a(aO>12?79:0,9)` settle — the
+    // player mounts the wall top.
+    @Test fun `fall past a wall lip auto-grabs and climbs to the top`() {
+        val w = world()
+        w.stateL(8)
+        // a wall top edge facing left-open air: cell(x,y)>=19, air
+        // above it, and column x-1 open rows y-1..y+2 (the pocket the
+        // hang probe requires).
+        var wx = -1; var wy = -1
+        outer@ for (y in 6 until w.level.rows - 3) {
+            for (x in 2 until w.level.cols - 1) {
+                if (w.level.collisionCell(x, y) >= 19 &&
+                    w.level.collisionCell(x, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y - 1) == 0 &&
+                    w.level.collisionCell(x - 1, y) == 0 &&
+                    w.level.collisionCell(x - 1, y + 1) == 0 &&
+                    w.level.collisionCell(x - 1, y + 2) == 0 &&
+                    w.level.collisionCell(x - 2, y - 1) == 0 &&
+                    w.level.collisionCell(x - 2, y) == 0 &&
+                    w.level.collisionCell(x - 2, y + 1) == 0 &&
+                    w.level.collisionCell(x - 2, y + 2) == 0) { wx = x; wy = y; break@outer }
+            }
+        }
+        assertTrue(wx >= 0, "no open-side wall top in level0")
+        val p = w.player
+        p.S = 43                                     // fall — arms ct
+        p.ah = 2560                                  // falling
+        p.av = false                                 // face right (toward wall)
+        // hang probe: i2 = (W[2]+20)/20+1 must equal wx → the right
+        // edge stays ≥21px left of the wall — place ak ~1.5 cells out.
+        p.ak = (wx - 2) * 20 + 5                     // air left of the wall
+        p.al = wy * 20 - 80                          // start above the lip
+        var guard = 0
+        while (guard++ < 80 && p.S == 43) w.tick(emptyList())
+        assertEquals(61, p.S, "the fall must auto-grab the wall lip")
+        assertEquals(wy * 20 - 1, p.al, "hang snaps al to the lip top")
+        // climb press: UP edge → H();G();i(62) — the mount animation.
+        w.pad.queuePress(Pad.M_UP)
+        w.tick(emptyList())
+        assertEquals(62, p.S, "UP at the hang arms the S62 climb-up")
+        guard = 0
+        while (guard++ < 120 && p.S == 62) w.tick(emptyList())
+        // the mount anim carries the box up over the lip; al is the feet
+        // anchor so standing on the lip row's top edge keeps al ≈
+        // wy*20-1 — check the feet rest ON the wall top and ak stepped
+        // into the wall column.
+        p.probeCells(w)
+        assertTrue(p.aZ, "climb settles grounded on the wall top")
+        assertTrue(p.W[3] <= wy * 20, "feet rest on the lip row top edge")
+        assertTrue(p.ak >= wx * 20, "mount steps ak into the wall column")
+        assertTrue(p.S == 0 || p.S == 79,
+            "settle lands a grounded state on the wall top")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
