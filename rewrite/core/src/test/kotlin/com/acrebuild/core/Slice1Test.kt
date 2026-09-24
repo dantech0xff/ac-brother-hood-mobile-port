@@ -10449,6 +10449,61 @@ class Slice89Test {
         assertEquals(280, p.S, "cw && aO==5 must fire the S280 ceiling grab")
         assertEquals(cy * 20 + 10, p.al, "al snaps onto the '5' lip row +10")
     }
+
+    // Slice 228 — '5'-lip shimmy traversal (g.java:2101 L1502 + L1560,
+    // proven): from the S38 hang, `u(16388)` probes the cell above the
+    // head — the '5' lip itself answers aO=5 (never 0), so the S54
+    // vault-out is dead on '5' hangs and the else-chain arms S37 — the
+    // monkey-bar shimmy: facing dir held + facing cell open → `ag=∓1536`
+    // step; opposite → `av` flip; anim end → back to S38. '5' cells are
+    // standable tops from above AND shimmy bars from below — the
+    // corridor's trap resolves by climbing along the lip, not onto it.
+    @Test fun `5 lip hang shimmies along the bar`() {
+        val w = world()
+        w.stateL(8)
+        var cx = -1; var cy = -1
+        outer@ for (y in 1 until w.level.rows - 2) {
+            for (x in 1 until w.level.cols - 2) {
+                if (w.level.collisionCell(x, y) == 5 &&
+                    w.level.collisionCell(x + 1, y) == 5 &&
+                    w.level.collisionCell(x, y - 1) < 12 &&
+                    w.level.collisionCell(x, y + 1) < 5 &&
+                    w.level.collisionCell(x, y + 2) < 5) { cx = x; cy = y; break@outer }
+            }
+        }
+        assertTrue(cx >= 0, "no two-cell '5' bar in level0")
+        val p = w.player
+        p.S = 22                                     // air family — arms cw
+        p.ah = -3000                                 // rising
+        p.ak = cx * 20 + 10
+        p.al = cy * 20 + 80
+        var guard = 0
+        while (guard++ < 60) {
+            p.probeCells(w)
+            if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
+            p.al--
+        }
+        w.tick(emptyList())
+        assertEquals(280, p.S, "precondition: the lip grab fires")
+        guard = 0
+        while (guard++ < 60 && p.S == 280) w.tick(emptyList())
+        assertEquals(38, p.S, "S280 anim end arms the S38 hang")
+        // Shimmy (verbatim else-chain): S38's `!u(facing)` arms S37 —
+        // so hold the OPPOSITE of current facing; S37's flip arm
+        // (`av ? v(8256) : u(4112)` — asymmetric, verbatim) turns the
+        // player to face the held dir, then `u(facing) && c(av)` steps.
+        p.av = false                                 // face right
+        w.pad.queuePress(Pad.M_LEFT)
+        w.tick(emptyList())
+        assertEquals(37, p.S, "non-facing dir held arms the S37 shimmy")
+        val ak0 = p.ak
+        guard = 0
+        while (guard++ < 40 && p.S == 37) w.tick(emptyList())
+        assertTrue(p.av, "the flip arm turns the player to face the shimmy dir")
+        assertTrue(p.ak < ak0, "the shimmy carries ak along the lip")
+        assertTrue(p.S == 37 || p.S == 38 || p.S == 43,
+            "shimmy holds, returns to S38, or drops at the bar's end")
+    }
 }
 
 /** Slice 90 — `ae()` jc23/28 screen (k.java:6204-6228, proven). */
