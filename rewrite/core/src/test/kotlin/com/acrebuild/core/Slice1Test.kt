@@ -355,17 +355,25 @@ class Level0WorldTest {
         repeat(10) { w.tick(emptyList()) }
         w.kC?.releaseClaim(w); w.kC = null
         w.player.setPositionPx(600, w.player.al)
-        repeat(5) { w.tick(emptyList()) }
+        // wait for the landing — x600 sits over a drop, and the jump tail
+        // (`cq && v(action)`) only fires while an l()-family arm re-arms
+        // cq this tick — i.e. the press must land while grounded.
+        var grounded = false
+        repeat(80) {
+            w.tick(emptyList())
+            if (w.player.aZ && w.player.S == 0) { grounded = true; return@repeat }
+        }
+        assertTrue(grounded, "player should settle grounded before the tap")
         val (ux, uy) = w.cellPoint(1)
         q.post(InputQueue.Type.DOWN, ux, uy)
         val seen = HashSet<Int>()
-        repeat(60) {
+        repeat(200) {
             w.tick(q.drainTo(q.headSequence()))
             if (it == 1) q.post(InputQueue.Type.UP, ux, uy)
             seen += w.player.S
         }
-        // jump chain: squat 21 -> rise 22/23 -> fall 43 -> land 5
-        assertTrue(21 in seen || 22 in seen || 23 in seen,
+        // jump chain: squat 21 -> rise 22/23/233 -> fall 43 -> land 5
+        assertTrue(21 in seen || 22 in seen || 23 in seen || 233 in seen,
             "expected jump anims, saw $seen")
         assertTrue(43 in seen || 5 in seen,
             "expected fall/land, saw $seen")
@@ -12502,7 +12510,6 @@ class Slice127Test {
         val p = w.player
         val crate = Entity(51, null).apply { ak = p.ak; al = p.al }
         p.standingOn = crate
-        p.cq = true
         p.setAnim(0)
         // press → i(233) arm records crate-top level
         w.pad.e(Pad.M_UP); w.tick(emptyList()); w.pad.releaseFlush()
@@ -13457,7 +13464,6 @@ class Slice137Test {
             if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 102; p.aC = 18
-        p.cq = true                           // airborne latch — tail armed
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
         assertEquals(17, p.S, "g.E set → arm's i(17) survives the tail")
@@ -13466,10 +13472,13 @@ class Slice137Test {
 
     @Test fun `S102 cling up-edge outside E-zone jumps S233 g788`() {
         Entity.gq = false; Entity.gE = false
-        val w = Slice134Test.PassWorld(cell = 0)
+        // feet cell 12 → aZ survives the rescan → the arm calls l()
+        // which arms cp/cq/z — postTail's jump gate fires faithfully
+        // (e()'s head cleared the flags; l() re-arms them this tick).
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 12 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
-        p.cq = true                           // airborne latch like live play
+        val p = mk(200, 100); p.S = 102; p.aC = 18
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
         assertEquals(233, p.S, "no E-zone → cq&&!E tail overrides i(17)")
@@ -13494,7 +13503,6 @@ class Slice137Test {
             if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 332
-        p.cq = true                           // airborne latch — tail armed
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
         assertEquals(17, p.S)
@@ -13518,7 +13526,7 @@ class Slice137Test {
         val w = Slice134Test.PassWorld(cell = 0)
         val fsm = PlayerFsm(w)
         val p = mk(200, 100, av = true); p.S = 317
-        p.aR = 4; p.bb = false; p.bc = false; p.cq = true
+        p.aR = 4; p.bb = false; p.bc = false
         p.ah = 9999
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
@@ -16023,23 +16031,29 @@ class Slice168Test {
         assertTrue(p.ak >= 365, "ak advanced through the wall cell, got ${p.ak}")
     }
 
-    /** `g.z` is sticky (l() head): once armed on the ground it stays true
-     *  through S12 — a per-tick clear is what starved ap() at the crate. */
-    @Test fun `z latch stays armed through S12 run`() {
+    /** e()'s head clears `z` every tick (g.java:1285-1301): S12's run
+     *  arm (L16c0) calls no `l()` while `ag!=0 && aO==0`, so `z` stays
+     *  cleared on active-run ticks; the `ag==0||aO!=0 → L17c9` exit
+     *  re-arms it through the shared grounded block. */
+    @Test fun `z clears during S12 run and re-arms on the settle`() {
         val (w, p) = armed()
         holdRight(w)
-        for (i in 0 until 120) w.tick(listOf())
-        assertEquals(12, p.S, "expected S12 run, got S=${p.S}")
-        assertTrue(p.z, "z must persist into S12 (sticky latch)")
+        var sawClearedRun = false; var sawArmedStop = false
+        for (i in 0 until 400) {
+            w.tick(listOf())
+            if (p.S == 12 && p.ag != 0 && p.aO == 0 && !p.z) sawClearedRun = true
+            if (p.S == 12 && (p.ag == 0 || p.aO != 0) && p.z) sawArmedStop = true
+        }
+        assertTrue(sawClearedRun, "active-run ticks keep z cleared")
+        assertTrue(sawArmedStop, "stopped/blocked ticks re-arm z via L17c9")
     }
 
-    /** `aA|=8`-style clear sites: `cq=0; z=0` pairs — entering a fall
-     *  clears the latch so ap() can't fire mid-air. */
+    /** `cq=0; z=0` fling-exit pairs + the head clear: entering a fall
+     *  leaves `z` cleared so ap() can't fire mid-air. */
     @Test fun `z clears when leaving the ground`() {
         val (w, p) = armed()
-        holdRight(w)
-        for (i in 0 until 40) w.tick(listOf())
-        assertTrue(p.z, "grounded run arms z")
+        for (i in 0 until 30) w.tick(listOf())
+        assertTrue(p.z, "settled ground arms z via l()")
         p.enterFall(0, w); p.z = false; p.cq = false   // a(0) fling arm pair
         w.tick(listOf())
         assertFalse(p.z, "airborne tick keeps z cleared")

@@ -75,14 +75,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                      // proven (g.e(90) at entity init L195)
     var aF = 0
     var k = false                    // NPC patrol-active flag
-    var cp = true; var cq = false; var ct = true; var cw = true; var cv = true
-                                        // cq ctor=false (i.java:825); the
-                                        // o-link arm sets it from the
-                                        // linked ax11's P() (i.java:12858)
+    // g.cp/cq/ct/cu/cv/cw/z — e() tail latches (g.java:1285-1301): the
+    // head clears all of them EVERY tick; state arms re-arm only theirs
+    // (`l()` cp/cq/z, air/fall cv/cp/ct/cw, S33 cp/ct, S38 cq, S60 cu,
+    // S263/264 cw). `cr`/`cs` have no port fields — dead in the original.
+    var cp = false; var cq = false; var ct = false; var cw = false; var cv = false
     var cu = false                      // g.cu — case-60 sets it (ledge-
-                                        // hang drop eligibility); dead
-                                        // in the original (head-cleared)
-    var zz = true
+                                        // hang drop eligibility)
     var aA = 0                       // alert level (NPC) / turn-block (player)
     var aB = 0                       // hp-ish stat (az = max)
     var bR = false                   // i.bR — knife bounced-off-a-swing flag (bb L58)
@@ -1469,7 +1468,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *   26 launch: `av=attacker.av; ag=±4096; ah=-4096; aj=1536; a(43,32)`
      *   29 stumble: `av=attacker.av; i(10); ag=∓1536`
      *   34 damage-mark: zero vel + `a(8,5,14,…)` floatie + `k.A(11)` sfx
-     *      (recorded on `hitsTaken`; floatie/sfx spawners deferred).
+     *      (floatie spawner slice 160 `i.d()`; sfx slice 166 `e.a()`).
      * `d(int)` (g.java:3884) drains the meter: gates on busy/lock states,
      * `x[1]-=r5` clamped at 0; at 0 (non-flying `bh[aj]!=3`) the player is
      * knocked out: `bl=0; G(); H()` (detach links) or `E()` ground-snap —

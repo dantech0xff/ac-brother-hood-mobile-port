@@ -43,26 +43,31 @@ package com.acrebuild.core
  *   flip `av`, release → `ag=0; i(79)`.
  * - S78/S80 (L771): `r()` → `i(79)` or `i(1)`.
  *
- * Explicitly not ported (flagged `inferred`/omitted): `i.bn` blend-mode
- * variant (`bn=false` path → run-start uses 32), `am()` ledge-hang check
- * (stubbed false = "no ledge"), `a(257,8)` ledge-drop, `k.f(this)` barrier
- * clamp (no barrier entity), climb `f()`/`i(6)` entry requires `ci`
- * climbable refs, and every interact/QTE/attack arm.
+ * Coverage (as of slice 202): the full `e()` dispatch — every case arm
+ * is ported, plus the latch-flag model verbatim: the head clears
+ * `cp/cq/ct/cu/cv/cw/z` per tick (g.java:1285-1301), `l()`'s head re-arms
+ * `cp/cq/z` (g.java:11608-11617), and the per-arm sets (S33/38/60/
+ * 263/264, air & fall families) match the original labels. `am()`,
+ * `a(257,8)`, `k.f(this)`, and the interact/QTE/attack arms landed in
+ * earlier slices (11/16/132/135/151/153). Remaining gaps are individual
+ * helper tails flagged `inferred`/`proven-dead` inline.
  */
 class PlayerFsm(private val world: LevelCellSource, private val rng: DeterministicRandom? = null) {
 
     var bn = false   // i.bn — blend/unlock flag (false in slice 2)
 
     fun tick(p: Entity, pad: Pad) {
-        p.cp = true; p.cq = true; p.ct = true; p.cw = true; p.zz = true
-        // g.z is a STICKY latch, not per-arm state (proven): `l()`'s head
-        // arms `cp=1; cq=1; z=1` unconditionally (g.java L-l head), and the
-        // latch persists across states until a `cq=0; z=0` airborne arm or
-        // a grab/knockdown clears it (g.java grab sites + i.java ax-zone
-        // `aA|=8; z=0` pairs). A per-tick clear here starved ap() in every
-        // non-grounded state — e.g. S12 pinned at an ax4 crate, where the
-        // original still lets the player slash out of the pin.
-        // (no clear — armed in groundedTail, cleared at the cq=0 sites)
+        // e() head (g.java:1285-1301, proven): clears ALL latch flags
+        // EVERY tick — `cp=cq=cr=cs=z=ct=cu=cv=cw=0`. State arms then
+        // re-arm only theirs: `l()`'s head sets `cp=cq=z=1`
+        // (g.java:11608-11617), the air/fall families set `cv/cp/ct/cw`
+        // (+`I==4→z`), S33 `cp`+`ct`-on-rise, S38 `cq`, S60 `cu`,
+        // S263/264 `cw`; `cr`/`cs` are dead in the original. (The port
+        // previously true-set them at the head — that let postTail's
+        // cq-jump gate fire from every state; the original only lets
+        // l()-family + S38-boost-exit jump.)
+        p.cp = false; p.cq = false; p.ct = false; p.cu = false
+        p.cv = false; p.cw = false; p.z = false
         // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
         if (p.gt > 0) p.gt--
         if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
@@ -164,9 +169,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                             }
                         }
                     }
+                } else {
+                    // g.java:3569-3572 (proven): `ag==0 || aO!=0 → L17c9`
+                    // — `i.O()` timewarp disarm, then the shared L17cc
+                    // grounded block (open head/feet → l(); embedded →
+                    // i(79)). This is what re-arms cp/cq/z on the
+                    // stopped/blocked tick — e.g. pinned at a crate.
+                    p.timewarpOff(world)
+                    groundedTail(p, pad)
                 }
-                // (the case `break`s to the shared post-switch code —
-                //  the l() input handler does NOT run for S12)
             }
             // g.java L12de (proven, fallback decompile): the 107/108/109
             // directional edge-vault anims — on `r()` (anim end) the player
@@ -212,9 +223,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             // g.java L297b (proven) — S86 corpse-handoff: `r()` → i(326).
-            // Arms no latch flags — clears like the other pinned arms.
+            // Arms no latch flags.
             86 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.setAnim(326)
             }
             // g.java L25eb (proven) — S89 grab-pinned: `h(1)` eats the
@@ -222,21 +232,18 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // an ax16 request link); `ai=aj=ag=ah=0`; `r()` → `P|=64`
             // (sleep the body, keep the corpse drawn).
             89 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.requestH(1, world)               // h(1) — side effects
                 p.ai = 0; p.aj = 0; p.ag = 0; p.ah = 0
                 if (p.animFinished()) p.P = p.P or 64
             }
             // g.java L2de0 (proven) — S110 pinned settle: `r()` → `P|=64`.
             110 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.P = p.P or 64
             }
             // g.java L2df5 (proven) — S165 launch/leap: `aj=1536` capped
             // gravity; `r()` → `a(0)` (the masked fling — resolves to
             // S43 + `al+=10`).
             165 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.aj = 1536
                 if (p.animFinished()) p.flingAirborne(0, world)
             }
@@ -269,7 +276,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // `r() → P|=64` (the L2989 label is empty and falls through
             // to L2de0's arm).
             82, 83, 84, 85, 326 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.P = p.P or 64
             }
             // g.java L30a9 (proven) — S91 settle: zero all four velocity
@@ -283,7 +289,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // `r() → av=!av; ag=∓2048 (new facing); aO==20 → ah=0 else
             // ah=-5120`, then `a(36,36)` re-enters the wall state.
             92, 101 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
                 if (p.animFinished()) {
                     p.av = !p.av
@@ -294,20 +299,17 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             // g.java L11c2 (proven) — S122 bind-prep: `r() → a(53,1032)`.
             122 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.enterStateMasked(53, 1032, world)
             }
             // g.java L2eb9 (proven) — S148 knockback-launch: `ah=-5120`;
             // `r() → i(149)`.
             148 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ah = -5120
                 if (p.animFinished()) p.setAnim(149)
             }
             // g.java L2ed1 (proven) — S149 fling carry: `ag = g.l ? g.l :
             // ∓1024`; `aj=1536`; `r() → g.l=0; ag=0; i(150)`.
             149 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ag = if (p.gL != 0) p.gL else (if (p.av) -1024 else 1024)
                 p.aj = 1536
                 if (p.animFinished()) {
@@ -368,7 +370,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // ak re-centers and ax66-S12 exits to S228 (Z[0]>0) or
             // S358; else i(0). Early `return` on every path.
             209 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 val a = p.standingOn
                 if (a == null) { p.flingAirborne(0, world); return }
                 p.al = if (a.ax == 66 && (a.S == 11 || a.S == 12)) a.al
@@ -393,7 +394,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // drives `ag=∓5120`; facing-cell probe (aT/aU) → a(0)
             // fling; `r() → ag>>=1, i(217), P|=64`; early `return`.
             216 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ag = if (p.T in 2..3) (if (p.av) -5120 else 5120) else 0
                 if ((p.av && p.aT != 0) || (!p.av && p.aU != 0)) {
                     p.flingAirborne(0, world)
@@ -411,7 +411,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // else `aZ||aR==5` → `bd=1, a(1), P&=~64`, zero vel;
             // `r() → i(0)`; early `return`.
             217 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.T == 0) p.aj = 1536
                 if ((p.aR == 2 || p.aO == 2 ||
                      p.e(world, p.ak / 20, p.al / 20) == 2) &&
@@ -432,7 +431,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // pick + i(261); DOWN-edge → `a(0)` + `al+=10` (a(0) itself
             // adds +10 — the double-drop is verbatim); `return`.
             258 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (pad.v(16388)) { p.setAnim(259); return }
                 if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
                     if (pad.v(2) || pad.v(4112)) p.av = true
@@ -446,7 +444,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // straight up (`ag=0, ah=-7680, i(263)`); S261 goes to the
             // side (`ag=∓3072, ah=-7680, i(264)`); `return`.
             259, 261 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) {
                     if (p.S == 259) {
                         p.ag = 0; p.ah = -7680; p.setAnim(263); return
@@ -461,7 +458,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // input fork as S258 (UP→259, dir→av+261) but falls into
             // `r() → i(258)` on anim end; `return`.
             260, 262 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (pad.v(16388)) p.setAnim(259)
                 else if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
                     if (pad.v(2) || pad.v(4112)) p.av = true
@@ -504,7 +500,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // centre (`ag=∓1024`, av toward it) until |dx|≤4 → snap,
             // `av=0`, ax10→i(291) else i(268)+af.i(1); `return`.
             267 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.gt = 100
                 val f = p.af
                 if (f == null || (f.ax != 27 && f.ax != 10)) {
@@ -534,7 +529,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // `af.i(1), k.v(), G()`, return; `r9 && v(65568) && g.g` →
             // `G(), af snaps to player, i(3), i(270), A(13)`; `return`.
             268 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ag = 0; p.ah = 0
                 val c = p.clip
                 val nearEnd = p.animFinished() ||
@@ -575,7 +569,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // g.java Lf19 (proven) — S269 carry-drop: `g.t=0`; `r()` &&
             // af ax27 → `i(0)+E()+af.i(2)+af=null`; shared tail.
             269 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.gt = 0
                 if (p.animFinished()) {
                     val f = p.af
@@ -589,7 +582,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // no `g.g` → `i(0)` + tail; `g.g` forced to S133; `r()` →
             // `i(271)`, `g.g.i(145)`, `bl=5`; `return` (with-gg only).
             270 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.gt = 0
                 val gg = p.g
                 if (gg == null) {
@@ -609,7 +601,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // release, `P&=~64`, `i(0)`, `g.g.aB=0`, `i(135)`,
             // `k.e(0,aw)` kill credit, `k.o(3)` stat; `return` (with-gg).
             271 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.gt = 0
                 val gg = p.g
                 if (gg == null) {
@@ -640,7 +631,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             // g.java Lc7a (proven) — S280: `r() → i(38)`; `return`.
             280 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.setAnim(38)
                 return
             }
@@ -648,7 +638,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // w/o mount → `a(0)`; `v(65568)` queues `R` (286→287,
             // 287→286); `r()` → `i(R!=-1?R:0)`, `R=-1`; `return`.
             286, 287 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (!p.aZ && p.standingOn == null) {
                     p.flingAirborne(0, world); return
                 }
@@ -669,7 +658,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // `r9&&v(65568)&&g.g` → `G(), af=null, i(270), A(13)`;
             // every exit → shared tail (L353d).
             291 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ag = 0; p.ah = 0
                 val c = p.clip
                 if (p.animFinished() ||
@@ -1082,11 +1070,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // → any key held (`u(127999)`) → i(65) shimmy, else i(59)
             // hang-idle.
             56 -> {
-                // arm sets no latch flags — clears them to model the
-                // head-clear (the tick head's universal true-set is a
-                // slice-168 deviation; without this, postTail's cq-jump
-                // gate would hijack edges the original routes here).
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ah = 0; p.ag = 0
                 if (p.animFinished()) {
                     if (pad.u(127999)) p.setAnim(65) else p.setAnim(59)
@@ -1096,7 +1079,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // arrive via the S63 climb (Q!=63) or UP/toward-wall is held
             // → i(62) climb-up; always latches `cu`.
             60 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.Q != 63 || pad.u(Pad.M_UP) ||
                     (p.av && pad.u(4114)) || (!p.av && pad.u(8264))) {
                     p.setAnim(62)
@@ -1113,7 +1095,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // dumps the victim (`G();i(204);gh.ak=ak±10;gh=null`).
             // Shared tail: UP/toward-wall edge → `H();G();i(62)`.
             61, 203 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 p.ag = 0; p.ah = 0
                 var drop = false
                 if (p.S != 203) {
@@ -1162,7 +1143,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // g.java L25b5 (proven) — S62 climb-up finish: `r()` → step
             // ±10 then `a(aO>12 ? 79 : 0, 9)` settle.
             62 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) {
                     p.ak += if (p.av) -10 else 10
                     p.enterStateMasked(if (p.aO > 12) 79 else 0, 9, world)
@@ -1170,7 +1150,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             // g.java L25a5 (proven) — S63 climb anim end → i(60) hang.
             63 -> {
-                p.cp = false; p.cq = false; p.ct = false; p.cw = false
                 if (p.animFinished()) p.setAnim(60)
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
@@ -1586,8 +1565,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- grounded family tail (L682) ----------------------------------------
     private fun groundedTail(p: Entity, pad: Pad) {
-        p.z = true    // g.z — the locomotion arms set it (L890/1834/4976
-                      // equivalents all live inside this tail)
+        // `l()` head (g.java:11608-11617, proven): `cp=1; cq=1; z=1`
+        // every tick the grounded family runs.
+        p.cp = true; p.cq = true; p.z = true
         if (p.aO <= 12 || p.aR <= 12) {
             if (p.S == 79) {
                 p.ag = 0; p.ah = 0
@@ -1680,7 +1660,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- l() grounded input helper (proven) ----------------------------------
     fun l(p: Entity, pad: Pad): Boolean {
-        p.aF = 0; p.cp = true; p.cq = true; p.zz = true
+        p.aF = 0; p.cp = true; p.cq = true; p.z = true
         if (p.S == 79) {
             if (pad.u(Pad.M_LEFT)) {
                 if (!p.av) p.av = true
@@ -1745,7 +1725,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     // -- ax() sustained run (proven) ------------------------------------------
     private fun ax(p: Entity): Boolean {
         p.ah = 0
-        if (!p.aZ && p.standingOn == null) { p.cq = false; p.z = false; p.zz = false; return false }
+        if (!p.aZ && p.standingOn == null) { p.cq = false; p.z = false; return false }
         if (p.aR > 18) {
             // edge walk: open space beside the feet cell and no wall
             if (p.av && p.aV < 12 && !p.bb) { p.setAnim(26); p.ag = -1280 }
@@ -1776,7 +1756,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun aw(p: Entity, pad: Pad): Boolean {
         p.ag = 0; p.ah = 0
         if (!p.aZ && p.standingOn == null) {
-            p.cq = false; p.z = false; p.zz = false
+            p.cq = false; p.z = false
             p.enterFall(0, world)
             return true
         }
@@ -1890,11 +1870,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         }
         if (!p.hitWall()) {
             p.airWallResolve(world)
-            if (p.ah <= 0) {
-                if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) p.land(world, false)
-                else if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
+            // L1fb3 (proven): `ah <= 0 → skip` — the land block runs
+            // while FALLING (ah > 0). aR>=12 reaches L1ffb through every
+            // path (the aQ/aQ!=23 detours collapse back into it), so the
+            // effective condition is the L1fd9 list; d(0) — no ==4 arg
+            // (the aR==4/aS==4 variant lives only in the fall arm L2136).
+            if (p.ah > 0) {
+                if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
                     if (p.S == 215) { p.enterFall(0, world); p.av = !p.av }
-                    else p.land(world, p.aR == 4 || p.aS == 4)
+                    else p.land(world, false)
                 }
             }
             // g.java:1600 (proven): i.f(this) caps the !y() free-air path.
@@ -1906,7 +1890,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.enterFall(0, world)
             p.collideSides(world, true)
         }
-        if (p.S == 22 && p.ah >= 0 && p.ah + p.aj < 0) p.setAnim(23)
+        // L2046 (proven): `ah<0 && ah+aj>=0` — still rising this tick but
+        // the next gravity step reaches the apex → swap to the apex pose.
+        if (p.S == 22 && p.ah < 0 && p.ah + p.aj >= 0) p.setAnim(23)
     }
 
     // -- shared fall arm `case 16/35/43/150/252` (g.java:1400-1475) ----------
