@@ -4125,9 +4125,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 world.playerRect()[2]) shr 1
                             var r9 = 240 - aK.bZ
                             if (r9 < 60) r9 = 60
-                            // inferred: `j.a(0, j.c(0)>>8)` — `j.m` reads as
-                            // the constant 0 (decompiler fold) → j.c(0) =
-                            // Int.MAX_VALUE → range (0, MAX>>8)
+                            // proven: `j.a(0, j.c(0)>>8)` — `j.c(0)` =
+                            // Int.MAX_VALUE (j.java:798-804: `b(0)` null-arm
+                            // returns MAX) → range (0, MAX>>8)
                             val r02 = (kotlin.math.abs(
                                 world.jRand(0, Int.MAX_VALUE shr 8)) *
                                 ((-512) - world.kY)) / kotlin.math.abs(r9)
@@ -4528,7 +4528,11 @@ interface LevelCellSource {
      *  the b(z2)-tail flicker latch pair + vestigial counter. `bJ` toggles
      *  between `bH` (=1) and `bI` (=2) states each frame while >0; `bL`
      *  is a verbatim no-op (k.javap.txt:16545-16548 — `getstatic; dup;
-     *  putstatic` with no arithmetic). Producer arm unported. */
+     *  putstatic` with no arithmetic). PROVEN-DEAD: every `bJ` writer is
+     *  an init/reset (`i.java:7160,63743` and the state machine's own
+     *  `bJ=bI`/`bJ=0` arms at k.java:12101-12113) — nothing ever arms
+     *  `bJ>0`, and `bL` never leaves 0, so the latch self-clears without
+     *  drawing. Ported faithfully anyway (Level0World b(z2) tail). */
     var iBJ: Int get() = 0; set(_) {}
     var iBH: Int get() = 1; set(_) {}
     var iBI: Int get() = 2; set(_) {}
@@ -4698,7 +4702,9 @@ interface LevelCellSource {
     var kQ: Int get() = 0; set(_) {}
     /** `k.l(i)` — screen-state driver (`l(12)` = mission fail). */
     fun stateL(i: Int) {}
-    /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
+    /** `k.bJ` (k.java:194, proven) — boss grab-QTE lose latch: armed 6
+     *  on the fail path (i.java:31851 — ported, NpcFsm grab-lose arm),
+     *  `bJ--`-ticked in `k.I()` driving the `df` damage-flash ARGB ramp. */
     var kBj: Int get() = 0; set(_) {}
     /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by
      *  b(int)/O(). `k.V` is the camera-watch x (k.java:49 `-7`). */
