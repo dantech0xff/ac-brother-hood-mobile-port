@@ -1094,6 +1094,34 @@ class Level0Renderer {
                 }
             }
         }
+        // bh3 `et` draw (k.java:4522-style `b(Graphics)` flying arm,
+        // proven-shape): grounded packs skip layer-0 (`et` is collision
+        // only); on flying packs `et` IS the canyon — drawn THROUGH the
+        // `dL` stamp grid at the parallax offset so copy bands appear
+        // where `g()` says they are. Logical cell (x,y) → tile
+        // `et[dL[x%21][y%13]]` at `(x*20-i2, y*20-i3)`.
+        val dl = world.level.flyingGrid
+        if (dl != null) {
+            val et = world.level.layers.firstOrNull { it.id == 0 }
+            if (et != null) {
+                val px = world.parallaxX; val py = world.parallaxY
+                val c0 = px / 20
+                val c1 = (px + Level0World.VIEW_W - 1) / 20
+                val r0 = py / 20
+                val r1 = (py + Level0World.VIEW_H - 1) / 20
+                for (cy in r0..r1) {
+                    for (cx in c0..c1) {
+                        val idx = world.level.stampAt(cx, cy)
+                        if (idx < 0) continue
+                        val cell = et.cells[idx]
+                        if (cell < 0 || cell == 255) continue
+                        drawTileCell(et.tilesetClip, cell,
+                                     cx * 20 - px, cy * 20 - py,
+                                     et.flag(idx % et.cols, idx / et.cols))
+                    }
+                }
+            }
+        }
         // draw order (k.java:2800-2819): eu → ep → er (bh4/bh3) → entities
         for (layer in world.level.layers) {
             if (layer.id == 0 || layer.id == 2) continue

@@ -71,6 +71,15 @@ class LevelPack private constructor(
         return if (v == 255) 0 else v
     }
 
+    /** `dL` stamp lookup for a LOGICAL cell (renderer bh3 arm): the et
+     *  index `dL[cx%21][cy%13]` resolves to, or -1 when unset / pointing
+     *  past the et plane (`g()`'s own `i4<0||i4>=len → 0` guard). */
+    fun stampAt(cx: Int, cy: Int): Int {
+        val dl = flyingGrid ?: return -1
+        val idx = dl[(cx % 21) * 13 + (cy % 13)]
+        return if (idx < 0 || idx >= et.cells.size) -1 else idx
+    }
+
     /** Pixel-space convenience: `k.g(x/20, y/20)`. */
     fun collisionAtPx(px: Int, py: Int): Int = collisionCell(px / cellPx, py / cellPx)
 
