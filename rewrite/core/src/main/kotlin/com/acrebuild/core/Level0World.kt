@@ -2221,7 +2221,7 @@ class Level0World(
                     kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
-                    scrollBounds()                   // b(true) — scroll refresh (unported)
+                    scrollBounds()                   // k.b(true) — window + veil latch
                     kAD = null
                     if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
@@ -3593,7 +3593,7 @@ class Level0World(
                     kJT = 0                          // held pad bits flush
                     return true                      // → `j.t=0`, skip frame
                 }
-                scrollBounds()                       // b(true)
+                scrollBounds()                       // k.b(true) — window + veil latch
                 kEg = 0
                 menuL(kEy)
                 menuQ(pressY)
@@ -3660,7 +3660,64 @@ class Level0World(
     /** Stats screen (L466): `d(0,bx)` + "TOUCH THE SCREEN" blink. */
     val statsVisible get() = kAl && jC == 31 && kBx >= 0
     fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
-    private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
+    /**
+     * `k.b(boolean)` (k.java:9062-9340, proven). Every port caller passes
+     * `true` (`stateL(12/13)` :2224, `stateL(14)`-in-jc8/21 :2271, the
+     * jc12/13 tick arm :3596) — the `b(false)` early-out `jc∈{12,13,31}`
+     * (:9064-9072) is unreachable from those sites; kept as a `full`
+     * param anyway for the verbatim shape.
+     *
+     * (1) input-lock veil latch: `k.am && !k.dd → k.dd=1` then the
+     *     `j.a` veil ops (:9080-9101 — the 3/4/6-arg forms are
+     *     unrecovered stubs; by shape they are `fill 400×240`,
+     *     `alpha-strip 100`, `blit cd`, `reset` — inferred translucent
+     *     black dim while input is locked; drawn by the renderer every
+     *     frame while `kAm` holds, since our immediate-mode pass has no
+     *     persistent back-buffer to draw into once).
+     * (2) visible et-cell window: `camX/20 .. (camX+399)/20` ×
+     *     `camY/20 .. (camY+239)/20`; the `(bt-21)/(bp-21)`,
+     *     `(bu-13)/(bq-13)` rescales are proven 1 (`bt=bp`, `bu=bq` at
+     *     level load :19116-19118). Negative camY gets the `-20`
+     *     floor-division bias (:9084); `vy0<0` clamps only when
+     *     `bh[aj]!=3` (flying missions scroll above the level).
+     *     `vx1/vy1` are never clamped (verbatim).
+     * (3) `dM` full-invalidate + `dN..dQ` previous-window compare +
+     *     `h()` edge-strip marks (:9185-9290) — proven-dead
+     *     bookkeeping: `h()` (:15935+) computes ring-bank slots of the
+     *     tile back-buffer; our renderer draws the window fresh every
+     *     frame. The compare/flag state is kept verbatim for parity.
+     * (4) tail (:9306+) = the eu 420×260 toroidal blit via `d()` rects
+     *     — already covered verbatim by the renderer's eu arm.
+     */
+    internal var visX0 = 0; internal var visY0 = 0
+    internal var visX1 = 0; internal var visY1 = 0
+    internal var visDirty = false              // k.dM
+    private fun scrollBounds() = scrollBounds(true)
+    private fun scrollBounds(full: Boolean) {
+        if (!full && (jC == 12 || jC == 13 || jC == 31)) return  // L1c
+        if (kAm && !kDd) kDd = true                            // veil latch
+        var sy = camY
+        if (sy < 0) sy -= 20                    // :9084 floor-div bias
+        var vx0 = camX / 20
+        val vx1 = (camX + 399) / 20
+        var vy0 = sy / 20
+        val vy1 = (sy + 239) / 20
+        val cols = level.etCols                 // k.bt (== bp at load)
+        val rows = level.etRows                 // k.bu (== bq at load)
+        if (vx0 < 0) vx0 = 0 else if (vx0 > cols - 1) vx0 = cols - 1
+        if (vy0 < 0) { if (!bh3) vy0 = 0 } else if (vy0 > rows - 1) vy0 = rows - 1
+        if (!visDirty) {
+            if (vx0 != visX0 || vx1 != visX1) {
+                if (vx1 < visX0 || vx0 > visX1) visDirty = true
+                // else h() edge strips — proven-dead (see head comment)
+            }
+            if (!visDirty && (vy0 != visY0 || vy1 != visY1)) {
+                if (vy1 < visY0 || vy0 > visY1) visDirty = true
+            }
+        }
+        if (visDirty) visDirty = false          // h(full rect) — dead
+        visX0 = vx0; visY0 = vy0; visX1 = vx1; visY1 = vy1
+    }
 
     /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
      *  synthetic kAh has no per-tick fn; the equivalent is the ax37

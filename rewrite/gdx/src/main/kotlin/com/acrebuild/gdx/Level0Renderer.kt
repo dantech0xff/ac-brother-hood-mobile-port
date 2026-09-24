@@ -1170,6 +1170,15 @@ class Level0Renderer {
             drawOverlayTail(world, e, camX, camY)
         }
 
+        // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
+        // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —
+        // fill 400×240 + alpha-100 + blit `cd`. The 3/4/6-arg j.a forms
+        // are unrecovered stubs; by shape it's the "input locked" dim —
+        // translucent black over the scene, under HUD + dialogs. Drawn
+        // every frame while `kAm` holds (no persistent back-buffer).
+        if (world.kAm) fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
+                              0x64000000.toInt())
+
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
         // ticks `bJ--` + recomputes the ARGB ramp — k.java:2522-2526).
