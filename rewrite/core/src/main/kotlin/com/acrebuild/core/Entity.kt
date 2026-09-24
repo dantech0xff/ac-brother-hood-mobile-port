@@ -2866,11 +2866,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `I==4 && aA<2 → h(1)` head; on `v(65568)` (blocked while riding an
      *  ax10 zipline `ac` — inferred: the decompile's r0 flag only arms on
      *  `ac.ax!=10`), dispatch by equip `I`:
-     *   1 → zero h-vel; unless crouch-rope (`S==79 && a.ax==51 &&
-     *       a.aD!=0`) → `i(S==79?81:67)` sword swing; `k.E.K()` = `heldRelease` (ported slice 125);
+     *   1 → zero h-vel; unless crouch-rope (`S==79 && g.a.ax==51 &&
+     *       g.a.aD!=0`, g.java:8488-8497) → `i(S==79?81:67)` sword swing;
+     *       `k.E.K()` = `heldRelease` (ported slice 125);
      *   8 → `S!=79` → `ai=ag=0; K=0; cN=0; i(303)` standing gauge;
      *   2 → `i(286)` + sfx 29 knife anim.
-     *  `g.a` vehicle static approximated by `standingOn` (inferred). */
+     *  `g.a` = the grapple/ride link field `ga` (g.java:249+, proven). */
     fun contextDispatch(w: LevelCellSource, pad: Pad) {
         if (gI == 4 && aA < 2) requestH(1, w)
         if (!pad.v(Pad.M_CONTEXT)) return
@@ -2882,7 +2883,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         when (gI) {
             1 -> {
                 ag = 0; ah = 0; aj = 0
-                val v = standingOn
+                val v = ga
                 if (S == 79 && v != null && v.ax == 51 && v.aD != 0) return
                 setAnim(if (S == 79) 81 else 67)
                 w.kE?.heldRelease(this)              // k.E?.K() (g.java:4370)
@@ -3218,9 +3219,33 @@ open class Entity(val ax: Int, var clip: Clip?) {
             return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
         }
 
-        /** `j.d(int)` — floor integer square root (inferred impl). */
-        fun isqrt(x: Int): Int =
-            if (x <= 0) 0 else kotlin.math.sqrt(x.toDouble()).toInt()
+        /** `j.U[]` (pack resource /16 blob offset 154, proven): the 256-entry
+         *  Q4 square-root table — `U[i] = floor(16·sqrt(i))`, except the
+         *  verbatim quirk `U[0] = 256` (so `j.d(0)` returns 16, not 0).
+         *  Blob-verified 255/256 entries against `resources/archive/16`. */
+        private val SQRT_U = IntArray(256) { i ->
+            if (i == 0) 256 else (16.0 * kotlin.math.sqrt(i.toDouble())).toInt()
+        }
+
+        /** `j.d(int)` (j.java:1097, proven): piecewise table square root —
+         *  indexes `U` by a shifting window, so for large `x` the result
+         *  quantizes in steps of 256 (NOT the true floor-sqrt). */
+        fun isqrt(x: Int): Int = when {
+            x < 0 -> 0
+            x < 0x100 -> SQRT_U[x] shr 4
+            x < 0x400 -> SQRT_U[x shr 2] shr 3
+            x < 0x1000 -> SQRT_U[x shr 4] shr 2
+            x < 0x4000 -> SQRT_U[x shr 6] shr 1
+            x < 0x10000 -> SQRT_U[x shr 8]
+            x < 0x40000 -> SQRT_U[x shr 10] shl 1
+            x < 0x100000 -> SQRT_U[x shr 12] shl 2
+            x < 0x400000 -> SQRT_U[x shr 14] shl 3
+            x < 0x1000000 -> SQRT_U[x shr 16] shl 4
+            x < 0x4000000 -> SQRT_U[x shr 18] shl 5
+            x < 0x10000000 -> SQRT_U[x shr 20] shl 6
+            x < 0x40000000 -> SQRT_U[x shr 22] shl 7
+            else -> SQRT_U[x ushr 24] shl 8
+        }
 
         /** `k.e(int,int,int,int)` (k.java:6860, proven): the arc/lead
          *  solver — roots of `x² + r5·x − r4 = 0` (the `1`-coefficient is
