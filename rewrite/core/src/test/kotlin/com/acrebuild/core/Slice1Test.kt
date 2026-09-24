@@ -10835,21 +10835,25 @@ class Slice97Test {
         assertEquals(-1, w.kAE, "aE = aH(-1) poisons the meter (k.java:4216)")
         assertEquals(0, w.kAH)
         tickClean(w, 1)
-        assertEquals(-1, w.kAE, "aE<0 → arm dead")
+        // slice 180: n() runs now — `aE<0 → aE=0` (g.java:5621) eats the
+        // poison value; with aH==0 the stall gate stays closed.
+        assertEquals(0, w.kAE, "n() clamps the poisoned aE back to 0")
     }
 
     @Test fun `alert meter aF trickle`() {
         val w = bh3World()
         w.kAE = 50; w.kAH = -1; w.kAF = 7
         tickClean(w, 1)
-        assertEquals(53, w.kAE, "+3/tick")
+        // slice 180: n()'s aG decay divider (kAG=0 → -1 → reset+aE--) also
+        // runs: -1 + +3 → 52. Subsequent ticks decay only every 6th.
+        assertEquals(52, w.kAE, "aE-- divider + aF trickle +3")
         assertEquals(4, w.kAF)
         tickClean(w, 1)
-        assertEquals(56, w.kAE)
+        assertEquals(55, w.kAE)
         tickClean(w, 1)
-        assertEquals(57, w.kAE, "remainder <3 → aE += aF")
+        assertEquals(56, w.kAE, "remainder <3 → aE += aF")
         assertEquals(0, w.kAF)
-        assertEquals(57, w.alertFill, "i4 = min(aE,100)")
+        assertEquals(56, w.alertFill, "i4 = min(aE,100)")
     }
 
     @Test fun `alertFill caps at 100`() {
@@ -16468,12 +16472,16 @@ class Slice178Test {
         val w = world(aj = 1)
         tickPlay(w, 2)
         w.npcs.clear()                                  // nothing to consume
+        // slice 180: flightTick's z3 tail holds ah at kY — integrate drifts
+        // al by kY>>8 = -7/tick. Seat the latch + pin ah=kY so the drift is
+        // exact (O's sub-256 residue would otherwise alternate -3/-4).
+        w.iBi = true
         w.kDU = 2
         w.stateL(8)
-        w.player.ah = 0                         // isolate the shift from gravity
+        w.player.ah = w.kY
         val al0 = w.player.al; val dT0 = w.kDT
         w.tick(emptyList())
-        assertEquals(al0 + 800, w.player.al, "player teleports dU*400")
+        assertEquals(al0 + 800 - 7, w.player.al, "player teleports dU*400 (+flight drift)")
         assertEquals(dT0 + 40, w.kDT, "copy boundary shifts dU*20")
         assertEquals(0, w.kDU)
         assertEquals(-1, w.kDR)
@@ -16509,5 +16517,154 @@ class Slice179Test {
 
     @Test fun `stampAt is -1 on grounded packs`() {
         assertEquals(-1, world().level.stampAt(1, 1))
+    }
+}
+
+class Slice180Test {
+
+    /** i.java:2415-2427 (proven) — the ax25 flying player-slot init arm. */
+    @Test fun `level1 spawn applies the ax25 init`() {
+        val w = world(aj = 1)
+        val p = w.player
+        assertEquals(202, p.az, "az=202")
+        assertEquals(90, p.x1, "g.e(90) sets x[1]")
+        assertEquals(2, p.aA); assertEquals(3, p.aB)
+        assertEquals(-2560, p.ah, "ah=-2560 entry velocity")
+        assertEquals(-1, p.aq); assertEquals(-1, p.ar)
+        assertNotNull(p.ad, "`ad` = retype-26 glider companion")
+        assertEquals(26, p.ad!!.ax)
+        assertFalse(w.npcs.any { it.ax == 0 || it.ax == 25 },
+            "player-slot record must not double-spawn into bb[]")
+        assertNull(world(aj = 0).player.ad, "grounded levels carry no ad")
+    }
+
+    /** g.java:5603+ n() S∈{0,4,5,17,18}: no steering → `ah=kY` descent. */
+    @Test fun `glide descends at kY and decays bank to zero`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230                                        // bh3 camera init
+        val p = w.player; p.setAnim(0); p.ag = -2048; p.ah = 0
+        val pad = Pad()
+        w.playerFsm.tick(p, pad)
+        assertEquals(w.kY, p.ah, "no-input glide = kY descent")
+        assertEquals(-1280, p.ag, "ag decays 768 toward 0 (-2048+768)")
+        w.playerFsm.tick(p, pad)
+        assertEquals(-512, p.ag)
+        w.playerFsm.tick(p, pad)
+        assertEquals(0, p.ag, "bank settles to 0")
+    }
+
+    /** g.java:5746-5798: steering/climb/dive arms (verbatim quirks kept). */
+    @Test fun `steering banks and climbs with verbatim clamps`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230                                        // bh3 camera init
+        w.iBi = true                                      // seat latch (i.java:15216/9571) — steering arm
+        val p = w.player; p.setAnim(0); p.ag = 0; p.ah = 0
+        val pad = Pad()
+        pad.held = 4112                                   // u(4112) left
+        p.setAnim(4)                                      // z4 state → bank anim applies
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ag, "left bank -768/tick")
+        assertTrue(p.S == 33, "kBD<15 → light left bank i(33)")
+        // S33 is outside the glide case — no bank arm; the z2 tail
+        // decays ag back to 0 one step per tick (verbatim).
+        w.playerFsm.tick(p, pad)
+        assertEquals(0, p.ag, "S33: bank impulse decays via tail")
+        p.setAnim(4)
+        pad.held = 8256                                   // u(8256) right
+        w.playerFsm.tick(p, pad)
+        assertEquals(768, p.ag, "right bank +768/tick")
+        assertTrue(p.S == 32, "kBD<15 → light right bank i(32)")
+        // climb: u(16388) gated kQ>117 — kQ=230 on bh3. S32 has no exit
+        // arm (verbatim g.java:6013-6020: `av=false` + dead ifs only) —
+        // restore the glide state first.
+        p.setAnim(4)
+        pad.held = 16388
+        p.ah = 0
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ah, "climb ah-=768")
+        repeat(4) { w.playerFsm.tick(p, pad) }
+        assertEquals(-2048 + w.kY, p.ah, "climb clamps at -2048+kY")
+        assertTrue(p.S == 4, "climb → i(4)")
+        // dive: u(33024) gated kQ<230 — kQ==230 fails the gate (verbatim).
+        // With bi set the gated-off dive leaves the z3 tail: -768/tick.
+        pad.held = 33024
+        p.ah = 0
+        p.setAnim(4)
+        w.playerFsm.tick(p, pad)
+        assertEquals(-768, p.ah, "dive gated off → tail decel only")
+        repeat(2) { w.playerFsm.tick(p, pad) }
+        assertEquals(w.kY, p.ah, "tail settles at kY")
+    }
+
+    /** g.java:5610-5644 stall arms: aE<=0 && aH<0 → i(24) → stateL(12). */
+    @Test fun `stall arms the failsafe and fails on clip end`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        val p = w.player; p.setAnim(0)
+        w.kAE = 0; w.kAH = -1                       // stall-grace exhausted
+        w.playerFsm.tick(p, Pad())
+        assertEquals(24, p.S, "kAE<=0 && kAH<0 → i(24)")
+        assertEquals(0, p.x1, "stall zeroes the meter")
+        assertTrue(w.iBB, "stall arms bB + the 999/kB/kG markers")
+        // S24 failsafe: off-camera → !v() → stateL(12).
+        p.setPositionPx(p.ak, w.camY + 4000); p.refreshBoxes()
+        w.playerFsm.tick(p, Pad())
+        assertEquals(12, w.jC, "stall fail → k.l(12)")
+    }
+
+    /** g.java:5837-5867 + tail: `ad` mirror + waypoint homing. */
+    @Test fun `ad companion mirrors and homing steps ak al`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        val p = w.player; p.setAnim(0); p.ag = 10; p.ah = w.kY
+        w.iBB = true                                 // bank-lock latch
+        w.playerFsm.tick(p, Pad())
+        val ad = p.ad!!
+        assertEquals(p.ak + 20, ad.ak, "ad.ak = ak+20")
+        assertEquals(p.al, ad.al); assertEquals(p.ag, ad.ag)
+        assertEquals(p.ah, ad.ah); assertEquals(p.S, ad.S)
+        assertEquals(-1, p.aq); assertEquals(-1, p.ar,
+            "iBB consumes the waypoint target")
+        // homing arm: aq/ar set → ak/al step toward them at ±10.
+        val al0 = p.al
+        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false; w.iBi = true
+        w.playerFsm.tick(p, Pad())
+        assertEquals(p.aq - 15, p.ak, "ak steps +10 toward aq")
+        // verbatim: ar/al both += kX(-7), then ar<al → al-=10, then
+        // (ar>al && kQ>=230) → ar=al. Net: al = al0 - 7 - 10.
+        assertEquals(al0 - 17, p.al, "al steps via scroll + chase")
+        assertEquals(p.al, p.ar, "ar snaps to al (kQ>=230 arm)")
+    }
+
+    /** g.java:5678-5700 flap arm: cooldown + !iBk + z4 → e(false). */
+    @Test fun `auto-flap spawns the puff and arms flap velocity`() {
+        val w = world(aj = 1)
+        w.stateL(8)
+        w.kQ = 230
+        w.iBi = true                                 // seat latch — flap lives in bi&&!E
+        val p = w.player; p.setAnim(4); w.kAI = 11   // cooldown elapsed
+        p.ah = w.kY                                  // z4 glide condition
+        w.kBB = 1                                    // !bB==0&&bC==0 → skip
+        val before = w.pendingInsert.size
+        w.playerFsm.tick(p, Pad())
+        val wisp = w.iAK
+        assertNotNull(wisp, "flap spawns the ax24 clip-40 puff")
+        assertTrue(w.pendingInsert.size > before, "puff queued via k.b")
+        assertEquals(-3840 + w.kX, wisp!!.ah, "puff velocity -3840+kX")
+        assertTrue(wisp.P and 16 != 0, "wisp P|=16")
+        assertEquals(0, w.kAI, "cooldown reset")
+    }
+
+    /** grounded world must not run the flight tick. */
+    @Test fun `bh3 gate keeps grounded dispatch`() {
+        val w = world(aj = 0)
+        val p = w.player; p.setAnim(0); p.ah = 0
+        w.stateL(8)
+        w.playerFsm.tick(p, Pad())
+        assertNotEquals(2, p.aA, "aA stays grounded-default (no ax25 init)")
     }
 }
