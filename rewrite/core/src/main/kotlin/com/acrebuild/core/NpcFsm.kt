@@ -281,11 +281,162 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.animFinished()) e.setAnim(12)
             }
             12 -> {
-                // L478 contact/counter arm (subset): while my X attackbox
-                // overlaps the player's W hitbox, apply the melee ops
-                // `aB()` issues — op 4 grounded / op 20 airborne. On anim end
-                // back to chase (i(23)+aC=10 re-approach in the original).
-                if (e.animFinished()) { e.setAnim(23); e.aC = 10 }
+                // L478-L502 (i.java:5580-5640, proven): contact/counter
+                // arm — the shared tail runs j() + push (r13/r14). Player
+                // rolling (aS.S==6) through own X while facing us → the
+                // counter-bind: `aS.a(34,0,0,this)` + `i(18)`; Z0==2 →
+                // L490 (aN=this + g.E=true + b(2) + marker) → L849;
+                // Z0==0 && aB>bu/2 → L849; Z0==0 && aB<=bu/2 → L495 tail.
+                // r() → g.g()? i(2) : i(23)+aC=10 → L777.
+                if (Entity.overlapI(player.W, e.X) &&
+                    player.inFrontOf(e) && player.S == 6) {
+                    player.applyHit(34, 0, e, world)            // aS.a(34,0,0,this)
+                    e.setAnim(18)
+                    if (e.Z[0] == 2) {
+                        world.lockTarget = e                    // aN = this
+                        Entity.gE = true                        // g.E = true
+                        e.eventArm(2, world)                    // b(2) slowmo
+                        e.spawnMarker(world, 8, e.ak, e.al - 85)
+                        return                                  // → L849
+                    }
+                    if (e.Z[0] != 0 || e.aB > BU73[world.weaponSlot] / 2)
+                        return                                  // → L849
+                }
+                if (e.animFinished()) {                         // L495 r()
+                    if (world.gG()) e.setAnim(2)
+                    else { e.setAnim(23); e.aC = 10 }
+                }
+            }
+            11 -> {
+                // L475 (i.java:5578-5585, proven): windup-2 — Q() face
+                // player; r() → G() + i(12) strike. → L777 (r14 → j()).
+                e.av = player.ak < e.ak                         // Q()
+                if (e.animFinished()) {
+                    e.releaseAe()                               // G()
+                    e.setAnim(12)
+                }
+            }
+            24 -> {
+                // L623 (i.java:5720-5746, proven): thrown-victim drop —
+                // r15 → k() tail live. Holds the player pinned at own
+                // top-edge (aS.ah=ag=0, al=W[1], ak=W mid, O/N snap) while
+                // `aC-- > 0`; on expiry `aS.a(0)` airborne fling +
+                // `aS.G()`, then picks the nearer OPEN side edge:
+                // aT=e(W[0]-pw, W[1])>=12 → aS.ak=left open, av=false;
+                // aU=e(W[2]+pw, W[1])>=12 → aS.ak=right open, av=true;
+                // `aA=1` + `i(5)`. → L777.
+                world.kAA = 60                                  // k.aA = 60
+                player.ah = 0; player.ag = 0
+                player.al = e.W[1]
+                player.ak = (e.W[0] + e.W[2]) shr 1
+                player.O = player.al shl 8
+                player.N = player.ak shl 8
+                if (e.aC-- > 0) {
+                    // window live → L777 (the shared tail below)
+                } else {
+                    player.flingAirborne(0, world)              // aS.a(0)
+                    player.releaseAe()                          // aS.G()
+                    val pw = player.W[2] - player.W[0]
+                    val lx = e.W[0] - pw
+                    val rx = e.W[2] + pw
+                    val ey = e.W[1]
+                    e.aT = e.e(world, lx / 20, ey / 20)
+                    e.aU = e.e(world, rx / 20, ey / 20)
+                    if (e.aT >= 12) {
+                        player.ak = lx; player.av = false
+                    } else if (e.aU >= 12) {
+                        player.ak = rx; player.av = true
+                    }
+                    e.aA = 1
+                    e.setAnim(5)
+                }
+            }
+            99 -> {
+                // L299 (i.java:5442-5445, proven): kill-touch — r15 →
+                // the shared tail runs k(); `aE()` fired → r13=false
+                // (the push/engage section is skipped — our tail's
+                // fixed subset already excludes it).
+                killTouch(e, world, player)
+                contextK(e, world, player)
+            }
+            133 -> {
+                // L293 (i.java:5850-5856, proven): carried — track the
+                // carrier while aS.S==270 (carry-pickup), else i(135).
+                if (player.S == 270) {
+                    e.ak = player.ak; e.al = player.al
+                    e.T = player.T; e.U = player.U
+                } else { e.setAnim(135); return }               // → L849
+            }
+            134 -> {
+                // L297 (i.java:5860-5863, proven): carried-hold — no-op
+                // while aS.S==271 (carry-walk), else i(135) → L849.
+                if (player.S != 271) { e.setAnim(135); return }
+            }
+            138 -> {
+                // L280-L287 (i.java:5826-5842, proven): hostage-free —
+                // r() && af!=null → af.i(k.bK?3:10) + k.A(18) + af=null
+                // + P|=32|64 → L777; af==null → L777 (no-op).
+                if (e.animFinished() && e.af != null) {
+                    e.af!!.setAnim(if (world.kBK) 3 else 10)
+                    world.sfx(18)
+                    e.af = null
+                    e.P = e.P or 32 or 64
+                }
+            }
+            142 -> {
+                // L271 (i.java:5436-5441, proven): dropped — falls 10px
+                // per tick + a(true); grounded → i(143). → L849.
+                e.al += 10
+                e.collideSides(world, true)
+                if (!e.aZ) return                               // still falling
+                e.setAnim(143)
+                return                                          // → L849
+            }
+            143 -> {
+                // L276 (i.java:5820-5825, proven): landed-dead —
+                // r() → aB=0 + P|=32|64 → L849.
+                if (e.animFinished()) {
+                    e.aB = 0
+                    e.P = e.P or 32 or 64
+                }
+                return                                          // → L849
+            }
+            145 -> {
+                // L289 (i.java:5840-5849, proven): carried — track the
+                // carrier while aS.S==271 (carry-walk), else i(135).
+                if (player.S == 271) {
+                    e.ak = player.ak; e.al = player.al
+                    e.T = player.T; e.U = player.U
+                } else { e.setAnim(135); return }               // → L849
+            }
+            168 -> {
+                // L264 (i.java:5808-5818, proven): hostage
+                // secure — r() → G() + aB=0 + i(169) + k.e(0,aw) +
+                // k.o(3) + aS.i(293) + aS.P&=-65 + ar=aS.al + az=301.
+                if (e.animFinished()) {
+                    e.releaseAe()                               // G()
+                    e.aB = 0
+                    e.setAnim(169)
+                    world.statTally(e.aw)                       // k.e(0,aw)
+                    if (world.kAj != 7) world.kAp[3]++          // k.o(3)
+                    player.setAnim(293)                         // aS.i(293)
+                    player.P = player.P and -65                 // aS.P&=-65
+                    e.ar = player.al                            // ar=aS.al
+                    e.az = 301
+                }
+                return                                          // → L849
+            }
+            169 -> {
+                // L267 (i.java:5427-5435, proven): carried-rise —
+                // P|=512 + t() + ah=-2048; once W[1] passes ar the
+                // rise ends → ah=0 + P|=32|64 → L849.
+                e.P = e.P or 512
+                e.refreshBoxes()                                // t()
+                e.ah = -2048
+                if (e.W[1] > e.ar) return                       // still rising
+                e.ah = 0
+                e.P = e.P or 32 or 64
+                return                                          // → L849
             }
             25 -> { /* fall — shared tail below */ }
             9 -> {
@@ -524,16 +675,15 @@ class NpcFsm(val world: LevelCellSource) {
                 return                                          // → L849
             }
             139 -> {
-                // corpse (proven L689): P&=~16 removes actor flag;
-                // P|=32|64 freezes the last frame
-                e.P = e.P and -17
-                if (e.animFinished()) e.P = e.P or 32 or 64
-            }
-            144 -> {
-                // C() weakened/block stance (i.java:1955): hold in place;
-                // the player tap now queues the 183/184 finisher.
-                e.ag = 0; e.ah = 0; e.P = e.P or 512; e.aA = 2
-                if (e.aB <= 0) e.setAnim(0)
+                // L699 (i.java:6158-6167, proven): corpse rest —
+                // r() → P&=-17 + P|=32|64 freeze; k.bK → death wisp
+                // a(8,59,2,av,ak,al,az-1). → L849.
+                if (e.animFinished()) {
+                    e.P = e.P and -17; e.P = e.P or 32 or 64
+                    if (world.kBK) e.spawnFx8(world, 59, 2, e.av,
+                        e.ak, e.al, e.az - 1)
+                }
+                return                                          // → L849
             }
             0, 106, 107, 135 -> {
                 // Shared death/dormant arm (i.java:4044-4096, proven):
@@ -7812,6 +7962,42 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
 //
 // Confidence: PROVEN for every arm transcribed; the level-0 fixture has no
 // ax73 records (packs 8/9/11/12 only) so tests construct synthetic ones.
+
+    /**
+     * `i.aE()` (i.java:9144-9185, proven): kill-touch — only while the
+     * entity is mid-tumble (`j==6`), only into a flying/falling player
+     * (`aS.S∈{24,22,43,150,35,157}`), and only when the player's feet
+     * sit above own mid-line (`aS.W[3] < (W[1]+W[3])>>1`). Within 20
+     * cells of the apex marker `g.y` → the flying-kill: `g.x[1]=0`,
+     * `aS.h(1)`, player vel0, `aS.al=al`, `i(20)`. Past it → the bounce:
+     * `aS.i(89)`, own vel0, player snapped onto own top edge + `O/N`
+     * refresh. Always returns false.
+     */
+    private fun killTouch(e: Entity, w: LevelCellSource, p: Entity): Boolean {
+        if (e.j != 6) return false
+        if (p.S != 24 && p.S != 22 && p.S != 43 &&
+            p.S != 150 && p.S != 35 && p.S != 157) return false
+        if (p.W[3] >= ((e.W[1] + e.W[3]) shr 1)) return false
+        if ((e.al - p.gy) / 20 < 20) {
+            // <20 cells past the apex → the bounce (L22): the tumbler
+            // lands the player onto its own top edge
+            p.setAnim(89)
+            e.ah = 0; e.ag = 0
+            p.ah = 0; p.ag = 0
+            p.al = e.W[1]
+            p.ak = (e.W[0] + e.W[2]) shr 1
+            p.O = p.al shl 8
+            p.N = p.ak shl 8
+        } else {
+            // ≥20 cells → the flying kill: victim plummets
+            p.x1 = 0                                        // g.x[1] = 0
+            p.requestH(1, w)                                // aS.h(1)
+            p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+            p.al = e.al
+            e.setAnim(20)
+        }
+        return false
+    }
 
 private val BU73 = intArrayOf(300, 400, 500)
 private val BW73 = intArrayOf(80, 80, 80)

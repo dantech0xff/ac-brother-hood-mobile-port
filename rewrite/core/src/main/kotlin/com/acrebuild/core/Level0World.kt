@@ -674,6 +674,7 @@ class Level0World(
         // vehicle/contact/carry links must not survive into the respawned set
         player.ga = null; player.ac = null; player.standingOn = null
         gc = null
+        grabHolder = null; player.gb = null         // g.h=null; g.b=null (:2486-2489)
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
