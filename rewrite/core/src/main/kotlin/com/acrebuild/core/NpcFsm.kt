@@ -3381,9 +3381,10 @@ class NpcFsm(val world: LevelCellSource) {
     // (-1 = resolved or none), [6]=home ak.
     //
     // Horizontal travel is owned by the claim script — `ab()`→`aa()`
-    // runs `k.by` ops each tick while a claim is bound; `runClaimScript`
-    // is still a stub, so `ak` never advances and the gondola parks
-    // (inferred — bx() itself never writes `ak` except the S1 reset).
+    // runs `k.by` ops each tick while a claim is bound (runClaimScript
+    // ported, slice 43b; e.g. op25 drives `ak`). If the level's bound
+    // scripts don't advance it, the gondola parks (inferred — bx()
+    // itself never writes `ak` except the S1 reset).
     // `ah`/`aj` are the *vertical* departure-fall speed+gravity: once
     // moving, `M()` probes the side cell until a wall ends the fall and
     // `i(1)` resets the gondola to (Z[6], Z[1]).
