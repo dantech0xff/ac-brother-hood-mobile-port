@@ -20043,3 +20043,66 @@ class Slice214Test {
         assertTrue(captured, "P|512 zone still captures under suspension")
     }
 }
+
+class Slice215Test {
+    /** slice 215 — the ax7 mouth-throw landing wedge is verbatim original
+     *  behavior, not a port divergence. The full release chain was traced
+     *  against the source:
+     *  - record P=0 -> `e.av=false` -> release `aS.ag = 2048` east
+     *    (i.java:15695-15710);
+     *  - the S1 capture arm re-snaps `p.ak/al` to the mouth's CURRENT
+     *    frame-W centre every tick — the decoded clip swings the mouth W
+     *    east to ~x1495 (T9) then back west, ending at W [1466,458,1470,467]
+     *    on the last frame (T11);
+     *  - `r()` (i.java:462) fires at T==frameCount-1 && U==dur-1 — release
+     *    at T11 centre (1468,462);
+     *  - `a(43,32)` + mask-32 stale-`u` centre compensation (i.java:2336
+     *    L121: `al += u - Wc`) lands the anchor at (1468,501) — the S313
+     *    last-frame player W is a degenerate 0x0 point (verbatim clip data);
+     *  - one fall tick: +8px east then the wall-face resolve pushes -8
+     *    back -> lands (1468,499) fully embedded (aO=aR=aP=20, bd=false);
+     *  - `L17cc` (g.java): deep embed -> `i(79)` + goto L353d — the `l()`
+     *    input arms only run on shallow embed (aO or aR <= 12), so the
+     *    original ALSO wedges input-immune here. The mouth-plant is a
+     *    trap at this corner — an original-game softlock, kept verbatim.
+     *  Same outcome reproduced for uid=30 at (4801,674). */
+    @Test fun `ax7 mouth throw wedges into the wall verbatim`() {
+        val w = world()
+        settleIntro(w)
+        val e = w.npcs.first { it.ax == 7 && it.aw == 12 }
+        assertEquals(intArrayOf(1318, 456, 1334, 472).toList(), e.W.toList())
+        assertFalse(e.av)                       // record P=0 -> throws east
+        val p = w.player
+        p.setPositionPx(e.W[0] + 4, e.W[1] + 4)
+        p.refreshBoxes()
+        var captured = false
+        var sawMouthEast = false
+        var released = false
+        var releasePos: Pair<Int, Int>? = null
+        for (t in 0 until 120) {
+            w.tick(emptyList())
+            if (!captured && p.S == 313) {
+                captured = true
+                assertEquals(64, p.P and 64)    // P|=64 slot-hold
+            }
+            if (p.S == 313 && e.W[2] > 1480) sawMouthEast = true
+            if (!released && p.S == 43) {
+                released = true
+                releasePos = p.ak to p.al
+                assertEquals(2048, p.ag)        // east throw by e.av=false
+            }
+        }
+        assertTrue(captured, "mouth swallows the overlapping player")
+        assertTrue(sawMouthEast, "swing carries the mouth past x1480")
+        assertTrue(released, "r() releases at the last S1 frame")
+        val (rx, ry) = releasePos!!
+        // release point verbatim: mask-32 stale-u compensation lands the
+        // anchor ~(1468,501), deep inside the wall's top-east corner
+        assertTrue(rx in 1460..1480, "release x inside wall corner: $rx")
+        assertTrue(ry in 495..505, "release y below wall top: $ry")
+        // deep embed -> forced S79, input-immune, collideSides dead
+        assertEquals(79, p.S)
+        assertEquals(20, p.aO); assertEquals(20, p.aR); assertEquals(20, p.aP)
+        assertFalse(p.bd)
+    }
+}
