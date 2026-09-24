@@ -17,7 +17,6 @@ import com.badlogic.gdx.graphics.g2d.PixmapPacker
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
-import com.badlogic.gdx.graphics.glutils.FrameBuffer
 import com.badlogic.gdx.utils.ScreenUtils
 
 /**
@@ -39,7 +38,10 @@ class Level0Renderer {
     @Volatile var offsetX: Int = 0; private set
     @Volatile var offsetY: Int = 0; private set
 
-    private lateinit var fbo: FrameBuffer
+    // Direct-render viewport: the 400×240 scene draws straight into the
+    // letterboxed GL viewport — identical output to the old FBO+blit
+    // (integer `sc` + nearest ⇒ same pixels) minus one fullscreen copy
+    // per frame, which was a real cost on software-GL emulators.
     private lateinit var batch: SpriteBatch
     private lateinit var white: TextureRegion
     private lateinit var font: BitmapFont
@@ -77,8 +79,6 @@ class Level0Renderer {
 
     fun create(world: Level0World) {
         this.world = world
-        fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
-        fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
         font = BitmapFont()
         clips = world.clips
@@ -705,11 +705,13 @@ class Level0Renderer {
         }
     }
 
-    /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
+    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. */
     private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
         batch.flush()
         Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
-        Gdx.gl.glScissor(x, Level0World.VIEW_H - y - h, w, h)
+        Gdx.gl.glScissor(offsetX + x * scale,
+                         offsetY + (Level0World.VIEW_H - y - h) * scale,
+                         w * scale, h * scale)
     }
     private fun clipReset() {
         batch.flush()
@@ -1059,8 +1061,15 @@ class Level0Renderer {
     }
 
     fun render(world: Level0World) {
-        fbo.begin()
-        ScreenUtils.clear(0.07f, 0.07f, 0.09f, 1f)
+        // letterbox viewport — same math the FBO blit used to compute.
+        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
+        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
+        if (sc < 1) sc = 1
+        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
+        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
+        Gdx.gl.glViewport(0, 0, sw, sh)
+        ScreenUtils.clear(0f, 0f, 0f, 1f)          // black letterbox bars
+        Gdx.gl.glViewport(offsetX, offsetY, dw, dh)
         batch.projectionMatrix.setToOrtho2D(
             0f, 0f, Level0World.VIEW_W.toFloat(), Level0World.VIEW_H.toFloat())
         batch.begin()
@@ -1730,21 +1739,6 @@ class Level0Renderer {
         }
 
         batch.end()
-        fbo.end()
-
-        // letterbox blit (same as PixelRenderer)
-        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
-        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
-        if (sc < 1) sc = 1
-        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
-        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
-        ScreenUtils.clear(0f, 0f, 0f, 1f)
-        batch.projectionMatrix.setToOrtho2D(0f, 0f, sw.toFloat(), sh.toFloat())
-        batch.begin()
-        batch.draw(fbo.colorBufferTexture,
-                   offsetX.toFloat(), offsetY.toFloat(), dw.toFloat(), dh.toFloat(),
-                   0, 0, Level0World.VIEW_W, Level0World.VIEW_H, false, true)
-        batch.end()
     }
 
     /** `b.java:907` 8-arg path: draw the frame's module at anchor - offset. */
@@ -1956,7 +1950,7 @@ class Level0Renderer {
         clips.entries.firstOrNull { it.value === clip }?.key
 
     fun dispose() {
-        fbo.dispose(); batch.dispose()
+        batch.dispose()
         if (::font.isInitialized) font.dispose()
         if (::atlas.isInitialized) atlas.dispose()
         if (::packer.isInitialized) packer.dispose()
