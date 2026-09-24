@@ -1987,6 +1987,26 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // latch before the cq-gate reads it (sits ahead of L38b8 in the
         // original tail).
         if (p.aO == 7 || p.aO == 9) p.cq = false
+        // L3868 (g.java:7979-7992, proven): the g.A autowalk latch —
+        // armed by ax10 script zones (i.aV → g.A=1, g.B=facing, g.l=vel).
+        // Settles, faces g.B, zeroes ag, forces the S148 scripted-walk
+        // state and RETURNS — skips the whole tail (jump/back-dash/
+        // flag consumers).
+        if (p.gA) {
+            p.eSettle(world)                 // E() — settle-sink to footing
+            p.av = p.gB
+            p.ag = 0
+            p.setAnim(148)
+            p.gA = false
+            return
+        }
+        // L388a (g.java:7993-7997, proven): g.f() = isHolding — hands
+        // full (carried entity in front within 120/20) kills the jump
+        // latch.
+        if (p.isHolding()) p.cq = false
+        // L3895 (g.java:7998-8014, proven): standing on a crate (ax51)
+        // or moving platform (ax66) drops the jump latch.
+        p.ac?.let { if (it.ax == 51 || it.ax == 66) p.cq = false }
         // g.java:788 (proven): the shared jump tail is `cq && !E` — the
         // ax10-S55 suppress zone holds `g.E` so wall-run-family arms
         // (S102/332/317) keep their own `i(17)`/`i(50)` transitions.
