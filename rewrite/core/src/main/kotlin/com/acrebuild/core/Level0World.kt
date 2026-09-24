@@ -2400,7 +2400,11 @@ class Level0World(
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:
      *  `bw=-1; bv=n; ey=eA[n].length; eD=0`. Per-n row content and K(0)'s
-     *  `Y()/Z()` checks are unmined (`unknown`). */
+     *  `Y()` (k.java:19825, proven) = `bA[15]==1 || bA[14]>0` →
+     *  `menuHasSave`; `Z()` (k.java:19851, proven) = `f.a()` IGP
+     *  catalog (0..2 → `eA[0][3]=32+r`; else false) →
+     *  `menuShopCheck` (no catalog in the port → always false,
+     *  faithful to any non-IGP device). */
     private fun bannerK(i: Int) {
         kBw = -1; kBv = i; kEy = kEA[i].size; kEd = 0
         when (i) {

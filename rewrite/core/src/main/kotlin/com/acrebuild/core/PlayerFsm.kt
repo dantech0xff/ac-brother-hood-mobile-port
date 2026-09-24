@@ -1621,8 +1621,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * `am()` (g.java:301, proven for the `ag != 0` half): moving into a
      * type-19 wall cell (aV/aW = cell left/right of feet) with `aR == 0`
      * snaps `ak` to the grid and enters `a(63, 16385)` (deferred i(63) +
-     * `al = ((W[3]+10)/20)*20 - 1` climb-up snap). ag==0 ledge variant
-     * unmined.
+     * `al = ((W[3]+10)/20)*20 - 1` climb-up snap). The `ag==0` L5d arm
+     * (g.java:687-712, proven): standing inside a type-19 cell with an
+     * open side (aV==0 → face left; aW==0 → face right) snaps `ak` to the
+     * open side's grid edge — the ledge pull-up entry.
      */
     private fun wallClimb(p: Entity): Boolean {
         when {
@@ -1631,6 +1633,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             p.ag < 0 && p.aW == 19 && p.aR == 0 -> {
                 p.av = false; p.ak = (p.ak / 20) * 20 + 20
+            }
+            p.ag == 0 && p.aR == 19 -> {
+                if (p.aV == 0) p.av = false
+                if (p.aW == 0) p.av = true
+                p.ak = (p.ak / 20) * 20 + if (p.av) 20 else 0
             }
             else -> return false
         }
