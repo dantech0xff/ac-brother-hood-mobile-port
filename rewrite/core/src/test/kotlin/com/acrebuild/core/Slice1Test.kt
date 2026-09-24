@@ -187,12 +187,23 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
     return Level0World(level, clips, DeterministicRandom(1L),
         levelStrings = levelStrings, charmap = charmap,
         scripts = ScriptTables.load(asset("level$aj/scripts.bin")),
-        aj = aj)
+        aj = aj, packLoader = { a -> missionPackFor(a) })
         .also {
             // the intro claim script's op105 dialogs (k.l(21)) suspend the
             // sim until a dismiss press — emulate an instantly-tapping player
             it.autoDismissDialog = true
         }
+}
+
+/** `I(aj)` provider for tests — the same `level<aj>` asset triplet the
+ *  gdx launcher assembles in `missionPack`. */
+private fun missionPackFor(aj: Int): MissionPack {
+    val strings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
+        .readText().split("\n").filter { it.isNotEmpty() }
+        .map { it.replace("\\n", "\n") }
+    return MissionPack(
+        LevelPack.load(asset("level$aj/level$aj.aclv")), strings,
+        ScriptTables.load(asset("level$aj/scripts.bin")))
 }
 
 class Level0WorldTest {
@@ -16265,6 +16276,70 @@ class Slice176Test {
             w.stateL(8)
             repeat(120) { w.tick(emptyList()) }
         }
+    }
+
+    @Test fun `loadMission swaps pack strings and entities`() {
+        val w = world()
+        w.stateL(8)
+        w.loadMission(7)                                  // Cesare arena
+        assertEquals(7, w.kAj)
+        assertEquals(7, w.loadedAj)
+        assertEquals(7, w.missionIndex)
+        assertEquals(100, w.level.cols)
+        assertEquals(102, w.level.rows)
+        assertEquals(323, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "level7 spawned nothing")
+        assertFalse(w.bh3, "aj7 is grounded")
+        assertTrue(w.drainCommands().any {
+            it is Command.MissionLoaded && it.aj == 7 },
+            "MissionLoaded not emitted")
+    }
+
+    @Test fun `loadMission flying pack gates bh3 and drops ep`() {
+        val w = world()
+        w.stateL(8)
+        w.loadMission(1)
+        assertEquals(1, w.loadedAj)
+        assertTrue(w.bh3, "aj1 is flying (bh==3)")
+        assertEquals(setOf(0, 2, 3), w.level.layers.map { it.id }.toSet())
+        assertEquals(225, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "level1 spawned nothing")
+    }
+
+    @Test fun `same-pack loadMission is a reload not a swap`() {
+        val w = world()
+        w.stateL(8)
+        w.drainCommands()
+        w.loadMission(0)                                  // already level0
+        assertEquals(0, w.loadedAj)
+        assertTrue(w.drainCommands().none { it is Command.MissionLoaded },
+            "same-pack swap must not emit MissionLoaded")
+        assertEquals(637, w.level.entities.size)
+        assertTrue(w.npcs.isNotEmpty(), "respawn produced no entities")
+    }
+
+    @Test fun `stats survive a mission swap`() {
+        // `I(aj)` reloads pack+entities but `kBA`/`kAp` are world statics
+        // — the original keeps them across F(aj) (save bytes persist).
+        val w = world()
+        w.stateL(8)
+        w.kBA[14] = 6                                     // unlock marker
+        val n = w.npcs.size
+        w.loadMission(5)
+        assertEquals(6, w.kBA[14], "kBA wiped on mission swap")
+        assertNotEquals(n, w.npcs.size,
+            "level5 entity set should differ from level0")
+    }
+
+    @Test fun `strings follow the swapped pack`() {
+        val w = world()
+        w.stateL(8)
+        val before = w.levelStrings.firstOrNull { it.isNotEmpty() }
+        w.loadMission(2)
+        val after = w.levelStrings.firstOrNull { it.isNotEmpty() }
+        assertNotNull(after)
+        assertNotEquals(before, after,
+            "level2 strings should differ from level0")
     }
 
     @Test fun `visual layer gating matches bh table`() {

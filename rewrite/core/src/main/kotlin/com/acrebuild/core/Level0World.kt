@@ -17,22 +17,48 @@ package com.acrebuild.core
  *   bottom-third        → held 33024 (down/crouch)
  * A second press inside ~8 ticks sets the `x()` double-tap bits via Pad.
  */
-class Level0World(
+/** One mission's pack payload — the `I(aj)`/`G(i)`-staged resources
+ *  (k.java:5244/:4740): the ACLV level, the `j.g` string table
+ *  (`k.d(1+aj)` → pack-14 entry-aj+1), and the `j.e(7)` script tables. */
+class MissionPack(
     val level: LevelPack,
+    val levelStrings: List<String>,
+    val scripts: ScriptTables?,
+)
+
+class Level0World(
+    level: LevelPack,
     val clips: Map<Int, Clip>,
     val rng: DeterministicRandom,
     /** `j.g` level-string table (pack-14 entry-001 for level 0). */
-    val levelStrings: List<String> = emptyList(),
+    levelStrings: List<String> = emptyList(),
     /** `k.by`/`k.bz`/`k.eH` script tables (`j.e(7)` of the mission pack,
      *  k.java:6196). Null = no scripts (spawn smoke/tests w/o assets). */
-    val scripts: ScriptTables? = null,
+    scripts: ScriptTables? = null,
     /** `j.f(2)` charmap bytes (shared `short[]` font map) — builds the
      *  `y` FontClip used for `a(str,str2)` footer dims (:2276-2296). */
     val charmap: ByteArray? = null,
-    /** `k.aj` — mission index (0..7); selects `k.bh[aj]` flying gates,
-     *  `k.d(1+aj)` string table, and the `aj!=7` stat-tally exceptions. */
-    val aj: Int = 0,
+    /** `k.aj` at world-init — the pack `level` was converted from;
+     *  the mutable mission index lives on `kAj`. */
+    aj: Int = 0,
+    /** `I(aj)` pack provider (k.java:5244, proven): invoked by
+     *  `loadMission` when `kAj` targets another mission's pack. Null =
+     *  single-pack world (tests, minimal smoke worlds). */
+    val packLoader: ((Int) -> MissionPack)? = null,
 ) : LevelCellSource {
+
+    /** The currently-loaded mission pack — `var` so `loadMission`
+     *  (`I(aj)`) can swap it. */
+    var level: LevelPack = level
+        private set
+    var levelStrings: List<String> = levelStrings
+        private set
+    var scripts: ScriptTables? = scripts
+        private set
+    /** Which mission's pack `level` holds — distinct from `kAj`, which
+     *  the menu/win arms mutate *before* `I(aj)` runs at play entry. */
+    var loadedAj = aj
+        private set
 
     companion object {
         const val VIEW_W = 400
@@ -441,7 +467,8 @@ class Level0World(
     // -- marker/sweep globals -------------------------------------------------
     override var cFFlag = false                 // i.cF gauge-full static
     override var playerLinkB: Entity? = null    // g.b marker-engage link
-    override val missionIndex get() = aj          // k.aj — mission index
+    override val missionIndex get() = kAj         // k.aj — follows the
+                                                  // mutable mission field
     var statTally0 = 0                          // k.ap[0] kill/stat tally
     override var iBh = 0                        // i.bh static hit-lock
     /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
@@ -782,6 +809,29 @@ class Level0World(
     override var kAa = false                   // k.aa
     override var kAb = false                   // k.ab
     override var kAj = aj                    // k.aj — mission index 0..7
+
+    /** `G(3)` = `I(aj)` (k.java:5244, proven): the staged loader's
+     *  pack swap — level/strings/scripts move to mission `aj`'s pack.
+     *  Emits `MissionLoaded` only on a real pack change. */
+    private fun loadPackI(mission: Int) {
+        val pack = packLoader?.invoke(mission) ?: return
+        if (mission != loadedAj) {
+            level = pack.level
+            levelStrings = pack.levelStrings
+            scripts = pack.scripts
+            loadedAj = mission
+            pendingCommands += Command.MissionLoaded(mission)
+        }
+    }
+
+    /** `a(false)` (k.java:5173, proven): the fail-retry full reload —
+     *  `X();I(aj)` pack swap + `V();d(z2)` entity/stat restore. Called
+     *  by the `eC==25` restart-confirm arm via `reloadCheckpoint`. */
+    fun loadMission(mission: Int) {
+        kAj = mission
+        loadPackI(mission)
+        reload()
+    }
     /** Slice-43b claim-script VM state (aa() arms): world bounds for the
      *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
      *  the `k.*`/`i.*` statics the arg-op sub-switches write. */
@@ -2216,7 +2266,12 @@ class Level0World(
      *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
      *  Maps to our `reload()` (`inferred`). */
     override fun resetLevel(full: Boolean) { reloadCheckpoint(full) }
-    private fun reloadCheckpoint(full: Boolean) { reload() }
+    /** `a(z2)` (k.java:5173, proven): `false` = `a(false)` full
+     *  reload (`X();I(aj)` + `V();d(z2)`); `true` = `a(true)`
+     *  checkpoint restore (no `I(aj)`). */
+    private fun reloadCheckpoint(full: Boolean) {
+        if (full) reload() else loadMission(kAj)
+    }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm
      *  dispatch. `v(131072)` = back key (our `M_CYCLE` — no zone emitter
@@ -3014,6 +3069,12 @@ class Level0World(
      *  l(8); z(23); F(aj)`. `dl`/`A[]` are resource-management
      *  releases with no port equivalents (eager decode). */
     private fun menuJc9() {
+        // `G(j.g)` staged loader (k.java:4741-5090): the two stages that
+        // matter at runtime — `G(3)=I(aj)` pack swap and `G(164)=d(false)`
+        // entity spawn — run on their `j.g` ticks; every other stage is
+        // a resource load the converter already emitted.
+        if (jG == 3L) loadPackI(kAj)
+        if (jG == 164L) { spawnEntities(); postSpawn() }
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
             kBg = 0                                  // bG = 0
             kBA[16] = 0                              // a(bA,16,(short)0)

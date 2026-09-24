@@ -66,8 +66,16 @@ class Level0Renderer {
     private val paletteTextures = HashSet<Texture>()
     private val clipDims = HashMap<Int, Array<Pair<Int, Int>>>()
     private var clips: Map<Int, Clip> = emptyMap()
+    private var world: Level0World? = null
+
+    /** Mission-scoped tileset module dir — `level<loadedAj>/tileset-N`
+     *  (the `ec[aj]` pack layout, k.java:260). Falls back to level0
+     *  before `create` wires a world. */
+    private fun tilesetBase(id: Int): String =
+        "level${world?.loadedAj ?: 0}/tileset-$id/modules"
 
     fun create(world: Level0World) {
+        this.world = world
         fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
         fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
@@ -77,6 +85,22 @@ class Level0Renderer {
             Gdx.files.internal("fonts/charmap.bin").readBytes())
         fontW = com.acrebuild.core.FontClip(clips[91]!!, charmap, 4)
         fontY = com.acrebuild.core.FontClip(clips[92]!!, charmap, 4)
+        buildAtlas()
+    }
+
+    /** Re-pack the atlas after a mission switch — the `G(4..7)` tileset
+     *  stage (k.java:4775-4830, proven): the new mission's `ej` clips
+     *  replaced the old ones in the shared clip map. */
+    fun rebuildTilesets() {
+        if (::atlas.isInitialized) atlas.dispose()
+        for (t in paletteTextures) t.dispose()
+        paletteTextures.clear()
+        clipModules.clear(); clipPalettes.clear()
+        clipCanonical.clear(); clipDims.clear()
+        buildAtlas()
+    }
+
+    private fun buildAtlas() {
         packer = PixmapPacker(2048, 2048, Pixmap.Format.RGBA8888, 2, true)
         Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
             setColor(1f, 1f, 1f, 1f); fill()
@@ -91,7 +115,7 @@ class Level0Renderer {
             // negated tileset ids (level0/tilesetN/) — compute, don't map:
             // every new clip slice used to crash here when the when() lagged.
             val base = if (packId >= 0) "clips/clip$packId/modules"
-                       else "level0/tileset-${-packId}/modules"
+                       else tilesetBase(-packId)
             val canon = canonical.getOrPut(clip) { packId }
             if (canon == packId) {
                 for (i in clip.moduleNames.indices) {
@@ -150,7 +174,7 @@ class Level0Renderer {
             // keys — accept both conventions at the lookup.
             val clip = clips[pack] ?: clips[-pack] ?: return base
             val dir = if (pack >= 0) "clips/clip$pack/modules"
-                      else "level0/tileset-${-pack}/modules"
+                      else tilesetBase(-pack)
             val variant = clip.moduleNames[m]
                 .replace("-palette-00-", "-palette-%02d-".format(palette))
             val fh = Gdx.files.internal("$dir/$variant")
