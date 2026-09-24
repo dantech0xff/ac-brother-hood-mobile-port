@@ -4631,15 +4631,48 @@ class Level0World(
     /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
      *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
     private fun tickNpc(n: Entity) {
-        // `i.cu` world-freeze (i.java:15294 L109, proven): while the ax10
-        // S55 claim zone holds it, every non-ax10 entity skips `I()`.
-        if (Entity.icu && n.ax != 10) return
-        // `I()` preamble L85→La5 (i.java:15250, proven): `b = true` every
+        // `I()` head guards (i.java:15167 L9 + :15173 L21, proven):
+        // j.c==14 skips the entity tick outright; so does ax21 while a
+        // u9 dialog is suspended (k.C != null && k.u == 9).
+        if (jC == 14) return
+        if (n.ax == 21 && kC != null && dlgU == 9) return
+        // L34 (i.java:15182-15236, proven): under `k.al` only entities
+        // whose `aa` clip IS k.z[12] still run this block. Inside it,
+        // `y` is an anim-freeze counter — positive values (<100) count
+        // down and wrap to -1 (y>=100 never decrements: the aOp latched
+        // sentinel); `y<=0` runs `s()` gated `!cu && S>=0 &&
+        // (!aH || j.g % aI == 0)`.
+        if (!kAl || n.clip === clips[12]) {
+            if (n.y > 0) {
+                if (n.y < 100) n.y--
+                if (n.y == 0) n.y--
+            } else if (!Entity.icu && n.S >= 0 &&
+                (!iAH || jG % maxOf(1, iAI) == 0L)) {
+                n.advanceAnim()                                        // s()
+            }
+        }
+        // L85→L9a (i.java:15238-15244, proven): `m()` = `{ y = 0 }`
+        // (i.java:11774) — while not claim-suspended the freeze counter
+        // resets every tick, so the y-stall only persists under claim
+        // suspension. Skipped for ax==0 (the player slot type).
+        if ((kC == null || kC?.claimAb() != true) && n.ax != 0) n.y = 0
+        // `I()` preamble La5 (i.java:15250, proven): `b = true` every
         // tick — the box-dirty flag is a per-tick suppress latch, not a
         // persistent one. Arms that manage W themselves (ax15, ax60,
         // ax66 ride states) clear `b` inside their proc to keep the tail
         // from rebuilding it.
         n.b = true
+        // L108 dispatch gate (i.java:15252-15262, proven): while a claim
+        // script suspends the world OR a u9 dialog runs, only P|512
+        // entities, the claimer itself, and ax8/ax24 still dispatch —
+        // everything else returns here. (The ax==0 `k.E.P|=128` arm is
+        // player-slot territory — no ax0 npc records exist.)
+        val suspended = kC?.claimAb() == true || (jC == 21 && dlgU == 9)
+        if (suspended && (n.P and 512) == 0 && kC !== n &&
+            n.ax != 8 && n.ax != 24) return
+        // `i.cu` world-freeze (i.java:15264 L109, proven): while the ax10
+        // S55 claim zone holds it, every non-ax10 entity skips `I()`.
+        if (Entity.icu && n.ax != 10) return
         var claimed = true
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)

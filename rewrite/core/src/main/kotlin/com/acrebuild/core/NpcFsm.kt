@@ -183,8 +183,8 @@ class NpcFsm(val world: LevelCellSource) {
             }
             in 8..13 -> crush(e, player)
         }
-        // P&16 keeps the door unintegrated (static prop); anims still tick.
-        e.advanceAnim()
+        // P&16 keeps the door unintegrated (static prop); its one-per-tick
+        // anim advance comes from the I() preamble (i.java:15232).
     }
 
     /** `bf()` (i.java:14608, proven): ax58 anim-running — true iff its S is
@@ -296,10 +296,8 @@ class NpcFsm(val world: LevelCellSource) {
         e.refreshBoxes()                                     // t()
         if (e.av) e.P = e.P or 1 else e.P = e.P and -2       // L900-902
         pushL897(e, player)                                  // a(k.aS,P,W)
-        if (!e.cu && e.S >= 0 &&
-            (!world.iAH || world.jG % maxOf(1, world.iAI) == 0L)) {
-            e.advanceAnim()                                  // s()
-        }
+        // anim advance lives in the I() preamble (i.java:15232) — the
+        // source has exactly one `s()` per ticked entity.
     }
 
     // `case 11/17/23/47/50 → L104` — the shared soldier dispatch:
@@ -2245,7 +2243,7 @@ class NpcFsm(val world: LevelCellSource) {
     }
 
     fun tickDestructible(e: Entity, player: Entity) {
-        e.advanceAnim()   // universal s() in the outer tick (i.java:6407)
+        // anim advance: I() preamble (i.java:15232)
         // W comes from clip3 rects via t() — refresh like ax44 (slice-19
         // pitfall: volumes never take the probe paths that recompute it).
         e.refreshBoxes()
@@ -3600,8 +3598,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   W∩playerW` → `aA|=8`,`g.e`,`az-1`; release arm restores aA/az).
      */
     fun tickDecor(e: Entity, player: Entity) {
-        e.advanceAnim()   // universal s()
-        e.refreshBoxes()
+        e.refreshBoxes()  // anim advance: I() preamble (i.java:15232)
         if (decorClip(e.Z[0]) == 27) {
             when (e.S) {
                 19, 21, 23, 32, 35, 38 -> {
@@ -3726,7 +3723,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   (`P|=128`), otherwise `k.c(this)` — the pickup is collected.
      */
     fun tickPickup(e: Entity, player: Entity) {
-        e.advanceAnim()
+        // anim advance: I() preamble (i.java:15232)
         if (e.W.contentEquals(Entity.ZERO_RECT)) return      // L6 W==null
         if (Entity.overlapI(player.Y, e.W) && !player.isHolding()) {
             e.aF = 1
@@ -3776,7 +3773,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  prompt markers (S31/32/33 → `aS.i(216/214)` on a 65568 tap).
      */
     fun tickRequestMarker(e: Entity, player: Entity, pad: Pad) {
-        e.advanceAnim()
+        // anim advance: I() preamble (i.java:15232)
         when (e.S) {
             30, 38 -> {                   // L9/L15 — equip pickups
                 if (!Entity.overlapI(player.W, e.W)) return
@@ -4018,8 +4015,7 @@ class WaypointPool {
  *  linked-entity anim watcher + attach-sync + charge gauge — runs every
  *  tick the phase arm doesn't `return` early. */
 fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
-    val w = world
-    e.advanceAnim()
+    val w = world                                              // s(): I() preamble
     // pre-switch (L0-L6): chase-progress row while the player is airborne
     if (player.al < 260) w.kAR = (w.kBu / 20 - 1) - player.al / 400
     var tail = true
@@ -6636,7 +6632,7 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
  *  the homing delta is the waypoint's position in the scroll frame, so
  *  `bt.a/b` act as a direction vector × `bt.f` speed — verbatim. */
 fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()                                            // e() s() preamble
+    // anim advance: I() preamble (i.java:15232)
     if (!e.runnerBz) e.runnerBz = e.al > w.kP + e.Z[7]          // L7 latch
     val chainDone = e.bs >= e.runnerC
     if (e.runnerBz && e.Z[0] != 3 && chainDone && !e.inPlayV(w)) {
@@ -6815,7 +6811,7 @@ private fun NpcFsm.runnerTravelAnim(e: Entity, x: Int, y: Int) {
  *  k.P+240; no waypoint chain — (aq,ar) destination + az() travel check;
  *  burst fires on frame `T==3 && U==0` with timers Z[7]/Z[6]. */
 fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()                                            // e() s() preamble
+    // anim advance: I() preamble (i.java:15232)
     if (!e.runnerBz) e.runnerBz = e.al > w.kP                 // L7 latch
     if (!e.runnerBz) return                                 // L10 unarmed
     if (!e.inPlayV(w) && e.al > w.kP + 240) {               // L14 offscreen
@@ -7210,7 +7206,7 @@ private fun leverOccupied(e: Entity, w: Level0World, p: Entity): Boolean {
  * same bind tail. S4 parks (`P|32`).
  */
 fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()
+    // anim advance: I() preamble (i.java:15232)
     if (e.claimActive()) { e.runClaimScript(w); return }  // ab() → aa()
     when (e.S) {
         0, 5, 7, 9, 11 -> {                               // L9 — armed wait
@@ -7596,7 +7592,7 @@ fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
 }
 
 fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()
+    // anim advance: I() preamble (i.java:15232)
     if (e.claimActive()) { e.runClaimScript(w); return }        // ab()→aa()
     when (e.S) {
         7 -> {                                                  // L7 cut/re-offer
@@ -9688,10 +9684,8 @@ fun NpcFsm.initAx74(e: Entity, f: List<Int>, w: LevelCellSource) {
 }
 
 fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
-    // s() ordering (i.java:6407 L25-L34, proven): the universal anim
-    // advance runs in the shared per-tick TAIL — after the FSM arm — so
-    // an arm's r() still sees last-frame state before s() wraps T.
-    try {
+    // anim advance: I() preamble (i.java:15232) — before the arm, so
+    // an `r()` check sees the just-advanced frame (source ordering).
     when (e.S) {                                   // bN() switch (proven)
         0 -> {                                     // L4-17: collect scan
             val d = e.h(e.ak - p.ak, e.al - p.al)  // k.h octagonal
@@ -9756,9 +9750,6 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
             return
         }
         else -> return                             // L65
-    }
-    } finally {
-        e.advanceAnim()                            // universal s() tail (i.java:6407)
     }
 }
 
