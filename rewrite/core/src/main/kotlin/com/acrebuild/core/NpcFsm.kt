@@ -9922,6 +9922,53 @@ fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
     e.refreshBoxes()
 }
 
+/** ax37 `L633` (i.java:8074, proven): scroll-bound trigger init —
+ *  `Z[0..3]=r8[15..18]`; `P|=0x200`; `(P&0x20)==0 → P|=0x10`. L1bea
+ *  skips ax37 (no `i()` finish) — this arm has no setAnim call. */
+fun NpcFsm.initAx37(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(15); e.Z[1] = rf(16); e.Z[2] = rf(17); e.Z[3] = rf(18)
+    e.P = e.P or 512
+    if ((e.P and 32) == 0) e.P = e.P or 16
+}
+
+/** ax75 `Ldb1` (i.java:9206, proven): `az=r8[7]` only. */
+fun NpcFsm.initAx75(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax68 `Lfc9` (i.java:9536, proven): `az=99` only. The L1bea finish
+ *  special-cases ax68 to `i(0)` — kept verbatim here. */
+fun NpcFsm.initAx68(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 99
+    e.setAnim(0)
+    e.refreshBoxes()
+}
+
+/** ax45 `L122b` (i.java:9916, proven): bare `goto L1bea` — the record
+ *  takes ONLY the `i(r8[5])` finish; `Z` stays the ctor's zero-filled
+ *  array (the generic Z-fill does not apply). */
+fun NpcFsm.initAx45(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax31 `L1a79` (i.java:11259, proven): `az=r8[7]`;
+ *  `Z[0]=r8[8]*1000; Z[1]=r8[9]*1000; Z[2]=r8[10]; Z[3]=0`. */
+fun NpcFsm.initAx31(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = rf(8) * 1000; e.Z[1] = rf(9) * 1000
+    e.Z[2] = rf(10); e.Z[3] = 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
 /** Record init (L361 at i.java:3546, proven): `az=r8[7]`, `aC=r8[8]`
  *  (chain countdown), `o=r8[9]` (sibling aw link), `Z=new int[2]` +
  *  `Z[1]=r8[4]` (trap-type flag) — the Z re-alloc to 2 slots is folded

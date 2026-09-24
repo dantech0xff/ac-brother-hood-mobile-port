@@ -762,10 +762,10 @@ class Level0World(
             // types join as their clips + init arms get verified.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
                           else ENTITY_CLIP[type]
-            // bi[65]=-1 (proven, k.java bi[] table): ax65 is also a
-            // clipless spawn in the original — an invisible marker that
-            // routes to the "Unknown Actor Type" init (L1bc7 → L1bea).
-            if (clipIdx == null && type != 42 && type != 65) continue
+            // Every record spawns (proven, i.java:7600 dispatch): a null
+            // clip means clipless (bi[ax]=-1 or missing pack-3 entry —
+            // invisible but still ticking via i.I()). Entity handles
+            // clip=null defensively.
             val recSlot = slotOf[i] ?: -1
             // d(true): a `-99` slot was consumed before the checkpoint —
             // the record does not respawn (simple k.java:5972-5975).
@@ -829,13 +829,19 @@ class Level0World(
             else if (type == 58) npcFsm.initAx58(e, f.toList(), this)
             else if (type == 61) npcFsm.initAx61(e, f.toList())
             else if (type == 66) npcFsm.initAx66(e, f.toList(), this)
-            else if (type != 37) {
-                for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
-                // L1bea finish (i.java:11489, proven): every non-{37,70}
-                // record runs `i(r8[5])` — the common tail of every init
-                // arm including L1bc7's "Unknown Actor Type" path that
-                // ax65 routes through. ax68 takes `i(0)` verbatim.
-                if (type != 70) e.setAnim(if (type == 68) 0 else f[5])
+            else if (type == 37) npcFsm.initAx37(e, f.toList())
+            else if (type == 75) npcFsm.initAx75(e, f.toList())
+            else if (type == 68) npcFsm.initAx68(e, f.toList())
+            else if (type == 45) npcFsm.initAx45(e, f.toList())
+            else if (type == 31) npcFsm.initAx31(e, f.toList())
+            else {
+                // L1bc7→L1bea (i.java:11476/11489, proven): every
+                // remaining type ({33,36,38,39,48,49,52,53,55,57,59,
+                // 62,63,65,70,71,77} + the default) routes through the
+                // "Unknown Actor Type" print into the shared finish —
+                // NO Z writes (Z stays the ctor's zero-filled array),
+                // and ax37/70 skip the `i()` call.
+                if (type != 70) e.setAnim(f[5])
             }
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
             // Z[0]∈{1,2} (red-uniform variant), aH=0 otherwise; the player
