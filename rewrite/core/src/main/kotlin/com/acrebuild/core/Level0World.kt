@@ -820,6 +820,15 @@ class Level0World(
             else if (type == 76) npcFsm.initAx76(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 32) npcFsm.initAx32(e, f.toList(), this)
+            else if (type == 16) npcFsm.initAx16(e, f.toList())
+            else if (type == 21) npcFsm.initAx21(e, f.toList(), this)
+            else if (type == 29) npcFsm.initAx29(e, f.toList(), this)
+            else if (type == 41) npcFsm.initAx41(e, f.toList())
+            else if (type == 43) npcFsm.initAx43(e, f.toList(), this)
+            else if (type == 51) npcFsm.initAx51(e, f.toList(), this)
+            else if (type == 58) npcFsm.initAx58(e, f.toList(), this)
+            else if (type == 61) npcFsm.initAx61(e, f.toList())
+            else if (type == 66) npcFsm.initAx66(e, f.toList(), this)
             else if (type != 37) {
                 for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
                 // L1bea finish (i.java:11489, proven): every non-{37,70}
