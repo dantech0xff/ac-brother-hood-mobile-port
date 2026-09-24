@@ -43,26 +43,31 @@ package com.acrebuild.core
  *   flip `av`, release → `ag=0; i(79)`.
  * - S78/S80 (L771): `r()` → `i(79)` or `i(1)`.
  *
- * Explicitly not ported (flagged `inferred`/omitted): `i.bn` blend-mode
- * variant (`bn=false` path → run-start uses 32), `am()` ledge-hang check
- * (stubbed false = "no ledge"), `a(257,8)` ledge-drop, `k.f(this)` barrier
- * clamp (no barrier entity), climb `f()`/`i(6)` entry requires `ci`
- * climbable refs, and every interact/QTE/attack arm.
+ * Coverage (as of slice 202): the full `e()` dispatch — every case arm
+ * is ported, plus the latch-flag model verbatim: the head clears
+ * `cp/cq/ct/cu/cv/cw/z` per tick (g.java:1285-1301), `l()`'s head re-arms
+ * `cp/cq/z` (g.java:11608-11617), and the per-arm sets (S33/38/60/
+ * 263/264, air & fall families) match the original labels. `am()`,
+ * `a(257,8)`, `k.f(this)`, and the interact/QTE/attack arms landed in
+ * earlier slices (11/16/132/135/151/153). Remaining gaps are individual
+ * helper tails flagged `inferred`/`proven-dead` inline.
  */
 class PlayerFsm(private val world: LevelCellSource, private val rng: DeterministicRandom? = null) {
 
     var bn = false   // i.bn — blend/unlock flag (false in slice 2)
 
     fun tick(p: Entity, pad: Pad) {
-        p.cp = true; p.cq = true; p.ct = true; p.cw = true; p.zz = true
-        // g.z is a STICKY latch, not per-arm state (proven): `l()`'s head
-        // arms `cp=1; cq=1; z=1` unconditionally (g.java L-l head), and the
-        // latch persists across states until a `cq=0; z=0` airborne arm or
-        // a grab/knockdown clears it (g.java grab sites + i.java ax-zone
-        // `aA|=8; z=0` pairs). A per-tick clear here starved ap() in every
-        // non-grounded state — e.g. S12 pinned at an ax4 crate, where the
-        // original still lets the player slash out of the pin.
-        // (no clear — armed in groundedTail, cleared at the cq=0 sites)
+        // e() head (g.java:1285-1301, proven): clears ALL latch flags
+        // EVERY tick — `cp=cq=cr=cs=z=ct=cu=cv=cw=0`. State arms then
+        // re-arm only theirs: `l()`'s head sets `cp=cq=z=1`
+        // (g.java:11608-11617), the air/fall families set `cv/cp/ct/cw`
+        // (+`I==4→z`), S33 `cp`+`ct`-on-rise, S38 `cq`, S60 `cu`,
+        // S263/264 `cw`; `cr`/`cs` are dead in the original. (The port
+        // previously true-set them at the head — that let postTail's
+        // cq-jump gate fire from every state; the original only lets
+        // l()-family + S38-boost-exit jump.)
+        p.cp = false; p.cq = false; p.ct = false; p.cu = false
+        p.cv = false; p.cw = false; p.z = false
         // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
         if (p.gt > 0) p.gt--
         if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
@@ -71,11 +76,46 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // player drops below it, or enters a `c(S)` grounded state.
         if ((Entity.entBq != 0 && p.al > Entity.entBq) || p.S in GROUNDED_C)
             Entity.entBq = 0
+        // g.java:535-583 (proven) — the pre-dispatch L33-L88 block:
+        // `k.E.J()` companion overlay follow (:535-537, i.java:7002), the
+        // `aA|256` alert window + `aA|16` cooldown (:538-575), dead →
+        // `i(50)` (:576), `cn++` (:580) + `k.aA`-gated `aA|=1` (:581-583).
+        world.kE?.followJ(p, world)
+        if ((p.aA and 256) != 0) {
+            if (p.Z[1] >= 120) {
+                // proven-dead call path — `k.aY` is allocated but never
+                // filled (k.java:8425; only nulled at i.java:2541), so
+                // the knife throw never fires; ported verbatim so the
+                // |256 → |16 flip still runs.
+                if (world.iBn) world.kAyAt(0)?.let { p.spawnKnife(world, it.Z[4]) }
+                p.aA = (p.aA and -257) or 16
+            }
+            // L48-L53: `Z[1]` decays unless the alert is blind (`i.bn`
+            // && player `aA&8`); the Z[1]>=120 throw above also decays
+            // on the same gate verbatim (the L46 arm falls into L48).
+            if (!(world.iBn && (p.aA and 8) != 0)) {
+                p.Z[1]--
+                if (p.Z[1] <= 0) p.Z[1] = 0
+            }
+        }
+        if ((p.aA and 16) != 0) {
+            if (p.Z[0] <= 0) p.Z[0] = 3000
+            p.Z[0] -= 62                                  // `Z[0] -= j.f`
+            if (p.Z[0] <= 0) p.aA = (p.aA and -17) or 256
+        }
+        if (world.playerDead()) p.setAnim(50)               // g.java:576
+        if (world.kAA > 0 && p.aA > 1) p.aA = p.aA or 1   // g.java:581-583
+        // g.java:602-607 (proven): the terminal-velocity clamp lives in the
+        // e() head — `cn` counts consecutive capped ticks and resets the
+        // moment `ah` falls below 5120. (Write-only in the original —
+        // debug counter, no live consumer.)
+        if (p.ah > 5120) { p.ah = 5120; Entity.gCn++ } else Entity.gCn = 0
+        // g.java:615 (proven): `a(an())` — the per-tick wall rescan. The
+        // `an()` whitelist only gates the resolve half of `i.a(z2)`;
+        // `bb`/`bc`/`aT`/`aU` refresh on every state.
+        p.collideSides(world, p.rescanEligible())
         if (world.bh3) flightTick(p, pad)                      // g.n() bh3 arms
         else { dispatch(p, pad); postTail(p, pad) }
-        // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =
-        // one cell) — without it long descents tunnel through floors.
-        if (p.ah > 5120) p.ah = 5120
     }
 
     private fun dispatch(p: Entity, pad: Pad) {
@@ -84,6 +124,23 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             0, 1, 7, 11, 26, 79 -> groundedTail(p, pad)
             78, 80 -> {                       // L771
                 if (p.animFinished()) p.setAnim(if (p.S == 78) 79 else 1)
+            }
+            // g.java:3011-3024 L1301 (proven) — S8 hit-connect lock:
+            // the struck victim drives `k.aS.i(8)` on W∩X overlap
+            // (i.java:1777/1914/1976/6040/6065/8090/10363/10425); the
+            // player back-steps ±1280 opposite `av`, plays the footstep
+            // `k.A(11)` at frame 1 (`T==1&&U==0`), and on `r()` sets
+            // `P|=64` then `l()`/`aw()` resume. `i.f(this)` clamps the
+            // scroll wall; the arm falls into the L1926 tail below.
+            8 -> {
+                if (p.T == 1 && p.U == 0) world.sfx(11)          // L1303
+                p.aj = 0; p.ah = 0
+                p.ag = if (p.av) 1280 else -1280
+                if (p.animFinished()) {                          // r()
+                    p.P = p.P or 64
+                    if (!l(p, pad)) aw(p, pad)
+                }
+                world.scrollWallClamp(p)                         // i.f(this)
             }
             // g.java:1313-1352 (proven) — dismount/swing: `D=false`,
             // `co++`, then inside `ag!=0 && aO==0`: `A()` ladder snap →
@@ -112,9 +169,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                             }
                         }
                     }
+                } else {
+                    // g.java:3569-3572 (proven): `ag==0 || aO!=0 → L17c9`
+                    // — `i.O()` timewarp disarm, then the shared L17cc
+                    // grounded block (open head/feet → l(); embedded →
+                    // i(79)). This is what re-arms cp/cq/z on the
+                    // stopped/blocked tick — e.g. pinned at a crate.
+                    p.timewarpOff(world)
+                    groundedTail(p, pad)
                 }
-                // (the case `break`s to the shared post-switch code —
-                //  the l() input handler does NOT run for S12)
             }
             // g.java L12de (proven, fallback decompile): the 107/108/109
             // directional edge-vault anims — on `r()` (anim end) the player
@@ -142,7 +205,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.ae = null
                 p.ah = 0
                 p.releaseAe()                          // G()
-                pad.edge = 0                           // v()
+                pad.eL = 0                             // k.v() = eL=0 (:5710)
                 p.gD = true                            // D = true
                 if (world.gP != 0) {
                     if (world.gP == 1) { p.ag = 4096; p.av = false }
@@ -159,6 +222,481 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     }
                 }
             }
+            // g.java L297b (proven) — S86 corpse-handoff: `r()` → i(326).
+            // Arms no latch flags.
+            86 -> {
+                if (p.animFinished()) p.setAnim(326)
+            }
+            // g.java L25eb (proven) — S89 grab-pinned: `h(1)` eats the
+            // pending J&1 grab request into `I=1` + `k.at=1` (and releases
+            // an ax16 request link); `ai=aj=ag=ah=0`; `r()` → `P|=64`
+            // (sleep the body, keep the corpse drawn).
+            89 -> {
+                p.requestH(1, world)               // h(1) — side effects
+                p.ai = 0; p.aj = 0; p.ag = 0; p.ah = 0
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L2de0 (proven) — S110 pinned settle: `r()` → `P|=64`.
+            110 -> {
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L2df5 (proven) — S165 launch/leap: `aj=1536` capped
+            // gravity; `r()` → `a(0)` (the masked fling — resolves to
+            // S43 + `al+=10`).
+            165 -> {
+                p.aj = 1536
+                if (p.animFinished()) p.flingAirborne(0, world)
+            }
+            // g.java L1ce4 (proven) — S19/S36 air variants: `cv=1` then
+            // the shared L1ce8 air-family tail (same body as airFamily).
+            19, 36 -> {
+                p.cv = true
+                airFamily(p, pad)
+            }
+            // g.java L1ce8 (proven) — S24/S157: the shared air tail
+            // without the `cv` arm.
+            24, 157 -> airFamily(p, pad)
+            // g.java L3078 (proven) — S49 slide-settle: `T>9 → ag=ah=0`
+            // (frame-9 stop), `r() → i(0); E()`; early `return`.
+            49 -> {
+                if (p.T > 9) { p.ag = 0; p.ah = 0 }
+                if (p.animFinished()) { p.setAnim(0); p.eSettle(world) }
+                return
+            }
+            // g.java L169c (proven) — S74 leap-dash: `r() → ak±40; a(0)`;
+            // early `return`.
+            74 -> {
+                if (p.animFinished()) {
+                    p.ak += if (p.av) -40 else 40
+                    p.flingAirborne(0, world)
+                }
+                return
+            }
+            // g.java L2989→L2de0 (proven) — S82-85/S326 corpse-sleep:
+            // `r() → P|=64` (the L2989 label is empty and falls through
+            // to L2de0's arm).
+            82, 83, 84, 85, 326 -> {
+                if (p.animFinished()) p.P = p.P or 64
+            }
+            // g.java L30a9 (proven) — S91 settle: zero all four velocity
+            // fields; `r() → i(0)`; early `return`.
+            91 -> {
+                p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L1a46 (proven) — S92/S101 wall-bounce: zero all,
+            // `r() → av=!av; ag=∓2048 (new facing); aO==20 → ah=0 else
+            // ah=-5120`, then `a(36,36)` re-enters the wall state.
+            92, 101 -> {
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    p.av = !p.av
+                    p.ag = if (p.av) -2048 else 2048
+                    p.ah = if (p.aO == 20) 0 else -5120
+                    p.enterStateMasked(36, 36, world)
+                }
+            }
+            // g.java L11c2 (proven) — S122 bind-prep: `r() → a(53,1032)`.
+            122 -> {
+                if (p.animFinished()) p.enterStateMasked(53, 1032, world)
+            }
+            // g.java L2eb9 (proven) — S148 knockback-launch: `ah=-5120`;
+            // `r() → i(149)`.
+            148 -> {
+                p.ah = -5120
+                if (p.animFinished()) p.setAnim(149)
+            }
+            // g.java L2ed1 (proven) — S149 fling carry: `ag = g.l ? g.l :
+            // ∓1024`; `aj=1536`; `r() → g.l=0; ag=0; i(150)`.
+            149 -> {
+                p.ag = if (p.gL != 0) p.gL else (if (p.av) -1024 else 1024)
+                p.aj = 1536
+                if (p.animFinished()) {
+                    p.gL = 0; p.ag = 0; p.setAnim(150)
+                }
+            }
+            // g.java L2f42 (proven) — S152 slide: `ag=∓1024`; `r() →
+            // i(0)`; early `return`.
+            152 -> {
+                p.ag = if (p.av) -1024 else 1024
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L2f13 (proven) — S156 launch-prep: zero all; `r() →
+            // ag=g.l; ah=0; i(157)`; early `return`.
+            156 -> {
+                p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    p.ag = p.gL; p.ah = 0; p.setAnim(157)
+                }
+                return
+            }
+            // g.java L2596 (proven) — S204 victim-dump loop: `r() →
+            // i(203)`; early `return` (skips the shared tail).
+            204 -> {
+                if (p.animFinished()) p.setAnim(203)
+                return
+            }
+            // g.java L305d (proven) — S214 knockback-rise: `ah=-768`;
+            // `r() → ah=0; i(215)`; early `return`.
+            214 -> {
+                p.ah = -768
+                if (p.animFinished()) { p.ah = 0; p.setAnim(215) }
+                return
+            }
+            // g.java L2f66/L311a/L311b (proven) — S225/244/250 fully
+            // inert: the arm is a bare `return` — no flags, no tail.
+            225, 244, 250 -> return
+            // g.java L2b6c (proven) — S282 pinned: `r() → i(38)`; early
+            // `return`.
+            282 -> {
+                if (p.animFinished()) p.setAnim(38)
+                return
+            }
+            // g.java L309c (proven) — S283: `r() → i(0)`; early `return`.
+            283 -> {
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // ---- slice 196: the last unported g.e() arms -------------
+            // g.java L2b66/L2b69/L2f63 (proven) — S59/S65/S164/S211:
+            // bare `goto L353d` — no arm, no L351e settle; only the
+            // shared tail runs. Empty arm so `else` can't fling them.
+            59, 65, 164, 211 -> { }
+            // g.java L1320 (proven) — S209 vehicle ride: no mount →
+            // a(0) fling. `al` rides the mount (ax66 S11/S12 → own al,
+            // else W[1]+1); last-frame on ax60 snaps ak; on anim end
+            // ak re-centers and ax66-S12 exits to S228 (Z[0]>0) or
+            // S358; else i(0). Early `return` on every path.
+            209 -> {
+                val a = p.standingOn
+                if (a == null) { p.flingAirborne(0, world); return }
+                p.al = if (a.ax == 66 && (a.S == 11 || a.S == 12)) a.al
+                       else a.W[1] + 1
+                val c = p.clip
+                if (c != null && p.T == c.frameCount(p.S) - 1 &&
+                    a.ax == 60) {
+                    p.ak = a.ak; p.setAnim(0)
+                }
+                if (p.animFinished()) {
+                    p.ak = if (a.ax == 66 && (a.S == 11 || a.S == 12)) a.ak
+                           else (a.W[0] + a.W[2]) shr 1
+                    if (a.ax == 66 && a.S == 12) {
+                        p.setAnim(if (a.Z[0] > 0) 228 else 358)
+                        return
+                    }
+                    p.setAnim(0); return
+                }
+                return
+            }
+            // g.java L2f67 (proven) — S216 dive-attack windup: T∈[2,3]
+            // drives `ag=∓5120`; facing-cell probe (aT/aU) → a(0)
+            // fling; `r() → ag>>=1, i(217), P|=64`; early `return`.
+            216 -> {
+                p.ag = if (p.T in 2..3) (if (p.av) -5120 else 5120) else 0
+                if ((p.av && p.aT != 0) || (!p.av && p.aU != 0)) {
+                    p.flingAirborne(0, world)
+                }
+                if (p.animFinished()) {
+                    p.ag = p.ag shr 1
+                    p.setAnim(217)
+                    p.P = p.P or 64
+                }
+                return
+            }
+            // g.java L2fd8 (proven) — S217 dive-attack descent: T==0 →
+            // `aj=1536`; floor (aR/aO==2 or feet-cell==2) with no
+            // mount → `ah=aj=0`, `x1=0` (g.e(0)), `i(50)`, `return`;
+            // else `aZ||aR==5` → `bd=1, a(1), P&=~64`, zero vel;
+            // `r() → i(0)`; early `return`.
+            217 -> {
+                if (p.T == 0) p.aj = 1536
+                if ((p.aR == 2 || p.aO == 2 ||
+                     p.e(world, p.ak / 20, p.al / 20) == 2) &&
+                    p.standingOn == null) {
+                    p.ah = 0; p.aj = 0; p.x1 = 0; p.setAnim(50); return
+                }
+                if (p.aZ || p.aR == 5) {
+                    p.bd = true
+                    p.flingAirborne(1, world)
+                    p.P = p.P and -65
+                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+                }
+                if (p.animFinished()) p.setAnim(0)
+                return
+            }
+            // g.java L32b3 (proven) — S258 wall-perch: UP-edge →
+            // i(259); L/R edges (2/8 taps or 4112/8256 held) → `av`
+            // pick + i(261); DOWN-edge → `a(0)` + `al+=10` (a(0) itself
+            // adds +10 — the double-drop is verbatim); `return`.
+            258 -> {
+                if (pad.v(16388)) { p.setAnim(259); return }
+                if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
+                    if (pad.v(2) || pad.v(4112)) p.av = true
+                    else if (pad.v(8) || pad.v(8256)) p.av = false
+                    p.setAnim(261); return
+                }
+                if (pad.v(33024)) { p.flingAirborne(0, world); p.al += 10 }
+                return
+            }
+            // g.java L3334 (proven) — perch launch: `r()` → S259 goes
+            // straight up (`ag=0, ah=-7680, i(263)`); S261 goes to the
+            // side (`ag=∓3072, ah=-7680, i(264)`); `return`.
+            259, 261 -> {
+                if (p.animFinished()) {
+                    if (p.S == 259) {
+                        p.ag = 0; p.ah = -7680; p.setAnim(263); return
+                    }
+                    p.ag = if (p.av) -3072 else 3072
+                    p.ah = -7680
+                    p.setAnim(264)
+                }
+                return
+            }
+            // g.java L323b (proven) — perch-entry transitions: same
+            // input fork as S258 (UP→259, dir→av+261) but falls into
+            // `r() → i(258)` on anim end; `return`.
+            260, 262 -> {
+                if (pad.v(16388)) p.setAnim(259)
+                else if (pad.v(2) || pad.v(8) || pad.v(4112) || pad.v(8256)) {
+                    if (pad.v(2) || pad.v(4112)) p.av = true
+                    else if (pad.v(8) || pad.v(8256)) p.av = false
+                    p.setAnim(261)
+                }
+                if (p.animFinished()) p.setAnim(258)
+                return
+            }
+            // g.java L3386 (proven) — perch up-launch: `cw=1`, `aj=
+            // 2560`; `ah>=0` → 264→i(266), 263→i(265); `av()` wall
+            // resolve; `y()` grab → `ai=ag=0` + `a(0)`; tail.
+            263, 264 -> {
+                p.cw = true
+                p.aj = 2560
+                if (p.ah >= 0) {
+                    if (p.S == 264) p.setAnim(266)
+                    else if (p.S == 263) p.setAnim(265)
+                }
+                p.airWallResolve(world)
+                if (p.climbCheck()) {
+                    p.ai = 0; p.ag = 0
+                    p.flingAirborne(0, world)
+                }
+            }
+            // g.java L33da (proven) — launch descent: `r() → a(0)`;
+            // `av()`; `y()` → `ai=ag=0` + `a(0)`; tail.
+            265, 266 -> {
+                if (p.animFinished()) p.flingAirborne(0, world)
+                p.airWallResolve(world)
+                if (p.climbCheck()) {
+                    p.ai = 0; p.ag = 0
+                    p.flingAirborne(0, world)
+                }
+            }
+            // g.java Lc88 (proven) — S267 carry-init: `g.t=100`; if af
+            // is not an ax27/ax10 target, `i.ae()` (standingOn or a
+            // W∩kAc ax∈{17,11,23,50,73} carry-check) must pass or →
+            // `g.t=0, i(0)`; `E()` when airborne; walks to the target
+            // centre (`ag=∓1024`, av toward it) until |dx|≤4 → snap,
+            // `av=0`, ax10→i(291) else i(268)+af.i(1); `return`.
+            267 -> {
+                p.gt = 100
+                val f = p.af
+                if (f == null || (f.ax != 27 && f.ax != 10)) {
+                    if (!carryAvailable(p)) { p.gt = 0; p.setAnim(0); return }
+                }
+                if (!p.aZ) p.eSettle(world)
+                val f2 = p.af!!
+                val cx = if (f2.ax == 10) (f2.W[0] + f2.W[2]) shr 1
+                         else (f2.X[0] + f2.X[2]) shr 1
+                val dx = cx - p.ak
+                if (kotlin.math.abs(dx) <= 4) {
+                    p.ak = cx; p.av = false
+                    if (f2.ax == 10) p.setAnim(291)
+                    else { p.setAnim(268); f2.setAnim(1) }
+                } else if (dx < 0) {
+                    p.av = true; p.ag = -1024
+                } else {
+                    p.av = false; p.ag = 1024
+                }
+                return
+            }
+            // g.java Ld69 (proven) — S268 hostage-carry walk: `ag=ah=
+            // 0`; body only when `r() || T≥len-2`; needs af ax27;
+            // marker 102 (ae) hovers 85px overhead; `af.i(2)+az=-2`
+            // once; anim-end → `T=len-1,U=0`; `g.g` within 60 → marker
+            // 8, else release it; `k.u()` edge (+r9/g.g fork) →
+            // `af.i(1), k.v(), G()`, return; `r9 && v(65568) && g.g` →
+            // `G(), af snaps to player, i(3), i(270), A(13)`; `return`.
+            268 -> {
+                p.ag = 0; p.ah = 0
+                val c = p.clip
+                val nearEnd = p.animFinished() ||
+                    (c != null && p.T >= c.frameCount(p.S) - 2)
+                if (!nearEnd) return
+                val f = p.af
+                if (f == null || f.ax != 27) return
+                if ((p.ae == null || p.ae!!.S != 102) && f.S != 1) {
+                    p.releaseAe()
+                    p.spawnMarker(world, 102, p.ak, p.al - 85)
+                }
+                p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                if (f.S != 2 && p.az != -2) {
+                    f.setAnim(2); p.az = -2; return
+                }
+                p.T = (c?.frameCount(p.S) ?: 0) - 1; p.U = 0
+                var r9 = 0
+                val gg = p.g
+                if (gg != null) {
+                    r9 = if (kotlin.math.abs(gg.ak - p.ak) >= 60) 0 else 1
+                    if (r9 == 1) {
+                        if (p.ae == null || p.ae!!.S != 8) {
+                            p.releaseAe()
+                            p.spawnMarker(world, 8, p.ak, p.al - 85)
+                        }
+                    } else if (p.ae != null && p.ae!!.S == 8) p.releaseAe()
+                } else if (p.ae != null && p.ae!!.S == 8) p.releaseAe()
+                if (padAnyEdge(pad) && (r9 == 0 || p.g == null)) {
+                    f.setAnim(1); world.clearLatches(); p.releaseAe(); return
+                }
+                if (r9 != 0 && pad.v(65568) && p.g != null) {
+                    p.releaseAe()
+                    f.ak = p.ak; f.al = p.al; f.setAnim(3)
+                    p.setAnim(270); world.sfx(13)
+                }
+                return
+            }
+            // g.java Lf19 (proven) — S269 carry-drop: `g.t=0`; `r()` &&
+            // af ax27 → `i(0)+E()+af.i(2)+af=null`; shared tail.
+            269 -> {
+                p.gt = 0
+                if (p.animFinished()) {
+                    val f = p.af
+                    if (f != null && f.ax == 27) {
+                        p.setAnim(0); p.eSettle(world)
+                        f.setAnim(2); p.af = null
+                    }
+                }
+            }
+            // g.java Lf50 (proven) — S270 grab-QTE lead-in: `g.t=0`;
+            // no `g.g` → `i(0)` + tail; `g.g` forced to S133; `r()` →
+            // `i(271)`, `g.g.i(145)`, `bl=5`; `return` (with-gg only).
+            270 -> {
+                p.gt = 0
+                val gg = p.g
+                if (gg == null) {
+                    p.setAnim(0)
+                } else {
+                    if (gg.S != 133) gg.setAnim(133)
+                    if (p.animFinished()) {
+                        p.setAnim(271); gg.setAnim(145); p.bl = 5
+                    }
+                    return
+                }
+            }
+            // g.java Lf94 (proven) — S271 grab-QTE mash: `g.t=0`; no
+            // `g.g` → `i(0)` + tail; `g.g` → S134; marker 8 overhead;
+            // `v(65568)` → `bl+=2` else `j.g%2==0` → `bl--`; `bl<0` →
+            // release, `i(0)`, `g.g.i(5)`, `aA=1`, `Q()`; `bl>=10` →
+            // release, `P&=~64`, `i(0)`, `g.g.aB=0`, `i(135)`,
+            // `k.e(0,aw)` kill credit, `k.o(3)` stat; `return` (with-gg).
+            271 -> {
+                p.gt = 0
+                val gg = p.g
+                if (gg == null) {
+                    p.setAnim(0)
+                } else {
+                    if (gg.S != 134) gg.setAnim(134)
+                    if (p.ae == null || p.ae!!.S != 8) {
+                        p.releaseAe()
+                        p.spawnMarker(world, 8, p.ak, p.al - 85)
+                    }
+                    p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                    if (pad.v(65568)) p.bl += 2
+                    else if (world.jG % 2 == 0L) p.bl -= 1
+                    if (p.bl < 0) {
+                        p.bl = 0; p.releaseAe(); p.setAnim(0)
+                        gg.setAnim(5); gg.aA = 1; gg.facePlayer(world)
+                        return
+                    }
+                    if (p.bl >= 10) {
+                        p.bl = 0; p.releaseAe(); p.P = p.P and -65
+                        p.setAnim(0)
+                        gg.aB = 0; gg.setAnim(135)
+                        world.countKill(p.aw); world.kCount(3)
+                        return
+                    }
+                    return
+                }
+            }
+            // g.java Lc7a (proven) — S280: `r() → i(38)`; `return`.
+            280 -> {
+                if (p.animFinished()) p.setAnim(38)
+                return
+            }
+            // g.java La41 (proven) — S286/287 knife-aim hold: airborne
+            // w/o mount → `a(0)`; `v(65568)` queues `R` (286→287,
+            // 287→286); `r()` → `i(R!=-1?R:0)`, `R=-1`; `return`.
+            286, 287 -> {
+                if (!p.aZ && p.standingOn == null) {
+                    p.flingAirborne(0, world); return
+                }
+                if (pad.v(65568)) {
+                    p.R = -1
+                    if (p.S == 286) p.R = 287
+                    else if (p.S == 287) p.R = 286
+                }
+                if (p.animFinished()) {
+                    p.setAnim(if (p.R != -1) p.R else 0)
+                    p.R = -1
+                }
+                return
+            }
+            // g.java Lb10 (proven) — S291 drag-carry: `ag=ah=0`; body
+            // when `r() || T≥len-2` else tail; needs af ax10; markers
+            // 102+8; `k.u()` fork → `i(285), af=null, k.v(), G()`;
+            // `r9&&v(65568)&&g.g` → `G(), af=null, i(270), A(13)`;
+            // every exit → shared tail (L353d).
+            291 -> {
+                p.ag = 0; p.ah = 0
+                val c = p.clip
+                if (p.animFinished() ||
+                    (c != null && p.T >= c.frameCount(p.S) - 2)) {
+                    val f = p.af
+                    if (f != null && f.ax == 10) {
+                        p.T = (c?.frameCount(p.S) ?: 0) - 1; p.U = 0
+                        if (p.ae == null || p.ae!!.S != 102) {
+                            p.releaseAe()
+                            p.spawnMarker(world, 102, p.ak, p.al - 85)
+                        }
+                        p.ae?.let { it.ak = p.ak; it.al = p.al - 85 }
+                        var r9 = 0
+                        val gg = p.g
+                        if (gg != null) {
+                            r9 = if (kotlin.math.abs(gg.ak - p.ak) >= 60) 0 else 1
+                            if (r9 == 1) {
+                                if (p.ae == null || p.ae!!.S != 8) {
+                                    p.releaseAe()
+                                    p.spawnMarker(world, 8, p.ak, p.al - 85)
+                                }
+                            } else if (p.ae != null && p.ae!!.S == 8) {
+                                p.releaseAe()
+                            }
+                        } else if (p.ae != null && p.ae!!.S == 8) {
+                            p.releaseAe()
+                        }
+                        if (padAnyEdge(pad) && (r9 == 0 || p.g == null)) {
+                            p.setAnim(285); p.af = null
+                            world.clearLatches(); p.releaseAe()
+                        } else if (r9 != 0 && pad.v(65568) && p.g != null) {
+                            p.releaseAe(); p.af = null
+                            p.setAnim(270); world.sfx(13)
+                        }
+                    }
+                }
+            }
+            // g.java L92e (proven) — S313: bare `return`.
+            313 -> return
             // g.java:1938-2015 + L1ab3-L1c33 (proven) — wall-rebound:
             // `cp=true`, `aj=512`; `A()` → ledge snap i(74);
             // direction-toward-av HELD && `ah<0` (still rising) → ct=true +
@@ -227,9 +765,83 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             32 -> {                           // case 32 — run-start end → settle
+                world.scrollWallClamp(p)      // g.java:1895 head — i.f(this)
                 if (p.animFinished()) {
                     p.ag = 0
                     p.setAnim(if (p.Q == 79) 79 else 0)
+                }
+            }
+            // `e()` case 37 (L1560, proven — fallback g.java:6461+): the
+            // grapple-climb step. Bound to an ax10-S32 grapple zone or
+            // grounded (aO==5): dir-held into facing + open facing cell →
+            // i(37) + ag=∓1536 step; opposite-dir input flips `av`; else
+            // `r()` → i(38) bound stance. Non-bound without ground falls.
+            37 -> {
+                val bound = p.ac != null && p.ac!!.ax == 10 && p.ac!!.S == 32
+                if (bound || p.aO == 5) {
+                    if (!bound) p.al = ((p.W[1] / 20) * 20) + 10
+                    p.ag = 0
+                    val dirHeld = if (p.av) pad.u(Pad.M_LEFT) else pad.u(Pad.M_RIGHT)
+                    if (dirHeld && p.facingCellOpen(world)) {
+                        p.setAnim(37)
+                        p.ag = if (p.av) -1536 else 1536
+                    } else {
+                        val oppDir = if (p.av) pad.v(Pad.M_RIGHT) else pad.u(Pad.M_LEFT)
+                        if (oppDir) p.av = !p.av
+                        else if (p.animFinished()) p.setAnim(38)
+                    }
+                } else {
+                    p.al = p.W[3]
+                    p.setAnim(43)
+                }
+            }
+            // `e()` case 38 (L1502, proven — structured g.java:2101+):
+            // the bound stance (grapple zone ax10-S32, crate, door or
+            // carrier `ac`). Grapple-bound: `u(16388)` or dir-tap into
+            // facing → `G(); al-=20; i(23); ah=2560` spring-jump with
+            // horizontal launch on dir keys + `cq`. Else-grounded:
+            // snap to cell + `u(16388)` → `G()` + `a(54,8)` vault-out on
+            // open head cell. `u(33024)` → drop-check → `i(43)` fall;
+            // same-facing held → i(37) climb; opposite → `av` flip.
+            38 -> {
+                p.ag = 0
+                val grapple = p.ac != null && p.ac!!.ax == 10 && p.ac!!.S == 32
+                if (grapple) {
+                    if (pad.u(Pad.M_UP) || (if (p.av) pad.u(Pad.M_TAP_L) else pad.u(Pad.M_TAP_R))) {
+                        p.releaseAe()                                     // G()
+                        p.al -= 20
+                        p.setAnim(23)
+                        p.ah = 2560
+                        if (pad.u(Pad.M_TAP_L) || pad.u(Pad.M_TAP_R)) {
+                            p.ag = if (p.av) -4096 else 4096
+                        }
+                        p.cq = true
+                    }
+                } else if (p.aO != 5) {
+                    p.al = p.W[3]
+                    p.setAnim(43)
+                } else {
+                    p.al = ((p.W[1] / 20) * 20) + 10
+                    if (pad.u(Pad.M_UP)) {
+                        p.releaseAe()                                     // G()
+                        p.al -= 20
+                        p.probeCells(world)                               // x()
+                        p.al += 20
+                        if (p.aO == 0) p.enterStateMasked(54, 8, world)
+                    }
+                }
+                if (pad.u(Pad.M_DOWN)) {
+                    p.al += 20
+                    p.probeCells(world)                                   // x()
+                    p.al -= 20
+                    if (p.aO == 0) {
+                        p.al = p.W[3] + 10
+                        p.setAnim(43)
+                    }
+                } else if (if (p.av) !pad.u(Pad.M_LEFT) else !pad.u(Pad.M_RIGHT)) {
+                    p.setAnim(37)
+                } else if (if (p.av) pad.u(Pad.M_LEFT) else pad.v(Pad.M_RIGHT)) {
+                    p.av = !p.av
                 }
             }
             // `e()` case 27 (fallback g.java:5811-5818 L27da, proven):
@@ -360,7 +972,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             20, 22, 23, 25, 215 -> airFamily(p, pad)
-            43 -> fallArm(p)
+            // shared fall case (g.java:1400 `case 16/35/43/150/252`)
+            16, 35, 43, 150, 252 -> fallArm(p, pad)
             // g.java:2736-2757 (proven) — S102 wall-cling: grounded →
             // `l()` input-consume; else `aC` counts down — on expiry or
             // wall-contact lost (`aR!=4`) `a(0)` fling + `al+=21` drop;
@@ -453,8 +1066,91 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             257 -> ledgeDropArm(p)            // L1770
-            63 -> {                           // climb-up end — inferred arm
-                if (p.animFinished()) p.setAnim(0)
+            // g.java L2b3b (proven) — S56 grab-settle: `ah=ag=0`; anim end
+            // → any key held (`u(127999)`) → i(65) shimmy, else i(59)
+            // hang-idle.
+            56 -> {
+                p.ah = 0; p.ag = 0
+                if (p.animFinished()) {
+                    if (pad.u(127999)) p.setAnim(65) else p.setAnim(59)
+                }
+            }
+            // g.java L2421 (proven) — S60 ledge-hang: when it didn't
+            // arrive via the S63 climb (Q!=63) or UP/toward-wall is held
+            // → i(62) climb-up; always latches `cu`.
+            60 -> {
+                if (p.Q != 63 || pad.u(Pad.M_UP) ||
+                    (p.av && pad.u(4114)) || (!p.av && pad.u(8264))) {
+                    p.setAnim(62)
+                }
+                p.cu = true
+            }
+            // g.java L2460 (proven) — S61/S203 shared ledge-hang:
+            // `ag=ah=0`. S61 counts `aC` down — the one-shot `aC==0`
+            // tick, a lost front cell (`e<12`) with no `ga` link, or
+            // `v(33024)` all take the drop-release `H();G();al+=W3-W1;
+            // a(0)` (an ax43 carrier link blocks it). S203 (victim
+            // carry) skips `aC` and instead tracks `g.h`: link gone/dead
+            // → `G()`; alive → `k.c(ak,al-85,gh.aw)` marker + `v(65568)`
+            // dumps the victim (`G();i(204);gh.ak=ak±10;gh=null`).
+            // Shared tail: UP/toward-wall edge → `H();G();i(62)`.
+            61, 203 -> {
+                p.ag = 0; p.ah = 0
+                var drop = false
+                if (p.S != 203) {
+                    p.aC--
+                    if (p.aC == 0) {
+                        drop = true                            // grace expired
+                    } else {
+                        val cell = p.e(world,
+                            (p.ak + if (p.av) -10 else 10) / 20,
+                            (p.al + 10) / 20)
+                        if (cell >= 12) {
+                            if (pad.v(33024)) drop = true      // manual release
+                        } else if (p.ga == null || pad.v(33024)) {
+                            drop = true                        // edge lost / link-drop
+                        }
+                    }
+                } else if (pad.v(33024)) {
+                    drop = true
+                }
+                if (drop && !(p.ga != null && p.ga!!.ax == 43)) {
+                    p.dropHeld()                               // H()
+                    p.releaseAe()                              // G()
+                    p.al += p.W[3] - p.W[1]
+                    p.flingAirborne(0, world)                  // a(0)
+                }
+                if (p.S == 203) {
+                    val h = p.gh
+                    if (h == null || h.deadRelease()) {
+                        p.releaseAe()                          // L2558 — G()
+                    } else {
+                        world.showPrompt(p.ak, p.al - 85, h.aw)// k.c(ak,al-85,aw)
+                        if (pad.v(65568)) {
+                            p.releaseAe()
+                            p.setAnim(204)
+                            h.ak = p.ak + (if (p.av) 10 else -10)
+                            p.gh = null
+                        }
+                    }
+                }
+                if (pad.v(Pad.M_UP) || (p.av && pad.v(4114)) ||
+                    (!p.av && pad.v(8264))) {
+                    p.dropHeld(); p.releaseAe()                // H(); G()
+                    p.setAnim(62)
+                }
+            }
+            // g.java L25b5 (proven) — S62 climb-up finish: `r()` → step
+            // ±10 then `a(aO>12 ? 79 : 0, 9)` settle.
+            62 -> {
+                if (p.animFinished()) {
+                    p.ak += if (p.av) -10 else 10
+                    p.enterStateMasked(if (p.aO > 12) 79 else 0, 9, world)
+                }
+            }
+            // g.java L25a5 (proven) — S63 climb anim end → i(60) hang.
+            63 -> {
+                if (p.animFinished()) p.setAnim(60)
             }
             67, 68, 69, 112, 113, 114, 115 -> comboArm(p, pad)  // L1341 family
             // S357 scripted leap (g.java:4154, proven): `ag=3328` but
@@ -618,6 +1314,134 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     }
                 }
             }
+            // `e()` cases 50/241 (L447, proven — structured g.java:2160+):
+            // crush death — frame-1 `d(999)` + `ab` drop + sfx18, then
+            // `ag>>=2` damping; a bound crate pushes the corpse (`ag+=a.ag`),
+            // a bound carrier snaps it (`al=a.al`); `r()` → `k.l(12)` fail.
+            50, 241 -> {
+                if (p.T == 1 && p.U == 0) {
+                    p.drainMeter(999)                                    // d(999)
+                    p.ab = null
+                    world.sfx(18)                                        // k.A(18)
+                }
+                p.ag = p.ag shr 2; p.ah = 0; p.aj = 0
+                if (p.ga != null) {
+                    if (p.ga!!.ax == 51) p.ag += p.ga!!.ag
+                    else if (p.ga!!.ax == 43) p.al = p.ga!!.al
+                    p.ga = null
+                }
+                if (p.animFinished()) world.stateL(12)                   // k.l(12)
+            }
+            // `e()` cases 228/358 (L1737, proven — structured g.java:3282+):
+            // ride/push bound stance — zero velocity; `u(16388)` or
+            // dir-tap into facing → facing-vs-crate-side check, mismatch
+            // releases into `i(235)` + `ac=null` + `G()` (ac==null is a
+            // no-op, the stance persists); else `v(4112/8256)` → `av`.
+            // `r()` on S228 → `a(0)` + `i(252)` dismount fall.
+            228, 358 -> {
+                p.aj = 0; p.ah = 0; p.ai = 0; p.ag = 0
+                if (pad.u(Pad.M_UP) ||
+                    (if (p.av) pad.u(Pad.M_TAP_L) else pad.u(Pad.M_TAP_R))) {
+                    if (p.ac != null && p.av != (p.ac!!.ak < p.ak)) {
+                        p.setAnim(235)
+                        p.bindAc(null)                                   // ac = null
+                        p.releaseAe()                                    // G()
+                    }
+                } else if (pad.v(Pad.M_LEFT)) {
+                    p.av = true
+                } else if (pad.v(Pad.M_RIGHT)) {
+                    p.av = false
+                }
+                if (p.animFinished() && p.S == 228) {
+                    p.setAnim(0)
+                    p.setAnim(252)
+                }
+            }
+            // `e()` cases 235/238 (L536, proven — structured g.java:3350+):
+            // push/pull entry — `T==1`: bound ax66/ax51 → homing velocity
+            // `(ac-ak)<<8 / r96` (r96 = ax66?8 : ax51?10→5 when within 60
+            // of either axis); unbound/wrong-ax → `ag=±4864, ah=-6656`
+            // dive. Bound → `r()` chains into push-hold (235→236, 238→239);
+            // unbound → `av()` + `y()→ai=ag=0;a(0)` + `r()→a(0)`.
+            235, 238 -> {
+                val held = p.ac != null && (p.ac!!.ax == 66 || p.ac!!.ax == 51)
+                if (p.T == 1) {
+                    if (held) {
+                        var i16 = if (p.ac!!.ax == 51) 10 else 8
+                        if ((Math.abs(p.ac!!.ak - p.ak) < 60 ||
+                            Math.abs(p.ac!!.al - p.al) < 60) && p.ac!!.ax == 51) {
+                            i16 = i16 shr 1
+                        }
+                        p.ag = 0; p.ah = 0
+                        p.ag = ((p.ac!!.ak - p.ak) shl 8) / i16
+                        p.ah = ((p.ac!!.al - p.al) shl 8) / i16
+                    } else {
+                        p.ag = if (p.av) -4864 else 4864
+                        p.ah = -6656
+                    }
+                }
+                if (held) {
+                    if (p.animFinished()) p.setAnim(if (p.S == 235) 236 else 239)
+                } else {
+                    p.airWallResolve(world)                              // av()
+                    if (p.climbCheck()) {                                // y()
+                        p.ai = 0; p.ag = 0
+                        p.setAnim(0)
+                    }
+                    if (p.animFinished()) p.setAnim(0)
+                }
+            }
+            // `e()` cases 236/239 (L620, proven — structured g.java:3390+):
+            // push-hold — bound-crate check lost (`ac==null||ax!=51||
+            // S!=8`) → `aj=512` gravity accel; bound but `al <= ac.al`
+            // (player bottom at/above crate's) → `a=null; a(0)` release.
+            236, 239 -> {
+                if (p.ac == null || p.ac!!.ax != 51 || p.ac!!.S != 8) {
+                    p.aj = 512
+                } else if (p.al <= p.ac!!.al) {
+                    p.ga = null                                          // a = null
+                    p.setAnim(0)
+                }
+            }
+            // `e()` cases 237/240 (L589, proven — structured g.java:3401+):
+            // push-align — `r()` gate: bound ax66-S12 carrier → ride mount
+            // (`Z[0]>0` → i(228) else i(358)); bound ax51 → edge-align step
+            // ±20 then `i(0)`; `ag=ah=0` + non-crate link `ak=a.ak` snap.
+            237, 240 -> {
+                if (p.animFinished()) {
+                    val a = p.ga
+                    if (a == null || a.ax != 66 || a.S != 12) {
+                        if (a != null && a.ax == 51) {
+                            if (p.av) {
+                                if (p.W[2] > a.W[2]) p.ak -= 20
+                            } else if (p.W[0] < a.W[0]) {
+                                p.ak += 20
+                            }
+                        }
+                        p.setAnim(0)
+                    } else if (a.Z[0] > 0) {
+                        p.setAnim(228)
+                    } else {
+                        p.setAnim(358)
+                    }
+                    p.ag = 0; p.ah = 0
+                    if (a != null && a.ax != 51) p.ak = a.ak
+                }
+            }
+            // `e()` cases 242/243 (L1721, proven — structured g.java:3428+):
+            // bind-release anims — `aj=1536` gravity; S242 apex (`ah>=0`) →
+            // i(243); S243 `r()` → `a(0)`; `av()` edge guard then
+            // `y() → a(true); ai=ag=0` settle.
+            242, 243 -> {
+                p.aj = 1536
+                if (p.S == 242 && p.ah >= 0) p.setAnim(243)
+                if (p.S == 243 && p.animFinished()) p.setAnim(0)
+                p.airWallResolve(world)                                  // av()
+                if (p.climbCheck()) {                                    // y()
+                    p.collideSides(world, true)                          // a(true)
+                    p.ai = 0; p.ag = 0
+                }
+            }
             else -> {
                 // default arm (g.java:1145-1147, proven) — the ~150-state
                 // fallthrough family (attack anims, hit-reacts, decor
@@ -630,6 +1454,16 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     p.flingAirborne(0, world)
                 }
             }
+        }
+        // L1926-L1946 shared tail (g.java:3460-3473, proven) — the
+        // universal post-arm block every `goto L1926` arm flows into.
+        // `ab` releases when the linked partner reaches S14 (skipped on
+        // S9's own arm); `aO==6` (head cell = drop-through type) fires
+        // op18 `g.a(); i(43)` unless standing in/on a type-2 cell.
+        if (p.S != 9 && p.ab?.S == 14) p.ab = null              // L1926-L1933
+        if (p.aR != 2 && p.aO != 2 &&
+            p.e(world, p.ak / 20, p.al / 20) != 2) {           // L() i.java:7191
+            if (p.aO == 6) p.applyHit(18, 0, p, world)         // a(18,0,0,this)
         }
         interactScan(p)     // az() — g/ci/at interact maintenance+scan
         mountEntry(p, pad)  // L1947 — mount/assassinate context arm
@@ -731,8 +1565,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- grounded family tail (L682) ----------------------------------------
     private fun groundedTail(p: Entity, pad: Pad) {
-        p.z = true    // g.z — the locomotion arms set it (L890/1834/4976
-                      // equivalents all live inside this tail)
+        // `l()` head (g.java:11608-11617, proven): `cp=1; cq=1; z=1`
+        // every tick the grounded family runs.
+        p.cp = true; p.cq = true; p.z = true
         if (p.aO <= 12 || p.aR <= 12) {
             if (p.S == 79) {
                 p.ag = 0; p.ah = 0
@@ -766,8 +1601,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * `am()` (g.java:301, proven for the `ag != 0` half): moving into a
      * type-19 wall cell (aV/aW = cell left/right of feet) with `aR == 0`
      * snaps `ak` to the grid and enters `a(63, 16385)` (deferred i(63) +
-     * `al = ((W[3]+10)/20)*20 - 1` climb-up snap). ag==0 ledge variant
-     * unmined.
+     * `al = ((W[3]+10)/20)*20 - 1` climb-up snap). The `ag==0` L5d arm
+     * (g.java:687-712, proven): standing inside a type-19 cell with an
+     * open side (aV==0 → face left; aW==0 → face right) snaps `ak` to the
+     * open side's grid edge — the ledge pull-up entry.
      */
     private fun wallClimb(p: Entity): Boolean {
         when {
@@ -776,6 +1613,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             }
             p.ag < 0 && p.aW == 19 && p.aR == 0 -> {
                 p.av = false; p.ak = (p.ak / 20) * 20 + 20
+            }
+            p.ag == 0 && p.aR == 19 -> {
+                if (p.aV == 0) p.av = false
+                if (p.aW == 0) p.av = true
+                p.ak = (p.ak / 20) * 20 + if (p.av) 20 else 0
             }
             else -> return false
         }
@@ -818,19 +1660,21 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- l() grounded input helper (proven) ----------------------------------
     fun l(p: Entity, pad: Pad): Boolean {
-        p.aF = 0; p.cp = true; p.cq = true; p.zz = true
+        p.aF = 0; p.cp = true; p.cq = true; p.z = true
         if (p.S == 79) {
             if (pad.u(Pad.M_LEFT)) {
                 if (!p.av) p.av = true
                 else {
                     p.setAnim(if (bn) 199 else 32)
                     p.ag = if (p.hitWall()) 0 else if (p.S == 199) 0 else -2560
+                    world.scrollWallClamp(p)   // g.java:5172 — i.f(this)
                 }
             } else if (pad.u(Pad.M_RIGHT)) {
                 if (p.av) p.av = false
                 else {
                     p.setAnim(if (bn) 199 else 32)
                     p.ag = if (p.hitWall()) 0 else if (p.S == 199) 0 else 2560
+                    world.scrollWallClamp(p)   // g.java:5182 — i.f(this)
                 }
             }
             // L41 tail: jump press continues to the shared L55 block
@@ -881,7 +1725,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     // -- ax() sustained run (proven) ------------------------------------------
     private fun ax(p: Entity): Boolean {
         p.ah = 0
-        if (!p.aZ && p.standingOn == null) { p.cq = false; p.z = false; p.zz = false; return false }
+        if (!p.aZ && p.standingOn == null) { p.cq = false; p.z = false; return false }
         if (p.aR > 18) {
             // edge walk: open space beside the feet cell and no wall
             if (p.av && p.aV < 12 && !p.bb) { p.setAnim(26); p.ag = -1280 }
@@ -894,6 +1738,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             17 -> p.ah = (-p.ag) shr 1
         }
         if (p.ah < 0) p.ah = 0
+        world.scrollWallClamp(p)               // g.java:5319 — i.f(this) tail
         return true
     }
 
@@ -911,7 +1756,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun aw(p: Entity, pad: Pad): Boolean {
         p.ag = 0; p.ah = 0
         if (!p.aZ && p.standingOn == null) {
-            p.cq = false; p.z = false; p.zz = false
+            p.cq = false; p.z = false
             p.enterFall(0, world)
             return true
         }
@@ -945,8 +1790,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.hitWall() && p.ag != 0) { p.ag = 0 /* a(S,4) vfx skipped */ }
             if (pad.u(Pad.M_LEFT)) {
                 if (p.av) p.ag = -2560 else p.av = true
+                world.scrollWallClamp(p)       // g.java:3153 — i.f(this)
             } else if (pad.u(Pad.M_RIGHT)) {
                 if (p.av) p.av = false else p.ag = 2560
+                world.scrollWallClamp(p)       // g.java:3160 — i.f(this)
             } else if (!pad.u(Pad.M_LEFT or Pad.M_RIGHT)) {
                 p.ag = 0; p.setAnim(79)
             }
@@ -978,40 +1825,103 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.ah = -5120
             p.ag = if (p.av) -2048 else 2048
         }
+        world.scrollWallClamp(p)               // g.java:1740 — i.f(this) tail
     }
 
     // -- air family {20,22,23,25,215} (L889 block, proven core) ---------------
+    /** `i.ae()` (i.java:59138, proven) — carry-available scan:
+     * `g.a != null` → true; else any entity with ax∈{17,11,23,50,73}
+     * passing `i.h()`. `i.h()` (i.java:59097): `W∩k.ac` overlap, then
+     * per-type: ax11/73 → `!P() && aA≥1`; ax17/50 → true; else false. */
+    private fun carryAvailable(p: Entity): Boolean {
+        if (p.standingOn != null) return true
+        for (e in world.npcs) {
+            when (e.ax) {
+                17, 11, 23, 50, 73 -> if (carryClaimable(e)) return true
+            }
+        }
+        return false
+    }
+
+    private fun carryClaimable(e: Entity): Boolean {
+        val r = world.kAc ?: return false
+        if (!Entity.overlapI(e.W, r)) return false
+        return when (e.ax) {
+            11, 73 -> !e.deadRelease() && e.aA >= 1
+            17, 50 -> true
+            else -> false
+        }
+    }
+
+    /** `k.u()` (k.java:20271, proven) — any `bB` edge EXCEPT the two
+     *  soft-key bits (0x20000/0x40000): `bB!=0 && !(bB&0x20000) &&
+     *  !(bB&0x40000)`. */
+    private fun padAnyEdge(pad: Pad): Boolean =
+        pad.bB != 0 && pad.bB and 0x20000 == 0 && pad.bB and 0x40000 == 0
+
     private fun airFamily(p: Entity, pad: Pad) {
         p.cp = true; p.ct = true; p.cw = true
+        // L1ce4 (proven): `cv=1` — only the L1ce4-entry states arm cv:
+        // {18,19,23,36} direct + 22 via L1cc5. S20/24/25/157/215 enter at
+        // L1ce8 and never arm cv — their wall-grab rides S215 or aF
+        // alone.
+        if (p.S == 22 || p.S == 23) p.cv = true
+        if (p.gI == 4) p.z = true              // L1ce8 — I==4 arms z
         p.aj = 1536
         if (p.S == 22 && p.animFinished()) p.P = p.P or 64
         if (p.S == 20) {
             p.ag = if (p.av) -2048 else 2048
             p.ah = -5120
         }
-        if (!p.hitWall()) {
-            p.airWallResolve(world)
-            if (p.ah <= 0) {
-                if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) p.land(world, false)
-                else if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
-                    if (p.S == 215) { p.enterFall(0, world); p.av = !p.av }
-                    else p.land(world, p.aR == 4 || p.aS == 4)
-                }
+        // L1e3e/L1e6e (g.java:4578-4630, proven): y() (hitWall) gates ONLY
+        // the wall-grab — `cv && aF!=0` (armed by the postTail cv producer
+        // on the previous tick's dir/up input) or S215, plus side cell 20
+        // → L1e94 grab (snap + aK marker + i(101), goto L353d). Grab not
+        // met → L1f84 drift clamp for S25/15/19 under wall contact, then
+        // L1fb3 runs av()+land either way (contact or not).
+        if (p.hitWall()) {
+            if (((p.cv && p.aF != 0) || p.S == 215) && !p.ba &&
+                (if (p.av) p.aT == 20 else p.aU == 20)) {
+                wallGrabSnap(p, flipOn215 = true)
+                return
+            }
+            if ((p.S == 25 || p.S == 15 || p.S == 19) && p.ag != 0) {
+                p.ag = if (p.ag > 0) 512 else -512
             }
         }
+        p.airWallResolve(world)                         // av()
+        // L1fb3 (proven): `ah <= 0 → skip` — the land block runs
+        // while FALLING (ah > 0). aR>=12 reaches L1ffb through every
+        // path (the aQ/aQ!=23 detours collapse back into it), so the
+        // effective condition is the L1fd9 list; d(0) — no ==4 arg
+        // (the aR==4/aS==4 variant lives only in the fall arm L2136).
+        if (p.ah > 0) {
+            if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5) {
+                if (p.S == 215) { p.enterFall(0, world); p.av = !p.av }
+                else p.land(world, false)
+            }
+        }
+        // g.java:1600 (proven): i.f(this) caps the !y() free-air path.
+        // The cv/aF-bound climb sites (:1614/:1645) sit in unported
+        // branches — those climb states have their own arms.
+        world.scrollWallClamp(p)
         if (p.animFinished() && p.S != 215 && p.S != 22) {
             p.enterFall(0, world)
             p.collideSides(world, true)
         }
-        if (p.S == 22 && p.ah >= 0 && p.ah + p.aj < 0) p.setAnim(23)
+        // L2046 (proven): `ah<0 && ah+aj>=0` — still rising this tick but
+        // the next gravity step reaches the apex → swap to the apex pose.
+        if (p.S == 22 && p.ah < 0 && p.ah + p.aj >= 0) p.setAnim(23)
     }
 
-    // -- S43 fall arm (L1045, proven core) ------------------------------------
-    private fun fallArm(p: Entity) {
+    // -- shared fall arm `case 16/35/43/150/252` (g.java:1400-1475) ----------
+    private fun fallArm(p: Entity, pad: Pad) {
+        world.scrollWallClamp(p)               // g.java:1406 — i.f(this) head
         p.cv = true; p.cp = true; p.ct = true; p.cw = true
         if (p.S == 43 && p.hitWall()) { p.ai = 0; p.ag = 0 }
+        if (p.gI == 4) p.z = true              // g.java:1414 — I==4 arms z
         if (p.S == 43 && p.animFinished()) p.P = p.P or 64
-        // L1421/L1430 — marker-3 feet cell: crate-top dismount probe
+        // L1421 — marker-3 feet cell: crate-top dismount probe
         // (g.c = world.gc contact link; i.bq = Entity.entBq)
         if (p.aQ == 3) {
             val c = world.gc
@@ -1021,18 +1931,82 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.setAnim(147)                                  // i(147)
                 Entity.entBq = 0                                // i.bq = 0
             }
-        } else if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23) {
-            p.land(world, p.aR == 4 || p.aS == 4)
-        } else if (p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5 ||
+        } else if (p.aR >= 12 && p.aQ >= 12 && p.aQ != 23 ||
+                   p.aR >= 12 || p.aS >= 12 || p.aR == 5 || p.aS == 5 ||
                    p.aR == 4 || p.aS == 4) {
             p.land(world, p.aR == 4 || p.aS == 4)
         } else {
             p.aj = 1536
+            // g.java:1428-1445 (proven) — L1425 bound catch: falling inside
+            // an S36 context zone (gk!=-1 while `al<go || go==0`) re-binds
+            // instead of falling. gk==0 → a(29,32) ride state (snap to gn);
+            // gk==1 → snap onto the owner entity gd → i(315) carrier pose.
+            if (p.gk != -1 && ((p.go != 0 && p.al < p.go) || p.go == 0)) {
+                if (p.gk == 0) {
+                    p.enterStateMasked(29, 32, world)           // a(29,32)
+                } else if (p.gk == 1) {
+                    p.gd?.let { d ->                            // g.d
+                        p.ak = d.W[0]
+                        p.refreshBoxes()                        // t()
+                        p.setAnim(315)
+                        p.av = d.av
+                        p.ak = if (d.av) d.W[2] else d.W[0]
+                    }
+                }
+                p.ag = 0
+                if (p.gn != 0 && p.gk == 0) p.ak = p.gn
+                p.ah = 1536; p.aj = 0
+            } else if (p.hitWall() && (
+                        pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
+                        pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R) ||
+                        pad.u(Pad.M_UP) || pad.v(Pad.M_UP))) {
+                // g.java:5049-5125 (proven) — L2231/L2268 wall-grab check:
+                // `cv && aF!=0 && !ba` + side cell 20 → L2298 grab (snap +
+                // aK marker + i(101), no S215 flip here); grab conditions
+                // failing fall through to L2361 — the ±512 drift clamp.
+                if (p.cv && p.aF != 0 && !p.ba &&
+                    (if (p.av) p.aT == 20 else p.aU == 20)) {
+                    wallGrabSnap(p, flipOn215 = false)
+                    return
+                }
+                if (p.ag != 0) p.ag = if (p.ag > 0) 512 else -512
+            }
+            // g.java:1465 (proven): states outside {43,150,35,29,252}
+            // sharing this arm resolve to i(35) on anim end — the S16
+            // door-glide → loop-fall S35 route.
+            if (p.S != 43 && p.S != 150 && p.S != 35 && p.S != 29 &&
+                p.S != 252 && p.animFinished()) {
+                p.setAnim(35)
+            }
         }
     }
 
     // -- post-switch tail (g.e() L2083 block, proven) -------------------------
     private fun postTail(p: Entity, pad: Pad) {
+        // g.java:7968-7974 (proven) — L3852: head cell 7/9 drops the jump
+        // latch before the cq-gate reads it (sits ahead of L38b8 in the
+        // original tail).
+        if (p.aO == 7 || p.aO == 9) p.cq = false
+        // L3868 (g.java:7979-7992, proven): the g.A autowalk latch —
+        // armed by ax10 script zones (i.aV → g.A=1, g.B=facing, g.l=vel).
+        // Settles, faces g.B, zeroes ag, forces the S148 scripted-walk
+        // state and RETURNS — skips the whole tail (jump/back-dash/
+        // flag consumers).
+        if (p.gA) {
+            p.eSettle(world)                 // E() — settle-sink to footing
+            p.av = p.gB
+            p.ag = 0
+            p.setAnim(148)
+            p.gA = false
+            return
+        }
+        // L388a (g.java:7993-7997, proven): g.f() = isHolding — hands
+        // full (carried entity in front within 120/20) kills the jump
+        // latch.
+        if (p.isHolding()) p.cq = false
+        // L3895 (g.java:7998-8014, proven): standing on a crate (ax51)
+        // or moving platform (ax66) drops the jump latch.
+        p.ac?.let { if (it.ax == 51 || it.ax == 66) p.cq = false }
         // g.java:788 (proven): the shared jump tail is `cq && !E` — the
         // ax10-S55 suppress zone holds `g.E` so wall-run-family arms
         // (S102/332/317) keep their own `i(17)`/`i(50)` transitions.
@@ -1072,6 +2046,61 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.aA and 4 != 0) p.aA = p.aA and 4.inv()
         // L2057: `z && i.bn==false && E==false → ap()` context dispatch
         if (p.z && !bn && !world.eFlag) p.contextDispatch(world, pad)
+        // -- L3a2d-L3ad8 flag consumers (g.java:8197-8303, proven) -------
+        // L3a2d: `cp && (aO==9||aP==9) && aQ==9` corner-9 gate skips the
+        // whole consumer; otherwise `ct` fires the ledge-mount probes —
+        // ak()/al() snap + i(60)/i(61) inside — and zeroes motion on a
+        // mount (the probe side effects ARE the corner-stop).
+        if (!(p.cp && (p.aO == 9 || p.aP == 9) && p.aQ == 9) &&
+            p.ct && (p.ledgeLipGrab(world) || p.ledgeHangGrab(world))) {
+            p.ag = 0; p.ah = 0; p.aj = 0
+        }
+        // L3a71: `cu && v(33024)` (DOWN edge) → a(2560) fast-drop; a held
+        // ax14 support drops its link via i.H().
+        if (p.cu && pad.v(Pad.M_DOWN)) {
+            p.flingAirborne(2560, world)
+            if (p.ab?.ax == 14) p.dropHeld()
+        }
+        // L3a9d: `cv && (u|v)(16388|8|2)` → aF=1 — the grab-intent latch
+        // the L1e94/L2298 wall-grab sites consume on later ticks. aF is
+        // deliberately NOT in the e() head clear — it persists.
+        if (p.cv && (pad.u(Pad.M_UP) || pad.v(Pad.M_UP) ||
+                     pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
+                     pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R))) p.aF = 1
+        // L3ad8: `cw && aO==5` → i(280) ceiling grab — zero all motion and
+        // snap `al` onto the ceiling grid row.
+        if (p.cw && p.aO == 5) {
+            p.setAnim(280)
+            p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
+            p.al = (p.W[1] / 20) * 20 + 10
+        }
+    }
+
+    /**
+     * `L1e94`/`L2298` (g.java:4633-4730 / :5125-5210, proven): the shared
+     * wall-grab body — consumes the `aF` intent latch, zeroes motion
+     * (`ag=ah=ai=aj=0`), flips `av` when entered from S215 (air family
+     * only — the fall site has no S215 check), snaps `ak` onto the
+     * wall-edge grid (`av: ((W[0]+20)/20)*20+1`; `!av:`
+     * `((W[2]-20)/20)*20+19`), spawns the ax8/clip5/S17/az201 marker via
+     * the `aK` child factory (`P=512`, t() before P per the original),
+     * `k.b()`-inserts it, then `i(101)` — the S101 cling state.
+     */
+    private fun wallGrabSnap(p: Entity, flipOn215: Boolean) {
+        p.aF = 0
+        p.ag = 0; p.ah = 0; p.ai = 0; p.aj = 0
+        if (flipOn215 && p.S == 215) p.av = !p.av
+        p.ak = if (p.av) (p.W[0] + 20) / 20 * 20 + 1
+               else (p.W[2] - 20) / 20 * 20 + 19
+        val aK = p.spawnChildFx(world, 8, 5, 17, 201)   // a(8,5,17,201)
+        aK.av = p.av
+        aK.N = p.ak shl 8; aK.O = p.al shl 8
+        aK.ak = p.ak; aK.al = p.al
+        aK.aj = 0; aK.ai = 0; aK.ah = 0; aK.ag = 0
+        aK.refreshBoxes()                                // aK.t()
+        aK.P = 512
+        world.queueInsert(aK)                            // k.b(aK)
+        p.setAnim(101)
     }
 
     /**

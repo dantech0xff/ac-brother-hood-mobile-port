@@ -216,12 +216,20 @@ class Level0World(
     // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
     // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
     var projectilePool: Array<Entity?>? = null
+    /** `k.aY` (k.java:211 + :8425 `new i[3]`, proven) — the 3-slot
+     *  projectile/knife pool. PROVEN-DEAD upstream: allocated but no
+     *  bytecode ever writes a non-null entity into it — the throw call
+     *  sites only gate on `aY[0] != null` (g.java:541, i.java:1588).
+     *  Kept so the dead knife calls port verbatim; nulled per-slot by
+     *  `i.D()` (i.java:2541). Declared before init{} — spawnEntities()
+     *  calls `kAY.fill(null)`. */
+    private val kAY = arrayOfNulls<Entity>(3)
 
     /** `k.ap[]` progress counters (k.java:4314/L() proven): `k.e(r5,uid)`
      *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
      *  verbatim — always slot 0). */
     override val kAp = IntArray(6)
-    fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
+    override fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
 
     var kDg = 0                           // k.dg — mission-frame counter (timer)
     var kAy = 30                          // k.ay — sync byte (bA[46])
@@ -360,12 +368,12 @@ class Level0World(
      *  action buttons; cleared = the player-relative invisible wheel.
      *  (The `mounted` accessor name is historical — it IS `k()`.) */
     var cm = 1
-    /** `k.bJ`/`k.de`/`k.df` (k.java:194-195/318, proven) — the full-screen
-     *  damage flash: `I()` ticks `bJ--` and recomputes `df` as an ARGB
-     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the only
-     *  producer so far is the boss-grab `k.bJ = 6` (i.java:8869, arm
-     *  unported). `de` clears in `f()` reload (k.java:5131). */
-    var kBJ = 0
+    /** `k.de`/`k.df` (k.java:195/318, proven) — the full-screen damage
+     *  flash state: `I()` ticks `kBj--` and recomputes `df` as an ARGB
+     *  ramp `A=fo=255, RGB=(fp|fq|fr)·bJ/8` (k.java:2522-2526); the
+     *  producer is the boss-grab `k.bJ = 6` (i.java:31851 — ported at
+     *  NpcFsm.kt grab-lose arm). `de` clears in `f()` reload (:5131).
+     *  The `k.bJ` field itself is the iface `kBj` below (:1505). */
     var kDe = false
     var kDf = -1
     override val mounted: Boolean get() = cm == 1
@@ -674,9 +682,11 @@ class Level0World(
         // vehicle/contact/carry links must not survive into the respawned set
         player.ga = null; player.ac = null; player.standingOn = null
         gc = null
+        grabHolder = null; player.gb = null         // g.h=null; g.b=null (:2486-2489)
         marker = null; markerTag = -1
         waypointPool.clear()
         projectilePool = null
+        kAY.fill(null)                            // k.aY (i.java:2541)
         // i.D() tail — the modeled statics that must not survive a reload:
         iZ = true                                   // i.z = true
         iBn = false                                 // i.bn = false
@@ -778,6 +788,7 @@ class Level0World(
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
             else if (type == 46) npcFsm.initAx46(e, f.toList(), this)
             else if (type == 7) npcFsm.initAx7(e, f.toList(), this)
+            else if (type == 8) npcFsm.initAx8(e, f.toList())
 
             else if (type == 42) npcFsm.initAx42(e, f.toList())
             else if (type == 35) npcFsm.initAx35(e, f.toList(), this)
@@ -958,6 +969,8 @@ class Level0World(
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
     override var kE: Entity? = null            // k.E
+    override fun kAyAt(i: Int): Entity? = kAY.getOrNull(i)
+    override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
     override var iBy = 0                       // i.by — boss phase tier
@@ -1176,7 +1189,7 @@ class Level0World(
      *  k.java:576; 10 is the level-select screen, NOT play); 12 fail;
      *  13/31 win; 15 complete stats; 16/17 frozen; 21 dialog; 22
      *  medal-unlock; 5 win-stats build; others per `stateL`. */
-    var jC = 8                           // j.c — in-play screen state
+    override var jC = 8                    // j.c — in-play screen state
         private set
     var kCy = 0                        // cy — previous j.c, written at commit
     private var kCz = false            // cz — u==8 dialog-tail flag
@@ -1270,6 +1283,11 @@ class Level0World(
     var kDF = 0                        // k.dF — misc byte (bA[48])
     var kBG = 0                        // k.bG — score flag (Q case14)
     var kEJ = false                    // k.eJ — tutorial done (bA[10])
+    var kLoading = false               // `f.bF` — the IGP-thread loadingMsg
+                                       //  (d(0,24)="LOADING") painted centered
+                                       //  by the f-loop (f.java:1857-1863); set
+                                       //  by `f.a(d(0,24),0)` call sites, cleared
+                                       //  on stateL away from jC==27
     var kDM = false                    // k.dM — resume flag
     var kCm = 0                        // k.cm — control-style flag
                                      // (inferred distinct from mount cm)
@@ -1557,27 +1575,12 @@ class Level0World(
     }
     override var iBi = false                     // i.bi — ax64 grab hitlag
     override val gS = false                      // g.s — cutscene (no producer)
-    /** `k.aX` pooled-shot slots (k.java:8423 `aW=50`, proven) — lazily
-     *  grown to 50 `new i()`-blank slots (ax=0, clipless — the ax64
-     *  tether/barrage spawn config never touches ax/aa; `inferred`); the
-     *  spawner's `P &= -129` un-reserves the slot → `P&128` = free. */
-    val shotPool = ArrayList<Entity>()
-    override fun allocShot(): Entity? {
-        if (shotPool.size < 50) shotPool += Entity(0, null).apply { P = P or 128 }
-        return shotPool.firstOrNull { (it.P and 128) != 0 }
-    }
-    override fun tickShotPool() {
-        for (s in shotPool) {
-            if ((s.P and 128) != 0) continue
-            s.aC--
-            if (s.aC < 0) { s.P = s.P or 128; continue }   // slot freed
-            s.am += s.ag; s.an += s.ah
-            s.ah += kY                                     // k.Y bias (0 today)
-            s.N = s.am; s.O = s.an
-            s.ak = s.am shr 8; s.al = s.an shr 8
-            s.refreshBoxes()
-        }
-    }
+    /** `k.aX` projection (i.java:2837, proven): the pool array is
+     *  `projectilePool` — seeded by `initAx24` on an S0 ax24 record,
+     *  slots `k.b`-inserted so they tick as ordinary ax24 `ba()`
+     *  entities. No separate pool step exists in the original. */
+    override val pooledShots: Array<Entity?>? get() = projectilePool
+    override fun allocPooledShot(): Int = projectileAlloc()
     override fun padHeld(mask: Int): Boolean = pad.v(mask)
     override fun padDown(mask: Int): Boolean = pad.u(mask)
     override fun padTap(mask: Int): Boolean = pad.x(mask)           // k.x
@@ -1625,6 +1628,36 @@ class Level0World(
         return true
     }
     var dialogLine = -1                                // last b(9,·) str arg
+
+    /** `k.b(10,1,str,str)` (k.java:349-404 r5==10 arm, proven): the u10
+     *  single-page dialog — `u=10`; `w = a(d(1,str),0,true,10)+1` where
+     *  `r9!=9` writes the page digit `bN[0]=charAt(0)-'0'` and z2 wraps at
+     *  300; `D(0)`; `bQ=true`; `z()`; always true (str!=-1). The jC21
+     *  machine's `dlgU==10` arm already advances pages on M_CONTEXT. */
+    fun tutorialDialog(strRef: Int): Boolean {
+        if (strRef == -1) return false
+        val str = levelString(1, strRef) ?: ""
+        dlgU = 10
+        dlgBN[0] = (str.getOrNull(0) ?: '0') - '0'        // (:420-423)
+        val iA = dlgLoadPage(str, 0, 300)
+        dlgW = iA + 1
+        dlgD(0)
+        dlgBQ = true
+        dlgZ()
+        return true
+    }
+
+    /** `i.c(int)` (i.java:7724-7756, proven): tutorial hint — level-0
+     *  only (`k.aj!=0` → skip), one-shot per `br[r6]`; shows the u10 page
+     *  `d(1, A[r6])` (A={30,31,32}) and enters screen 21 on success;
+     *  `k.E.P|=128` marks the prompt. */
+    override fun tutorialHint(r6: Int) {
+        if (kAj != 0) return
+        if (r6 !in hintPending.indices || !hintPending[r6]) return
+        kE?.let { it.P = it.P or 128 }
+        hintPending[r6] = false
+        if (tutorialDialog(TUTORIAL_STRS[r6])) stateL(21)
+    }
 
     /** `a(String,int,boolean,int)` (k.java:374-401, proven) — wraps `str`
      *  at `width` (caller's resolved `i3`: z2 → 300, else 220) into
@@ -1698,14 +1731,16 @@ class Level0World(
         lastMoveX >= x && lastMoveY >= y &&
             lastMoveX <= x + w && lastMoveY <= y + h &&
             (lastMoveX != -1 || lastMoveY != -1)
-    /** `k.j()` (k.java:579, proven): inside the bottom strip when
-     *  `H∈[36,364] && I∈(204,240)`; otherwise true iff `I∈[0,204]`.
-     *  (`ce/cf/cg` margins inferred at 36 — the `b.d+30` variant unmined.) */
+    /** `k.j()` (k.java:925, proven): false when no touch; the footer
+     *  button span `ce<=H<=400-cf` on the strip row `240-cg < I < 240`
+     *  → true; everywhere else → `0<=I<=240-cg`. Margins `ce/cf` are the
+     *  soft-key label widths persisted by `a(str,str2)` (`b.d+30` or 36;
+     *  init 60/60, `cg=37` — k.java:23630-23635). */
     override fun pointerStrip(): Boolean {
         val hx = lastTouchX; val hy = lastTouchY
         if (hx == -1 && hy == -1) return false
-        return if (hx < 36 || hx > 364 || hy <= 204 || hy >= 240)
-            hy in 0..204
+        return if (hx < kCe || hx > 400 - kCf || hy <= 240 - kCg || hy >= 240)
+            hy in 0..240 - kCg
         else true
     }
     /** `i.a(8,59,S,facing,x,y,az)` (i.java:6898, proven) — op111's
@@ -2206,7 +2241,8 @@ class Level0World(
                     val hasCheckpoint = kBA[15] == 1                     // r82
                     if (nextUnlocked && !hasCheckpoint && ex != 10) i = 10
                 }
-                (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — unported
+                (i == 8 || i == 21) && jC == 9 -> missionInit()          // B() — the mission
+                                                                                                //  music/init picker (k.java:2021)
                 i == 8 && kCy == 17 -> i = 17
                 i == 29 -> {
                     bannerK(2)
@@ -2265,6 +2301,7 @@ class Level0World(
               (i == 21 && dlgU != 8 && dlgU != 9)
         if (i == 21 && dlgU == 8) kCz = true
         kCy = jC; jC = i                              // j.g=0 skipped (derived counter)
+        if (i != 27) kLoading = false               // `bF` clears on IGP-exit (f.java:1399)
         if (!kCz) inputReset()
         kCz = false
         // aggregate flag keyed on the ENTRY state — l(15) may redirect to
@@ -2365,7 +2402,11 @@ class Level0World(
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:
      *  `bw=-1; bv=n; ey=eA[n].length; eD=0`. Per-n row content and K(0)'s
-     *  `Y()/Z()` checks are unmined (`unknown`). */
+     *  `Y()` (k.java:19825, proven) = `bA[15]==1 || bA[14]>0` →
+     *  `menuHasSave`; `Z()` (k.java:19851, proven) = `f.a()` IGP
+     *  catalog (0..2 → `eA[0][3]=32+r`; else false) →
+     *  `menuShopCheck` (no catalog in the port → always false,
+     *  faithful to any non-IGP device). */
     private fun bannerK(i: Int) {
         kBw = -1; kBv = i; kEy = kEA[i].size; kEd = 0
         when (i) {
@@ -2455,7 +2496,6 @@ class Level0World(
         kBw = -1; kDs--
     }
 
-    /** `e(true)` — RMS save flush; unported → stub (`inferred`). */
     /** `ag()` (k.java:6358-6389, proven) — jC==10 mission poster card:
      *  `u=8`; `i(0,120)` card overlay (frame12 + black fill, `u==8`
      *  suppresses its hint arm); `A[4]` frame `i+4` at (0,200,119) —
@@ -2555,8 +2595,12 @@ class Level0World(
         if (kAu == 2 && kBA[69] == 0) kAu = 0
         hasSaveRecord = true
     }
-    /** `f.a(str,0)` — "LOADING" overlay proc; unported → stub. */
-    private fun loadingShow() { /* f.a(d(0,24),0) — unported */ }
+    /** `f.a(d(0,24),0)` (f.java:879+, proven call-site shape) — sets the
+     *  IGP thread's `bF` loadingMsg; the f-loop paints it centered
+     *  HCENTER|BOTTOM with a white progress outline (f.java:1857-1863).
+     *  The IGP machinery itself is proven-dead (shop); the LOADING
+     *  overlay is real UI — rendered from `kLoading`. */
+    fun loadingShow() { kLoading = true }
     /** `W()` (structured :5093) — full game teardown on quit-to-menu:
      *  clips/claims/director/records released. Light port: drop the
      *  entity pools (level reload re-spawns) (`inferred` coverage). */
@@ -2643,12 +2687,14 @@ class Level0World(
      *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
      *  the same 67 (`inferred` — call sites unmined). */
     fun menuPanelY(): Int = menuPanelRect()[1]
-    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :6218):
-     *  jc12/13 `b(93,67,214,true,true)`; jc14 bv3 `b(93,67)` / bv4
-     *  `b(93,86)` / else `b(93,30)` (:1124-1129); jc19 `d(14,47,180)`;
+    /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :1957-1964,
+     *  :2948-2950, :6218): jc12/13 `b(93,67,214,true,true)`; jc14 bv3
+     *  `b(93,67)` / bv4 `b(93,86)` / else `b(93,30)` (:1124-1129);
+     *  jc2 `d(93,45,214)` (case-2 arm); jc19 `d(14,47,180)`;
      *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
      *  (:1440); other states `inferred` (93,67,214). */
     fun menuPanelRect(): IntArray = when (jC) {
+        2 -> intArrayOf(93, 45, 214)
         14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
         19 -> intArrayOf(14, 47, 180)
         23, 28 -> intArrayOf(93, 120, 214)
@@ -2665,8 +2711,8 @@ class Level0World(
     /** Panel visible this frame: jc12/13 (kAl'd) plus the footer states
      *  drawn unconditionally each frame (:1124-1185, :6218-6227). */
     val panelVisible: Boolean
-        get() = menuVisible || jC == 14 || jC == 19 || jC == 23 ||
-            jC == 28 || jC == 29 || jC == 30  // af() `d(93,46,214)` (:6254)
+        get() = menuVisible || jC == 2 || jC == 14 || jC == 19 ||
+            jC == 23 || jC == 28 || jC == 29 || jC == 30
     fun menuPanelZ3(): Boolean = when {
         jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
         jC == 12 || jC == 13 -> true
@@ -2721,9 +2767,13 @@ class Level0World(
      *  97 → `": "+d(0,35+au)`; 103 → `l(3)`; 123 → `": "+d(0,124+k()?0:1)`);
      *  non-19 → `d(0,10)+" "+(i13+1)` = "LEVEL n". */
     /** `ce`/`cf` footer widths (k.java:2271-2296, proven): measured via
-     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36. */
-    var kCe = -1
-    var kCf = -1
+     *  the `y` font for d(0,16)/d(0,18) labels (`b.d+30`), else 36.
+     *  Init 60/60 (k.java:23630) and persist between footer draws — the
+     *  statics keep their last value when `a(str,str2)` isn't called. */
+    var kCe = 60
+    var kCf = 60
+    /** `cg` strip height (k.java:23635): 37, never reassigned. */
+    val kCg = 37
     /** `y` font for the footer measure — same clip as renderer's fontY
      *  (pack-1 entry-3 = clip92 + shared charmap). Null in tests without
      *  assets → footer labels still returned, dims fall back to 36. */
@@ -2767,7 +2817,6 @@ class Level0World(
     private fun footerQ() {
         val fl = menuFooter()
         val left = fl.first
-        kCe = -1; kCf = -1
         if (left != null && left != "" && jC != 21 && jC != 8) {
             kCe = footerLeftDim(left)
             if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
@@ -3344,7 +3393,10 @@ class Level0World(
     private fun igpBlit() { }
     /** `f.a(String,int)` (f.java:759, proven) — `enterIGP(msg,lang)`,
      *  the vendor store intent; no IGP layer on this target → no-op. */
-    private fun enterIgp() { }
+    /** `f.a(d(0,24),0)` store intent (k.java:1410/4786) — same call as
+     *  `loadingShow()`; the overlay shows while entering the IGP state.
+     *  The shop thread itself stays dead. */
+    fun enterIgp() { kLoading = true }
 
     /** `k.a()` case 6 (k.java:844-858, proven) — the ABOUT screen's
      *  tick. `cb=true`; `f(false)`/`d(0,7)`/`bW.l(1)`/`j.a(cd,…)` are
@@ -3635,9 +3687,10 @@ class Level0World(
      *  dismiss: the modal check runs at the top of the NEXT tick, so the
      *  first fresh press edge is the dismiss — no cooldown needed. */
     val dialogModal get() = jC == 21
-    /** Screen-21 dismiss → back to the previous state (`inferred` — the
-     *  original's l()-based return target is unmined). */
-    private fun leaveDialog() { jC = kCy; kAl = false }
+    /** Screen-21 dismiss → `l(8)` (proven exit shared by the u9 arm
+     *  :975-1007 and the u∈{0,4} panels; entering 21 from play leaves
+     *  `cy=8` anyway). */
+    private fun leaveDialog() { stateL(8); kAl = false }
     /** Test-harness flag — when true, a modal dialog resolves the same
      *  tick (emulates the player instantly tapping the screen-21 dismiss
      *  edge). Real gameplay leaves it false: a press is required. */
@@ -3658,6 +3711,7 @@ class Level0World(
     override var iBf = false                       // i.bf engage latch
     override var iX = 0                            // i.x — every-3rd-hit static
     override var iBx: Entity? = null               // i.bx grab-QTE holder
+    override var grabHolder: Entity? = null         // g.h — grab holder
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
     override var iL = -1                           // i.L
@@ -4513,7 +4567,8 @@ class Level0World(
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()
         }
-        tickShotPool()                            // k.aX pool step (inferred)
+        // pooled k.aX shots tick inside the npc pass (ax24 ba()) — no
+        // separate step exists in the original (i.java:2837 proven).
         if (pendingInsert.isNotEmpty()) {         // k.b(aK) drain
             npcs += pendingInsert
             pendingInsert.clear()
@@ -4542,9 +4597,9 @@ class Level0World(
 
         // k.I() flash arm (k.java:2522-2526, proven): `bJ--` then
         // `df = ARGB(255, 120·bJ/8, 120·bJ/8, 120·bJ/8)` and `de = true`.
-        if (kBJ > 0) {
-            kBJ--
-            val c = (120 * kBJ) / 8
+        if (kBj > 0) {
+            kBj--
+            val c = (120 * kBj) / 8
             kDe = true
             kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
         }
@@ -4569,6 +4624,9 @@ class Level0World(
     /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
      *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
     private fun tickNpc(n: Entity) {
+        // `i.cu` world-freeze (i.java:15294 L109, proven): while the ax10
+        // S55 claim zone holds it, every non-ax10 entity skips `I()`.
+        if (Entity.icu && n.ax != 10) return
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
         else if (n.ax == 4) npcFsm.tickDestructible(n, player)
@@ -4592,6 +4650,7 @@ class Level0World(
         else if (n.ax == 15) npcFsm.tickAx15(n, this, player)
         else if (n.ax == 46) npcFsm.tickAx46(n, this, player)
         else if (n.ax == 7) npcFsm.tickAx7(n, this, player)
+        else if (n.ax == 8) npcFsm.tickAx8(n, this, player)
         else if (n.ax == 42) npcFsm.tickAx42(n, this, player)
         else if (n.ax == 13) npcFsm.tickAx13(n, this, player)
 
@@ -4637,3 +4696,7 @@ private val CAM_B_DOWN_STATES = intArrayOf(28, 29, 315, 318)
 private val CAM_B_CENTER_STATES = intArrayOf(
     148, 149, 150, 210, 59, 65,
     258, 259, 260, 261, 262, 263, 264, 265, 266)
+
+/** `i.A[]` (i.java:22313, proven): u10 tutorial string indices for
+ *  `i.c(int)` — {grab=30, counter-kill=31, weakened-finish=32}. */
+private val TUTORIAL_STRS = intArrayOf(30, 31, 32)

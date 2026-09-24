@@ -1173,7 +1173,7 @@ class Level0Renderer {
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
         // ticks `bJ--` + recomputes the ARGB ramp — k.java:2522-2526).
-        if (world.kBJ > 0 && world.kDe) {
+        if (world.kBj > 0 && world.kDe) {
             val df = world.kDf
             batch.setColor(((df ushr 16) and 0xFF) / 255f,
                            ((df ushr 8) and 0xFF) / 255f,
@@ -1689,6 +1689,29 @@ class Level0Renderer {
             if (world.hintBack) {
                 world.d0(17)?.let { t -> drawText(t, 390, 222, 24) }
             }
+        }
+
+        // `f.bF` loading overlay (f.java:1857-1863, proven paint shape):
+        // the IGP f-loop drew the loadingMsg over the live screen —
+        // `drawString(bF, bK, bL-5, HCENTER|BOTTOM)` in white plus a
+        // white-outlined progress bar (`drawRect` + red `fillRect`).
+        // Our port draws it whenever `kLoading` is set (the `f.a(d(0,24),0)`
+        // call sites: save-slot load, store/IGP entry). Progress fill is
+        // a fixed stub — the underlying load is synchronous (`inferred`).
+        if (world.kLoading) {
+            val bw = 120; val bx = (400 - bw) / 2; val by = 110
+            batch.setColor(1f, 1f, 1f, 1f)
+            // drawRect outline (J2ME strokes 1px — draw as 4 thin fills)
+            batch.draw(white, bx.toFloat(), by.toFloat(), bw.toFloat(), 1f)
+            batch.draw(white, bx.toFloat(), (by + 6).toFloat(), bw.toFloat(), 1f)
+            batch.draw(white, bx.toFloat(), by.toFloat(), 1f, 7f)
+            batch.draw(white, (bx + bw - 1).toFloat(), by.toFloat(), 1f, 7f)
+            batch.setColor(0.9f, 0.15f, 0.15f, 1f)          // setColor(16711680)
+            batch.draw(white, (bx + 2).toFloat(), (by + 2).toFloat(),
+                       (bw - 4).toFloat() * 0.35f, 3f)       // stub fill ~35%
+            batch.setColor(1f, 1f, 1f, 1f)
+            // drawString(bF, bK, bL-5, HCENTER|BOTTOM) — centered, baseline
+            drawText(world.d0(24) ?: "LOADING", 200, 122, 3)
         }
 
         batch.end()
