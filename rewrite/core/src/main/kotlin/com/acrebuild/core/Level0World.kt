@@ -2269,8 +2269,11 @@ class Level0World(
                 i == 14 -> {
                     if (jC == 8 || jC == 21) scrollBounds()
                     bannerK(1); kAo = false; kAn = false
-                    kFi = -1                           // `if (!e.a())` — unported (inferred)
-                    audioStop()
+                    // k.java:5180 (proven): `if (!e.a()) k.fi = -1` —
+                    // silence the music slot only when no track is live,
+                    // so RESUME's `when(kFi)` replays the paused track.
+                    if (!audioPlaying()) kFi = -1
+                    audioStop()                        // L327 `e.b()`
                 }
                 i == 23 -> { kEc = 19; bannerK(3); kEb = 70; kBw = -1 }
                 i == 5 -> {                                          // (:1806)
