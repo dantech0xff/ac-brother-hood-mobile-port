@@ -34,14 +34,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
-        set(v) {
-            if (ax == 0 && field != 0 && v == 0) {
-                val st = Throwable().stackTrace
-                val hit = st.firstOrNull { it.className.contains("acrebuild") && !it.methodName.contains("ag\$") }
-                println("AG0 ax=$ax S=$S at ${hit?.className}.${hit?.methodName}:${hit?.lineNumber} | ${st.getOrNull(2)?.methodName}:${st.getOrNull(2)?.lineNumber}")
-            }
-            field = v
-        }
     var ah: Int = 0                  // vy
     var ai: Int = 0                  // axel x
     var aj: Int = 0                  // axel y
@@ -82,7 +74,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                      // proven (g.e(90) at entity init L195)
     var aF = 0
     var k = false                    // NPC patrol-active flag
-    var cp = true; var cq = true; var ct = true; var cw = true; var cv = true
+    var cp = true; var cq = false; var ct = true; var cw = true; var cv = true
+                                        // cq ctor=false (i.java:825); the
+                                        // o-link arm sets it from the
+                                        // linked ax11's P() (i.java:12858)
     var cu = false                      // g.cu — case-60 sets it (ledge-
                                         // hang drop eligibility); dead
                                         // in the original (head-cleared)
@@ -952,15 +947,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * integer anchor unless code writes `N`/`O` directly, then vel/accel:
      * `N += ag; ag += ai; ai = 0; ak = N >> 8` and same for the vertical.
      */
-    fun integrate() {
+    fun integrate(div: Int = 1) {
         N += (ak - (N shr 8)) shl 8
-        N += ag
-        ag += ai
+        N += ag / div
+        ag += ai / div
         ai = 0
         ak = N shr 8
         O += (al - (O shr 8)) shl 8
-        O += ah
-        ah += aj
+        O += ah / div
+        ah += aj / div
         aj = 0
         al = O shr 8
     }
@@ -1524,6 +1519,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  working — `ca >= 0` (a counter bound) && `!cd[0]` (the flag bit
      *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
     fun claimActive(): Boolean = ca >= 0 && !cd[0] && scriptStep >= 0
+
+    /** `i.ab()` (i.java:20564-20577, proven): bound-claim LIVE — a
+     *  counter bound (`ca>=0`), the claim flag bit set (`cd[0]==true`),
+     *  and a live claim step (`cK>=0`). Read by the L777 tail
+     *  (`k.C.ab()`) to suppress aB() melee while a script claim runs —
+     *  note cd[0] is INVERTED vs claimActive()'s `!cd[0]`. */
+    fun claimLive(): Boolean = ca >= 0 && cd[0] && cK >= 0
 
     /** `g.c()` (g.java:421, proven): player mid-combo anims
      *  {112, 113, 114, 115} — `k.m` early-returns while true. */
@@ -3307,6 +3309,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 ag = if (av) 1536 else -1536
             }
             34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+            // op32 (i.java:4639-4652 L16, proven): stance-break — aA<=1
+            // with the attacker within ±150px clears aA to 0; aA>1 with
+            // the 16-flag sets Z[0]=3000 (counter-bleed reset). Ops from
+            // the aA-branch in I() target the player.
+            32 -> {
+                if (aA <= 1) {
+                    if (attacker != null) {
+                        val dx = ak - attacker.ak
+                        if (dx > -150 && dx < 150) aA = 0
+                    }
+                } else if (aA and 16 != 0) Z[0] = 3000
+            }
             // op11 (i.java:4761 L167, proven): spring-pad bounce intake —
             // pin to the pad's top edge, launch `ah=src.Z[1]` /
             // `ag=src.Z[0]` (record r8[9]/r8[8]<<8), anim 24 when the pad
@@ -4655,6 +4669,10 @@ interface LevelCellSource {
      *  (k.java:6696-6702): gates the ax17/50 `l()` notice arms — while set,
      *  civilians/pouncers never panic (i.java:2385/2396). */
     var iBn: Boolean get() = false; set(_) {}
+    /** `k.aY` (k.java:211 + :8425 `new i[3]`, proven) — the 3-slot
+     *  projectile/quiver entity pool (`b()`'s `bn` arm fires `aY[0].Z[4]`
+     *  via `aS.b(...)`). Pool unported → always null → the arm is inert. */
+    fun kAyAt(i: Int): Entity? = null
     /** `i.ce`/`i.bD`/`i.bQ`/`i.cO`/`i.cg`/`i.ch`/`i.z` — `i` statics the
      *  arg-ops write (i.java:153-204). */
     var iCe: Boolean get() = false; set(_) {}
