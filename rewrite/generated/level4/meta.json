@@ -1,0 +1,41 @@
+{
+ "source": "pack-10",
+ "aj": 4,
+ "bh": 3,
+ "flying": true,
+ "cols": 44,
+ "rows": 625,
+ "worldPx": [
+  880,
+  12500
+ ],
+ "entities": 254,
+ "layers": {
+  "et": {
+   "entry": 1,
+   "tileset": null,
+   "dims": [
+    44,
+    625
+   ]
+  },
+  "eu": {
+   "entry": 8,
+   "tileset": 3,
+   "dims": [
+    44,
+    625
+   ]
+  },
+  "er": {
+   "entry": 11,
+   "tileset": 4,
+   "dims": [
+    44,
+    625
+   ]
+  }
+ },
+ "strings": "pack-14/entry-005-strings.json",
+ "scripts": "pack-10/entry-007 (k.by/bz/eH, k.java:6196)"
+}

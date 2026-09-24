@@ -34,6 +34,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
+        set(v) {
+            if (ax == 0 && field != 0 && v == 0) {
+                val st = Throwable().stackTrace
+                val hit = st.firstOrNull { it.className.contains("acrebuild") && !it.methodName.contains("ag\$") }
+                println("AG0 ax=$ax S=$S at ${hit?.className}.${hit?.methodName}:${hit?.lineNumber} | ${st.getOrNull(2)?.methodName}:${st.getOrNull(2)?.lineNumber}")
+            }
+            field = v
+        }
     var ah: Int = 0                  // vy
     var ai: Int = 0                  // axel x
     var aj: Int = 0                  // axel y
@@ -53,6 +61,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var aZ = false                   // standing flag (aR != 18 when probing feet)
     var bd = false; var v = true     // x() status flags
     var bb = false; var bc = false   // wall flags left/right (a(boolean))
+
     var ba = false                   // unused third flag, kept for parity
     val W = IntArray(4)              // hitbox [x,y,w,h] in world px (t())
     val X = IntArray(4)              // attackbox (t())
@@ -130,7 +139,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var ar = 0                     // launch anchor y px (i.ar)
     var af: Entity? = null         // owner — af.aG!=0 → k.A(15) sfx on land
     var ga: Entity? = null         // g.a — grapple/ride link (a() push guard,
-                                   // i.java:922/937; producer arms unported)
+                                   // i.java:922/937; producers: ax15 bind,
+                                   // Entity:1210/1285 lunge, ax66/72 arms)
     // -- ax67 prop fields (init L347, i.java:3530; tick bB i.java:17584) --
     var bZ = 0                     // i.bZ lifecycle counter (aX L23 linked
                                    // arm — used by the ax14/pickup path)
@@ -138,6 +148,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var au = 10                    // i.au screen-distance score (u() rewrites
                                    // it per v() call; ctor 10, i.java:819)
     var ae: Entity? = null         // i.ae player's spawned ax14 pickup ref
+    /** `i.cr` (i.java:111 `i[][]`, proven) — the ax10-S30 pursuer-pool
+     *  matrix: `cr[row][col]` members allocated on first overlap by the
+     *  La72 arm; `aS()` drains it (null), `aT()` reports all-dead. */
+    var cr: Array<Array<Entity>>? = null
     var gb: Entity? = null         // g.b grabbed-prop ref (op40 arm)
     var ge: Entity? = null         // g.e hide-spot owner (bB S12 arm)
     var gg: Entity? = null         // g.g hide-spot busy guard
@@ -188,6 +202,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var s: Entity? = null         // i.s — ax51 side-link read by aF()
     var c: Entity? = null         // i.c carry link (released by p())
     var b = false                  // i.b — ridden/carried latch (bm() tail)
+    var scriptBound = false        // i.d — latched when the record's Z[13]
+                                   // script claim binds at init
+                                   // (i.java:2266); released inside the
+                                   // S117 claim-release arm (i.java:5147)
     // -- mission-director + barrage fields (i.java:18003+, bD/bG/d/p/g) ------
     var ao = 0                     // i.ao — floatie aim target x
     var ap = 0                     // i.ap — floatie aim target y
@@ -235,11 +253,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var gQL = 0                   // g.L — grab-QTE display x (k.java:4348)
     var gQM = 0                   // g.M — grab-QTE display y (k.java:4348)
     var z = false                 // g.z — cleared on grab (c() callers)
+    /** `g.cm` (g.java:15430 init 0, proven) — the mount-indicator
+     *  "refresh pending" latch: set after any r98 mount-event tick
+     *  (L37eb), consumed next tick when r9==0 (L37f2) to run
+     *  `k.k() ? G() : U()`. Distinct from `k.cm` (touchpad flag). */
+    var gcm = false
     /** `i.cU[5]` — the afterimage-trail ring (`a(true,0)`/`bP()`); each
      *  element is an (a,b) pos pair flattened to 10 ints. */
     var cU: IntArray? = null
     var cV = false                // i.cV — trail-fadeout flag
     var cW = 0                    // i.cW — trail clip workspace index
+    /** `a.e` (a.java:33-42) — the anim index each trail card carries:
+     *  captured `S` at arm time (`cU[i].a(this.S,-1)` i.java:19611/19615). */
+    var trailAnim = -1
+    /** `a.g` (a.java:110-140, proven) — the trail cards' shared ms
+     *  accumulator: `b(j.g)` adds ~1/draw; frames hold `dur*40` units so
+     *  dots sit on armed-S frame ~0 for the trail's short life. */
+    var trailClock = 0
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
@@ -955,7 +985,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * ±r13/r14 mirror fixup inside quad space, again as the ±av anchor —
      * transcribed verbatim even though it reads like a double shift.
      */
-    var centerX = 0; var centerY = 0    // i.t/i.u — W-box center
     fun refreshBoxes() {
         if (ax == 14 || ax == 37 || ax == 10 || ax == 5 || ax == 42) return
         val c = clip
@@ -1104,57 +1133,57 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun collideSides(world: LevelCellSource, resolve: Boolean) {
         v = true
-        probeCells(world)
-        var r10 = W[0] - 1
-        var r11 = W[2] + 1
-        var r12 = W[1]
-        var r13 = W[3] - 10
+        val iX = probeCells(world)
+        var i = W[0] - 1; var i2 = W[2] + 1
+        var i3 = W[1]; var i4 = W[3] - 10
+        // L8: player crouch states extend the strip down another 10.
+        if (ax == 0 && (S == 12 || S == 7 || S == 32 || S == 199)) i4 -= 10
         bb = false; bc = false; ba = false; aT = 0; aU = 0
-        if (resolve && bd) {
-            // L16/L34: embedded — recompute then continue probes
-            refreshBoxes()
-            r10 = W[0] - 1; r11 = W[2] + 1; r12 = W[1]; r13 = W[3] - 10
+        if (resolve) {
+            if (bd) {
+                // L16-L28: ground-strip pre-adjust when embedded.
+                if (aR >= 10 || aR == 5) al -= iX
+                else if (aO >= 12 && aO != 23) { ba = true; al += (20 - (i3 % 20)) + 1 }
+                else if ((aQ >= 12 || aQ == 5) && aO != 23) { ba = true; al += (10 - (i3 % 20)) + 4 }
+            }
+            refreshBoxes()                                     // t()
+            i = W[0] - 1; i2 = W[2] + 1; i3 = W[1]; i4 = W[3] - 10
         }
-        val r02 = e(world, r10 / 20, r12 / 20 - 1)
-        val r03 = e(world, r11 / 20, r12 / 20 - 1)
-        var cy = r12 / 20
-        while (cy <= r13 / 20) {
-            val l = e(world, r10 / 20, cy)
-            if (l > aT) {
-                aT = l
+        val iE = e(world, i / 20, i3 / 20 - 1)
+        val iE2 = e(world, i2 / 20, i3 / 20 - 1)
+        var i5 = i3 / 20
+        while (i5 <= i4 / 20) {
+            val iE3 = e(world, i / 20, i5)
+            if (iE3 > aT) {
+                aT = iE3
                 if (aT >= 18) {
-                    aX = if (r02 < 18) (r13 / 20) - cy + 1
-                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    aX = if (iE >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
                     bb = true
                 }
             }
-            val r = e(world, r11 / 20, cy)
-            if (r > aU) {
-                aU = r
+            val iE4 = e(world, i2 / 20, i5)
+            if (iE4 > aU) {
+                aU = iE4
                 if (aU >= 18) {
-                    aY = if (r03 < 18) (r13 / 20) - cy + 1
-                         else (r13 / 20) - (r12 / 20 - 1) + 1
+                    aY = if (iE2 >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
                     bc = true
                 }
             }
             if (bb || bc) break
-            cy++
+            i5++
         }
         if (resolve && v) {
-            if (bb == bc) {
-                bc = false; bb = false
-            } else if (ag > 0) {
-                // L75/L77: moving right — push left out of a right wall,
-                // else right out of a left wall (fallback).
-                if (bc) ak -= r11 % 20 else ak += (20 - ((r10 + 20) % 20)) - 1
-                probeCells(world)
+            if (bb == bc) { bc = false; bb = false }
+            else if (ag <= 0) {
+                if (bb) { ak += (20 - ((i + 20) % 20)) - 1; probeCells(world) }
+                else { ak -= i2 % 20; probeCells(world) }
+            } else if (bc) {
+                ak -= i2 % 20; probeCells(world)
             } else {
-                // L69/L73: mirrored for leftward/still.
-                if (bb) ak += (20 - ((r10 + 20) % 20)) - 1 else ak -= r11 % 20
-                probeCells(world)
+                ak += (20 - ((i + 20) % 20)) - 1; probeCells(world)
             }
         }
-        refreshBoxes()
+        refreshBoxes()                                         // t()
         tc = (W[0] + W[2]) shr 1
         uc = (W[1] + W[3]) shr 1
     }
@@ -1456,7 +1485,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `g.d(int)` meter drain (proven, g.java:3884): skips while `s`
-     * (cutscene, unported), `t != 0` iframes, `c()` linked-carry, or
+     * (cheat/debug toggle — deliberately unported), `t != 0` iframes,
+     * `c()` linked-carry, or
      * `S in {67,183,184,205}`; else `i.bh = 8` flash + `x[1] -= amt`
      * clamped at 0; survival sets `t = 10`.
      */
@@ -1526,74 +1556,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * (ladder) → bare `true` and no state change (the caller's mount
      * stays deferred); otherwise `k.v()` + `i(61)` hang + `aC=40`.
      */
-    /**
-     * `i.a(boolean)` (i.java:829-915, proven): the side-strip rescan —
-     * `v=true`, `x()` probe, clears `bb/bc/ba`/`aT`/`aU`, then scans the
-     * left/right columns from head-row to `W[3]-10` (player crouch
-     * states 12/7/32/199 extend it another 10), recording the worst
-     * cell per side in `aT`/`aU` and the clearance in `aX`/`aY`,
-     * flagging `bb`/`bc` at ≥18 with early exit. When `z2 && v` it
-     * snaps `ak` off the flagged wall (`ag<=0` picks the side:
-     * `bb` → push right of cell, else `bc` → pull left; `ag>0`
-     * mirrors), re-probing after each snap; `z2` also pre-adjusts `al`
-     * by the ground strip (`aR>=10|5 → al-=x()`, `aO>=12&&!23 → +cell`,
-     * `aQ>=12|5&&!23 → +half`). Ends with `t()` + the `t/u` center.
-     */
-    fun probeSnapSides(z2: Boolean, w: LevelCellSource) {
-        v = true
-        val iX = probeCells(w)
-        var i = W[0] - 1; var i2 = W[2] + 1
-        var i3 = W[1]; var i4 = W[3] - 10
-        if (ax == 0 && (S == 12 || S == 7 || S == 32 || S == 199)) i4 -= 10
-        bb = false; bc = false; ba = false; aT = 0; aU = 0
-        if (z2) {
-            if (bd) {
-                if (aR >= 10 || aR == 5) al -= iX
-                else if (aO >= 12 && aO != 23) { ba = true; al += (20 - (i3 % 20)) + 1 }
-                else if ((aQ >= 12 || aQ == 5) && aO != 23) { ba = true; al += (10 - (i3 % 20)) + 4 }
-            }
-            refreshBoxes()
-            i = W[0] - 1; i2 = W[2] + 1; i3 = W[1]; i4 = W[3] - 10
-        }
-        val iE = e(w, i / 20, i3 / 20 - 1)
-        val iE2 = e(w, i2 / 20, i3 / 20 - 1)
-        var i5 = i3 / 20
-        while (i5 <= i4 / 20) {
-            val iE3 = e(w, i / 20, i5)
-            if (iE3 > aT) {
-                aT = iE3
-                if (aT >= 18) {
-                    aX = if (iE >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
-                    bb = true
-                }
-            }
-            val iE4 = e(w, i2 / 20, i5)
-            if (iE4 > aU) {
-                aU = iE4
-                if (aU >= 18) {
-                    aY = if (iE2 >= 18) (i4 / 20) - (i3 / 20 - 1) + 1 else (i4 / 20) - i5 + 1
-                    bc = true
-                }
-            }
-            if (bb || bc) break
-            i5++
-        }
-        if (z2 && v) {
-            if (bb == bc) { bc = false; bb = false }
-            else if (ag <= 0) {
-                if (bb) { ak += (20 - ((i + 20) % 20)) - 1; probeCells(w) }
-                else { ak -= i2 % 20; probeCells(w) }
-            } else if (bc) {
-                ak -= i2 % 20; probeCells(w)
-            } else {
-                ak += (20 - ((i + 20) % 20)) - 1; probeCells(w)
-            }
-        }
-        refreshBoxes()
-        centerX = (W[0] + W[2]) shr 1
-        centerY = (W[1] + W[3]) shr 1
-    }
-
     /** `i.M()` (i.java:5849, proven): feet-level cell one column into
      *  the facing direction is solid (≥12) or "≥5" (verbatim — the
      *  second conjunct subsumes the first). */
@@ -2659,11 +2621,58 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun deadRelease(): Boolean = if (aB > 0) false else { releaseAe(); true }
 
+    /** `i.aS()` (i.java:8963, proven): drop the whole `cr` pool
+     *  (original nulls every cell then the matrix — same observable). */
+    fun poolDrain() { cr = null }
+
+    /** `i.aT()` (i.java:8975, proven): every `cr` member `P()` — i.e.
+     *  all dead (`P()` itself `G()`-deactivates dead members); a null
+     *  pool reports dead too. */
+    fun poolAllDead(): Boolean {
+        val pool = cr ?: return true
+        for (row in pool) for (m in row) if (!m.deadRelease()) return false
+        return true
+    }
+
+    /** `i.at()` (i.java:6174, proven): "settled" — false only for a
+     *  live ax11 still at S 0/85/20/176; otherwise `P()` (dead check,
+     *  deactivating). Consumed by the ax10 S29 release-zone gate. */
+    fun atDone(): Boolean {
+        if (ax == 11 && (S == 0 || S == 85 || S == 20 || S == 176))
+            return false
+        return deadRelease()
+    }
+
+    /**
+     * `i.S()` (i.java:7276, proven): the victim-payoff tick inside the
+     *  S183/184 assassination arm — three bursts of `m(-1)` wisp spawn,
+     *  `k.o(5)` stat and `k.s()` streak/shake per iteration.
+     */
+    fun victimPayoff(w: LevelCellSource) {
+        repeat(3) {
+            w.spawnWisp(this)               // m(-1) → a(74,54,1,…)
+            w.kStat(5)                      // k.o(5)
+            w.kCollectStreak()              // k.s()
+        }
+    }
+
+    /**
+     * `i.d(iVar)` (i.java:1221, proven): per-ax anim reset applied to the
+     *  released `i.aN` victim when the finisher ends — ax11 → `i(0)`,
+     *  ax23 → `i(79)`, anything else untouched.
+     */
+    fun releaseAnimReset() {
+        when (ax) {
+            11 -> setAnim(0)
+            23 -> setAnim(79)
+        }
+    }
+
     /** `i.ab()` (i.java:18914, proven): claim-script parked at an active
-     *  marker — bound (`ca>=0`), not flag-0 suspended, `cK` snapshot
-     *  armed. The draw pass reads this (and `cd[2]`/`cd[9]`) for the
-     *  bar-quiet gate and the `cg`/`cf` hint arms. */
-    fun claimAb(): Boolean = ca >= 0 && !cd[0] && cK >= 0
+     *  marker — bound (`ca>=0`), not flag-0 suspended, the `i.cK` key
+     *  counter armed (>=0). Same check as `claimActive` — kept for the
+     *  draw-path call sites that name it `ab()`. */
+    fun claimAb(): Boolean = claimActive()
 
     /** `g.g(int)` (g.java:5266, proven): `J |= mask` — ORs an action-request
      *  bit, then `k.q()` rebuilds the `ar[]` equip list. */
@@ -2714,11 +2723,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun edgeFlag(): Boolean =
         if (ag < 0) bb else if (ag > 0) bc else if (av) bb else bc
 
-    /** `g.o()` (g.java:6369, proven shape): grounded-or-mounted gate for
-     *  the weapon cycle — `aZ` or standing on ax51/15/43. `g.a` vehicle
-     *  static approximated by `standingOn` (inferred). */
-    fun groundOrVehicle(): Boolean =
-        aZ || standingOn?.ax == 51 || standingOn?.ax == 15 || standingOn?.ax == 43
+    /** `g.o()` (g.java:6090, proven): grounded-or-mounted gate for the
+     *  weapon cycle — `aZ` true; `a == null || a.ax == 43` → false;
+     *  else `a.ax ∈ {51,15,43}` (the trailing `ax == 43` is unreachable
+     *  dead code — kept verbatim). `g.a` = `standingOn`. */
+    fun groundOrVehicle(): Boolean {
+        if (aZ) return true
+        val s = standingOn ?: return false
+        if (s.ax == 43) return false
+        return s.ax == 51 || s.ax == 15 || s.ax == 43
+    }
 
     /**
      * `g.ap()` (g.java:3817, proven): the 65568 context dispatcher —
@@ -2733,7 +2747,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun contextDispatch(w: LevelCellSource, pad: Pad) {
         if (gI == 4 && aA < 2) requestH(1, w)
         if (!pad.v(Pad.M_CONTEXT)) return
-        if (ac?.ax == 10) return                       // L8-L12 zipline block
+        // L28-L33 (proven): blocked while riding a zipline OR while an
+        // attack anim plays — `b()` is the busy set {67-69,81,112-115,
+        // 183-184,216-217,286-287}; combo chaining runs inside the combo
+        // arms (`aj()`/`ay()`) instead of re-entering here.
+        if (ac?.ax == 10 || PlayerFsm.isAttackState(S)) return
         when (gI) {
             1 -> {
                 ag = 0; ah = 0; aj = 0
@@ -2820,6 +2838,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.E()` (i.java:2929, proven): settle-sink — each pass pins
+     * `ah=1`, sets `b`, rescans sides (`a(true)`), unpins `ah`; if
+     * `aR∈{3,5,12}` the entity has found footing and returns, else it
+     * sinks `al+=10` and loops. Used by the S54 dismount settle
+     * (g.java:2226).
+     */
+    fun eSettle(world: LevelCellSource) {
+        var guard = 0
+        while (guard++ < 400) {
+            ah = 1; b = true
+            collideSides(world, true)
+            ah = 0
+            if (aR >= 12 || aR == 5 || aR == 3) return
+            al += 10
+        }
+    }
+
+    /**
      * `k.h(dx,dy)` (k.java:6839, proven): octagonal distance in px —
      * `(a+b) - (min>>1) - (min>>2) + (min>>3)`.
      */
@@ -2834,9 +2870,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /**
      * `i.e(i)` (i.java:2407, proven): Bresenham LOS walk in 20px cells
      * between the two W-centers — `cell >= 12` → true (blocked); OOB
-     * reads as 20 (blocked) via i.e(x,y) (i.java:15294, ax0-override
-     * arms for S37/257 unported — raw cell read here, `inferred` on
-     * those arms). End conditions per major axis.
+     * reads as 20 (blocked). Cells read through `i.e(x,y)`
+     * (i.java:15294) so the ax0 S37/257 + `m()` overrides apply when
+     * the walker is the player. End conditions per major axis.
      */
     fun losBlocked(t: Entity, world: LevelCellSource): Boolean {
         if (W.contentEquals(ZERO_RECT) || t.W.contentEquals(ZERO_RECT)) return false
@@ -2868,11 +2904,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return false
     }
 
-    /** `i.e(x,y)` subset (i.java:15294): OOB → 20, else raw cell value. */
-    private fun cellForLos(cx: Int, cy: Int, world: LevelCellSource): Int {
-        if (cx < 0 || cy < 0) return 20
-        return world.collisionCell(cx, cy)
-    }
+    /** `i.e(x,y)` (i.java:15294): routed through `e()` so the ax0
+     *  overrides apply for a player walker (NPC callers get the raw
+     *  read back — `ax != 0` skips both arms). */
+    private fun cellForLos(cx: Int, cy: Int, world: LevelCellSource): Int =
+        e(world, cx, cy)
 
     /**
      * `g.i(i)` (g.java:5465, proven): interact-eligibility of `cand`
@@ -2967,6 +3003,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     companion object {
+        /** `i.j(i)` (i.java:5926, proven): static dead check — null →
+         *  true; ax ∈ {11,17,29,27} → the member's `P()` (side-effect
+         *  release); any other type → false. Consumed by the ax37 Z[2]
+         *  linked-entity gate. */
+        fun isDeadCheck(other: Entity?): Boolean {
+            if (other == null) return true
+            return when (other.ax) {
+                11, 17, 29, 27 -> other.deadRelease()
+                else -> false
+            }
+        }
+
         val ZERO_RECT = IntArray(4)
         /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
          *  (written by `o()`, read by `b(x,y)` :9829). */
@@ -2992,6 +3040,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  difficulty `k.au` (spawn init i.java:2340/2399 + the
          *  ax17 HP-bar scale k.java:2947). */
         val NPC_HP_BV = intArrayOf(100, 140, 200)
+        /** `k.bi[]` (k.java:266, proven) — default clip index per ax;
+         *  `-1` = clipless record spawn. bi[11]=bi[17]=bi[23]=7. */
+        val AX_CLIP_BI = intArrayOf(
+            0, -1, 1, 2, 3, 1, 4, 60, 5, 47, 6, 7, 8, 61, 9, 25, 10, 7,
+            -1, 11, -1, 13, 14, 7, 40, 16, 15, 48, -1, 52, 36, 44, 36,
+            -1, 42, 62, -1, -1, -1, -1, 45, 30, -1, 31, 32, 33, 29, 7,
+            13, -1, 7, 28, -1, -1, 19, -1, 19, -1, 20, -1, 21, 71, -1,
+            -1, 22, -1, 23, -1, 26, 38, 43, -1, 51, 7, 54, 55, 56, -1,
+            63, 0, 57)
         /** `i.H[]` (i.java:22318, proven) — carried-entity damage (bc()/bd()). */
         val WEAPON_H = intArrayOf(50, 50, 50)
         /** `i.K[]` (i.java:22322, proven) — ax32 wall-break damage (bc()). */
@@ -3005,6 +3062,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         /** `i.bA[]` (i.java:22336 `new a[4]`, proven) — script-QTE prompt
          *  slots shared across claim runs (class `a` = the prompt sprite). */
         val scriptPrompts = arrayOfNulls<ScriptPrompt>(4)
+        /** `i.cs[]` (i.java:184, proven) — pad mask per QTE lane type
+         *  (S55 zone's `p` selects the mask the player must press). */
+        val CS = intArrayOf(1, 2, 16388, 8, 4112, 65568, 8256, 128, 33024, 512)
         /** `g.u[]` (g.java:6400, proven) — player meter cost per weapon
          *  tier, indexed by `k.au`: {5,10,15}. */
         val PLAYER_DMG = intArrayOf(5, 10, 15)
@@ -3054,6 +3114,25 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  default `e()` arm's `r() && !j` fall guard (g.java:1146) plus
          *  the i.java:7180/:15564 mount/overlap gates. */
         var grabLatch = false
+        /** `g.q` (g.java:63, proven) — static wall-run-zone latch: set by
+         *  the ax10 S10 zone arm while the player overlaps it
+         *  (i.java:9343-9363), read by the S317 arm's `!q` release gate
+         *  (g.java:4093). Cleared by `i.D()` pool init (i.java:1818). */
+        var gq = false
+        /** `g.f` (g.java:10, proven) — static wall-run marker-FX entity
+         *  (`i.a(8,30,4,...)` spawned by the S317 arm, g.java:4083);
+         *  the marker's own FSM checks `g.f == this` (i.java:6122). */
+        var gf: Entity? = null
+        /** `g.E` (g.java:36, proven) — static jump-tail suppress latch:
+         *  set while the player overlaps an ax10 S55 zone
+         *  (i.java:9843-9860), read as `cq && !E` in the shared e()
+         *  jump tail (g.java:788). Without it the tail's `i(233/22/21)`
+         *  overrides the arm-level `i(17)` wall-kick — the wall-run
+         *  family is only reachable inside these zones. */
+        var gE = false
+        /** `i.cu` (i.java static, proven) — set by the ax10 S55 arm's
+         *  `Z[0]!=0` branch (i.java:9857); consumers unmined. */
+        var icu = false
         /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
          *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */
@@ -3499,6 +3578,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
         return r0
     }
 
+    /** `i.d(i,x,y)` (i.java:16745, proven): spawn the ax24/clip40 `S=i`
+     *  score floatie at pixel (x,y) — `a(24,40,i,201)` child, then
+     *  `av=false`, `N/O` = 8.8 pos, `ak/al` = pos, vel 0, `t()`, `k.b`
+     *  insert. (spawnChildFx's settleToGround runs before the pos
+     *  re-anchor, so it's a no-op vs the raw a() — flagged.) */
+    fun spawnFloatie(world: LevelCellSource, i: Int, x: Int, y: Int) {
+        val aK = spawnChildFx(world, 24, 40, i, 201)
+        aK.av = false
+        aK.N = x shl 8; aK.O = y shl 8
+        aK.ak = x; aK.al = y
+        aK.aj = 0; aK.ai = 0; aK.ah = 0; aK.ag = 0
+        aK.refreshBoxes()                        // t()
+        world.queueInsert(aK)                    // k.b(aK)
+    }
+
     /** `i.a(x,y,tx,ty,ax,clip,S,az)` (i.java:21212, proven): 4-arg spawn
      *  + ax74 burst-particle customization — `ag/ah = j.a(-6,6)<<8`,
      *  `Z[8]` arc table `{x-kO, y-kP, tx-kO, ty-kP, midX+rand±80, y-kP,
@@ -3592,14 +3686,39 @@ open class Entity(val ax: Int, var clip: Clip?) {
         t[0] = ak; t[1] = al
         for (i in 1..4) { t[i * 2] = -200; t[i * 2 + 1] = -120 }
         cU = t; cV = true; cW = 0
+        trailAnim = S
+        trailClock = 0
     }
 
     /** `i.af()` (i.java:21513, proven): ring-shift the trail dots —
-     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. */
+     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. The card clock
+     *  ticks here (`ah()`→`b(j.g)` in the original runs per draw; j.g is
+     *  ~1 in gameplay so +1/push is the same rate — `inferred`). */
     fun pushTrail() {
         val t = cU ?: return
         for (i in 3 downTo 0) { t[(i + 1) * 2] = t[i * 2]; t[(i + 1) * 2 + 1] = t[i * 2 + 1] }
         t[0] = ak; t[1] = al
+        trailClock++
+    }
+
+    /** `a.b(i)`/`a.f()` (a.java:60,112-142, proven): the trail cards'
+     *  frame position — walk `dur*40`ms thresholds through `trailAnim`,
+     *  wrapping forever (`h=-2` < 0 → `f=0` loop, never `i=true`). */
+    fun trailFrame(): Int {
+        val c = clip ?: return 0
+        if (trailAnim < 0 || trailAnim >= c.animCount()) return 0
+        val n = c.frameCount(trailAnim)
+        if (n <= 0) return 0
+        var rem = trailClock
+        var f = 0
+        var guard = 0
+        while (guard++ < 1024) {
+            val d = c.frameDuration(trailAnim, f) * 40
+            if (d <= 0 || rem < d) break
+            rem -= d
+            f = (f + 1) % n
+        }
+        return f
     }
 
     /** `i.ag()` (i.java:21529, proven): trail armed. */
@@ -3612,15 +3731,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (cU != null) cU = null
     }
 
-    /** `i.N()` (i.java:7284, head proven): claim the `k.C` HUD slot —
-     *  `k.C=this`, `P|=16`. The old-claimer arm needs the unported
-     *  sequencing fields (`ab()`/`bI()`/`k.c`) — `inferred` reduction:
-     *  port keeps only the claim. The `h(k.s(aG))`/`k(k.s(aG))`
-     *  display-row pair is render-side (skipped). */
-    fun claimKC(w: LevelCellSource) {
-        w.kC = this
-        P = P or 16
-    }
 
     /** `i.e(int,x,y,az)` (i.java:11084, proven): the ck-aura manager —
      *  first call spawns `a(61,71,anim,99)` into `i.ck` (`P&=-129&-33`,
@@ -4086,6 +4196,11 @@ interface LevelCellSource {
     var kP: Int get() = 0; set(_) {}
     /** `k.ac` — camera view rect [x1,y1,x2,y2] world px (v()'s L83/L85). */
     val camRect: IntArray get() = IntArray(4)
+    /** `k.af`/`k.ag` — camera focus-point offsets written by ax10 S0 zones
+     *  (i.java:9772 L5ac) and consumed by the `k.m()` tracker
+     *  (k.java:1959-1965: camA = ak-200+af, camB = al-120+ag). */
+    var camAf: Int get() = 0; set(_) {}
+    var camAg: Int get() = 0; set(_) {}
     /** `k.bh[k.aj] == 3` — in-play phase (v()'s ax14 arm L61). */
     val inPlay: Boolean get() = true
     /** `k.aS.W` — the player's hitbox (v()'s ax14 tail). */
@@ -4234,13 +4349,31 @@ interface LevelCellSource {
      *  ax9-S4 is the live producer (`aC=-1` while touching). */
     var kAB: String? get() = null; set(_) {}
     var kAC: Int get() = 0; set(_) {}
+    /** `k.aZ` (k.java:252 `boolean`, proven) — persisted flag byte 68
+     *  (`j.a(k.bA,68,aZ?1:0)` save at i.java:13494/17286; `aZ = bA[68]!=0`
+     *  restore at k.java:5197). Written by the ax10 S6/S7 zone arms. */
+    var kAZ: Boolean get() = false; set(_) {}
+    /** `k.b(int,int,int,int)` (k.java:350, proven) — checkpoint-map
+     *  marker: `u=slot` (8 = checkpoint kind), expands `d(level,row)`
+     *  entries into the `w` region; `i3==-1 → false` (no start row). */
+    fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean = false
+    /** `k.bQ` (k.java:140 `private static boolean`, proven) — the
+     *  checkpoint-map "region dirty" flag `k.b()` sets; consumed by the
+     *  map screen (unported there — flag tracked for parity). */
+    var kBQ: Boolean get() = false; set(_) {}
+    /** `e.b()` (e.java:87, proven) — stop the current audio track.
+     *  (`k.w()` 0-arg, k.java:5707.) */
+    fun audioStop() {}
+    /** `e.a(n,false)` (e.java:50-87, proven) — start audio track n
+     *  (`k.z(n)`/`k.A(n)`, k.java:5696-5705; `A` delegates to `z`). */
+    fun audioTrackPlay(n: Int) {}
     /** `k.aR` — chase-progress row (pre-switch `aS.al<260` arm). */
     var kAR: Int
     /** `k.bu` — level pixel height used by the `aR` row formula. */
     val kBu: Int get() = 0
     /** `k.bk[]` — per-record type table read by `u()`'s ax67 arms
      *  (`inferred` — table unmined; default 0). */
-    fun kBk(i: Int): Int = 0
+    fun kBk(i: Int): Int = NpcFsm.decorClip(i)
     /** `j.a(lo,hi)` (j.java:328, proven): `lo + |nextInt| % (hi-lo)`. */
     fun jRand(lo: Int, hi: Int): Int = lo
     /** `j.j.nextInt()` — raw RNG (bG scatter/homing arms). */
@@ -4297,9 +4430,11 @@ interface LevelCellSource {
     var iAJ: Int get() = 0; set(_) {}
     /** `k.bJ` — boss grab-QTE lose latch (armed 6 on the fail path). */
     var kBj: Int get() = 0; set(_) {}
-    /** `k.X`/`k.W`/`k.aw` — time-scale statics touched by b(int)/O(). */
+    /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by
+     *  b(int)/O(). `k.V` is the camera-watch x (k.java:49 `-7`). */
     var kX: Int get() = 0; set(_) {}
     var kW: Int get() = 0; set(_) {}
+    var kV: Int get() = 0; set(_) {}
     var kAw: Int get() = 0; set(_) {}
     /** `k.ae` (k.java:97) — the player's current link entity: the bI ax5
      *  arm rebinds it to `aS` (or `g.a` when that entity's ax==43); `ai()`
@@ -4511,6 +4646,8 @@ interface LevelCellSource {
     var gj: Boolean get() = false; set(_) {}
     /** `k.L` — the entity currently registered as the interact claim. */
     var kL: Entity? get() = null; set(_) {}
+    /** `k.au` — difficulty/medal-condition field (indexes `bu[]` HP table). */
+    var kAu: Int get() = 0; set(_) {}
     /** `k.co` — claim priority countdown (reset 6 by `k.m()`). */
     var claimCo: Int get() = 6; set(_) {}
     /** `k.cp` — the claim marker rect (k.java:~820 `a(int[])`). */

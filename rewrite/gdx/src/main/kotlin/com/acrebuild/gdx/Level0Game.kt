@@ -28,6 +28,7 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
     private val save = SaveBridge("asbr-save.bin")
+    private val audio = AudioBridge()
     private var accumulatorMs = 0L
 
     override fun create() {
@@ -75,6 +76,19 @@ class Level0Game : ApplicationAdapter() {
         clips[42] = Clip.load(Gdx.files.internal("clips/clip42/clip.acpk").readBytes())
         clips[46] = Clip.load(Gdx.files.internal("clips/clip46/clip.acpk").readBytes())
         clips[39] = Clip.load(Gdx.files.internal("clips/clip39/clip.acpk").readBytes())   // z[39] jc20 icons
+        clips[52] = Clip.load(Gdx.files.internal("clips/clip52/clip.acpk").readBytes())   // ax29 Cesare boss (bi[29]=52)
+        clips[30] = Clip.load(Gdx.files.internal("clips/clip30/clip.acpk").readBytes())   // ax41 knockable prop (bi[41]=30)
+        clips[6] = Clip.load(Gdx.files.internal("clips/clip6/clip.acpk").readBytes())     // ax10 zones (bi[10]=6 — load-valid, zero-pixel modules)
+        clips[5] = Clip.load(Gdx.files.internal("clips/clip5/clip.acpk").readBytes())     // ax8 knife projectile (bi[8]=5)
+        clips[12] = Clip.load(Gdx.files.internal("clips/clip12/clip.acpk").readBytes())   // k.dA HUD indicator (T())
+        clips[59] = Clip.load(Gdx.files.internal("clips/clip59/clip.acpk").readBytes())   // ax8 boss-knife param (op111)
+        clips[13] = Clip.load(Gdx.files.internal("clips/clip13/clip.acpk").readBytes())   // ax21/ax48 (bi=13)
+        clips[14] = Clip.load(Gdx.files.internal("clips/clip14/clip.acpk").readBytes())   // ax22 capture zone
+        clips[15] = Clip.load(Gdx.files.internal("clips/clip15/clip.acpk").readBytes())   // ax26
+        clips[16] = Clip.load(Gdx.files.internal("clips/clip16/clip.acpk").readBytes())   // ax25
+        clips[23] = Clip.load(Gdx.files.internal("clips/clip23/clip.acpk").readBytes())   // ax66 platform
+        clips[28] = Clip.load(Gdx.files.internal("clips/clip28/clip.acpk").readBytes())   // ax51 crate
+        clips[44] = Clip.load(Gdx.files.internal("clips/clip44/clip.acpk").readBytes())   // ax31
         // pack-15 tilesets bound via k.ej[0..3]={11,10,12,10}; cells index
         // each tileset clip's composite-object space. Negated keys: entity
         // clips share this map via k.bi[] whose values 10/11 collide with
@@ -102,6 +116,7 @@ class Level0Game : ApplicationAdapter() {
         world.stateL(0)
         renderer = Level0Renderer()
         renderer.create(world)
+        audio.create()
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
         Gdx.app.log(TAG, "level0: ${level.entities.size} records, " +
             "${level.cols}x${level.rows} cells, world=${level.worldW}x${level.worldH}px, " +
@@ -123,16 +138,26 @@ class Level0Game : ApplicationAdapter() {
             accumulatorMs -= TICK_MS
             ticks++
         }
-        // `z()`/`e.b()` audio commands (e.java:50-87): the 34 track
-        // samples are not decoded into the app — log the command the
-        // original would have issued. `audioTrack` mirrors e.e.
-        for (c in world.drainCommands()) {
+        // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
+        // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
+        // (0–9,17,21,28) log-skip — undecoded on this pipeline.
+        // `audioTrack` mirrors e.e.
+        val commands = world.drainCommands()
+        audio.execute(commands)
+        for (c in commands) {
             when (c) {
                 is com.acrebuild.core.Command.PlaySfx ->
                     Gdx.app.log(TAG, "audio: play track=${c.slot} (e.e=${world.audioTrack})")
+                is com.acrebuild.core.Command.StopAudio ->
+                    Gdx.app.log(TAG, "audio: e.b() stop channel")
                 is com.acrebuild.core.Command.PersistBA -> {
                     save.write(c.record)
                     Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                }
+                is com.acrebuild.core.Command.QuitApp -> {
+                    // j.c==11 → notifyDestroyed (j.java:218)
+                    Gdx.app.log(TAG, "quit: notifyDestroyed via EXIT menu")
+                    Gdx.app.exit()
                 }
                 else -> Unit
             }
@@ -154,6 +179,7 @@ class Level0Game : ApplicationAdapter() {
     }
 
     override fun dispose() {
+        audio.dispose()
         renderer.dispose()
     }
 }

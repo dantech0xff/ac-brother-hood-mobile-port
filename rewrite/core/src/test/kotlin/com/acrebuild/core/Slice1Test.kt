@@ -130,10 +130,16 @@ private fun charmapFont(): FontClip =
     FontClip(Clip.load(asset("clips/clip92/clip.acpk")),
              FontClip.loadCharmap(charmap()), 4)
 
-private fun world(charmap: ByteArray? = null): Level0World {
+private fun world(charmap: ByteArray? = null, aj: Int = 0):
+    Level0World {
+    Entity.grabLatch = false                      // static latch — reset per world
+    Entity.gq = false                             // g.q wall-run latch
+    Entity.gf = null                              // g.f marker FX ref
+    Entity.gE = false                             // g.E jump-tail suppress
+    Entity.icu = false                            // i.cu static
     // mirror of the game's conversion of decoded assets
-    val level = LevelPack.load(asset("level0/level0.aclv"))
-        val clips = mapOf(
+    val level = LevelPack.load(asset("level$aj/level$aj.aclv"))
+        val clips = mutableMapOf(
             0 to Clip.load(asset("clips/clip0/clip.acpk")),
             1 to Clip.load(asset("clips/clip1/clip.acpk")),
             3 to Clip.load(asset("clips/clip3/clip.acpk")),
@@ -168,17 +174,20 @@ private fun world(charmap: ByteArray? = null): Level0World {
             46 to Clip.load(asset("clips/clip46/clip.acpk")),
             92 to Clip.load(asset("clips/clip92/clip.acpk")),
             12 to Clip.load(asset("clips/clip94/clip.acpk")),   // z[12] = entry-012
-            -10 to Clip.load(asset("level0/tileset-10/clip.acpk")),
-            -11 to Clip.load(asset("level0/tileset-11/clip.acpk")),
-            -12 to Clip.load(asset("level0/tileset-12/clip.acpk")),
         )
-    // pack-14 entry-001 level-string table (line-delimited emit)
-    val levelStrings = java.io.File("../generated/level0/strings-1.txt")
+        if (aj == 0) {
+            clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
+            clips[-11] = Clip.load(asset("level0/tileset-11/clip.acpk"))
+            clips[-12] = Clip.load(asset("level0/tileset-12/clip.acpk"))
+        }
+    // pack-14 entry-<aj+1> level-string table (line-delimited emit)
+    val levelStrings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
         .readText().split("\n").filter { it.isNotEmpty() }
         .map { it.replace("\\n", "\n") }
     return Level0World(level, clips, DeterministicRandom(1L),
         levelStrings = levelStrings, charmap = charmap,
-        scripts = ScriptTables.load(asset("level0/scripts.bin")))
+        scripts = ScriptTables.load(asset("level$aj/scripts.bin")),
+        aj = aj)
         .also {
             // the intro claim script's op105 dialogs (k.l(21)) suspend the
             // sim until a dismiss press — emulate an instantly-tapping player
@@ -218,8 +227,18 @@ class Level0WorldTest {
         for (n in w.npcs) {
             val exp = byAw[n.aw]
             if (exp != null) {
-                assertEquals(exp, n.ak to n.al,
-                    "ax${n.ax} aw=${n.aw} should sit at its record position")
+                if (n.ax == 11 || n.ax == 73) {
+                    // ctor tail `a(true);E()` (i.java:2895-2898) settles
+                    // soldiers at spawn: collideSides pushes ak out of
+                    // walls and E() sinks al in +10 steps to standable
+                    // ground — both drift within a small window.
+                    assertTrue(kotlin.math.abs(n.ak - exp.first) <= 10 &&
+                        n.al >= exp.second && n.al <= exp.second + 40,
+                        "ax${n.ax} aw=${n.aw} settled pos near (${exp.first},${exp.second}) got (${n.ak},${n.al})")
+                } else {
+                    assertEquals(exp, n.ak to n.al,
+                        "ax${n.ax} aw=${n.aw} should sit at its record position")
+                }
             }
         }
     }
@@ -452,8 +471,11 @@ class Level0WorldTest {
         }
         assertTrue(s.aB <= 0,
             "S216 finisher should zero the victim (aB=${s.aB})")
-        assertTrue(s.ag != 0,
-            "S216 should launch the victim (ag=${s.ag} — decays post-hit)")
+        // i.g() (i.java:1237) zeroes ag/ai unconditionally — the ±5120
+        // launch written before it is dead in the original; the victim
+        // lands in S85 (the c(85,157) path) with ag=0.
+        assertTrue(s.S == 85 || s.ag == 0,
+            "S216 victim should sit in S85 with the launch eaten by g() (S=${s.S}, ag=${s.ag})")
     }
 
     @Test fun `npc strike on a metered player counters the attacker`() {
@@ -698,13 +720,13 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 36 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertSame(t, w.player.gd)
         assertEquals(t.W[0] + (t.W[2] - t.W[0]) / 2, w.player.gn)
         assertEquals(t.W[3], w.player.go)
         w.player.setPositionPx(0, 0)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertNull(w.player.gd)
         assertEquals(0, w.player.gn)
         assertEquals(-1, w.player.gk)
@@ -715,13 +737,13 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 33 && it.aG != 0 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertTrue(w.player.gA)
         assertEquals(((t.aG - w.player.ak) shl 8) / 11, w.player.gL)
         assertEquals(t.av, w.player.gB)
         w.player.setPositionPx(0, 0)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertFalse(w.player.gA)
     }
 
@@ -731,7 +753,7 @@ class Level0WorldTest {
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
         w.player.setAnim(60)              // wall-climb state per i.java:12946
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertEquals(203, w.player.S)
     }
 
@@ -740,14 +762,14 @@ class Level0WorldTest {
         val t = w.npcs.first { it.ax == 10 && it.S == 53 }
         w.player.setPositionPx((t.W[0] + t.W[2]) / 2, (t.W[1] + t.W[3]) / 2)
         w.player.refreshBoxes()
-        // gD false (producer arm unported): stays inert
+        // gD false (no S90 launch ran): stays inert
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertTrue(w.npcs.contains(t))
         // gD true + player S ∈ {0,1,5} → i(360), zero vel, k.c(this)
         w.player.gD = true
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertEquals(360, w.player.S)
         assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
         w.tick(emptyList())               // npc loop drains pendingRemove
@@ -10498,11 +10520,11 @@ class Slice94Test {
 
     @Test fun `claimAb needs bound ca armed cK and cd0 clear`() {
         val e = Entity(5, null)
-        e.ca = 2; e.cd[0] = false; e.cK = 0
+        e.ca = 2; e.cd[0] = false; e.scriptStep = 0
         assertTrue(e.claimAb())                         // i.java:18914
         e.cd[0] = true; assertFalse(e.claimAb()); e.cd[0] = false
         e.ca = -1; assertFalse(e.claimAb()); e.ca = 0
-        e.cK = -1; assertFalse(e.claimAb())
+        e.scriptStep = -1; assertFalse(e.claimAb())
     }
 
     @Test fun `khypot matches k h approximation`() {
@@ -10977,7 +10999,7 @@ class Slice99Test {
         val p = w.player
         p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
         val (door, _) = doorPair(w)
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertNotNull(p.ae, "aS.a(105,…) spawned into player ae")
         assertEquals(105, p.ae!!.S, "marker anim 105")
         assertEquals(300, door.az, "az=300 marker TTL (L1784)")
@@ -10991,7 +11013,7 @@ class Slice99Test {
         val (door, _) = doorPair(w)
         door.ae = Entity(14, null)                    // door-side ae link
         p.ak = door.W[2] + 200; p.refreshBoxes()       // out of the zone
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertNull(door.ae, "L1850 G() on no-overlap")
     }
 
@@ -11001,7 +11023,7 @@ class Slice99Test {
         p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
         val (door, dest) = doorPair(w)
         w.pad.commit(16388)
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertSame(dest, p.ac, "bh() k.q(o) → aS.a(dest)")
         assertTrue(dest.P and 256 != 0, "bind marks P|=256")
         assertEquals((door.W[0] + door.W[2]) shr 1, p.ak,
@@ -11019,7 +11041,7 @@ class Slice99Test {
         p.g = Entity(14, null)                          // g.g != null
         val (door, _) = doorPair(w)
         w.pad.commit(16388)
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertNull(p.ac, "L1850 → no bind while g.g lives")
         assertFalse(w.kAn, "no fade")
     }
@@ -11031,7 +11053,7 @@ class Slice99Test {
         p.ga = Entity(43, null)                          // g.a != null
         val (door, _) = doorPair(w)
         door.az = -5
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertEquals(-5, door.az, "L177d early return skips az=300")
         assertNull(p.ae)
     }
@@ -11042,7 +11064,7 @@ class Slice99Test {
         val (door, dest) = doorPair(w)
         p.ac = dest                                       // bound to dest
         w.kAn = false; w.kAo = false                      // fades idle
-        w.npcFsm.tickTrigger(dest, w, p)
+        w.npcFsm.tickTrigger(dest, w, p, w.pad)
         assertEquals((dest.W[0] + dest.W[2]) shr 1, p.ak, "bottom-center x")
         assertEquals(dest.W[3], p.al, "al = W[3]")
         assertTrue(p.av, "av = (aD&1)!=0 → right")
@@ -11058,7 +11080,7 @@ class Slice99Test {
         val (door, dest) = doorPair(w)
         p.ac = door                                       // bound to EXIT
         w.kAo = true; w.kBI = 20                          // ao && bI>13
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertEquals(19, dest.S, "r8.i(19) dest open anim")
         assertEquals(43, p.S, "aS.a(0) → enterStateMasked(43,32) fling")
         assertEquals(1536, p.aj, "fling aj=1536")
@@ -11070,7 +11092,7 @@ class Slice99Test {
         p.refreshBoxes(); p.aZ = false; p.g = null; p.ga = null
         val (door, dest) = doorPair(w)
         w.kAn = true; w.kBI = 20                          // an && bI>13
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertEquals(17, dest.S, "L1837 r8.i(17)")
         assertNull(p.ac, "no bind without the keypress")
     }
@@ -11082,7 +11104,7 @@ class Slice99Test {
         val (door, _) = doorPair(w)
         door.oId = -1
         w.pad.commit(16388)
-        w.npcFsm.tickTrigger(door, w, p)
+        w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertNull(p.ae, "o==-1 → L17d0 early return")
     }
 }
@@ -12202,7 +12224,7 @@ class Slice122Test {
         w.player.setPositionPx(px, ry + h)
         w.player.refreshBoxes()
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertSame(t, w.player.af)
         assertEquals(ry + 75, w.player.al)          // i13+=10; al=i13+65
         assertEquals((slope * 1024) shr 8, w.player.ah)
@@ -12212,7 +12234,7 @@ class Slice122Test {
         // ride-release: leave the rail x-range while S164
         w.player.setPositionPx(t.W[2] + 40, ry + 500)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertNull(w.player.af)
         assertEquals(43, w.player.S)                // Z[1]!=1 → plain fall
         assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
@@ -12231,14 +12253,14 @@ class Slice122Test {
         w.player.setPositionPx(px, ry + h)
         w.player.refreshBoxes()
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertSame(t, w.player.af)
         // walk off → Z[1]==1 arm: al-=40, i(157), ag=+8192, ah=-2560
         val al0 = w.player.al
         w.player.setPositionPx(t.W[2] + 40, ry + 500)
         w.player.refreshBoxes()
         w.player.al = al0                            // restore hang height
-        w.npcFsm.tickTrigger(t, w, w.player)
+        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
         assertNull(w.player.af)
         assertEquals(157, w.player.S)
         assertEquals(8192, w.player.ag)
@@ -12788,31 +12810,31 @@ class Slice133Test {
         return p
     }
 
-    @Test fun `probeSnapSides clears flags and rescans both columns i829`() {
+    @Test fun `a() clears flags and rescans both columns i829`() {
         val w = Slice128Test.MarkerWorld(cell = 0)
         val p = playerAt(200, 100)
         p.bb = true; p.bc = true; p.ba = true; p.aT = 30; p.aU = 30
-        p.probeSnapSides(false, w)
+        p.collideSides(w, false)
         assertFalse(p.bb); assertFalse(p.bc); assertFalse(p.ba)
         assertEquals(0, p.aT); assertEquals(0, p.aU)
-        assertEquals((p.W[0] + p.W[2]) shr 1, p.centerX)
-        assertEquals((p.W[1] + p.W[3]) shr 1, p.centerY)
+        assertEquals((p.W[0] + p.W[2]) shr 1, p.tc)
+        assertEquals((p.W[1] + p.W[3]) shr 1, p.uc)
     }
 
-    @Test fun `probeSnapSides wall column flags bb i862`() {
+    @Test fun `a() wall column flags bb i862`() {
         // column left of the box (i=W[0]-1) is solid 19 → bb + aT>=18
         val w = Slice128Test.MarkerWorld { cx, cy -> if (cx <= 9) 19 else 0 }
         val p = playerAt(200, 100)          // i = 189 → col 9
-        p.probeSnapSides(false, w)
+        p.collideSides(w, false)
         assertTrue(p.bb)
         assertTrue(p.aT >= 18)
     }
 
-    @Test fun `probeSnapSides both walls clears both flags i894`() {
+    @Test fun `a() both walls clears both flags i894`() {
         val w = Slice128Test.MarkerWorld(cell = 19)
         val p = playerAt(200, 100)
         p.clip = clip                         // keep W across t()
-        p.probeSnapSides(true, w)
+        p.collideSides(w, true)
         assertFalse(p.bb); assertFalse(p.bc)   // bb == bc → both cleared
     }
 
@@ -13027,5 +13049,3238 @@ class Slice134Test {
         fsm.tick(p, Pad())
         assertEquals(-1, w.kBg, "k.bG = -1 when e.a() is false")
         Entity.grabLatch = false
+    }
+}
+
+// ---- Slice 135: S183/184/205 assassination finisher arms + victim helpers ----
+class Slice135Test {
+    private val clip by lazy { Clip.load(asset("clips/clip7/clip.acpk")) }
+
+    /** MarkerWorld + tracking for the finisher payoff calls. */
+    class FinWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
+        var statE = 0; var stat5 = 0; var streak = 0; var wisps = 0
+        override fun kStatE(gate: Int) { statE++ }
+        override fun kStat(n: Int) { if (n == 5) stat5++ }
+        override fun kCollectStreak() { streak++ }
+        override fun spawnWisp(src: Entity) { wisps++ }
+    }
+
+    private fun playerAt(ak: Int, al: Int, av: Boolean = false): Entity {
+        val p = Entity(0, clip)               // clip → r() stays false
+        p.ak = ak; p.al = al; p.av = av
+        p.S = 183
+        return p
+    }
+
+    @Test fun `S183 drags the locked victim into S106 at 30px g3043`() {
+        val w = FinWorld()
+        val fsm = PlayerFsm(w)
+        val p = playerAt(200, 100)
+        val v = Entity(11, null); v.S = 144; v.al = 105   // weakened soldier
+        w.lockTarget = v
+        fsm.tick(p, Pad())
+        // converted clip7's S183 is single-frame → r() fires the same
+        // tick: drag + release both run — assert the combined effects.
+        assertEquals(230, v.ak, "av=false → ak+30 (:3048)")
+        assertEquals(100, v.al)
+        assertEquals(1, w.statE, "k.e(0,aw)")
+        assertEquals(3, w.wisps, "i.aN.S() → 3× m(-1)")
+        assertEquals(3, w.stat5); assertEquals(3, w.streak)
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertEquals(0, v.aB, "release zeroed the victim")
+        assertNull(w.lockTarget)
+    }
+
+    @Test fun `S183 releases the lock when the anim ends g3073`() {
+        val w = FinWorld()
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)               // null clip → r() fires
+        p.ak = 200; p.al = 100; p.S = 183
+        val v = Entity(11, null); v.S = 106; v.al = 105; v.aB = 40
+        w.lockTarget = v
+        w.kAm = true
+        fsm.tick(p, Pad())
+        assertEquals(0, p.S, "!r()||aN==null → i(0)")
+        assertEquals(0, v.aB, "victim aB=0")
+        assertEquals(0, v.S, "i.d(ax11) → i(0)")
+        assertNull(w.lockTarget, "i.aN = null")
+        assertFalse(w.kAm, "k.p() input unlock")
+    }
+
+    @Test fun `S184 drags the victim into S107 at 35px g3099`() {
+        val w = FinWorld()
+        val fsm = PlayerFsm(w)
+        val p = playerAt(200, 100, av = true)
+        p.S = 184
+        val v = Entity(11, null); v.S = 144; v.al = 105
+        w.lockTarget = v
+        fsm.tick(p, Pad())
+        assertEquals(107, v.S, "i.aN.i(107)")
+        assertEquals(235, v.ak, "av=true → ak+35")
+        assertEquals(1, w.statE); assertEquals(3, w.wisps)
+    }
+
+    @Test fun `S184 skips the drag when already in S107 g3099`() {
+        val w = FinWorld()
+        val fsm = PlayerFsm(w)
+        val p = playerAt(200, 100); p.S = 184
+        val v = Entity(11, null); v.S = 107; v.al = 105
+        w.lockTarget = v
+        fsm.tick(p, Pad())
+        assertEquals(0, w.statE, "aN.S!=107 guard — no second tally")
+    }
+
+    @Test fun `S205 shares the arm with no victim drag g3098`() {
+        val w = FinWorld()
+        val fsm = PlayerFsm(w)
+        // S205 exceeds converted clip7's 201 anims — null clip drives the
+        // arm like the original's wider k.z[75] bank (flagged in plan).
+        val p = Entity(0, null); p.ak = 200; p.al = 100; p.S = 205
+        val v = Entity(11, null); v.S = 144; v.al = 105
+        w.lockTarget = v
+        fsm.tick(p, Pad())
+        assertEquals(0, w.statE, "S==184 guard — S205 never drags")
+        assertEquals(0, w.wisps)
+        assertTrue(v.S != 107, "victim never i(107)")
+    }
+
+    @Test fun `releaseAnimReset maps ax11 to S0 and ax23 to S79 i1221`() {
+        assertEquals(0, Entity(11, null).also { it.S = 106; it.releaseAnimReset() }.S)
+        assertEquals(79, Entity(23, null).also { it.S = 106; it.releaseAnimReset() }.S)
+        assertEquals(50, Entity(5, null).also { it.S = 50; it.releaseAnimReset() }.S)
+    }
+}
+
+// ---- Slice 136: g.j unification (w.gj → Entity.grabLatch) + ax11 aD() ----
+class Slice136Test {
+
+    private fun soldierAt(w: Level0World, x: Int, y: Int): Entity {
+        val e = Entity(11, w.clips[7])
+        // aB>0 required: `I()` head (i.java:4024) sends aB<=0 soldiers to
+        // i(0); initSoldier always sets aB=BU[0].
+        e.aB = 50
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.Z[0] = 0; e.aA = 1
+        w.npcs.add(e)
+        return e
+    }
+
+    private fun crateAt(w: Level0World, x: Int, y: Int, uid: Int): Entity {
+        val c = Entity(51, w.clips[7])
+        c.aw = uid; c.setPositionPx(x, y); c.refreshBoxes()
+        w.npcs.add(c)
+        return c
+    }
+
+    @Test fun `aD binds s to the Z7-linked crate on overlap i7167`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val c = crateAt(w, p.ak, p.al - 20, 7)
+        val e = soldierAt(w, p.ak, p.al - 20)
+        e.Z[7] = 7; e.S = 4
+        assertTrue(w.npcFsm.crateRide11(e), "s bound")
+        assertSame(c, e.s)
+        assertEquals(2, e.S, "i(2) on bind (S!=3)")
+        assertEquals(0, e.aA)
+        assertEquals(c.W[1] + 1, e.al, "al = s.W[1]+1")
+    }
+
+    @Test fun `aD tracks the crate top and faces the player off-latch i7180`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.ak = 9999                                // player right of soldier
+        val c = crateAt(w, p.ak - 60, p.al - 40, 7)
+        val e = soldierAt(w, p.ak - 60, p.al - 40)
+        e.Z[7] = 0; e.s = c; e.av = true
+        Entity.grabLatch = false
+        w.npcFsm.crateRide11(e)
+        assertEquals(c.W[1] + 3, e.al, "al = s.W[1]+3")
+        assertFalse(e.av, "Q() → av = aS.ak < ak → false")
+    }
+
+    @Test fun `aD latch gate suppresses the Q face-player flip i7180`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.ak = 9999
+        val c = crateAt(w, p.ak - 60, p.al - 40, 7)
+        val e = soldierAt(w, p.ak - 60, p.al - 40)
+        e.Z[7] = 0; e.s = c; e.av = true
+        Entity.grabLatch = true                    // g.j held by S146/147
+        w.npcFsm.crateRide11(e)
+        assertTrue(e.av, "!g.j gate — Q() suppressed while latched")
+        Entity.grabLatch = false
+    }
+
+    @Test fun `aD drops i96 while the crate plays S2 i7167`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val c = crateAt(w, p.ak, p.al - 40, 7)
+        c.S = 2
+        val e = soldierAt(w, p.ak, p.al - 40)
+        e.Z[7] = 0; e.s = c
+        w.npcFsm.crateRide11(e)
+        assertEquals(96, e.S, "s.ax==51 && s.S==2 → i(96)")
+    }
+
+    @Test fun `aD unbinds when the overlap is lost i7202`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val c = crateAt(w, p.ak + 4000, p.al - 40, 7)
+        val e = soldierAt(w, p.ak, p.al - 40)
+        e.Z[7] = 0; e.s = c
+        assertFalse(w.npcFsm.crateRide11(e), "lost overlap → s=null")
+        assertNull(e.s)
+    }
+
+    @Test fun `w gj delegates to the Entity grabLatch companion var`() {
+        val w = world()
+        Entity.grabLatch = false
+        assertFalse(w.gj)
+        w.gj = true
+        assertTrue(Entity.grabLatch, "w.gj writes the real g.j latch")
+        Entity.grabLatch = false
+        assertFalse(w.gj, "w.gj reads the real g.j latch")
+    }
+
+    @Test fun `patrolArm runs the ride helper and feeds crate velocity i4168`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val c = crateAt(w, p.ak, p.al - 40, 7)
+        c.ag = 4096
+        val e = soldierAt(w, p.ak, p.al - 40)
+        e.Z[7] = 7; e.S = 2; e.k = true; e.ag = 0
+        e.Z[3] = e.ak; e.Z[5] = 40; e.Z[6] = 40
+        w.npcFsm.tick(e, p)
+        assertSame(c, e.s, "crate bound through the patrol arm")
+        assertEquals(4096, e.ag, "s.ag feeds ride velocity")
+    }
+}
+
+/** Slice 137 — wall-run family: `g.q`/`g.f` statics, ax10 S10 zone arm,
+ *  S317 wall-run dash, S102 wall-cling, S332 wall-shimmy, S17 wall-kick. */
+class Slice137Test {
+
+    private fun mk(ak: Int, al: Int, av: Boolean = false): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al; p.av = av
+        p.W[0] = ak - 10; p.W[2] = ak + 10
+        p.W[1] = al - 20; p.W[3] = al
+        return p
+    }
+
+    @Test fun `S102 cling grounded runs l consume g2737`() {
+        Entity.gq = false; Entity.gf = null
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 102; p.aZ = true; p.aC = 18
+        fsm.tick(p, Pad())
+        assertEquals(11, p.S, "l() settle folds to S11")
+        assertEquals(18, p.aC, "aC untouched when grounded")
+    }
+
+    @Test fun `S102 cling countdown expiry flings g2741`() {
+        Entity.gq = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 0; p.aR = 4
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S, "aC<=0 → a(0) fling")
+        assertEquals(131, p.al, "fling's +10 plus the arm's +21 drop")
+        assertEquals(-1, p.aC, "aC decremented (i15-1)")
+    }
+
+    @Test fun `S102 cling dir-held enters shimmy g2745`() {
+        Entity.gq = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
+        val pad = Pad(); pad.held = Pad.M_LEFT
+        fsm.tick(p, pad)
+        assertEquals(332, p.S)
+        assertTrue(p.av, "av = true for LEFT")
+    }
+
+    @Test fun `S102 cling up-edge kicks to S17 in E-zone g2751`() {
+        Entity.gq = false; Entity.gE = true   // inside S31 zone → !E tail off
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
+        p.cq = true                           // airborne latch — tail armed
+        val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
+        fsm.tick(p, pad)
+        assertEquals(17, p.S, "g.E set → arm's i(17) survives the tail")
+        Entity.gE = false
+    }
+
+    @Test fun `S102 cling up-edge outside E-zone jumps S233 g788`() {
+        Entity.gq = false; Entity.gE = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
+        p.cq = true                           // airborne latch like live play
+        val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
+        fsm.tick(p, pad)
+        assertEquals(233, p.S, "no E-zone → cq&&!E tail overrides i(17)")
+    }
+
+    @Test fun `S332 shimmy anim-end re-enters cling g4124`() {
+        Entity.gq = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 332; p.aZ = false; p.aR = 4
+        p.ag = 999; p.ah = 999
+        fsm.tick(p, Pad())
+        assertEquals(102, p.S, "r() → i(102)")
+        assertEquals(18, p.aC)
+        assertEquals(0, p.ag); assertEquals(0, p.ah); assertEquals(0, p.aj)
+    }
+
+    @Test fun `S332 shimmy up-edge kicks to S17 in E-zone g4113`() {
+        Entity.gq = false; Entity.gE = true
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 332; p.aZ = false; p.aR = 4
+        p.cq = true                           // airborne latch — tail armed
+        val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
+        fsm.tick(p, pad)
+        assertEquals(17, p.S)
+        Entity.gE = false
+    }
+
+    @Test fun `S17 wall-kick winds up then launches g1490`() {
+        Entity.gq = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100, av = false); p.S = 17
+        p.ag = 999; p.ah = 999
+        fsm.tick(p, Pad())                      // null clip → r() fires
+        assertEquals(18, p.S)
+        assertEquals(2048, p.ag, "ag = av?-2048:2048")
+        assertEquals(-5120, p.ah)
+    }
+
+    @Test fun `S317 dash velocities and UP hop g4065`() {
+        Entity.gq = false; Entity.gf = null; Entity.gE = true
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100, av = true); p.S = 317
+        p.aR = 4; p.bb = false; p.bc = false; p.cq = true
+        p.ah = 9999
+        val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
+        fsm.tick(p, pad)
+        assertEquals(-2560, p.ag, "ag = av?-2560:2560")
+        assertEquals(-2048, p.ah, "v(16388) hop overrides the 512 cap")
+        assertEquals(128, p.aj)
+        assertEquals(317, p.S, "no wall — stays in run")
+        Entity.gE = false
+    }
+
+    @Test fun `S317 wall-hit stops run and releases link out-of-zone g4080`() {
+        Entity.gq = false; Entity.gf = null
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100, av = true); p.S = 317
+        p.bb = true                              // hitWall via ag<0 → bb
+        p.aR = 4
+        val marker = Entity(14, null); p.ae = marker
+        fsm.tick(p, Pad())
+        assertEquals(0, p.ag, "ag zeroed on wall contact")
+        assertNull(p.ae, "!q → G() releaseAe")
+        assertNull(Entity.gf, "clip30 unconverted → no spawn (k.z[30]==null)")
+        assertEquals(317, p.S, "no marker → no i(50) yet")
+    }
+
+    @Test fun `ax10 S46 zone latches and clears gq i9343`() {
+        Entity.gq = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = NpcFsm(w)
+        // L1e1 is aV() case 46, not S10 — slice 141 corrected the label.
+        val zone = Entity(10, null); zone.S = 46
+        zone.W[0] = 190; zone.W[2] = 230; zone.W[1] = 60; zone.W[3] = 140
+        val p = mk(200, 100)
+        fsm.tickTrigger(zone, w, p, Pad())
+        assertTrue(Entity.gq, "overlap → g.q")
+        assertSame(zone, p.gd, "g.d = zone")
+        // leave the zone
+        p.ak = 900; p.W[0] = 890; p.W[2] = 910
+        fsm.tickTrigger(zone, w, p, Pad())
+        assertFalse(Entity.gq, "left + still owner → g.q cleared")
+        assertNull(p.gd)
+    }
+
+    @Test fun `ax10 S31 zone latches and clears gE i9830`() {
+        Entity.gE = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = NpcFsm(w)
+        val zone = Entity(10, null); zone.S = 31
+        zone.W[0] = 190; zone.W[2] = 230; zone.W[1] = 60; zone.W[3] = 140
+        val p = mk(200, 100)
+        fsm.tickTrigger(zone, w, p, Pad())
+        assertTrue(Entity.gE, "overlap → g.E")
+        assertEquals(0, zone.P and 128, "P &= ~128 while overlapped")
+        p.ak = 900; p.W[0] = 890; p.W[2] = 910
+        fsm.tickTrigger(zone, w, p, Pad())
+        assertFalse(Entity.gE, "left → g.E cleared")
+        assertEquals(128, zone.P and 128, "P |= 128 while empty")
+    }
+
+    @Test fun `ax10 S31 Z0 nonzero sets icu i9857`() {
+        Entity.gE = false; Entity.icu = false
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = NpcFsm(w)
+        val zone = Entity(10, null); zone.S = 31
+        zone.W[0] = 190; zone.W[2] = 230; zone.W[1] = 60; zone.W[3] = 140
+        zone.Z[0] = 1
+        val p = mk(200, 100)
+        fsm.tickTrigger(zone, w, p, Pad())
+        assertTrue(Entity.icu, "Z[0]!=0 → i.cu")
+        Entity.icu = false
+    }
+}
+
+/** Slice 138 — dismount/leap family: S54 settle, S357 scripted leap,
+ *  S360 perch, S370 boss-grab windup, S374 KO-settle, `i.E()` sink. */
+class Slice138Test {
+
+    private val clip0 by lazy { Clip.load(asset("clips/clip0/clip.acpk")) }
+
+    private fun mk(ak: Int, al: Int, av: Boolean = false): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al; p.av = av
+        p.W[0] = ak - 10; p.W[2] = ak + 10
+        p.W[1] = al - 20; p.W[3] = al
+        return p
+    }
+
+    @Test fun `S54 anim end drops 20 settles and idles g2223`() {
+        val w = Slice134Test.PassWorld(cell = 3)   // aR=3 → E() finds footing
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 54
+        fsm.tick(p, Pad())
+        assertEquals(0, p.S, "i(0) after the settle")
+        assertEquals(80, p.al, "al -= 20, E() finds footing at aR==3")
+    }
+
+    @Test fun `S357 leap speed entries g4155`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 357
+        p.clip = clip0                 // real clip + T=0 → !r()
+        p.T = 0; p.U = 0
+        fsm.tick(p, Pad())
+        assertEquals(3328, p.ag, "facing-right → ag=3328")
+        assertEquals(357, p.S, "still leaping")
+        val q = mk(200, 100, av = true); q.S = 357
+        q.clip = clip0; q.T = 0; q.U = 0
+        fsm.tick(q, Pad())
+        assertEquals(-1280, q.ag, "av → ag=-1280 (asymmetric, verbatim)")
+    }
+
+    @Test fun `S357 anim end K4 i364 then ar-folds g4159`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 357
+        fsm.tick(p, Pad())                    // null clip → r()
+        assertEquals(0, p.ag, "anim end → ag=0")
+        assertEquals(4, p.K, "K=4")
+        // i(364) then ar() — g==null → ar() i(0)'s (verbatim: the S!=364
+        // guard only keeps 364 when an interact anchor is live).
+        assertEquals(0, p.S, "i(364) + ar() no-anchor → i(0)")
+    }
+
+    @Test fun `S360 perch forward press relaunches g4174`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100, av = false); p.S = 360
+        p.clip = clip0; p.T = 0; p.U = 0   // mid-anim → r() false
+        val pad = Pad(); pad.queuePress(Pad.M_RIGHT); pad.commit(0)
+        fsm.tick(p, pad)
+        assertNull(p.ae, "forward press → G() releases the marker")
+        assertEquals(357, p.S, "i(357) relaunch")
+    }
+
+    @Test fun `S360 perch marker spawn then anim end idles g4178`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100, av = false); p.S = 360
+        // mid-tick: spawnMarker runs before the r() check — ae is set,
+        // then r() → G() clears it in the same pass.
+        fsm.tick(p, Pad())
+        assertNull(p.ae, "r() → G() releases the just-spawned marker")
+        assertEquals(0, p.S, "r() → i(0)")
+    }
+
+    @Test fun `S370 windup advances to S371 g4185`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 370
+        fsm.tick(p, Pad())
+        assertEquals(371, p.S, "r() → i(371)")
+    }
+
+    @Test fun `S374 with meter recovers to S376 g4211`() {
+        val w = Slice134Test.PassWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 374; p.x1 = 90
+        p.ag = 999; p.ah = 999
+        fsm.tick(p, Pad())
+        assertEquals(376, p.S, "x[1]>0 → i(376)")
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+    }
+
+    @Test fun `S374 without meter mission-fails g4216`() {
+        val w = object : Slice128Test.MarkerWorld(cell = 0) {
+            var lCalls = 0
+            override fun screenL(n: Int) { if (n == 12) lCalls++ }
+        }
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 374; p.x1 = 0
+        fsm.tick(p, Pad())
+        assertEquals(1, w.lCalls, "x[1]==0 → k.l(12)")
+        assertEquals(374, p.S, "state holds")
+    }
+}
+
+/** Slice 139 — ax10 S31 claim-QTE zone tail (i.java:9795-10423): the
+ *  4-lane sequence QTE — Z[1] nibble lane types → i.cs[] pad masks →
+ *  i.ct[] card frames; aB progress vs Z[2]; aA script uid Z[4]→Z[3];
+ *  consumed reset P|=8192 → self-remove; claim bind h/k(k.s(aA)). */
+class Slice139Test {
+    open class ClaimZoneWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
+        val removed = mutableListOf<Entity>()
+        val sfxCalls = mutableListOf<Int>()
+        override fun removeEntity(e: Entity) { removed += e }
+        override fun sfx(id: Int) { sfxCalls += id }
+        override var kC: Entity? = null
+        var mountMode = true
+        override val mounted: Boolean get() = mountMode
+        override var iBe = false
+        override var iAH = false
+        override var kAm = false
+        override var kAU: Entity? = null
+    }
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 10; p.W[2] = ak + 10
+        p.W[1] = al - 20; p.W[3] = al
+        return p
+    }
+
+    private fun zone(z1: Int = 0x1234, z2: Int = 2, z3: Int = 9, z4: Int = 7): Entity {
+        val z = Entity(10, null); z.S = 31
+        z.W[0] = 190; z.W[2] = 230; z.W[1] = 60; z.W[3] = 140
+        z.Z[1] = z1; z.Z[2] = z2; z.Z[3] = z3; z.Z[4] = z4
+        return z
+    }
+
+    private fun resetStatics() {
+        Entity.gE = false; Entity.icu = false
+        Entity.scriptPrompts.fill(null)
+    }
+
+    @kotlin.test.AfterTest fun cleanupStatics() = resetStatics()
+
+    @Test fun `S31 iBe removes zone i9799`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.iBe = true
+        val z = zone(); val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertSame(z, w.removed.single(), "i.be → k.c(this)")
+    }
+
+    @Test fun `S31 claimAb ticks bound script i9802`() {
+        resetStatics()
+        // armed claim (i.cK>=0) opens aa() → kBy[0] must exist — give the
+        // world one empty op-block so the bound-script tick no-ops.
+        val w = object : ClaimZoneWorld() {
+            override val kBy: Array<Array<ByteArray>>
+                get() = arrayOf(arrayOf(byteArrayOf(0, 0, 0)))
+        }
+        val z = zone(); z.ca = 0; z.scriptStep = 0; z.scriptOps = IntArray(1)
+        val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(w.removed.isEmpty(), "aa() tick — no removal")
+        assertFalse(Entity.gE, "early return — gE untouched")
+    }
+
+    @Test fun `S31 consumed flag self-removes i9807`() {
+        resetStatics()
+        val w = ClaimZoneWorld()
+        val z = zone(); z.P = 8192
+        NpcFsm(w).tickTrigger(z, w, mk(200, 100), Pad())
+        assertSame(z, w.removed.single(), "P&8192 → k.c(this)")
+    }
+
+    @Test fun `S31 arm pass fills lanes and cards i10030`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.mountMode = false        // !k.k() → clip74 cards
+        val z = zone(z1 = 0x1234, z2 = 99)
+        val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(intArrayOf(1, 2, 3, 4).toList(), z.X.toList(),
+            "X lanes = Z[1] nibbles")
+        assertEquals(7, z.aA, "aA = Z[4]")
+        assertEquals(300, z.az, "az = 300")
+        assertEquals(16, z.P and 16, "P |= 16")
+        assertEquals(0, z.P and 128, "P &= ~128")
+        assertEquals(1, z.aB, "scan tick → aB++")
+        assertEquals(0, z.m, "lane cursor = first live lane")
+        assertEquals(1, z.pv, "pv = X[0] lane type")
+        assertEquals(1, z.j, "j cursor advanced past lane 0")
+        assertTrue(Entity.scriptPrompts[0] != null &&
+            Entity.scriptPrompts[3] != null, "bA cards spawned per lane")
+        assertEquals(74, Entity.scriptPrompts[0]!!.clipIdx,
+            "!k.k() → clip74 touch card")
+        assertEquals(1, z.aB, "aB progress only (no hit)")
+    }
+
+    @Test fun `S31 mounted pass binds clip9 key cards i10148`() {
+        resetStatics()
+        val w = ClaimZoneWorld()                              // mounted → k.k()
+        val z = zone(z1 = 0x0100, z2 = 99)              // lane1 = type1, rest 0
+        val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, z.X[0]); assertEquals(1, z.X[1])
+        assertNull(Entity.scriptPrompts[0],
+            "X==0 before first live lane → skipped (r9!=3 && m==0 && X==0)")
+        assertTrue(Entity.scriptPrompts[1] != null &&
+            Entity.scriptPrompts[2] != null,
+            "once live, later zero lanes still spawn")
+        assertEquals(9, Entity.scriptPrompts[1]!!.clipIdx,
+            "k.k() → clip9 key card")
+        assertEquals(3, z.aD, "3 spawned lanes (r9=3 always spawns)")
+    }
+
+    @Test fun `S31 lane hit advances cursor i10224`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.mountMode = false
+        val z = zone(z1 = 0x1234, z2 = 99)
+        val p = mk(200, 100)
+        val fsm = NpcFsm(w)
+        val pad = Pad()
+        fsm.tickTrigger(z, w, p, pad)                   // arm: m=0,pv=1,j=1
+        pad.queuePress(Entity.CS[1]); pad.commit(0)     // cs[1]=2 → v() edge
+        fsm.tickTrigger(z, w, p, pad)
+        assertEquals(1, z.m, "hit → m = j (next lane)")
+        assertEquals(2, z.pv, "pv = X[1]")
+        assertEquals(2, z.j, "j++")
+        assertEquals(2, z.aB, "aB++ once more")
+    }
+
+    @Test fun `S31 last lane hit sets aA sentinel i10255`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.mountMode = false
+        val z = zone(z1 = 0x1111, z2 = 99)              // all lanes type1
+        val p = mk(200, 100)
+        val fsm = NpcFsm(w)
+        val pad = Pad()
+        fsm.tickTrigger(z, w, p, pad)                   // arm
+        repeat(3) {
+            pad.queuePress(Entity.CS[1]); pad.commit(0)
+            fsm.tickTrigger(z, w, p, pad)
+        }
+        assertEquals(4, z.j, "3 lane hits → j = 4 (j>3 gates next hit)")
+        pad.queuePress(Entity.CS[1]); pad.commit(0)
+        fsm.tickTrigger(z, w, p, pad)
+        assertEquals(9, z.aA, "j>3 → aA = Z[3] done sentinel")
+        assertTrue(w.sfxCalls.contains(25), "k.A(25) on completion")
+    }
+
+    @Test fun `S31 full progress auto-passes lane i10395`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.mountMode = false
+        val z = zone(z1 = 0x1000, z2 = 1, z3 = 9)       // aB>=Z[2] at scan
+        val p = mk(200, 100)
+        val fsm = NpcFsm(w)
+        fsm.tickTrigger(z, w, p, Pad())                 // arm, aB→1
+        fsm.tickTrigger(z, w, p, Pad())                 // aB>=1 → success
+        assertEquals(10, z.m, "m = 10 + lane → resolved marker")
+    }
+
+    @Test fun `S31 consumed reset binds claim script i9870`() {
+        resetStatics()
+        val w = ClaimZoneWorld(); w.mountMode = false
+        val z = zone()
+        z.aB = 3; z.nl = 1                              // busy latch (script-set)
+        z.aA = 5                                        // armed script uid
+        Entity.scriptPrompts[0] = ScriptPrompt()
+        val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(8192, z.P and 8192, "P |= 8192 consumed")
+        assertEquals(0, z.aB); assertEquals(0, z.nl)
+        assertEquals(0, z.X.sum(), "X cleared")
+        assertNull(Entity.scriptPrompts[0], "bA[] cleared")
+        assertFalse(Entity.gE, "g.E lifted while consumed")
+        assertSame(z, w.kC, "aA>0 → k.C = this")
+        assertEquals(512 + 16 + 128, z.P and (512 + 16 + 128), "P|=512|16|128")
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertSame(z, w.removed.last(), "P&8192 → removed next tick")
+    }
+
+    @Test fun `S31 busy tick with nl set exits early i9929`() {
+        resetStatics()
+        val w = ClaimZoneWorld()
+        val z = zone(); z.nl = 1                        // n!=0, aB==0 → L737
+        val p = mk(200, 100)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, z.aB, "no scan — n!=0 returned")
+        assertTrue(Entity.gE, "overlap still latches gE")
+    }
+
+    // -- S55 (Lf4, i.java:9227-9253) — boss-reposition zone ----------
+
+    private fun bossAt(ak: Int, s: Int = 13, y1: Int = 60, y2: Int = 140): Entity {
+        val b = Entity(29, null); b.S = s; b.ak = ak; b.al = 100
+        b.Y[0] = 190; b.Y[2] = 230; b.Y[1] = y1; b.Y[3] = y2
+        b.ah = 111; b.ag = 222
+        return b
+    }
+
+    private fun zone55(ak: Int = 210): Entity {
+        val z = Entity(10, null); z.S = 55; z.ak = ak
+        z.W[0] = 190; z.W[2] = 230; z.W[1] = 60; z.W[3] = 140
+        return z
+    }
+
+    @Test fun `S55 repositions S13 boss on overlap i9227`() {
+        val w = ClaimZoneWorld()
+        val z = zone55(); val boss = bossAt(999); w.kAU = boss
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(25, boss.S, "k.aU.i(25)")
+        assertEquals(210, boss.ak, "aU.ak ← zone.ak")
+        assertEquals(100, boss.al, "aU.al untouched")
+        assertEquals(0, boss.ah); assertEquals(0, boss.ag)
+    }
+
+    @Test fun `S55 no-op without bound boss Lf4`() {
+        val w = ClaimZoneWorld()                                 // kAU null
+        NpcFsm(w).tickTrigger(zone55(), w, mk(0, 0), Pad())      // bare return
+    }
+
+    @Test fun `S55 no-op when boss not S13 Lf4`() {
+        val w = ClaimZoneWorld()
+        val z = zone55(); val boss = bossAt(999, s = 7); w.kAU = boss
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(7, boss.S); assertEquals(999, boss.ak)
+        assertEquals(111, boss.ah)
+    }
+
+    @Test fun `S55 no-op when boss rect misses zone Lf4`() {
+        val w = ClaimZoneWorld()
+        val z = zone55()
+        val boss = bossAt(999, y1 = 500, y2 = 560); w.kAU = boss   // Y far below
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(13, boss.S); assertEquals(999, boss.ak)
+    }
+}
+
+// ============================================================ slice 140
+// ax10 S0 camera-focus zone (L5ac-L5e0) + S2 flag-apply trigger
+// (L13a1-L14a2) + initTrigger's per-S record arms (L59/L95).
+
+class Slice140Test {
+    class S140World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        override var camAf = 0
+        override var camAg = 0
+        private val cam = intArrayOf(0, 0, 400, 240)
+        override val camRect: IntArray get() = cam
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+    }
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 6; p.W[1] = al - 16; p.W[2] = ak + 6; p.W[3] = al
+        return p
+    }
+
+    private fun zone(s: Int, cfg: (Entity) -> Unit = {}): Entity {
+        val z = Entity(10, null); z.S = s
+        z.ak = 200; z.al = 120
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        cfg(z); return z
+    }
+
+    @Test fun `S0 overlap publishes focus offsets L5c7`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(10, w.camAf); assertEquals(20, w.camAg)
+    }
+
+    @Test fun `S0 leave clears both offsets L5e0`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        val p = mk(200, 120)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        p.ak = 2000; p.W[0] = 1994; p.W[2] = 2006
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, w.camAf); assertEquals(0, w.camAg)
+    }
+
+    @Test fun `S0 zero params keep prior offsets L5d1`() {
+        val w = S140World(); w.camAf = 55; w.camAg = 99
+        val z = zone(0) { it.pv = 0; it.aG = 0 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(55, w.camAf, "p==0 → af write skipped")
+        assertEquals(99, w.camAg, "aG==0 → L1ec7 bare return")
+    }
+
+    @Test fun `S0 offscreen zone clears despite overlap`() {
+        val w = S140World()
+        val z = zone(0) { it.pv = 10; it.aG = 20 }
+        z.W[0] = 900; z.W[2] = 940                          // outside camRect
+        w.camAf = 7; w.camAg = 8
+        // player.W still overlaps the moved zone
+        val p = mk(920, 120)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, w.camAf); assertEquals(0, w.camAg)
+    }
+
+    @Test fun `S2 Z0==1 no overlap holds fire L13b5`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 1; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(900, 500), Pad())
+        assertEquals(0, t.P and 512, "no overlap → no mask")
+        assertTrue(w.removed.isEmpty(), "zone survives")
+    }
+
+    @Test fun `S2 Z0==1 overlap applies mask and removes L13f5`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 1; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 513
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(513, t.P and 513)
+        assertTrue(t.av, "bit0 → av=true")
+        assertSame(z, w.removed.last(), "one-shot k.c(this)")
+    }
+
+    @Test fun `S2 Z0==2 onscreen guard holds the gate L13c5`() {
+        val w = S140World()
+        val guard = Entity(11, null); guard.aw = 9
+        guard.ak = 210; guard.al = 120
+        guard.Y[0] = 200; guard.Y[1] = 100; guard.Y[2] = 220; guard.Y[3] = 140
+        val t = Entity(11, null); t.aw = 7
+        w.npcs += guard; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 2; it.Z[1] = 7; it.Z[2] = 9; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(0, t.P and 512, "guard visible → blocked")
+        assertTrue(w.removed.isEmpty())
+    }
+
+    @Test fun `S2 Z0==2 absent guard lets it fire`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val z = zone(2) {
+            it.Z[0] = 2; it.Z[1] = 7; it.Z[2] = 9; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(512, t.P and 512)
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S2 target player propagates bit9 to ga L1418`() {
+        val w = S140World()
+        w.player.aw = 3
+        val held = Entity(0, null); w.player.ga = held
+        val z = zone(2) {
+            it.Z[0] = 0; it.Z[1] = 3; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(512, w.player.P and 512)
+        assertEquals(512, held.P and 512, "g.a gets the 512 mask")
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S2 squad sweep arms soldiers by link L1451`() {
+        val w = S140World()
+        val t = Entity(11, null); t.aw = 7; w.npcs += t
+        val armed = Entity(11, null)
+        val link = Entity(0, null); link.P = link.P or 512
+        armed.s = link
+        val plain = Entity(11, null)                      // no s link
+        w.npcs += armed; w.npcs += plain
+        val z = zone(2) {
+            it.Z[0] = 0; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 4
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(512, armed.P and 512, "s.P&512 → soldier armed")
+        assertEquals(0, plain.P and 512, "no link → skipped")
+    }
+
+    @Test fun `initTrigger S2 record fills the gate Z quad L59`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 77, 88, 513)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(2, e.S)
+        assertEquals(2, e.Z[0]); assertEquals(77, e.Z[1])
+        assertEquals(88, e.Z[2]); assertEquals(513, e.Z[3])
+        assertEquals(0, e.aE, "L59 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S10 record fills the five-slot Z L95`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 10, 10, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(10, e.S)
+        assertEquals(listOf(1, 2, 3, 4, 5), e.Z.take(5))
+        assertEquals(0, e.pv, "L95 arm does not run L111")
+    }
+
+    // slice 143 — remaining per-S init arms (i.java:2173-2229); each
+    // replaces the `default → L111` field map for its S value.
+
+    @Test fun `initTrigger S31 record fills the QTE Z quintet i2205`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 7, 31, 0, 0, 0, 0, 0, 0x1234, 0, 3, 9, 42)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(31, e.S)
+        assertEquals(7, e.Z[0]); assertEquals(0x1234, e.Z[1])
+        assertEquals(3, e.Z[2]); assertEquals(9, e.Z[3]); assertEquals(42, e.Z[4])
+        assertEquals(0, e.aE, "S31 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S30 record fills the eight-slot Z i2194`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(30, e.S)
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8), e.Z.take(8),
+            "Z = f12..f19")
+    }
+
+    @Test fun `initTrigger S24 record binds aA from f11 i2187`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 66)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(66, e.aA, "aA = f11")
+        assertEquals(0, e.aE, "S24 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S11 record Z0 from f0 i2173`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 11)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(10, e.Z[0], "Z[0] = f0")
+        assertEquals(0, e.aE, "S11 arm does not run L111")
+    }
+
+    @Test fun `initTrigger S28 skips L111 field map i2190`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 55, 28, 0, 0, 0, 0, 0, 77)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(0, e.Z[0]); assertEquals(0, e.aE); assertEquals(0, e.pv)
+    }
+
+    @Test fun `initTrigger S39 arms P16 unless P32 set i2219`() {
+        val w = S140World()
+        val e = Entity(10, null)
+        val f = listOf(10, 0, 0, 0, 0, 39)
+        NpcFsm(w).initTrigger(e, f)
+        assertEquals(16, e.P and 16, "P&32==0 → P|=16")
+        val e2 = Entity(10, null); e2.P = 32
+        NpcFsm(w).initTrigger(e2, f)
+        assertEquals(0, e2.P and 16, "P&32!=0 → unchanged")
+    }
+}
+
+// ============================================================ slice 141
+// ax10 S3 flag-clear trigger (L14a7-L1526 — S2's mirror) + the real S10
+// arm (L318-L5a8, scripted wall-climb sequence); the wall-run latch arm
+// previously ported as "S10" is case 46 (L1e1) — relabeled.
+
+class Slice141Test {
+    class S141World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        override fun spawnPickup(anim: Int, x: Int, y: Int): Entity =
+            Entity(14, null).also {
+                it.setAnim(anim); it.az = 302; it.av = false
+                it.ak = x; it.al = y
+            }
+        override var iBB = false
+        override var iBi = false
+        override var iBC = false
+        override var iBD = false
+        override var iBE = 0
+        override var iBF = -1
+        override var iBG = -1
+        override var kDd = false
+        private val cam = intArrayOf(0, 0, 400, 240)
+        override val camRect: IntArray get() = cam
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+    }
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 6; p.W[1] = al - 16; p.W[2] = ak + 6; p.W[3] = al
+        return p
+    }
+
+    private fun climbZone(s: Int = 10, cfg: (Entity) -> Unit = {}): Entity {
+        // W[3]=140 → dy = p.W[1]-140; band Z[0]=-60..Z[1]=0 (player top
+        // 60..0 px above the zone bottom = climbing window)
+        val z = Entity(10, null); z.S = s
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        z.Z[0] = -60; z.Z[1] = 0; z.Z[2] = 10; z.Z[3] = 90; z.Z[4] = 7
+        cfg(z); return z
+    }
+
+    @Test fun `S10 iBe suppresses the zone L318`() {
+        val w = S141World(); w.iBe = true
+        val z = climbZone()
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S10 in-band locks input and parks the hand L323`() {
+        val w = S141World()
+        val z = climbZone()
+        val p = mk(200, 100)                     // W[1]=84 → dy=-56 ∈ [-60,0]
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(w.kAm, "k.o() input lock")
+        assertNotNull(p.ae, "hand indicator spawned at view center")
+        assertEquals(0, p.ae!!.S, "hand card idles at S0")
+        assertFalse(w.iBB, "not armed until the press")
+    }
+
+    @Test fun `S10 pad press arms the climb L3b3`() {
+        val w = S141World()
+        val z = climbZone()
+        val p = mk(200, 100)
+        val pad = Pad(); pad.queuePress(1); pad.commit(0)
+        NpcFsm(w).tickTrigger(z, w, p, pad)
+        assertTrue(w.iBB, "i.bB armed")
+        assertEquals(-1, w.iBF); assertEquals(-1, w.iBG)
+        assertEquals(4, p.S, "player i(4) climb enter")
+        assertTrue(w.iBi, "i.bi climb-active")
+        assertEquals(199, p.az)
+        assertNull(p.ae, "hand released after the press")
+    }
+
+    @Test fun `S10 overlap unarmed aborts with marker 71 L46b`() {
+        val w = S141World()
+        val z = climbZone()
+        val p = mk(200, 130)
+        p.W[1] = 70                              // dy=-70 < Z[0] → outside
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertNotNull(p.ae); assertEquals(71, p.ae!!.S, "marker 71")
+        assertTrue(w.iBe, "i.be suppression latch")
+        assertEquals(34, p.S, "player i(34)")
+    }
+
+    @Test fun `S10 overlap armed tracks grip marker 35 L42c`() {
+        val w = S141World(); w.iBB = true; w.iBF = 50   // bF ∈ [Z2,Z3]=[10,90]
+        val z = climbZone()
+        val p = mk(200, 130); p.W[1] = 70        // outside band, overlapping
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertNotNull(p.ae); assertEquals(35, p.ae!!.S, "grip marker")
+        assertEquals(p.ak, p.ae!!.ak)
+        assertEquals(p.al - 85, p.ae!!.al)
+    }
+
+    @Test fun `S10 bF outside the window aborts L46b`() {
+        val w = S141World(); w.iBB = true; w.iBF = 95   // > Z[3]=90
+        val z = climbZone()
+        val p = mk(200, 130); p.W[1] = 70        // outside band, overlapping
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(71, p.ae!!.S)
+        assertTrue(w.iBe); assertEquals(34, p.S)
+    }
+
+    @Test fun `S10 off-zone climb finish resets progress L4b2`() {
+        val w = S141World(); w.iBB = true; w.iBi = true; w.iBF = -1
+        val z = climbZone()
+        val p = mk(200, 300)                     // dy=144 > Z[1], no overlap
+        p.W[0] = 300; p.W[2] = 320               // outside zone W
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(28, p.S)
+        assertFalse(w.iBC); assertFalse(w.iBD)
+        assertEquals(100, w.iBF); assertEquals(7, w.iBE)
+        assertEquals(25, w.sfxCalls.last())
+    }
+
+    @Test fun `S10 player above the zone removes it L564`() {
+        val w = S141World(); w.iBB = true; w.iBi = true; w.iBF = 50
+        w.kAm = true                             // still locked
+        val z = climbZone()
+        val p = mk(200, 100)
+        p.S = 28; p.W[1] = 70                    // dy=-70 < Z[0] → climbed out
+        p.W[0] = 300; p.W[2] = 320               // no overlap
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertSame(z, w.removed.last(), "k.c(this)")
+        assertFalse(w.iBi)
+        assertEquals(27, p.S, "S28 → exit anim 27")
+        assertFalse(w.kAm, "k.p() unlock")
+    }
+
+    @Test fun `S10 below zone unlocks without removing L573`() {
+        val w = S141World(); w.iBB = true; w.iBF = 95; w.kAm = true
+        val z = climbZone()
+        val p = mk(200, 300)
+        p.W[0] = 300; p.W[2] = 320               // no overlap, dy=144 > Z0
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(w.removed.isEmpty())
+        assertFalse(w.kAm)
+    }
+
+    @Test fun `S3 clears the mask on the target L150a`() {
+        val w = S141World()
+        val t = Entity(11, null); t.aw = 7; t.P = t.P or 512 or 4
+        w.npcs += t
+        val z = climbZone(3) {
+            it.Z[0] = 0; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(4, t.P and 516, "512 cleared, 4 kept")
+        assertSame(z, w.removed.last())
+    }
+
+    @Test fun `S3 ax21 target also gets the re-activate bit L1520`() {
+        val w = S141World()
+        val t = Entity(21, null); t.aw = 7; t.P = t.P or 512
+        w.npcs += t
+        val z = climbZone(3) {
+            it.Z[0] = 0; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(0, t.P and 512)
+        assertEquals(16, t.P and 16, "director re-activate")
+    }
+
+    @Test fun `S3 Z0==1 requires overlap L14bb`() {
+        val w = S141World()
+        val t = Entity(11, null); t.aw = 7; t.P = t.P or 512
+        w.npcs += t
+        val z = climbZone(3) {
+            it.Z[0] = 1; it.Z[1] = 7; it.Z[2] = 0; it.Z[3] = 512
+        }
+        NpcFsm(w).tickTrigger(z, w, mk(900, 500), Pad())
+        assertEquals(512, t.P and 512, "no overlap → mask stays")
+        assertTrue(w.removed.isEmpty())
+    }
+}
+
+// ============================================================ slice 142
+// ax10 small linked-entity triggers: S47 claim-clear (L219), S48 boss
+// speed (L166), S49 →S20 (L1bc), S54 S29→S30 advance (L136).
+
+class Slice142Test {
+    class S142World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        override var kAQ: Entity? = null
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+    }
+
+    private fun trig(s: Int, uid: Int = 7, pv: Int = 0): Entity {
+        val z = Entity(10, null); z.S = s; z.oId = uid; z.pv = pv
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        return z
+    }
+
+    private fun overlapped(w: S142World): Entity {
+        val p = w.player; p.Y[0] = 190; p.Y[1] = 110; p.Y[2] = 210; p.Y[3] = 130
+        return p
+    }
+
+    @Test fun `S47 clears the claim slot every tick L219`() {
+        val w = S142World(); w.kAQ = w.player
+        NpcFsm(w).tickTrigger(trig(47), w, w.player, Pad())
+        assertNull(w.kAQ)
+    }
+
+    @Test fun `S48 copies pv onto the linked entity aG L166`() {
+        val w = S142World(); overlapped(w)
+        val boss = Entity(29, null); boss.aw = 7
+        w.npcs += boss
+        NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
+        assertEquals(12, boss.aG)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S48 requires player-Y overlap`() {
+        val w = S142World()
+        val boss = Entity(29, null); boss.aw = 7
+        w.npcs += boss
+        NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
+        assertEquals(0, boss.aG); assertTrue(w.removed.isEmpty())
+    }
+
+    @Test fun `S49 advances the linked entity to S20 L1bc`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(21, null); t.aw = 7
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(49), w, w.player, Pad())
+        assertEquals(20, t.S)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S54 advances S29 target to S30 on overlap L136`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(11, null); t.aw = 7; t.S = 29
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(54), w, w.player, Pad())
+        assertEquals(30, t.S)
+        assertEquals(1, w.removed.size)
+    }
+
+    @Test fun `S54 holds while the target is not at S29`() {
+        val w = S142World(); overlapped(w)
+        val t = Entity(11, null); t.aw = 7; t.S = 3
+        w.npcs += t
+        NpcFsm(w).tickTrigger(trig(54), w, w.player, Pad())
+        assertEquals(3, t.S); assertTrue(w.removed.isEmpty())
+    }
+}
+
+// ============================================================ slice 145
+// ax10 S24 — rope/grab trigger zone (L21e, i.java:9361-9467): ax27-S0
+// mechanics cloned into an ax10 zone (marker pinned at al-15 vs al-85).
+
+class Slice145Test {
+    class S145World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        override fun spawnPickup(anim: Int, x: Int, y: Int): Entity =
+            Entity(14, null).also {
+                it.setAnim(anim); it.ak = x; it.al = y
+            }
+    }
+
+    private fun zone(w: S145World): Entity {
+        val z = Entity(10, null); z.S = 24
+        z.W[0] = 90; z.W[2] = 130; z.W[1] = 80; z.W[3] = 120
+        w.player.ak = 110; w.player.al = 100
+        w.player.W[0] = 104; w.player.W[2] = 116
+        w.player.W[1] = 84; w.player.W[3] = 100
+        return z
+    }
+
+    @Test fun `S24 press binds af settles and poses i267`() {
+        val w = S145World(12)
+        val z = zone(w); z.aA = 0
+        val pad = Pad(); pad.bB = 16388
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertSame(z, w.player.af)
+        assertEquals(267, w.player.S)
+        assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
+        assertNull(z.ae)                                     // G()
+    }
+
+    @Test fun `S24 aA1 pins marker7 at al-15`() {
+        val w = S145World(12)
+        val z = zone(w); z.aA = 1; z.ak = 110; z.al = 100
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val m = z.ae ?: error("no marker")
+        assertEquals(7, m.S)
+        assertEquals(110, m.ak); assertEquals(85, m.al)
+        val same = z.ae
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertSame(same, z.ae)                               // pin only
+    }
+
+    @Test fun `S24 ineligible drops marker link`() {
+        val w = S145World(12)
+        val z = zone(w); z.aA = 1
+        w.player.W[0] = -100; w.player.W[2] = -50            // no overlap
+        z.ae = Entity(14, null)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertNull(z.ae)
+    }
+
+    @Test fun `S24 player already bound stays ineligible`() {
+        val w = S145World(12)
+        val z = zone(w); z.aA = 1
+        w.player.af = z                                      // af == e
+        val pad = Pad(); pad.bB = 16388
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(0, w.player.S)                          // no grab
+        assertNull(z.ae)
+    }
+}
+
+// ============================================================ slice 146
+// ax10 S30 — pursuer-pool wave spawner (La72, i.java:10427-11736):
+// pv×aG grid fill, flavor by Z[6], Z6==3 infinite-wave respawn with
+// aC cooldown, finite-row advance, all-dead cleanup+remove, and the
+// Z[1]==-1 drain+goto-L0 refill path.
+
+class Slice146Test {
+    class S146World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        val inserts = mutableListOf<Entity>()
+        override fun queueInsert(e: Entity) { inserts += e }
+        private var cam = 0
+        override var kO: Int get() = cam; set(v) { cam = v }
+        private val byAw = mutableMapOf<Int, Entity>()
+        fun register(e: Entity) { byAw[e.aw] = e }
+        override fun findByAw(aw: Int): Entity? = byAw[aw]
+    }
+
+    private fun zone(w: S146World, z1: Int, z2: Int, z6: Int, z7: Int = 0): Entity {
+        val z = Entity(10, null); z.S = 30
+        z.W[0] = 90; z.W[2] = 130; z.W[1] = 80; z.W[3] = 120
+        z.Z[1] = z1; z.Z[2] = z2; z.Z[3] = -20; z.Z[4] = 55
+        z.Z[5] = 0; z.Z[6] = z6; z.Z[7] = z7
+        w.player.ak = 110; w.player.al = 100
+        w.player.W[0] = 104; w.player.W[2] = 116
+        w.player.W[1] = 84; w.player.W[3] = 100
+        return z
+    }
+
+    @Test fun `S30 no overlap does nothing`() {
+        val w = S146World()
+        val z = zone(w, 2, 2, 0)
+        w.player.W[0] = -100; w.player.W[2] = -50
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertNull(z.cr); assertEquals(0, w.inserts.size)
+    }
+
+    @Test fun `S30 finite fill allocates grid and positions row0`() {
+        val w = S146World()
+        val z = zone(w, 2, 2, 0)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val cr = z.cr ?: error("no pool")
+        assertEquals(2, cr.size); assertEquals(2, cr[0].size)
+        assertTrue(z.P and 16 != 0)
+        assertEquals(0, z.aA); assertEquals(2, z.pv); assertEquals(2, z.aG)
+        val m00 = cr[0][0]
+        assertEquals(11, m00.ax); assertEquals(4, m00.S)
+        assertEquals(Entity.WEAPON_DMG[0], m00.aB)
+        assertEquals(5000, m00.aw)
+        assertEquals(-20, m00.ak)                      // Z5==0 → left of cam
+        assertEquals(-20, m00.aq)                      // Z3+kO
+        assertEquals(55, m00.ar); assertEquals(55, m00.al)
+        assertEquals(m00.ak, m00.Z[3])
+        assertEquals(1, m00.Z[2].let { -it })          // Z[2]==-1
+        val m01 = cr[0][1]
+        assertEquals(5001, m01.aw); assertEquals(-40, m01.ak)
+        // row 1 members exist but stay dormant (no position/register)
+        assertEquals(0, cr[1][0].ak); assertEquals(5002, cr[1][0].aw)
+        assertEquals(2, w.inserts.size)                // row0 only
+    }
+
+    @Test fun `S30 Z6=3 wave config forces 1x3 and leader col0`() {
+        val w = S146World()
+        val z = zone(w, 5, 5, 3)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val cr = z.cr ?: error("no pool")
+        assertEquals(1, cr.size); assertEquals(3, cr[0].size)
+        assertEquals(-1, z.Z[1]); assertEquals(3, z.Z[2])
+        assertEquals(1, cr[0][0].Z[0])                  // col0 engaged
+        assertTrue(cr[0][0].av)                         // leader faces left
+        assertEquals(0, cr[0][1].Z[0]); assertFalse(cr[0][1].av)
+        assertEquals(420, cr[0][0].ak)                  // Z5=1 → right
+        assertEquals(-40, cr[0][1].ak)                  // Z5=0 → left
+        assertEquals(-60, cr[0][2].ak)
+    }
+
+    @Test fun `S30 Z6=3 respawns dead member when cooldown clear`() {
+        val w = S146World()
+        val z = zone(w, 0, 0, 3)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val cr = z.cr ?: error("no pool")
+        val old = cr[0][1]
+        old.aB = 0                                       // killed
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val nw = z.cr!![0][1]
+        assertFalse(nw === old)
+        assertEquals(11, nw.ax); assertEquals(4, nw.S)
+        assertEquals(Entity.WEAPON_DMG[0], nw.aB)
+        assertEquals(5001, nw.aw)                        // 5000+aA*pv+col
+        assertEquals(0, nw.Z[0])                         // col0 still engaged
+        assertEquals(-40, nw.ak)                         // r9>=1 → Z5=0
+    }
+
+    @Test fun `S30 Z6=3 cooldown gates respawn then ticks down`() {
+        val w = S146World()
+        val z = zone(w, 0, 0, 3, z7 = 2)                   // aC=2 after fill
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val cr = z.cr ?: error("no pool")
+        cr[0][1].aB = 0
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())       // aC=2 → skip, aC--
+        assertEquals(1, z.aC)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())       // aC=1 → skip, aC--
+        assertEquals(0, z.aC)
+        val dead = z.cr!![0][1]
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())       // aC=0 → respawn
+        assertFalse(z.cr!![0][1] === dead)
+    }
+
+    @Test fun `S30 finite row wipe advances aA and positions next row`() {
+        val w = S146World()
+        val z = zone(w, 2, 2, 0)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val cr = z.cr ?: error("no pool")
+        cr[0][0].aB = 0; cr[0][1].aB = 0                   // row0 wiped
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(1, z.aA)
+        val m = z.cr!![1][0]
+        assertEquals(-20, m.ak); assertEquals(-20, m.aq)   // repositioned
+        assertEquals(m.ak, m.Z[3])
+        assertEquals(4, w.inserts.size)                    // 2 + row of 2
+    }
+
+    @Test fun `S30 finite all dead clears link flags and removes zone`() {
+        val w = S146World()
+        val z = zone(w, 1, 1, 0); z.Z[0] = 77
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val t = Entity(11, null); t.aw = 77; t.P = t.P or 32 or 128
+        w.register(t)
+        z.cr!![0][0].aB = 0
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertNull(z.cr)                                   // aS()
+        assertTrue(w.removed.contains(z))                  // k.c()
+        assertEquals(0, t.P and 32)                        // bi[11]!=-1 → ~128 too
+        assertEquals(0, t.P and 128)
+    }
+
+    @Test fun `S30 Z1=-1 wipe drains and refills via goto L0`() {
+        val w = S146World()
+        val z = zone(w, -1, 2, 0)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        val old = z.cr!![0][0]
+        z.cr!![0][0].aB = 0; z.cr!![0][1].aB = 0
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())       // drain + re-fill
+        val nw = z.cr ?: error("pool not refilled")
+        assertFalse(nw[0][0] === old)
+        assertEquals(0, z.aA)
+        assertTrue(w.removed.isEmpty())                    // not a cleanup
+    }
+}
+
+// ============================================================ slice 147
+// ax10 S17 — balance zone (L1b44, i.java:12794-12951): center-pin on
+// overlap, v(2)/v(8) side-leaps, v(33024) jump-up fling, leave→aA=2,
+// aZ||g.a→reset, claim-busy freeze.
+
+class Slice147Test {
+    private fun zone(w: Slice139Test.ClaimZoneWorld): Entity {
+        val z = Entity(10, null); z.S = 17
+        z.W[0] = 90; z.W[2] = 130; z.W[1] = 80; z.W[3] = 120
+        w.player.ak = 110; w.player.al = 100
+        w.player.W[0] = 104; w.player.W[2] = 116
+        w.player.W[1] = 84; w.player.W[3] = 100
+        return z
+    }
+
+    @Test fun `S17 overlap center-pins player and plays S297`() {
+        val w = Slice139Test.ClaimZoneWorld(12)
+        val z = zone(w)
+        NpcFsm(w).tickTrigger(z, w, w.player, Pad())
+        assertEquals(1, z.aA)
+        assertEquals(297, w.player.S)
+        assertEquals(110, w.player.ak)                    // (90+130)/2
+        assertEquals(100, w.player.al)                    // (80+120)/2
+        assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
+    }
+
+    @Test fun `S17 v2 leaps left and v8 leaps right`() {
+        val w = Slice139Test.ClaimZoneWorld(12)
+        val z = zone(w); val pad = Pad()
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)          // → aA=1
+        pad.bB = 2
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(19, w.player.S); assertEquals(-3328, w.player.ag)
+        assertEquals(-3840, w.player.ah); assertTrue(w.player.av)
+        assertEquals(2, z.aA)
+        // second zone: v(8)
+        val w2 = Slice139Test.ClaimZoneWorld(12)
+        val z2 = zone(w2); val pad2 = Pad()
+        NpcFsm(w2).tickTrigger(z2, w2, w2.player, pad2)
+        pad2.bB = 8
+        NpcFsm(w2).tickTrigger(z2, w2, w2.player, pad2)
+        assertEquals(3328, w2.player.ag); assertFalse(w2.player.av)
+    }
+
+    @Test fun `S17 v33024 jump-up flings and leap skips S298 S293`() {
+        val w = Slice139Test.ClaimZoneWorld(12)
+        val z = zone(w); val pad = Pad()
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        pad.bB = 33024
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(2, z.aA)
+        assertEquals(2560, w.player.ah)                    // a(2560) fling
+        // S298 blocks the action block entirely
+        val w2 = Slice139Test.ClaimZoneWorld(12)
+        val z2 = zone(w2); val pad2 = Pad()
+        NpcFsm(w2).tickTrigger(z2, w2, w2.player, pad2)
+        w2.player.setAnim(298)
+        pad2.bB = 2
+        NpcFsm(w2).tickTrigger(z2, w2, w2.player, pad2)
+        assertEquals(1, z2.aA)                             // still centered
+        assertEquals(298, w2.player.S)
+    }
+
+    @Test fun `S17 leaving rect to aA2 then aZ resets`() {
+        val w = Slice139Test.ClaimZoneWorld(12)
+        val z = zone(w); val pad = Pad()
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)          // → aA=1
+        w.player.W[0] = -100; w.player.W[2] = -50           // moved out
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(2, z.aA)
+        w.player.aZ = true                                // landed
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(0, z.aA)
+    }
+
+    @Test fun `S17 claim busy freezes while centered`() {
+        val w = Slice139Test.ClaimZoneWorld(12)
+        val z = zone(w); val pad = Pad()
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)          // → aA=1
+        w.kC = Entity(5, null).apply { ca = 0; scriptStep = 0 }
+        w.player.W[0] = -100; w.player.W[2] = -50
+        pad.bB = 2
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(1, z.aA)                             // frozen
+        w.kC = null
+        NpcFsm(w).tickTrigger(z, w, w.player, pad)
+        assertEquals(2, z.aA)                             // unfrozen
+    }
+}
+
+/**
+ * Slice 148 — the `aV()` small-zone batch (all proven):
+ * S4/S5/S6/S7/S12/S13/S14/S21/S22/S23/S28/S29/S32/S41/S42/S44/S45 —
+ * dialog/kAZ/checkpoint/audio/link/release/balance/meter/fail arms.
+ * S9/S19/S39 are verbatim bare-return arms (documented in the port's
+ * when-fallthrough; no test needed).
+ */
+class Slice148Test {
+    /** World: adds the k.b/e.a/k.aZ/k.n/k.x/k.V/k.W seams the small
+     *  arms consume (level strings, audio, checkpoint mark, latches). */
+    class S148World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        private val cam = intArrayOf(0, 0, 400, 240)
+        override val camRect: IntArray get() = cam
+        override fun findByAw(aw: Int): Entity? =
+            if (aw == -1) null
+            else if (player.aw == aw) player
+            else npcs.firstOrNull { it.aw == aw }
+        var strings = mapOf<Int, String>()
+        override fun levelString(level: Int, idx: Int): String? = strings[idx]
+        override var kAj = 0
+        override var kAB: String? = null
+        override var kAC = 0
+        var uMask = 0
+        override fun padDown(mask: Int): Boolean = (uMask and mask) != 0
+        val kBMarkCalls = mutableListOf<Int>()
+        override fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean {
+            kBMarkCalls += row
+            return row != -1
+        }
+        var audioTrack = -2
+        override fun audioStop() { audioTrack = -1 }
+        override fun audioTrackPlay(n: Int) { audioTrack = n }
+        override var kAZ = false
+        override var kX = 0
+        override var kV = 0
+        override var kW = 0
+        val kNSetCalls = mutableListOf<Int>()
+        override fun kNSet(n: Int) { kNSetCalls += n }
+        var bh = 0
+        override fun missionBh(): Int = bh
+        var latchClears = 0
+        override fun clearLatches() { latchClears++ }
+        override var iBn = false
+    }
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 6; p.W[1] = al - 16; p.W[2] = ak + 6; p.W[3] = al
+        return p
+    }
+
+    private fun zone(s: Int, cfg: (Entity) -> Unit = {}): Entity {
+        val z = Entity(10, null); z.S = s
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        cfg(z); return z
+    }
+
+    @Test fun `S4 overlap publishes dialog string L15b9`() {
+        val w = S148World(); w.strings = mapOf(3 to "hello")
+        w.kAj = 1
+        val z = zone(4) { it.aF = 3 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals("hello", w.kAB); assertEquals(-1, w.kAC)
+    }
+
+    @Test fun `S4 leaving clears kAB when aC spent L15dd`() {
+        val w = S148World(); w.kAB = "old"; w.kAC = 0
+        val z = zone(4)
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertNull(w.kAB)
+    }
+
+    @Test fun `S5 overlap + fire edges to i22 L1625`() {
+        val w = S148World(); w.uMask = 16388
+        val z = zone(5)
+        val p = mk(200, 120)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(22, p.S)
+    }
+
+    @Test fun `S6 overlap sets kAZ true then S7 clears it`() {
+        val w = S148World()
+        NpcFsm(w).tickTrigger(zone(6), w, mk(200, 120), Pad())
+        assertTrue(w.kAZ)
+        NpcFsm(w).tickTrigger(zone(7), w, mk(200, 120), Pad())
+        assertFalse(w.kAZ)
+    }
+
+    @Test fun `S12 overlap runs kNSet + removes L175c`() {
+        val w = S148World()
+        val z = zone(12) { it.aF = 7 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(listOf(7), w.kNSetCalls); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S13 always removes itself L1778`() {
+        val w = S148World()
+        val z = zone(13)
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertTrue(z in w.removed)
+    }
+
+    @Test fun `S14 ax69 Z0=1 pins player ak to target center L1704`() {
+        val w = S148World()
+        val t = Entity(69, null); t.Z[0] = 1
+        t.W[0] = 190; t.W[2] = 210                      // center 200
+        t.W[1] = 110; t.W[3] = 130                      // inside zone
+        val p = mk(200, 120); p.af = t; p.ak = 0
+        val z = zone(14)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(200, p.ak); assertEquals(0, p.S)
+        assertNull(p.af); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S14 ax69 Z0=0 hurls player L1726`() {
+        val w = S148World()
+        val t = Entity(69, null); t.Z[0] = 0
+        t.W[0] = 190; t.W[2] = 210; t.W[1] = 110; t.W[3] = 130
+        val p = mk(200, 120); p.af = t; p.av = true
+        val z = zone(14)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(-3328, p.ag); assertEquals(-6656, p.ah)
+        assertEquals(243, p.S); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S14 ignores a wrong-ax or out-of-zone target`() {
+        val w = S148World()
+        val t = Entity(11, null)
+        val p = mk(200, 120); p.af = t
+        val z = zone(14)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(t, p.af); assertTrue(z !in w.removed)
+    }
+
+    @Test fun `S21 overlap marks checkpoint + l21 + kX48 L1855`() {
+        val w = S148World(); w.kAj = 2
+        val z = zone(21) { it.aF = 5; it.pv = 9 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(listOf(5), w.kBMarkCalls)
+        assertEquals(48, w.kX); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S22 overlap plays or stops the audio track L157d`() {
+        val w = S148World()
+        NpcFsm(w).tickTrigger(zone(22) { it.aF = 6 }, w, mk(200, 120), Pad())
+        assertEquals(6, w.audioTrack)
+        val w2 = S148World()
+        NpcFsm(w2).tickTrigger(zone(22) { it.aF = -1 }, w2, mk(200, 120), Pad())
+        assertEquals(-1, w2.audioTrack)
+    }
+
+    @Test fun `S23 publishes alive flag onto linked ax11 L1889`() {
+        val w = S148World()
+        val t = Entity(11, null); t.aw = 42; t.aB = 100
+        t.W[0] = 190; t.W[2] = 210; t.W[1] = 100; t.W[3] = 140
+        w.npcs += t
+        val z = zone(23) { it.oId = 42 }
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertTrue(t.cq)
+        // dead target (aB<=0 → P() true) → cq = false
+        t.aB = 0
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertFalse(t.cq)
+    }
+
+    @Test fun `S28 enter sets aA8 + z0, exit clears L1aa7`() {
+        val w = S148World()
+        val p = mk(200, 120); p.gg = null; p.aA = 0
+        val z = zone(28)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(8, p.aA and 8); assertFalse(p.z); assertEquals(1, z.Z[0])
+        p.W[0] = 0; p.W[2] = 5                        // leave
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, p.aA and 8); assertTrue(p.z); assertEquals(0, z.Z[0])
+    }
+
+    @Test fun `S28 held gate blocks the enter arm`() {
+        val w = S148World()
+        val p = mk(200, 120); p.gg = Entity(43, null)   // g.g != null
+        val z = zone(28)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertEquals(0, p.aA and 8); assertEquals(0, z.Z[0])
+    }
+
+    @Test fun `S29 releases the group once members are done L12e4`() {
+        val w = S148World()
+        val t = Entity(11, null); t.aw = 7
+        t.P = t.P or 32                               // flagged member
+        t.setAnim(200)                                // off the at() set
+        w.npcs += t
+        val z = zone(29) { it.oId = 7; it.pv = -1; it.aG = -1; it.ay = -1 }
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(0, t.P and 32); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S29 waits while a member is not done`() {
+        val w = S148World()
+        val t = Entity(11, null); t.aw = 7
+        t.P = t.P or 32
+        t.aB = 100                                    // alive
+        t.setAnim(0)                                  // S0 → at() false
+        w.npcs += t
+        val z = zone(29) { it.oId = 7; it.pv = 7; it.aG = -1; it.ay = -1 }
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertEquals(32, t.P and 32); assertTrue(z !in w.removed)
+    }
+
+    @Test fun `S32 binds ac + arcs player onto the beam L18d1`() {
+        val w = S148World()
+        val z = zone(32)
+        val p = mk(200, 120); p.ac = null
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(p.ac === z); assertEquals(38, p.S); assertEquals(1, w.latchClears)
+        // center → al = zone cy (dx=0 → +10*hw/hw)
+        assertEquals(((z.W[1] + z.W[3]) shr 1) + 10, p.al)
+        p.W[0] = 0; p.W[2] = 5                        // leave
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertNull(p.ac)
+    }
+
+    @Test fun `S41 removes on held ax51 overlap L1a03`() {
+        val w = S148World()
+        val p = mk(0, 0); p.ga = Entity(51, null)
+        p.ga!!.W[0] = 190; p.ga!!.W[2] = 210; p.ga!!.W[1] = 110; p.ga!!.W[3] = 130
+        val z = zone(41)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(z in w.removed)
+    }
+
+    @Test fun `S42 overlap removes L1d75`() {
+        val w = S148World()
+        val z = zone(42)
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertTrue(z in w.removed)
+    }
+
+    @Test fun `S44 writes kW = kV - aE L1a59`() {
+        val w = S148World(); w.kV = 60
+        val z = zone(44) { it.aE = 15 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(45, w.kW); assertTrue(z in w.removed)
+    }
+
+    @Test fun `S45 overlap hurts when bh3 else fails L1a79`() {
+        val w = S148World(); w.bh = 3
+        val p = mk(200, 120)
+        NpcFsm(w).tickTrigger(zone(45), w, p, Pad())
+        assertEquals(34, p.S)
+        val w2 = S148World(); w2.bh = 0
+        val z2 = zone(45)
+        NpcFsm(w2).tickTrigger(z2, w2, mk(200, 120), Pad())
+        assertTrue(z2 in w2.removed)
+    }
+}
+
+/** Slice 149 — the last two `aV()` arms: S8 (L152b alert-toggle) and
+ *  S18 (L1c98 ax4 offscreen spawn-release). All proven. */
+class Slice149Test {
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 6; p.W[1] = al - 16; p.W[2] = ak + 6; p.W[3] = al
+        return p
+    }
+
+    private fun zone(s: Int, cfg: (Entity) -> Unit = {}): Entity {
+        val z = Entity(10, null); z.S = s
+        z.W[0] = 180; z.W[1] = 100; z.W[2] = 220; z.W[3] = 140
+        cfg(z); return z
+    }
+
+    @Test fun `S8 overlap toggles iBn and animates L152b`() {
+        val w = Slice148Test.S148World(cell = 12)     // standable: E() stays put
+        val p = mk(200, 120)
+        val z = zone(8)
+        NpcFsm(w).tickTrigger(z, w, p, Pad())
+        assertTrue(w.iBn); assertTrue(z in w.removed)
+        assertEquals(79, p.S); assertFalse(p.z)         // i(79), g.z=0
+        // second trigger flips back: i(80), g.z=1, latches cleared
+        // eSettle may have walked `al` — re-pin the rect for call 2
+        p.W[0] = p.ak - 6; p.W[1] = 100; p.W[2] = p.ak + 6; p.W[3] = 140
+        val z2 = zone(8)
+        NpcFsm(w).tickTrigger(z2, w, p, Pad())
+        assertFalse(w.iBn)
+        assertEquals(80, p.S); assertTrue(p.z)
+        assertTrue(w.latchClears > 0)
+    }
+
+    @Test fun `S8 ignores non-overlap`() {
+        val w = Slice148Test.S148World()
+        val z = zone(8)
+        NpcFsm(w).tickTrigger(z, w, mk(0, 0), Pad())
+        assertFalse(w.iBn); assertTrue(z !in w.removed)
+    }
+
+    @Test fun `S18 releases ax4 to the right offscreen edge L1c98`() {
+        val w = Slice148Test.S148World()
+        val t = Entity(4, null); t.aw = 9; t.setAnim(33); t.pv = 300
+        t.W[0] = 0; t.W[2] = 20                         // width 20
+        t.ak = 250                                      // right of player
+        t.P = t.P or 32 or 128
+        w.npcs += t
+        val z = zone(18) { it.oId = 9 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(16, t.P and 16)
+        assertEquals(0, t.P and 32); assertEquals(0, t.P and 128)
+        assertEquals(-300, t.ag); assertTrue(t.av)      // ag=-p, av=1
+        assertEquals(w.camRect[2] + 20, t.ak)           // camR + width
+        assertEquals(w.camRect[1] + 70, t.al)           // camT + 70
+        assertEquals(1, t.aA)
+    }
+
+    @Test fun `S18 releases ax4 to the left offscreen edge L1d3f`() {
+        val w = Slice148Test.S148World()
+        val t = Entity(4, null); t.aw = 9; t.setAnim(33); t.pv = 300
+        t.W[0] = 0; t.W[2] = 20
+        t.ak = 150                                      // left of player
+        w.npcs += t
+        val z = zone(18) { it.oId = 9 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(300, t.ag); assertFalse(t.av)      // ag=p, av=0
+        assertEquals(w.camRect[0] - 20, t.ak)           // camL - width
+        assertEquals(1, t.aA)
+    }
+
+    @Test fun `S18 gates on ax4 S33 aA0-or-2`() {
+        val w = Slice148Test.S148World()
+        val t = Entity(4, null); t.aw = 9; t.setAnim(33); t.aA = 1
+        w.npcs += t
+        val z = zone(18) { it.oId = 9 }
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(1, t.aA)                           // untouched
+        t.aA = 2                                        // aA==2 passes
+        NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
+        assertEquals(1, t.aA)
+    }
+}
+
+
+/** Slice 150 — player e() climb arms: case 27 (L27da link-lost fling),
+ *  28/318 (L23fa freeze + v(33024) fling), 29/315 (L23bb go-climb /
+ *  gk fling), 34 (L1a0a wall-kick + l() input + latch clear). */
+class Slice150Test {
+
+    class S150World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+        var vMask = 0
+        var latchClears = 0
+        override fun padHeld(mask: Int): Boolean = (vMask and mask) != 0
+        override fun clearLatches() { latchClears++ }
+    }
+
+    @Test fun `S27 ac null flings to S43`() {
+        // fallback g.java:5811 — ac==null → a(0)
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 27; p.ac = null
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S)
+        assertEquals(0, p.ah); assertEquals(1536, p.aj)
+    }
+
+    @Test fun `S27 ac bound keeps S27`() {
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 27; p.ac = Entity(10, null)
+        fsm.tick(p, Pad())
+        assertEquals(27, p.S)
+    }
+
+    @Test fun `S28 freezes then pad edge flings`() {
+        // L23fa — zeroes velocity fields; v(33024) → a(ah)
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 28; p.ag = 999; p.ah = 500; p.ai = 7; p.aj = 9
+        fsm.tick(p, Pad())
+        assertEquals(28, p.S)                       // no key → stay
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertEquals(0, p.ai); assertEquals(0, p.aj)
+        w.vMask = 33024
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S)                       // flung
+    }
+
+    @Test fun `S29 and S315 past go upgrade anims`() {
+        // L23bb — go!=0 && al>go → i(28); S315 → i(318)
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 29; p.go = 100; p.al = 200
+        fsm.tick(p, Pad())
+        assertEquals(28, p.S)
+        val q = Entity(0, null)
+        q.S = 315; q.go = 100; q.al = 200
+        fsm.tick(q, Pad())
+        assertEquals(318, q.S)
+    }
+
+    @Test fun `S29 no go and gk -1 flings`() {
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 29; p.go = 0; p.gk = -1; p.ah = 777
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S)
+        assertEquals(777, p.ah)
+    }
+
+    @Test fun `S34 wall cell runs l plus latch clear`() {
+        // L1a0a — aT==20 keeps a(0) off; aR=5 → l() + k.v()
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 34; p.av = true; p.aT = 20; p.aR = 5
+        fsm.tick(p, Pad())
+        assertEquals(1, w.latchClears)
+    }
+
+    @Test fun `S34 non-20 side cell flings`() {
+        // (av?aT:aU) != 20 → a(0)
+        val w = S150World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 34; p.av = true; p.aT = 8; p.aR = 0
+        fsm.tick(p, Pad())
+        assertEquals(0, w.latchClears)
+        assertEquals(43, p.S)
+    }
+}
+
+/** Slice 151 — player tail mount/vehicle helpers: `g.o()` verbatim
+ *  (groundOrVehicle — ax43 exclusion), `g.d()`/`g.b(i)` dead-documented,
+ *  `g.cm` latch pair (L37eb set + L37f2 drain) and the L37b6/L37c1
+ *  mounted arm (U()+a(8,ak,al-85)+ae pin). */
+class Slice151Test {
+
+    class S151World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell)
+
+    @Test fun `groundOrVehicle gates by o verbatim`() {
+        // g.java:6090 — aZ → true; a==null||ax43 → false; ax51/15/43 else
+        val p = Entity(0, null)
+        p.aZ = true
+        assertTrue(p.groundOrVehicle())
+        p.aZ = false
+        assertFalse(p.groundOrVehicle())                       // a == null
+        p.standingOn = Entity(43, null)
+        assertFalse(p.groundOrVehicle())                       // ax43 → false
+        p.standingOn = Entity(51, null)
+        assertTrue(p.groundOrVehicle())                        // ax51 → true
+        p.standingOn = Entity(15, null)
+        assertTrue(p.groundOrVehicle())                        // ax15 → true
+        p.standingOn = Entity(11, null)
+        assertFalse(p.groundOrVehicle())                       // other → false
+    }
+
+    @Test fun `gcm quiet tick mounted releases ae`() {
+        // L37f2 — r9==0 + g.cm → k.k()=mounted → G() release
+        val w = S151World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 0; p.gJ = 4
+        p.gcm = true
+        p.ae = Entity(14, null).also { it.S = 0; it.av = false }
+        Entity.L = 5; Entity.M = 6
+        w.mountMode = true                                     // k.k() true
+        fsm.mountEntry(p, Pad())
+        assertNull(p.ae, "mounted → releaseAe drops ae")
+        assertFalse(p.gcm, "latch drained")
+        assertEquals(5, Entity.L, "G() does not touch L/M")
+    }
+
+    @Test fun `gcm quiet tick unmounted drops indicator`() {
+        // L37f2 — !k.k() → U() = T()→G() + L/M=-1
+        val w = S151World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 0; p.gJ = 4
+        p.gcm = true
+        p.ae = Entity(14, null).also { it.S = 0; it.av = false }
+        Entity.L = 5; Entity.M = 6
+        w.mountMode = false
+        fsm.mountEntry(p, Pad())
+        assertNull(p.ae)
+        assertFalse(p.gcm)
+        assertEquals(-1, Entity.L, "U() clears the L/M point")
+        assertEquals(-1, Entity.M)
+    }
+
+    @Test fun `gcm latch stays when mount request absent`() {
+        // J&4 == 0 → mountEntry returns before the consumer — latch held
+        val w = S151World(cell = 12)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 0; p.gJ = 0
+        p.gcm = true
+        fsm.mountEntry(p, Pad())
+        assertTrue(p.gcm)
+    }
+}
+
+/** Slice 152 — bA[] checkpoint serializer completion: writeIX stamps
+ *  bA[28..50]/[52+aj*2]/[68]/[79]; resetLevel restores gJ/gI/kAp +
+ *  mission globals + aZ/bn from the snapshot (k.a(z2) arm). */
+class Slice152Test {
+
+    @Test fun `checkpoint write stamps bA bytes`() {
+        // i.java:13488-13500 — the full serializer arm
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.kAx = 77; w.kAy = 12; w.kAz = 9; w.kAN = 3; w.kAL = 44
+        w.kAj = 2; w.kAp[5] = 91
+        w.kAZ = true; w.iBn = true
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        // bytes are stamped from live globals at write time — compare to
+        // the snapshot the checkpoint captured
+        val s = w.checkpointSnap!!
+        assertEquals(1, w.kBA[15])
+        assertEquals(s.kAx, w.kBA[28]); assertEquals(s.kAy, w.kBA[30])
+        assertEquals(s.kAz, w.kBA[32]); assertEquals(s.kAN, w.kBA[34])
+        assertEquals(44, w.kBA[50])
+        assertEquals(s.ap[5], w.kBA[52 + (2 shl 1)])
+        assertEquals(1, w.kBA[68]); assertEquals(1, w.kBA[79])
+    }
+
+    @Test fun `reload restores snapshot globals and flags`() {
+        // k.java:5185-5203 — the k.a(z2) restore arm on resetLevel
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        w.player.gJ = 9; w.player.gI = 2; w.kAp[3] = 8
+        w.kAx = 55; w.kAz = 4; w.kAZ = true; w.iBn = true
+        repeat(2) { w.tick(emptyList()) }
+        // ticks mutate globals before the write — compare restore vs the
+        // snapshot the checkpoint actually captured
+        val s = w.checkpointSnap!!
+        w.player.gJ = 0; w.player.gI = 0; w.kAp[3] = 0
+        w.kAx = 0; w.kAz = 0; w.kAZ = false; w.iBn = false
+        w.resetLevel(true)
+        assertEquals(s.gJ, w.player.gJ); assertEquals(s.gI, w.player.gI)
+        assertEquals(8, w.kAp[3])
+        assertEquals(s.kAx, w.kAx); assertEquals(s.kAz, w.kAz)
+        assertTrue(w.kAZ); assertTrue(w.iBn)
+    }
+
+    @Test fun `checkpoint bA flags reflect write-time state`() {
+        // aZ=false / bn=false stamp zeros — no carry-over
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.kAZ = false; w.iBn = false
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        repeat(2) { w.tick(emptyList()) }
+        assertEquals(0, w.kBA[68]); assertEquals(0, w.kBA[79])
+    }
+}
+
+/** Slice 153/155 — i.D() static-reset tail (i.java:1795-1865): entity-system
+ *  reset clears the modeled k./i. statics AND runs before the k.a(z2)
+ *  checkpoint restore so D() can't clobber restored values. */
+class Slice153Test {
+
+    @Test fun `entity reset clears k statics before restore`() {
+        val w = world()
+        val cp = w.checkpoints.first()
+        w.player.setPositionPx(cp.ak, cp.al + 5)
+        w.camAf = 40; w.camAg = -20; w.kAZ = true; w.iBn = true
+        w.kAE = 5; w.kAF = 9; w.kAH = 3; w.iAJ = 7
+        w.kAD = w.npcs.firstOrNull(); w.kAi = true
+        repeat(2) { w.tick(emptyList()) }
+        assertNotNull(w.checkpointSnap)
+        // D() zeroes the statics; the snapshot restore then re-applies
+        // only what the checkpoint captured (aZ/bn/global values).
+        w.resetLevel(true)
+        assertEquals(0, w.camAf); assertEquals(0, w.camAg)
+        assertEquals(100, w.kAE); assertEquals(0, w.kAF)
+        assertEquals(-1, w.kAH); assertEquals(0, w.iAJ)
+        assertNull(w.kAD); assertFalse(w.kAi)
+        assertTrue(w.iZ)
+        // aZ/bn were TRUE at checkpoint time → restored, not cleared
+        assertTrue(w.kAZ); assertTrue(w.iBn)
+    }
+
+    @Test fun `fresh load clears aZ and bn`() {
+        // no checkpoint → snapshot restore absent → D() values stand
+        val w = world()
+        w.kAZ = true; w.iBn = true
+        w.resetLevel(true)
+        assertFalse(w.kAZ); assertFalse(w.iBn)
+        assertEquals(0, w.camAf)
+        assertEquals(100, w.kAE)
+    }
+}
+
+/** Slice 156 — `i.y()` wall-contact-on-travel-side (i.java:918-927) wired
+ *  into the a() push-out arm (i.java:749-758): the push only fires when
+ *  the player is NOT wall-blocked on the side they're travelling toward;
+ *  `a(true)` rescan + `ag=0` run on every overlapping tick either way. */
+class Slice156Test {
+
+    @Test fun `wallOnFacingSide picks bb for left travel bc otherwise`() {
+        val e = Entity(41, null)
+        e.bb = true; e.bc = false
+        e.ag = -3                                        // moving left
+        assertTrue(e.hitWall())
+        e.ag = 0; e.av = true                            // stopped facing left
+        assertTrue(e.hitWall())
+        e.ag = 0; e.av = false                           // stopped facing right
+        assertFalse(e.hitWall())
+        e.ag = 4
+        assertFalse(e.hitWall())
+        e.bc = true
+        assertTrue(e.hitWall())                 // bc read for right
+    }
+
+    private fun propAt(w: Level0World, x: Int, y: Int): Entity {
+        val e = Entity(41, w.clips[7])
+        e.setPositionPx(x, y); e.refreshBoxes()
+        e.S = 3
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `pushOut skips push when player wall-blocked on travel side`() {
+        val w = world(); w.npcs.clear()
+        val e = propAt(w, 300, 150)
+        val p = w.player
+        p.setPositionPx(e.ak - 5, e.al); p.refreshBoxes() // overlap, ak < e.ak
+        p.ag = 0; p.av = true; p.bb = true               // wall on the left
+        val x0 = p.ak
+        w.npcFsm.tickKnockable(e, w, p)
+        assertEquals(x0, p.ak)                           // no push
+        assertEquals(0, p.ag)                            // L63 still zeroes
+        assertTrue(p.v)                                  // a(true) ran
+    }
+
+    @Test fun `pushOut pushes unblocked player to volume edge`() {
+        val w = world(); w.npcs.clear()
+        val e = propAt(w, 300, 150)
+        val p = w.player
+        p.setPositionPx(e.ak - 5, e.al); p.refreshBoxes()
+        p.ag = 0; p.av = true; p.bb = false              // no wall
+        val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
+        w.npcFsm.tickKnockable(e, w, p)
+        assertEquals(e.ak - pw / 2 - ew / 2, p.ak)
+        assertEquals(0, p.ag)
+        assertTrue(p.v)
+    }
+}
+
+/** Slice 158 — `k.bk[]` wired: ax67 offscreen-score clip-rate pick
+ *  (i.java:588-592): bk[kind]==49 → /400+/240, ==27 → /800+/240,
+ *  else → /400+/120. kBk now returns the real table, not 0. */
+class Slice158Test {
+
+    @Test fun `ax67 offscreen score uses bk clip rates`() {
+        val w = world()
+        fun prop(kind: Int): Entity {
+            val e = Entity(67, null)
+            e.Z[0] = kind
+            e.ak = w.kO + 200 + 800
+            e.al = w.kP + 120 + 240
+            e.offscreenScore(w)
+            return e
+        }
+        // bk[12]=49 → 800/400 + 240/240 = 3
+        assertEquals(3, prop(12).au)
+        // bk[1]=27 → 800/800 + 240/240 = 2
+        assertEquals(2, prop(1).au)
+        // bk[0]=24 → 800/400 + 240/120 = 4
+        assertEquals(4, prop(0).au)
+    }
+}
+
+class Slice159Test {
+
+    private fun launchTick(p: Entity, w: Level0World, gp: Int): Entity {
+        w.gP = gp
+        p.setAnim(90)
+        p.ae = Entity(14, null)
+        w.playerFsm.tick(p, w.pad)
+        return p
+    }
+
+    @Test fun `S90 launch arg one flings right g2647`() {
+        val w = world()
+        val p = launchTick(w.player, w, 1)
+        assertEquals(4096, p.ag); assertFalse(p.av)
+        assertEquals(-768, p.ah); assertEquals(157, p.S)
+        assertEquals(0, w.gP); assertTrue(p.gD); assertNull(p.ae)
+    }
+
+    @Test fun `S90 launch arg two flings left g2651`() {
+        val w = world()
+        val p = launchTick(w.player, w, 2)
+        assertEquals(-4096, p.ag); assertTrue(p.av)
+        assertEquals(-768, p.ah); assertEquals(157, p.S)
+        assertEquals(0, w.gP); assertTrue(p.gD)
+    }
+
+    @Test fun `S90 anim end near edge settles i0 g2658`() {
+        val w = world()
+        w.gP = 0
+        w.player.setAnim(90)
+        w.player.clip = null               // r() -> animFinished
+        w.player.aR = 20
+        w.playerFsm.tick(w.player, w.pad)
+        assertEquals(0, w.player.S); assertTrue(w.player.gD)
+    }
+
+    @Test fun `S90 anim end mid cell flings a0 g2660`() {
+        val w = world()
+        w.gP = 0
+        w.player.setAnim(90)
+        w.player.clip = null
+        w.player.aR = 0; w.player.aS = 0
+        w.playerFsm.tick(w.player, w.pad)
+        assertEquals(43, w.player.S); assertEquals(1536, w.player.aj)
+    }
+
+    @Test fun `S12 entry clears gD g1316`() {
+        val w = world()
+        w.player.gD = true
+        w.player.setAnim(12)
+        w.player.ag = 0
+        w.playerFsm.tick(w.player, w.pad)
+        assertFalse(w.player.gD)
+    }
+
+}
+
+class Slice160Test {
+
+    @Test fun `spawnFloatie inserts ax24 clip40 Si at pos i16745`() {
+        val w = world()
+        val e = w.npcs.first()
+        e.spawnFloatie(w, 8, 123, 456)
+        assertEquals(1, w.pendingInsert.size)
+        val aK = w.pendingInsert[0]
+        assertEquals(24, aK.ax); assertEquals(8, aK.S)
+        assertEquals(123, aK.ak); assertEquals(456, aK.al)
+        assertEquals(123 shl 8, aK.N); assertEquals(456 shl 8, aK.O)
+        assertEquals(0, aK.ag); assertEquals(0, aK.ah)
+        assertEquals(0, aK.ai); assertEquals(0, aK.aj)
+        assertFalse(aK.av); assertEquals(201, aK.az)
+    }
+
+    @Test fun `bk27 springboard child link spawns d8 floatie`() {
+        val w = world()
+        // ax67 kind-1 springboard — decorClip(1)=bk[1]=27, clip27 loaded
+        val pad = Entity(67, w.clipFor(27))
+        pad.Z[0] = 1
+        pad.setAnim(19)
+        pad.ak = w.player.ak + 200; pad.al = w.player.al
+        pad.refreshBoxes()
+        // linked child: r0 (any ax) whose ad is ax68 inside pad.W
+        val ad = Entity(68, null)
+        ad.ak = (pad.W[0] + pad.W[2]) / 2
+        ad.al = (pad.W[1] + pad.W[3]) / 2
+        pad.W.copyInto(ad.W)
+        val r0 = Entity(30, null); r0.ad = ad
+        w.npcs += r0
+        w.npcFsm.tickDecor(pad, w.player)
+        assertEquals(20, pad.S)                          // S+1 armed
+        assertEquals(2, ad.S)                            // ad.i(2)
+        assertEquals(10, r0.S)                           // r0.i(10)
+        val fl = w.pendingInsert.filter { it.ax == 24 }
+        assertEquals(1, fl.size)
+        assertEquals(8, fl[0].S)
+        assertEquals(ad.ak, fl[0].ak); assertEquals(ad.al, fl[0].al)
+    }
+
+    @Test fun `ba trail arm spawns d9 floatie only at S22 i13661`() {
+        val w = world()
+        val e = Entity(24, null)
+        e.S = 22; e.aG = 1; e.aC = -1          // countdown elapsed → arm
+        e.ak = w.player.ak + 40; e.al = w.player.al
+        intArrayOf(e.ak - 20, e.al - 20, e.ak + 20, e.al + 20).copyInto(e.W)
+        w.camRect.copyInto(e.Y)                      // in-play overlap gate
+        // S22 in the in-flight gate + aG==1 + aC hits <0 → a(9,false) +
+        // d(9,ak,al) + retire flags
+        w.npcFsm.tickAx24(e, w, w.player)
+        val fl = w.pendingInsert.filter { it.ax == 24 && it.az == 201 }
+        assertEquals(1, fl.size)
+        assertEquals(9, fl[0].S)
+        assertEquals(w.player.ak + 40, fl[0].ak)
+        assertEquals(w.player.al, fl[0].al)
+        assertTrue((e.P and 128) != 0); assertNull(e.af)
+        // S!=22 → no floatie
+        w.pendingInsert.clear()
+        e.S = 23; e.aG = 1; e.aC = -1
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertTrue(w.pendingInsert.filter { it.ax == 24 && it.az == 201 }.isEmpty())
+    }
+}
+
+class Slice161Test {
+
+    @Test fun `S284 rope grab anim end sets P64 no fling`() {
+        val w = world()
+        w.player.setAnim(284)
+        w.player.clip = null               // r() -> animFinished
+        w.playerFsm.tick(w.player, w.pad)
+        assertTrue((w.player.P and 64) != 0)   // grab-done flag
+        assertEquals(284, w.player.S)          // stays bound, no a(0)
+        assertNotEquals(1536, w.player.aj)     // no fling arc
+    }
+}
+
+class Slice162Test {
+
+    private fun tr(cond: Int, uid: Int) = Level0World.ScrollTrigger(
+        intArrayOf(4900, 4900, 5100, 5100), intArrayOf(0, 0, 0, 0),
+        mask = 15, mode = 0, linkCond = cond, linkUid = uid)
+
+    @Test fun `ax37 linkCond3 removes trigger when link dead`() {
+        val w = world()
+        val base = w.scrollTriggers.size
+        w.scrollTriggers += tr(3, 4242)
+        w.npcs += Entity(11, null).apply { aw = 4242; aB = 0 }   // dead link
+        w.fireScrollTriggers()
+        assertEquals(base, w.scrollTriggers.size)              // k.n() + k.c(this)
+    }
+
+    @Test fun `ax37 linkCond3 keeps trigger while link alive`() {
+        val w = world()
+        val base = w.scrollTriggers.size
+        w.scrollTriggers += tr(3, 4244)
+        w.npcs += Entity(11, null).apply { aw = 4244; aB = 1 }
+        w.fireScrollTriggers()
+        assertEquals(base + 1, w.scrollTriggers.size)
+    }
+
+    @Test fun `ax37 linkCond1 flagged link skips claim`() {
+        val w = world()
+        w.player.setPositionPx(5000, 5000)
+        w.player.refreshBoxes()
+        w.scrollTriggers += tr(1, 4245)
+        w.npcs += Entity(80, null).apply { aw = 4245; P = P or 32 }
+        w.fireScrollTriggers()
+        assertNull(w.kAh)                              // gate skipped claim
+    }
+
+    @Test fun `ax37 linkCond1 unflagged link allows claim`() {
+        val w = world()
+        w.player.setPositionPx(5000, 5000)
+        w.player.refreshBoxes()
+        w.scrollTriggers += tr(1, 4246)
+        w.npcs += Entity(80, null).apply { aw = 4246 }
+        w.fireScrollTriggers()
+        assertNotNull(w.kAh)
+    }
+}
+
+class Slice163Test {
+
+    @Test fun `ax4 S29 blast sweep damages melee set and chains sibling`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 }
+        d.S = 29; d.refreshBoxes()
+        // ax11 melee inside X, aB>0 -> -bu[au]<<1 (kAu=0 -> 600)
+        val s = Entity(11, null).apply {
+            aB = 100; ak = (d.X[0] + d.X[2]) / 2; al = (d.X[1] + d.X[3]) / 2
+            W[0] = ak - 5; W[1] = al - 5; W[2] = ak + 5; W[3] = al + 5
+        }
+        // ax4 sibling in S30 -> i(29) chain
+        val sib = Entity(4, d.clip).apply {
+            S = 30; ak = s.ak; al = s.al
+            W[0] = s.W[0]; W[1] = s.W[1]; W[2] = s.W[2]; W[3] = s.W[3]
+        }
+        // ax15-S6 grapple volume -> i(7) + Z[3]=1
+        val g15 = Entity(15, null).apply {
+            S = 6; ak = s.ak; al = s.al
+            W[0] = s.W[0]; W[1] = s.W[1]; W[2] = s.W[2]; W[3] = s.W[3]
+        }
+        // ax29 boss outside S20 -> -50 + i(20)
+        val boss = Entity(29, null).apply {
+            S = 10; aB = 200; ak = s.ak; al = s.al
+            W[0] = s.W[0]; W[1] = s.W[1]; W[2] = s.W[2]; W[3] = s.W[3]
+        }
+        w.npcs += s; w.npcs += sib; w.npcs += g15; w.npcs += boss
+        // player OUT of X so applyHit doesn't fire; advanceAnim wraps
+        // T5->6 at U0 so the arm reads T==6&&U==0 -> sfx12
+        w.player.setPositionPx(d.X[2] + 500, d.X[3] + 500)
+        w.player.refreshBoxes()
+        d.T = 5; d.U = 999
+        w.npcFsm.tickDestructible(d, w.player)
+        assertTrue(s.aB <= 100 - 600, "ax11 aB drained by bu[au]<<1, got ${'$'}${'{'}s.aB}")
+        assertEquals(29, sib.S)
+        assertEquals(7, g15.S); assertEquals(1, g15.Z[3])
+        assertEquals(150, boss.aB); assertEquals(20, boss.S)
+        assertTrue(12 in w.sfxLog)
+    }
+
+    @Test fun `ax4 S29 player overlap routes op4 hit`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 }
+        d.S = 29; d.refreshBoxes()
+        w.player.setPositionPx((d.X[0] + d.X[2]) / 2, (d.X[1] + d.X[3]) / 2)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDestructible(d, w.player)
+        assertTrue(18 in w.sfxLog, "op4 tail always plays hurt sfx k.A(18)")
+    }
+
+    @Test fun `ax4 S30 proximity re-arms blast on hitbox overlap`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 }
+        d.S = 30; d.refreshBoxes()
+        // player.X (attack box) reaching W -> i(29)
+        w.player.setPositionPx(d.W[0] + 1, d.W[3] - 1)
+        w.player.setAnim(67)
+        w.player.refreshBoxes()
+        w.npcFsm.tickDestructible(d, w.player)
+        assertEquals(29, d.S)
+    }
+
+    @Test fun `ax4 S33 fly-out sparks child when player near`() {
+        val w = world()
+        val d = w.npcs.first { it.ax == 4 }
+        d.S = 33; d.aA = 0; d.refreshBoxes()
+        w.player.setPositionPx(d.ak + 10, d.al)
+        w.player.refreshBoxes()
+        val before = w.pendingInsert.size
+        w.npcFsm.tickDestructible(d, w.player)
+        assertTrue(d.b)
+        assertNotNull(d.af)
+        assertEquals(24, d.af!!.ax); assertEquals(35, d.af!!.S)
+        assertEquals(200, d.af!!.az)
+        assertTrue(w.pendingInsert.size > before)
+    }
+}
+
+
+/** Slice 164 — claim-field correctness: `claimAb` reads `i.cK`
+ *  (`scriptStep`), `claimKC` deleted in favor of the full `N()`
+ *  (`bindContext`), `cellForLos` routes `e()` for the ax0 overrides. */
+class Slice164Test {
+
+    @Test fun `claimAb follows scriptStep release not the lunge snapshot`() {
+        val w = world()
+        val e = Entity(5, null).apply {
+            ca = 0; cd[0] = false
+            scriptStep = 4          // ab() armed
+            cK = 77                 // lunge X[1] snapshot — unrelated field
+        }
+        assertTrue(e.claimAb(), "armed claim should read active")
+        // bI() normal path writes cK=-2 (scriptStep); the lunge cK is
+        // untouched — before the fix claimAb() stayed true here.
+        e.releaseClaim(w)
+        assertEquals(-2, e.scriptStep)
+        assertFalse(e.claimAb(), "claim must not read the lunge snapshot cK")
+    }
+
+    @Test fun `bindContext evicts the previous claimer like N()`() {
+        val w = world()
+        val old = Entity(5, null).apply {
+            ca = 0; cd[0] = false; scriptStep = 3; aw = 111
+        }
+        val new = Entity(5, null).apply { aw = 222; aG = -1 }
+        w.npcs += old; w.npcs += new
+        w.kC = old
+        new.bindContext(w)
+        assertSame(new, w.kC)
+        assertTrue(old in w.pendingRemove, "k.c(old) — evicted claimer removed")
+        assertEquals(-2, old.scriptStep, "old claimer released via bI()")
+        assertTrue(new.P and 16 != 0)
+    }
+
+    @Test fun `e cell read honors ax0 S37 override only for the player`() {
+        val w = world()
+        // find an in-bounds cell that reads solid (20)
+        var cx = -1; var cy = -1
+        outer@ for (y in 0 until w.kBq) for (x in 0 until w.kBp) {
+            if (w.collisionCell(x, y) == 20) { cx = x; cy = y; break@outer }
+        }
+        assertTrue(cx >= 0, "level 0 must contain a cell-20 block")
+        val p = w.player                      // ax == 0
+        p.S = 37
+        assertEquals(0, p.e(w, cx, cy), "S37 reads cell-20 as open")
+        p.S = 0
+        assertEquals(20, p.e(w, cx, cy), "grounded read is raw")
+        val npc = Entity(11, null)
+        assertEquals(20, npc.e(w, cx, cy), "ax!=0 never gets the override")
+    }
+
+    @Test fun `losBlocked routes through e so a player walker sees through S37 cells`() {
+        val w = world()
+        // find a cell-20 block with OPEN horizontal neighbors so the
+        // Bresenham walk starts in air and crosses the solid cell
+        var cx = -1; var cy = -1
+        outer@ for (y in 0 until w.kBq) for (x in 1 until w.kBp - 1) {
+            if (w.collisionCell(x, y) == 20 &&
+                w.collisionCell(x - 1, y) < 12 &&
+                w.collisionCell(x + 1, y) < 12) { cx = x; cy = y; break@outer }
+        }
+        assertTrue(cx > 0, "level 0 must contain an isolated cell-20 block")
+        val p = w.player                     // ax == 0 — center in cell cx-1
+        p.W[0] = (cx - 1) * 20 + 6; p.W[1] = cy * 20 + 6
+        p.W[2] = (cx - 1) * 20 + 14; p.W[3] = cy * 20 + 14
+        val t = Entity(0, null).apply {      // target center in cell cx+1
+            W[0] = (cx + 1) * 20 + 6; W[1] = cy * 20 + 6
+            W[2] = (cx + 1) * 20 + 14; W[3] = cy * 20 + 14
+        }
+        p.S = 37
+        assertFalse(p.losBlocked(t, w), "player S37 sees through cell-20")
+        p.S = 0
+        assertTrue(p.losBlocked(t, w), "grounded player is blocked")
+        val npc = Entity(11, null).apply {
+            W[0] = p.W[0]; W[1] = p.W[1]; W[2] = p.W[2]; W[3] = p.W[3]
+        }
+        assertTrue(npc.losBlocked(t, w), "npc LOS still blocked")
+    }
+}
+
+
+class Slice165Test {
+
+    private fun armDialog(w: Level0World, u: Int, v: Int, w_: Int,
+                          vararg lines: String): Level0World {
+        w.autoDismissDialog = false
+        w.stateL(21)
+        w.dlgU = u; w.dlgV = v; w.dlgW = w_
+        lines.forEachIndexed { i, s -> w.dlgBM[i] = s }
+        w.dlgBT = -1
+        return w
+    }
+
+    private fun claimWaiting(): Entity {
+        val e = Entity(5, null)
+        e.cd[2] = true                                 // claim wait-for-user
+        e.cd[0] = true                                 // halted by the modal
+        return e
+    }
+
+    @Test fun `u9 claim-wait dialog exits on a tap in the right soft-key strip`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        val c = claimWaiting(); w.kC = c
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
+                      InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        assertEquals(8, w.jC, "v(131072) + C.cd[2] → C.Z(); l(8) (:1003-1010)")
+        assertTrue(c.cd[1], "C.cd[1]=true on the consume arm")
+        assertFalse(c.cd[0], "C.Z() resumes the halted claimer")
+        assertEquals(w.dlgW, w.dlgV, "v = w on exit")
+    }
+
+    @Test fun `u9 claim-wait ignores a tap outside the soft-key strip`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        w.kC = claimWaiting()
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 100),
+                      InputQueue.Event(1, InputQueue.Type.UP, 200, 100)))
+        assertEquals(21, w.jC, "playfield tap = context only — no M_CYCLE arm")
+    }
+
+    @Test fun `u9 left-of-strip tap does not arm M_CYCLE`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        w.kC = claimWaiting()
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 340, 210),
+                      InputQueue.Event(1, InputQueue.Type.UP, 340, 210)))
+        assertEquals(21, w.jC, "x=340 sits outside (349..405,198..245)")
+    }
+
+    @Test fun `pause icon on jC21 routes to the pause menu`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        val c = claimWaiting(); w.kC = c
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 370, 10),
+                      InputQueue.Event(1, InputQueue.Type.UP, 370, 10)))
+        w.tick(emptyList())                            // E() lands bB at the
+                                                       // next frame's commit
+        assertEquals(14, w.jC, "v(262144) → C.Y(); bw=0; l(14) (:1057-1061)")
+        assertTrue(c.cd[0], "C.Y() halts the claimer")
+    }
+
+    @Test fun `af confirm accepts a tap on a level row`() {
+        val w = world()
+        w.kBA[14] = 3                                  // da=4 → kFQ rows
+        w.stateL(30)
+        w.tick(emptyList())                            // fO==0 init arm
+        assertTrue(w.panelVisible, "af() draws d(93,46,214) — panel must show")
+        assertTrue(w.kFQ > 0)
+        val r = w.menuRowRects()[0]
+        val cx = r[0] + r[2] / 2; val cy = r[1] + r[3] / 2
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
+                      InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
+        assertEquals(9, w.jC, "row tap = v(327712) confirm → l(9) (:6269)")
+    }
+
+    @Test fun `jc11 exit emits QuitApp once`() {
+        val w = world()
+        w.stateL(11)
+        w.tick(emptyList())
+        assertEquals(-1, w.jC, "case 11 → j.c=-1 (notifyDestroyed)")
+        val cmds = w.drainCommands()
+        assertEquals(1, cmds.count { it is com.acrebuild.core.Command.QuitApp },
+                     "QuitApp emitted once")
+        w.tick(emptyList())
+        assertTrue(w.drainCommands().none { it is com.acrebuild.core.Command.QuitApp },
+                   "j.c==-1 is dead — no re-emit")
+    }
+}
+
+
+class Slice166Test {
+
+    @Test fun `sfx emits PlaySfx through z and sets audioTrack`() {
+        val w = world()
+        w.sfx(12)                                      // k.A(12) → z(12)
+        assertEquals(12, w.audioTrack, "audioTrack = n (:7363)")
+        val cmds = w.drainCommands()
+        assertTrue(cmds.any { it is com.acrebuild.core.Command.PlaySfx &&
+                              it.slot == 12 }, "PlaySfx(12) queued")
+        assertTrue(w.sfxLog.contains(12), "sfxLog records the request")
+    }
+
+    @Test fun `sfx respects the kBF SFX-option gate`() {
+        val w = world()
+        w.kBF = false                                  // SFX option off
+        w.sfx(13)                                      // slot >= 10 gated
+        assertTrue(w.sfxLog.contains(13), "request still logged pre-gate")
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx }, "kBF=false → no SFX play")
+        assertEquals(-1, w.audioTrack)
+    }
+
+    @Test fun `sfx respects the kBE music-option gate`() {
+        val w = world()
+        w.kBE = false                                  // music option off
+        w.sfx(5)                                       // slot < 10 gated
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx }, "kBE=false → no music play")
+    }
+
+    @Test fun `sfx ignores out-of-range slots like z`() {
+        val w = world()
+        w.sfx(34); w.sfx(-1)
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx }, "n<0||n>=34 → nop")
+    }
+}
+
+
+class Slice167Test {
+
+    @Test fun `duration gate drops SFX while music is live`() {
+        val w = world()
+        w.sfx(0)                                       // music track 0 (h.a=38958ms)
+        w.drainCommands()
+        w.sfx(12)                                      // SFX while music within duration
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx },
+            "both options on + live slot → request skipped (e.java:62-84)")
+        assertEquals(0, w.audioTrack)
+    }
+
+    @Test fun `request plays once current slot expires`() {
+        val w = world()
+        w.sfx(10)                                      // SFX, h.a[10]=218ms
+        w.drainCommands()
+        for (i in 0 until 5) w.tick(listOf())          // 5×62=310ms > 218
+        w.sfx(11)
+        val cmds = w.drainCommands()
+        assertTrue(cmds.any { it is com.acrebuild.core.Command.PlaySfx &&
+                              it.slot == 11 }, "expired slot frees the channel")
+        assertTrue(cmds.any { it is com.acrebuild.core.Command.StopAudio },
+            "preempt emits e.b() first")
+    }
+
+    @Test fun `empty slots 22 26 27 never play`() {
+        val w = world()
+        w.sfx(22); w.sfx(26); w.sfx(27)
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx }, "a[i]==null → nop")
+        assertEquals(-1, w.audioTrack)
+    }
+
+    @Test fun `audioStop emits StopAudio and clears the channel`() {
+        val w = world()
+        w.sfx(10)
+        w.drainCommands()
+        w.audioStop()                                  // e.b()
+        assertEquals(-1, w.audioTrack)
+        assertTrue(w.drainCommands().any {
+            it is com.acrebuild.core.Command.StopAudio })
+        assertFalse(w.audioPlaying(), "e.a() false after stop")
+    }
+
+    @Test fun `audioPlaying mirrors the h_a duration window`() {
+        val w = world()
+        w.sfx(10)                                      // 218ms → ~4 ticks
+        assertTrue(w.audioPlaying())
+        for (i in 0 until 4) w.tick(listOf())          // 248ms > 218
+        assertFalse(w.audioPlaying(), "expired after h.a[10]")
+    }
+
+    @Test fun `SFX-option off still lets music through the gate`() {
+        val w = world()
+        w.kBF = false                                  // SFX option off
+        w.sfx(5)                                       // music <10 unaffected
+        assertTrue(w.drainCommands().any {
+            it is com.acrebuild.core.Command.PlaySfx && it.slot == 5 })
+        w.sfx(12)                                      // SFX gated out
+        assertTrue(w.drainCommands().none {
+            it is com.acrebuild.core.Command.PlaySfx && it.slot == 12 })
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Slice 168 — level-0 traversal blockers: the S107/108/109 directional
+ * edge-vault arm (g.java L12de), the sticky `g.z` latch (`l()` head arms it
+ * once per call — g.java:2982; airborne `cq=0; z=0` arms clear it), the
+ * `b()` busy-anim guard inside `ap()` (g.java L28-L33), and the ax4 crate
+ * block→break loop (i.java `a()` push + `tickDestructible` S5 arm).
+ */
+class Slice168Test {
+    // -- helpers --------------------------------------------------------------
+    private fun armed(): Pair<Level0World, Entity> {
+        val w = world()
+        w.stateL(8)
+        w.player.gI = 1
+        w.player.gJ = w.player.gJ or w.kF0Do[0]
+        w.rebuildEquip()
+        // run out the intro claim (~69t) then a little more
+        for (t in 0 until 150) w.tick(listOf())
+        return w to w.player
+    }
+    private fun holdRight(w: Level0World) =
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 95, 181)))
+    private fun attackTap(w: Level0World) =
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 305, 200),
+                      InputQueue.Event(1, InputQueue.Type.UP, 305, 200)))
+
+    /** g.java L12de: running into the 3-cell wall at x~351 enters S109 and
+     *  on anim end vaults `al -= 60`, `ak += 20`, then `a(0,9)` snaps `ak`
+     *  to the cell center. */
+    @Test fun `run into wall enters S109 and vaults 3 cells on anim end`() {
+        val (w, p) = armed()
+        holdRight(w)
+        var vaulted = false
+        var saw109 = false
+        for (i in 0 until 400) {
+            w.tick(listOf())
+            if (p.S == 109) saw109 = true
+            if (saw109 && p.S == 0 && p.al <= 890) { vaulted = true; break }
+        }
+        assertTrue(saw109, "player should enter S109 at the wall edge")
+        assertTrue(vaulted, "vault should settle S0 above the wall (al<=890)")
+        assertTrue(p.ak >= 365, "ak advanced through the wall cell, got ${p.ak}")
+    }
+
+    /** `g.z` is sticky (l() head): once armed on the ground it stays true
+     *  through S12 — a per-tick clear is what starved ap() at the crate. */
+    @Test fun `z latch stays armed through S12 run`() {
+        val (w, p) = armed()
+        holdRight(w)
+        for (i in 0 until 120) w.tick(listOf())
+        assertEquals(12, p.S, "expected S12 run, got S=${p.S}")
+        assertTrue(p.z, "z must persist into S12 (sticky latch)")
+    }
+
+    /** `aA|=8`-style clear sites: `cq=0; z=0` pairs — entering a fall
+     *  clears the latch so ap() can't fire mid-air. */
+    @Test fun `z clears when leaving the ground`() {
+        val (w, p) = armed()
+        holdRight(w)
+        for (i in 0 until 40) w.tick(listOf())
+        assertTrue(p.z, "grounded run arms z")
+        p.enterFall(0, w); p.z = false; p.cq = false   // a(0) fling arm pair
+        w.tick(listOf())
+        assertFalse(p.z, "airborne tick keeps z cleared")
+    }
+
+    /** `ap()` guard `ac.ax==10 || b()`: a context tap during an attack anim
+     *  must NOT re-fire i(67) — the combo chains via aj() only. */
+    @Test fun `context tap during attack anim does not re-enter swing`() {
+        val (w, p) = armed()
+        // settle on ground, arm the swing
+        for (i in 0 until 30) w.tick(listOf())
+        attackTap(w)
+        for (i in 0 until 3) w.tick(listOf())
+        assertEquals(67, p.S, "expected S67 swing, got S=${p.S}")
+        val t0 = p.T
+        attackTap(w)
+        w.tick(listOf())
+        assertTrue(p.S != 67 || p.T > t0,
+            "b() guard: tap during S67 must not restart the swing (S=${p.S} T=${p.T} was $t0)")
+    }
+
+    /** ax4 crate block→break: hold right into the aw10 crate — pushOut
+     *  pins the runner (faithful), a context slash breaks the crate and
+     *  the path clears. */
+    @Test fun `crate blocks run then breaks under attack`() {
+        val (w, p) = armed()
+        holdRight(w)
+        var pinned = false
+        for (i in 0 until 300) {
+            w.tick(listOf())
+            if (p.S == 12 && p.ag == 0 && p.ak >= 500) { pinned = true; break }
+        }
+        assertTrue(pinned, "runner should pin at the aw10 crate (~ak504)")
+        for (k in 0 until 12) {
+            attackTap(w)
+            for (i in 0 until 15) w.tick(listOf())
+        }
+        assertTrue(w.npcs.none { it.aw == 10 } ||
+                   w.npcs.first { it.aw == 10 }.S != 5,
+            "crate should break (anim advanced or entity removed)")
+        assertTrue(p.ak > 546, "player passed the crate, ak=${p.ak}")
+    }
+}
+
+class Slice169Test {
+    /** Slice 169 (proven, g.java L1ab3-L1c33): S33 wall-rebound arms —
+     *  dirHeld && still-rising (ah<0) arms the lip-scan (ct=true, no
+     *  probe/kick); ANY other case probes -> fall-or-kick. The old port
+     *  had the two branches inverted: held-right during the rise forced
+     *  the kick/fall probe and froze S33 when falling with no dir hold. */
+    @Test fun `S33 dirHeld while rising arms lip scan not kick`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val p = w.player
+        // plateau edge: x791,y864 (pit lip ahead, wall column at x840)
+        p.ak = 791; p.al = 864; p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(33); p.ag = 0; p.ah = -4096
+        w.tick(listOf(InputQueue.Event(7, InputQueue.Type.DOWN, 95, 180)))
+        assertEquals(33, p.S, "still rebounding while rising")
+        assertTrue(p.ct, "ct armed by the dirHeld+rise lip-scan branch")
+    }
+
+    @Test fun `S33 dirHeld while falling probes kick or fall`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val p = w.player
+        p.ak = 791; p.al = 864; p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(33); p.ag = 0; p.ah = 256
+        w.tick(listOf(InputQueue.Event(7, InputQueue.Type.DOWN, 95, 180)))
+        assertTrue(p.S != 33 || p.ct.not(),
+            "falling+held probes: left S33 for fall/kick (S=" + p.S + ")")
+    }
+
+    @Test fun `S33 no hold falling still resolves`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val p = w.player
+        p.ak = 791; p.al = 864; p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(33); p.ag = 0; p.ah = 256
+        w.tick(listOf())
+        assertTrue(p.S != 33, "no-hold falling still probes out of S33 (S=" + p.S + ")")
+    }
+}
+
+class Slice171Test {
+    // ax42 records spawn clipless (bi[42]=-1) so the win fuse exists in
+    // the world; in the original every record spawns even without a clip.
+    @Test fun `ax42 win fuse spawns clipless in level 0`() {
+        val w = world()
+        w.stateL(8)
+        val fuse = w.npcs.firstOrNull { it.ax == 42 }
+        assertTrue(fuse != null)
+        assertEquals(-1, fuse.S)                    // dormant until scripted i(0)
+        assertEquals(1, fuse.Z[0])                  // kind-1: fires on s.P&32 clear
+        assertEquals(531, fuse.Z[1])                // watches aw531 flag pickup
+    }
+
+    // Win chain (proven): script arms the fuse (i(0)) + clears the flag's
+    // bit32 (op100 arg1 / au() drop) -> kAJ 1->2 -> kAL*1000 countdown
+    // -> screenL(13). Verified end-to-end on the real level-0 records.
+    @Test fun `fuse arms then fires win after countdown`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val fuse = w.npcs.firstOrNull { it.ax == 42 }!!
+        val flag = w.npcs.firstOrNull { it.aw == 531 }!!
+        fuse.setAnim(0)                             // claim-script i(0) arm
+        flag.P = flag.P and 32.inv()                // op100 arg1: flag used
+        var ticks = 0
+        while (ticks < 1600 && !w.won) { w.tick(listOf()); ticks++ }
+        assertTrue(w.won)
+        assertEquals(-1, w.kBw)
+        assertEquals(58, w.kBx)
+    }
+
+    @Test fun `fuse stays dormant while flag holds bit32`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val fuse = w.npcs.firstOrNull { it.ax == 42 }!!
+        fuse.setAnim(0)
+        for (t in 0 until 120) w.tick(listOf())     // flag P=160 keeps bit32
+        assertEquals(0, w.kAJ)
+        assertFalse(w.won)
+    }
+}
+
+class Slice172Test {
+    // The real level-0 mission-complete path (proven from pack-6 data +
+    // the ported ax5/claim-script chain): S8 watcher aw252 sits at the
+    // level end with W=[12131,221,12561,811] and aG=116. Player overlap
+    // -> missionResolve -> bindContext -> script uid 116 -> its single
+    // op `op37(1)` (r013=1, r12=1) -> `screenL(15)` + `kStat(0)`.
+    // Verified: the zone fires on player entry and consumes itself.
+
+    @Test fun `aw252 watcher spawns with its record fields`() {
+        val w = world()
+        w.stateL(8)
+        val zone = w.npcs.firstOrNull { it.aw == 252 }
+        assertTrue(zone != null)
+        assertEquals(8, zone.S)
+        assertEquals(116, zone.aG)
+        assertEquals(listOf(12131, 221, 12561, 811), zone.W.toList())
+    }
+
+    @Test fun `player entering the end zone fires mission-complete screen`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 60) w.tick(listOf())
+        val p = w.player
+        val zone = w.npcs.firstOrNull { it.aw == 252 }!!
+        p.ak = 12300; p.al = 500
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        p.ag = 0; p.ah = 0
+        w.tick(listOf())
+        assertEquals(15, w.jC)                // screenL(15) fired
+        assertFalse(w.npcs.contains(zone))    // zone consumed itself
+    }
+
+    @Test fun `zone does not fire while player outside its box`() {
+        val w = world()
+        w.stateL(8)
+        for (t in 0 until 120) w.tick(listOf())
+        val zone = w.npcs.firstOrNull { it.aw == 252 }!!
+        assertNotEquals(15, w.jC)
+        assertTrue(w.npcs.contains(zone))
+    }
+}
+
+class Slice173Test {
+    // bi[35]=62 (k.java:266) — the ax35 scripted multi-tool spawns with
+    // clip 62. The record was silently dropped at spawn only because
+    // ENTITY_CLIP lacked the entry (same class of bug as the ax42 win
+    // fuse — clipless vs unmapped). One level-0 record exists.
+    @Test fun `ax35 record spawns with clip 62`() {
+        val w = world()
+        w.stateL(8)
+        val e35 = w.npcs.filter { it.ax == 35 }
+        assertEquals(1, e35.size)
+        assertTrue(e35[0].clip != null)
+    }
+
+    // The record carries S=6 (grab-wave march arm) at ak=5816 with the
+    // camera at kO=0: the L184-186 march arm culls it on its first tick —
+    // `av=false && ak > kO+420 -> k.c(this)` (i.java:19813-19817). The
+    // pre-cull L160 sweep hits nothing (W=[5832,161,5842,169] overlaps no
+    // ax17/11/23/47/50/73 entity). Original behavior is identical: the
+    // record exists for one tick then self-removes.
+    @Test fun `ax35 self-culls off-camera on first tick like the original`() {
+        val w = world()
+        w.stateL(8)
+        val e35 = w.npcs.firstOrNull { it.ax == 35 }!!
+        val victims = w.npcs.filter { it.ax in intArrayOf(17, 11, 23, 47, 50, 73) }
+        w.tick(listOf())
+        assertFalse(w.npcs.contains(e35))
+        assertTrue(victims.none { it.deadRelease() })   // sweep hit nothing
+    }
+}
+
+class Slice174Test {
+
+    // i.a(true,0) (i.java:19605-19616, proven): the trail cards arm with
+    // e = S at arm time; cU[0] = entity pos, cU[1..4] parked.
+    @Test fun `startTrail captures armed S and parks dots`() {
+        val w = world()
+        w.stateL(8)
+        val p = w.player
+        p.ak = 500; p.al = 300; p.setAnim(7)
+        p.startTrail()
+        assertTrue(p.hasTrail())
+        assertEquals(7, p.trailAnim)
+        val t = p.cU!!
+        assertEquals(500, t[0]); assertEquals(300, t[1])
+        for (i in 1..4) { assertEquals(-200, t[i * 2]); assertEquals(-120, t[i * 2 + 1]) }
+        p.endTrail()
+        assertFalse(p.hasTrail())
+    }
+
+    // i.af() (i.java:21513-21528, proven) + a.b(j.g) clock: ring-shift,
+    // pos 0 = current, clock +1/push.
+    @Test fun `pushTrail ring-shifts positions and ticks the card clock`() {
+        val w = world()
+        w.stateL(8)
+        val p = w.player
+        p.ak = 100; p.al = 50; p.setAnim(3)
+        p.startTrail()
+        p.ak = 110; p.pushTrail()
+        p.ak = 120; p.pushTrail()
+        val t = p.cU!!
+        assertEquals(120, t[0]); assertEquals(110, t[2]); assertEquals(100, t[4])
+        assertEquals(2, p.trailClock)
+        // parked dots still parked
+        assertEquals(-200, t[8]); assertEquals(-120, t[9])
+    }
+
+    // a.f() = d.a(e,f)*40 (a.java:60, proven): frames hold 40 units per
+    // duration tick — clock 1 -> frame 0; frame advances only after the
+    // first dur*40 threshold, and wraps (h=-2 infinite loop).
+    @Test fun `trailFrame walks dur-times-40 thresholds and wraps`() {
+        val w = world()
+        w.stateL(8)
+        val p = w.player
+        p.setAnim(0)
+        p.startTrail()
+        val clip = p.clip!!
+        val n = clip.frameCount(0)
+        assertTrue(n > 0)
+        assertEquals(0, p.trailFrame())
+        // dur0*40 - 1 -> still frame 0; dur0*40 -> frame 1 (or wraps on n==1)
+        val d0 = clip.frameDuration(0, 0)
+        if (d0 > 0 && n > 1) {
+            p.trailClock = d0 * 40 - 1
+            assertEquals(0, p.trailFrame())
+            p.trailClock = d0 * 40
+            assertEquals(1, p.trailFrame())
+            // far past the end: wraps back into range
+            val total = (0 until n).sumOf { clip.frameDuration(0, it) } * 40
+            if (total > 0) {
+                p.trailClock = total
+                assertEquals(0, p.trailFrame())
+            }
+        }
+    }
+
+    // Re-arm while armed is a no-op (i.java:19606 `cU != null` early-out).
+    @Test fun `startTrail while armed is a no-op`() {
+        val w = world()
+        w.stateL(8)
+        val p = w.player
+        p.ak = 42; p.al = 24; p.setAnim(5)
+        p.startTrail()
+        p.ak = 99; p.setAnim(8)
+        p.startTrail()
+        assertEquals(5, p.trailAnim)
+        assertEquals(42, p.cU!![0])
+    }
+}
+
+class Slice175Test {
+    /** i.java ctor tail `i(sArr[5])`: ax11 records spawn at their record
+     *  anim — the x7361 street guard (uid 44, f[5]=3) enters S3 patrol
+     *  live, not the old hardcoded S0 dormant state. (proven) */
+    @Test fun `ax11 record spawns at record anim S3`() {
+        val w = world()
+        w.stateL(8)
+        val g = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        assertEquals(3, g.S)
+        assertEquals(7361, g.ak)
+    }
+
+    /** i.java:2256-2258: Z[0]==1 (hardened record) doubles aB.
+     *  x5421 uid 60 carries z0_1 → aB = BU[0]<<1 = 600. (proven) */
+    @Test fun `hardened Z0==1 doubles soldier HP`() {
+        val w = world()
+        w.stateL(8)
+        val g = w.npcs.first { it.ax == 11 && it.aw == 60 }
+        assertEquals(600, g.aB)
+        val soft = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        assertEquals(300, soft.aB)
+    }
+
+    /** Shared S0/106/107/135 arm (i.java:4044-4096): on anim-finish a
+     *  plain S0 soldier goes corpse S139 + k.e(0,aw) stat tally + lock
+     *  releases — NOT the old inferred S3 activation. (proven) */
+    @Test fun `S0 anim finish goes corpse S139 and releases locks`() {
+        val w = world()
+        w.stateL(8)
+        val g = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        g.setAnim(0)
+        w.lockTarget = g
+        var ticks = 0
+        while (g.S != 139 && ticks < 80) { w.tick(listOf()); ticks++ }
+        assertEquals(139, g.S)
+        assertEquals(0, g.aB)
+        assertTrue(w.lockTarget !== g)
+    }
+
+    /** i.java:4072-4084: on r() the 106/107/135 death-drag states freeze
+     *  (P&-17 |32 |64) instead of entering S139. (proven) */
+    @Test fun `S106 finish freezes instead of corpse`() {
+        val w = world()
+        w.stateL(8)
+        val g = w.npcs.first { it.ax == 11 && it.aw == 44 }
+        g.setAnim(106)
+        var ticks = 0
+        while ((g.P and 64) == 0 && ticks < 120) { w.tick(listOf()); ticks++ }
+        assertTrue((g.P and 64) != 0)
+        assertTrue((g.P and 16) == 0)
+        assertNotEquals(139, g.S)
+    }
+
+    /** i.java:2263-2267 + ctor :2895: Z[13]!=-1 binds the claim script
+     *  and latches i.d; the tail `a(true);E()` runs at spawn. Level-0
+     *  records carry -1 → unbound, but the flag itself is proven via a
+     *  synthetic record. (proven wiring; synthetic record for the bind) */
+    @Test fun `Z13 script claim binds at init`() {
+        val w = world()
+        w.stateL(8)
+        val fsm = NpcFsm(w)
+        val e = Entity(11, null)
+        e.ak = 500; e.al = 500
+        val f = listOf(11, 9999, 500, 500, 0, 2, 0,0,0,-1,0,0, -160,-64,320,100, 0,100,-1,-1)
+        fsm.initSoldier(e, f, w)
+        assertEquals(0, e.Z[13])
+        assertTrue(e.scriptBound)
+    }
+}
+
+/** Slice 176 — all-mission pack conversion: `ec[aj]="/6".."/13"` packs
+ *  (k.java:260) load through the same `I(i)`/`H(i)` grid layout with
+ *  `ej[aj*4..+2]` tilesets (k.java:275) and `bh[aj]` layer gating
+ *  (flying missions 1/4 have no ep layer). Asserts each converted pack
+ *  parses, spawns its records, and ticks without exceptions. */
+class Slice176Test {
+
+    // (aj, cols, rows, entityCount) — converter output vs pack dims.
+    private val PACKS = arrayOf(
+        intArrayOf(0, 627, 55, 637),
+        intArrayOf(1, 44, 600, 225),   // FLYING (bh==3)
+        intArrayOf(2, 275, 110, 567),
+        intArrayOf(3, 775, 70, 691),
+        intArrayOf(4, 44, 625, 254),   // FLYING (bh==3)
+        intArrayOf(5, 786, 63, 740),
+        intArrayOf(6, 550, 70, 849),
+        intArrayOf(7, 100, 102, 323),  // Cesare arena (aj==7 stat-gate)
+    )
+
+    @Test fun `all 8 mission packs decode and spawn`() {
+        for ((aj, cols, rows, count) in PACKS) {
+            val w = world(aj = aj)
+            assertEquals(cols, w.level.cols, "level$aj cols")
+            assertEquals(rows, w.level.rows, "level$aj rows")
+            assertEquals(count, w.level.entities.size, "level$aj entities")
+            assertEquals(aj, w.kAj, "level$aj kAj")
+            assertTrue(w.npcs.isNotEmpty(), "level$aj spawned nothing")
+        }
+    }
+
+    @Test fun `bh3 flying flag follows aj`() {
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            assertEquals(aj == 1 || aj == 4, w.bh3, "level$aj bh3")
+        }
+    }
+
+    @Test fun `each pack ticks 120 frames clean`() {
+        // No-collision-exception smoke: flying packs (aj 1/4) run the
+        // ground-rule collision until the `dL` stamp grid (k.java:4405)
+        // is ported, so entities may legitimately cull — this only
+        // asserts the sim advances without throwing.
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            w.stateL(8)
+            repeat(120) { w.tick(emptyList()) }
+        }
+    }
+
+    @Test fun `visual layer gating matches bh table`() {
+        // Layer ids: 0=et, 1=ep, 2=eu, 3=er. Flying packs (aj 1/4) carry
+        // no ep entry (k.java:5244-5264 `I(i)` gate on bh==3); others
+        // carry all four.
+        for ((aj) in PACKS) {
+            val w = world(aj = aj)
+            val ids = w.level.layers.map { it.id }.toSet()
+            if (aj == 1 || aj == 4) {
+                assertEquals(setOf(0, 2, 3), ids,
+                             "level$aj flying layers")
+            } else {
+                assertEquals(setOf(0, 1, 2, 3), ids,
+                             "level$aj grounded layers")
+            }
+        }
     }
 }

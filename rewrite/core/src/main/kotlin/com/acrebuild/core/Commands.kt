@@ -13,4 +13,14 @@ sealed interface Command {
      *  writes the raw 512-byte `bA` into RMS record 1 verbatim. The
      *  port carries `kBA` little-endian shorts (2 bytes per slot). */
     data class PersistBA(val record: ByteArray) : Command
+
+    /** `e.b()` (e.java:87, proven) — stop the single MMAPI `Player`
+     *  channel. The original nulls/stops/closes `b` and sets `e=-1`. */
+    object StopAudio : Command
+
+    /** `A.notifyDestroyed()` (j.java:218, proven semantic) — reached via
+     *  `j.c==11 → j.c=-1`, the EXIT menu path. `inferred` adaptation:
+     *  the gdx launcher exits the app on drain (core can't kill the
+     *  process itself). */
+    object QuitApp : Command
 }

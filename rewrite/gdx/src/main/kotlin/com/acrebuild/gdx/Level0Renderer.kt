@@ -13,7 +13,9 @@ import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.BitmapFont
+import com.badlogic.gdx.graphics.g2d.PixmapPacker
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
+import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.glutils.FrameBuffer
 import com.badlogic.gdx.utils.ScreenUtils
@@ -39,8 +41,16 @@ class Level0Renderer {
 
     private lateinit var fbo: FrameBuffer
     private lateinit var batch: SpriteBatch
-    private lateinit var white: Texture
+    private lateinit var white: TextureRegion
     private lateinit var font: BitmapFont
+    // All module pixmaps live in one atlas: SpriteBatch draws of regions on
+    // the same page cost no texture switch; before this, every module was a
+    // standalone Texture and each draw flushed + re-uploaded the batch (~0.2
+    // fps on a software GL emulator). `white` is a 1x1 atlas pixel so HUD
+    // fills stay on the same texture.
+    private lateinit var packer: PixmapPacker
+    private lateinit var atlas: TextureAtlas
+    private val drawScratch = TextureRegion()
     /** `bW`/`y` = pack-1 entries 1/3 (k.java:3966-3967) — the game's two
      *  bitmap fonts. Glyph ids index each clip's OBJECT space (shared
      *  charmap `j.f(2)` = pack-1 entry-2). `l()` → palette variant. */
@@ -52,6 +62,8 @@ class Level0Renderer {
     // resolved lazily by filename substitution (b.aH slot, b.java:2436).
     private val clipModules = HashMap<Int, Array<TextureRegion?>>()
     private val clipPalettes = HashMap<Int, HashMap<Int, TextureRegion>>()
+    private val clipCanonical = HashMap<Int, Int>()
+    private val paletteTextures = HashSet<Texture>()
     private val clipDims = HashMap<Int, Array<Pair<Int, Int>>>()
     private var clips: Map<Int, Clip> = emptyMap()
 
@@ -60,36 +72,51 @@ class Level0Renderer {
         fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
         font = BitmapFont()
-        Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
-            setColor(1f, 1f, 1f, 1f); fill()
-            white = Texture(this); dispose()
-        }
         clips = world.clips
         val charmap = com.acrebuild.core.FontClip.loadCharmap(
             Gdx.files.internal("fonts/charmap.bin").readBytes())
         fontW = com.acrebuild.core.FontClip(clips[91]!!, charmap, 4)
         fontY = com.acrebuild.core.FontClip(clips[92]!!, charmap, 4)
+        packer = PixmapPacker(2048, 2048, Pixmap.Format.RGBA8888, 2, true)
+        Pixmap(1, 1, Pixmap.Format.RGBA8888).apply {
+            setColor(1f, 1f, 1f, 1f); fill()
+            packer.pack("white", this); dispose()
+        }
+        // dedupe: aliased pack ids (clips[12]===clips[94]) share the same
+        // Clip object — pack its pixmaps once under the first key.
+        val canonical = HashMap<Clip, Int>()
         for ((packId, clip) in clips) {
-            val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
             val dims = Array(clip.moduleNames.size) { clip.moduleWidth(it) to clip.moduleHeight(it) }
             // positive keys are clip packs (clips/clipN/), negative keys are
             // negated tileset ids (level0/tilesetN/) — compute, don't map:
             // every new clip slice used to crash here when the when() lagged.
             val base = if (packId >= 0) "clips/clip$packId/modules"
                        else "level0/tileset-${-packId}/modules"
+            val canon = canonical.getOrPut(clip) { packId }
+            if (canon == packId) {
+                for (i in clip.moduleNames.indices) {
+                    // aU==2 non-pixel modules are empty-name slots in the blob.
+                    if (clip.moduleNames[i].isEmpty()) continue
+                    val file = Gdx.files.internal("$base/${clip.moduleNames[i]}")
+                    if (!file.exists()) continue
+                    val pm = Pixmap(file)
+                    packer.pack("$packId/$i", pm)
+                    pm.dispose()
+                }
+            }
+            clipCanonical[packId] = canon
+            clipDims[packId] = dims
+        }
+        atlas = packer.generateTextureAtlas(Texture.TextureFilter.Nearest,
+            Texture.TextureFilter.Nearest, false)
+        white = atlas.findRegion("white")!!
+        for ((packId, clip) in clips) {
+            val regs = arrayOfNulls<TextureRegion>(clip.moduleNames.size)
+            val canon = clipCanonical[packId]!!
             for (i in clip.moduleNames.indices) {
-                // aU==2 non-pixel modules are empty-name slots in the blob.
-                if (clip.moduleNames[i].isEmpty()) continue
-                val file = Gdx.files.internal("$base/${clip.moduleNames[i]}")
-                // aliased pack ids (e.g. clips[12]=clips[94]) share module
-                // metadata but resolve a pack dir that may not be converted.
-                if (!file.exists()) continue
-                val t = Texture(file)
-                t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
-                regs[i] = TextureRegion(t)
+                regs[i] = atlas.findRegion("$canon/$i")
             }
             clipModules[packId] = regs
-            clipDims[packId] = dims
         }
     }
 
@@ -128,8 +155,11 @@ class Level0Renderer {
                 .replace("-palette-00-", "-palette-%02d-".format(palette))
             val fh = Gdx.files.internal("$dir/$variant")
             if (!fh.exists()) return@getOrPut base
+            // palette variants are rare: pack them standalone so the hot
+            // atlas path is never invalidated by a late variant upload.
             val t = Texture(fh)
             t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
+            paletteTextures += t
             TextureRegion(t)
         }
     }
@@ -138,7 +168,10 @@ class Level0Renderer {
         val src = moduleRegion(pack, m, palette) ?: return
         val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
         val t = transform and 7
-        val region = TextureRegion(src)
+        // shared scratch: setRegion resets the uv box to `src`, flips then
+        // mutate only this instance — draw() samples the values immediately.
+        val region = drawScratch
+        region.setRegion(src)
         var rot = 0f
         var dw = w; var dh = h
         when (t) {
@@ -549,8 +582,7 @@ class Level0Renderer {
                        (argb and 255) / 255f,
                        ((argb ushr 24) and 255) / 255f)
         batch.draw(white, x0.toFloat(), (Level0World.VIEW_H - y0).toFloat(),
-                   0f, 0.5f, len, 1f, 1f, 1f, rot,
-                   0, 0, white.width, white.height, false, false)
+                   0f, 0.5f, len, 1f, 1f, 1f, rot)
         batch.setColor(1f, 1f, 1f, 1f)
     }
 
@@ -1071,8 +1103,9 @@ class Level0Renderer {
             if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
                 drawEntity(world, e.ad!!, camX, camY); e.ad!!.advanceAnim()
             }
-            // ag()→ah() ghost-trail draw — `a` card producer unported
-            // (i.java:19605); `z2==0` bubble tick arm lives in the sim.
+            // `iVar2.ag() → iVar2.ah()` (k.java:2920-2921, proven): the
+            // per-entity ghost-trail draw, after the entity's own blit.
+            if (e.hasTrail()) drawGhostTrail(e, camX, camY)
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
@@ -1630,6 +1663,37 @@ class Level0Renderer {
     private val boArt = arrayOf(
         intArrayOf(0, -1), intArrayOf(3, 1), intArrayOf(5, 2), intArrayOf(6, 3))
 
+    /** `i.ah()` (i.java:19648-19683, proven): the 5-dot afterimage trail.
+     *  Each live dot — `(x != ak && x > -200) || (y != al && y > -120)` —
+     *  draws the entity's clip at armed-S anim `trailAnim` (`a.e`), frame
+     *  `trailFrame()` (`a.f` at the card clock), alpha `255*(100-i*20)/100`
+     *  (`d.g(cW,…)` palette fade — `a(z2,i)` hardcodes `cV=true` so the
+     *  `d.h(cW,i+2)` palette-remap branch is dead for this path), flip
+     *  bit `|=1` by `av`, at world pos `cU[i]` minus `k.O`/`k.P`. The
+     *  trailing `d.g(cW,255)`/`d.h(cW,1)` restore is render-side only —
+     *  the port never mutates the clip palette. Dots draw at palette 0
+     *  (row `cW=0` is the one the fade touches — `inferred` for entities
+     *  running a non-0 variant). */
+    private fun drawGhostTrail(e: Entity, camX: Int, camY: Int) {
+        val t = e.cU ?: return
+        val clip = e.clip ?: return
+        val pack = clipPackOf(clip) ?: return
+        val anim = e.trailAnim
+        if (anim < 0 || anim >= clip.animCount()) return
+        val frame = e.trailFrame()
+        if (frame < 0 || frame >= clip.frameCount(anim)) return
+        for (i in 0 until 5) {
+            val x = t[i * 2]; val y = t[i * 2 + 1]
+            if (!((x != e.ak && x > -200) || (y != e.al && y > -120))) continue
+            val fd = clip.frameDraw(anim, frame, if (e.av) 1 else 0)
+            val obj = clip.remap(e.remapTable, fd.module)
+            batch.setColor(1f, 1f, 1f, (255 * (100 - i * 20) / 100) / 255f)
+            drawObject(pack, obj, x - camX - fd.dx, y - camY - fd.dy,
+                       fd.transform, palette = 0)
+            batch.setColor(1f, 1f, 1f, 1f)
+        }
+    }
+
     private fun drawEntity(world: Level0World, e: Entity, camX: Int, camY: Int) {
         // `aU()` (i.java:3047 → :8989-9143, proven): ax10 early-outs of
         // the blit path entirely — before the clip checks (zones carry
@@ -1803,9 +1867,8 @@ class Level0Renderer {
     fun dispose() {
         fbo.dispose(); batch.dispose()
         if (::font.isInitialized) font.dispose()
-        if (::white.isInitialized) white.dispose()
-        clipModules.values.forEach { arr ->
-            arr.filterNotNull().forEach { it.texture.dispose() }
-        }
+        if (::atlas.isInitialized) atlas.dispose()
+        if (::packer.isInitialized) packer.dispose()
+        paletteTextures.forEach { it.dispose() }
     }
 }
