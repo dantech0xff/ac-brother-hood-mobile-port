@@ -12599,11 +12599,11 @@ class Slice128Test {
     }
 
     @Test fun `S43 aQ!=3 keeps the cell ladder`() {
-        val w = MarkerWorld()
+        // head a(an()) rescan recomputes aQ from cells — cell=0 leaves it 0
+        val w = MarkerWorld(cell = 0)
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
         p.S = 43
-        p.aQ = 0; p.aR = 0; p.aS = 0
         fsm.tick(p, Pad())
         assertEquals(43, p.S, "no dismount without marker-3")
         assertEquals(1536, p.aj)
@@ -12705,12 +12705,13 @@ class Slice129Test {
     }
 
     @Test fun `comboArm falls through when footing lost g2469`() {
-        // !aZ && a==null after ay() → a(0) — enterFall before combo logic
-        val w = Slice128Test.MarkerWorld(cell = 20)
+        // !aZ && a==null after ay() → a(0) — enterFall before combo logic.
+        // aZ comes out of the head rescan: only aR==18 keeps it false.
+        val w = Slice128Test.MarkerWorld(cell = 18)
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
         p.S = 67; p.T = 1; p.av = false
-        p.aZ = false; p.standingOn = null
+        p.standingOn = null
         fsm.tick(p, Pad())
         assertEquals(43, p.S, "lost footing → a(0) enterFall (g.java:2473)")
     }
@@ -12891,12 +12892,15 @@ class Slice132Test {
     }
 
     @Test fun `S12 wall face falls to the S33 rebound g1342`() {
-        val w = Slice128Test.MarkerWorld(cell = 20)
+        // head rescan recomputes the strip fields — stage real geometry:
+        // right strip col 10 solid from row 3 down (aU=20, aY=9-3+1=7), col
+        // 11 solid for z()'s push column; head-row cells 0 → aO==0 gate.
+        val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
+            if (cx == 11 || (cx == 10 && cy >= 3)) 20 else 0 })
         val fsm = PlayerFsm(w)
         val p = playerAt(200, 100)
-        p.S = 12; p.ag = 512; p.aO = 0; p.co = 3
-        p.aU = 20                              // i9 side-strip in [19,24)
-        p.aY = 7                               // i8 ∉ {1,2,3}
+        p.W[1] = 0; p.W[3] = 200               // deep strip → aY==7
+        p.S = 12; p.ag = 512; p.co = 3
         fsm.tick(p, Pad())
         assertEquals(33, p.S, "co>2 && z() && !ak() → i(33) (g.java:1350)")
         assertEquals(-4096, p.ah)
@@ -13405,9 +13409,11 @@ class Slice137Test {
 
     @Test fun `S102 cling grounded runs l consume g2737`() {
         Entity.gq = false; Entity.gf = null
-        val w = Slice134Test.PassWorld(cell = 0)
+        // feet cell 12 → aR=12 → aZ stays true through the head rescan
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 12 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 102; p.aZ = true; p.aC = 18
+        val p = mk(200, 100); p.S = 102; p.aC = 18
         fsm.tick(p, Pad())
         assertEquals(11, p.S, "l() settle folds to S11")
         assertEquals(18, p.aC, "aC untouched when grounded")
@@ -13415,9 +13421,11 @@ class Slice137Test {
 
     @Test fun `S102 cling countdown expiry flings g2741`() {
         Entity.gq = false
-        val w = Slice134Test.PassWorld(cell = 0)
+        // feet cell 4 → aR=4 (wall edge marker); <10 non-5 → aZ false
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 0; p.aR = 4
+        val p = mk(200, 100); p.S = 102; p.aC = 0
         fsm.tick(p, Pad())
         assertEquals(43, p.S, "aC<=0 → a(0) fling")
         assertEquals(131, p.al, "fling's +10 plus the arm's +21 drop")
@@ -13426,9 +13434,10 @@ class Slice137Test {
 
     @Test fun `S102 cling dir-held enters shimmy g2745`() {
         Entity.gq = false
-        val w = Slice134Test.PassWorld(cell = 0)
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
+        val p = mk(200, 100); p.S = 102; p.aC = 18
         val pad = Pad(); pad.held = Pad.M_LEFT
         fsm.tick(p, pad)
         assertEquals(332, p.S)
@@ -13437,9 +13446,10 @@ class Slice137Test {
 
     @Test fun `S102 cling up-edge kicks to S17 in E-zone g2751`() {
         Entity.gq = false; Entity.gE = true   // inside S31 zone → !E tail off
-        val w = Slice134Test.PassWorld(cell = 0)
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 102; p.aZ = false; p.aC = 18; p.aR = 4
+        val p = mk(200, 100); p.S = 102; p.aC = 18
         p.cq = true                           // airborne latch — tail armed
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
@@ -13460,9 +13470,10 @@ class Slice137Test {
 
     @Test fun `S332 shimmy anim-end re-enters cling g4124`() {
         Entity.gq = false
-        val w = Slice134Test.PassWorld(cell = 0)
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 332; p.aZ = false; p.aR = 4
+        val p = mk(200, 100); p.S = 332
         p.ag = 999; p.ah = 999
         fsm.tick(p, Pad())
         assertEquals(102, p.S, "r() → i(102)")
@@ -13472,9 +13483,10 @@ class Slice137Test {
 
     @Test fun `S332 shimmy up-edge kicks to S17 in E-zone g4113`() {
         Entity.gq = false; Entity.gE = true
-        val w = Slice134Test.PassWorld(cell = 0)
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 4 else 0 })
         val fsm = PlayerFsm(w)
-        val p = mk(200, 100); p.S = 332; p.aZ = false; p.aR = 4
+        val p = mk(200, 100); p.S = 332
         p.cq = true                           // airborne latch — tail armed
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
@@ -13512,11 +13524,11 @@ class Slice137Test {
 
     @Test fun `S317 wall-hit stops run and releases link out-of-zone g4080`() {
         Entity.gq = false; Entity.gf = null
-        val w = Slice134Test.PassWorld(cell = 0)
+        // feet cell 12 → aR=12 ≥12 → wall/contact arm fires
+        val w = Slice134Test.PassWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 5) 12 else 0 })
         val fsm = PlayerFsm(w)
         val p = mk(200, 100, av = true); p.S = 317
-        p.bb = true                              // hitWall via ag<0 → bb
-        p.aR = 4
         val marker = Entity(14, null); p.ae = marker
         fsm.tick(p, Pad())
         assertEquals(0, p.ag, "ag zeroed on wall contact")
@@ -13680,7 +13692,9 @@ class Slice138Test {
  *  i.ct[] card frames; aB progress vs Z[2]; aA script uid Z[4]→Z[3];
  *  consumed reset P|=8192 → self-remove; claim bind h/k(k.s(aA)). */
 class Slice139Test {
-    open class ClaimZoneWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
+    open class ClaimZoneWorld(cell: Int = 0,
+                              cellFn: ((Int, Int) -> Int)? = null) :
+        Slice128Test.MarkerWorld(cell, cellFn) {
         val removed = mutableListOf<Entity>()
         val sfxCalls = mutableListOf<Int>()
         override fun removeEntity(e: Entity) { removed += e }
@@ -15036,7 +15050,9 @@ class Slice149Test {
  *  gk fling), 34 (L1a0a wall-kick + l() input + latch clear). */
 class Slice150Test {
 
-    class S150World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
+    class S150World(cell: Int = 0,
+                    cellFn: ((Int, Int) -> Int)? = null) :
+        Slice139Test.ClaimZoneWorld(cell, cellFn) {
         var vMask = 0
         var latchClears = 0
         override fun padHeld(mask: Int): Boolean = (vMask and mask) != 0
@@ -15103,11 +15119,16 @@ class Slice150Test {
     }
 
     @Test fun `S34 wall cell runs l plus latch clear`() {
-        // L1a0a — aT==20 keeps a(0) off; aR=5 → l() + k.v()
-        val w = S150World(cell = 12)
+        // L1a0a — aT==20 keeps a(0) off; aR=5 → l() + k.v(). The head
+        // rescan recomputes the flags: stage a 20 cell in the left strip
+        // column and a 5 under the feet.
+        val w = S150World(cellFn = { cx, cy ->
+            if (cx == 9 && cy == 4) 20 else if (cx == 10 && cy == 5) 5 else 0 })
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
-        p.S = 34; p.av = true; p.aT = 20; p.aR = 5
+        p.ak = 200; p.al = 100
+        p.W[0] = 190; p.W[2] = 210; p.W[1] = 80; p.W[3] = 100
+        p.S = 34; p.av = true
         fsm.tick(p, Pad())
         assertEquals(1, w.latchClears)
     }
@@ -15404,19 +15425,19 @@ class Slice159Test {
         w.gP = 0
         w.player.setAnim(90)
         w.player.clip = null               // r() -> animFinished
-        w.player.aR = 20
+        standOn(w, w.player)               // real ground → aR≥20 after rescan
         w.playerFsm.tick(w.player, w.pad)
         assertEquals(0, w.player.S); assertTrue(w.player.gD)
     }
 
     @Test fun `S90 anim end mid cell flings a0 g2660`() {
-        val w = world()
-        w.gP = 0
-        w.player.setAnim(90)
-        w.player.clip = null
-        w.player.aR = 0; w.player.aS = 0
-        w.playerFsm.tick(w.player, w.pad)
-        assertEquals(43, w.player.S); assertEquals(1536, w.player.aj)
+        // airborne cells — the head rescan leaves aR/aS at 0 → a(0) fling
+        val w = Slice128Test.MarkerWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.S = 90
+        fsm.tick(p, Pad())
+        assertEquals(43, p.S); assertEquals(1536, p.aj)
     }
 
     @Test fun `S12 entry clears gD g1316`() {
@@ -17613,12 +17634,16 @@ class Slice187Test {
     /** L1933-L1946 (g.java:3465-3473): `aR!=2 && aO!=2 && !L()` and
      *  `aO==6` → `a(18,0,0,this)` = `g.a()` damage + `i(43)` drop. */
     @Test fun `aO6 head cell fires op18 drop`() {
-        val w = world()
-        val p = w.player
-        p.setAnim(8); p.S = 8                        // S8 arm doesn't probe
-        p.aO = 6; p.aR = 0
+        // head cell 6 via cellFn — the rescan recomputes aO from the grid
+        val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 4) 6 else 0 })
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.ak = 200; p.al = 100
+        p.W[0] = 190; p.W[2] = 210; p.W[1] = 80; p.W[3] = 100
+        p.S = 8
         val x1Before = p.x1
-        w.playerFsm.tick(p, Pad())
+        fsm.tick(p, Pad())
         assertEquals(43, p.S, "op18 → i(43) knockdown (i.java:4543)")
         assertTrue(p.x1 < x1Before, "g.a() pays u[au] damage")
     }
@@ -17626,12 +17651,17 @@ class Slice187Test {
     /** The `aR==2` gate (standing on a type-2 strip) suppresses op18
      *  even when `aO==6` (g.java:3465). */
     @Test fun `aO6 suppressed on type2 ground`() {
-        val w = world()
-        val p = w.player
-        p.setAnim(8); p.S = 8
-        p.aO = 6; p.aR = 2
-        w.playerFsm.tick(p, Pad())
-        assertEquals(8, p.S, "aR==2 → op18 arm skipped")
+        val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
+            if (cx == 10 && cy == 4) 6 else if (cx == 10 && cy == 5) 2 else 0 })
+        val fsm = PlayerFsm(w)
+        val p = Entity(0, null)
+        p.ak = 200; p.al = 100
+        p.W[0] = 190; p.W[2] = 210; p.W[1] = 80; p.W[3] = 100
+        p.S = 8
+        val x1Before = p.x1
+        fsm.tick(p, Pad())
+        assertNotEquals(43, p.S, "aR==2 → op18 arm skipped")
+        assertEquals(x1Before, p.x1, "no u[au] pay when suppressed")
     }
 }
 
@@ -17833,5 +17863,84 @@ class Slice189Test {
         p.U = p.clip!!.frameDuration(243, p.T) - 1
         w.playerFsm.tick(p, Pad())
         assertEquals(0, p.S, "S243 r() → a(0)")
+    }
+}
+
+/**
+ * Slice 190 — `g.e()` head fidelity: `a(an())` per-tick wall rescan
+ * (g.java:615, proven) now runs in `tick()` before dispatch, refreshing
+ * `bb`/`bc`/`aT`/`aU`/`aO`/`aR`/`aZ` every tick for every state — the
+ * `an()` whitelist (g.java:335, `rescanEligible`) only gates the wall-push
+ * resolve inside `i.a(z2)`. Also the head terminal-velocity clamp
+ * (g.java:602-607): `ah>5120 → ah=5120; cn++` else `cn=0`.
+ */
+class Slice190Test {
+
+    private fun mk(ak: Int, al: Int): Entity {
+        val p = Entity(0, null); p.ak = ak; p.al = al
+        p.W[0] = ak - 10; p.W[2] = ak + 10
+        p.W[1] = al - 20; p.W[3] = al
+        return p
+    }
+
+    @Test fun `rescanEligible follows the an whitelist`() {
+        val p = Entity(0, null)
+        // g.java:335 verbatim — S<=43, 150, 67-69, 199, 216, 217, 298,
+        // plus the redundant 20/49/243 and 259-266 blocks.
+        intArrayOf(0, 11, 43, 150, 67, 68, 69, 199, 216, 217, 298,
+                   20, 49, 243, 259, 260, 266).forEach {
+            p.S = it
+            assertTrue(p.rescanEligible(), "S$it inside an()")
+        }
+        intArrayOf(44, 46, 66, 70, 102, 151, 218, 267, 297, 300,
+                   317, 332).forEach {
+            p.S = it
+            assertFalse(p.rescanEligible(), "S$it outside an()")
+        }
+    }
+
+    @Test fun `head rescan refreshes strip flags before the arm`() {
+        // left strip column solid ≥18 → bb/aT refresh in the head;
+        // a stale pin cannot hide it from the dispatch.
+        val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
+            if (cx == 9) 20 else 0 })
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 0; p.aT = 9; p.bb = false
+        fsm.tick(p, Pad())
+        assertEquals(20, p.aT, "aT recomputed from the strip column")
+        assertTrue(p.bb, "bb fresh from the same rescan")
+    }
+
+    @Test fun `an whitelist gates the push not the probes`() {
+        // same left-column wall for both states: S34 (inside an()) gets
+        // the z2 wall-push (+10), S102 (outside) keeps ak but still gets
+        // fresh strip flags — i.java:870-925.
+        val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
+            if (cx == 9) 20 else 0 })
+        val fsm = PlayerFsm(w)
+        val s34 = mk(200, 100); s34.S = 34; s34.av = true
+        fsm.tick(s34, Pad())
+        assertEquals(210, s34.ak, "S34 inside an() → wall push +10")
+        val s102 = mk(200, 100); s102.S = 102; s102.aC = 18
+        fsm.tick(s102, Pad())
+        assertEquals(200, s102.ak, "S102 outside an() → no push")
+        assertTrue(s102.bb, "…but probes still refreshed bb")
+    }
+
+    @Test fun `terminal clamp caps ah and counts capped ticks`() {
+        Entity.gCn = 0
+        val w = Slice128Test.MarkerWorld(cell = 0)
+        val fsm = PlayerFsm(w)
+        val p = mk(200, 100); p.S = 43; p.ah = 6000
+        fsm.tick(p, Pad())
+        assertEquals(5120, p.ah, "ah capped at the head (g.java:602)")
+        assertEquals(1, Entity.gCn, "cn++ on the capped tick")
+        p.ah = 7000
+        fsm.tick(p, Pad())
+        assertEquals(2, Entity.gCn, "cn counts consecutive capped ticks")
+        p.ah = 100
+        fsm.tick(p, Pad())
+        assertEquals(0, Entity.gCn, "cn resets the tick ah drops below")
+        Entity.gCn = 0
     }
 }

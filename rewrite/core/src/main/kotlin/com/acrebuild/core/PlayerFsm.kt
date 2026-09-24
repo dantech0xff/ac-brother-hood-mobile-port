@@ -99,13 +99,18 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.Z[0] <= 0) p.aA = (p.aA and -17) or 256
         }
         if (world.playerDead()) p.setAnim(50)               // g.java:576
-        Entity.gCn++                                        // g.java:580 (dead)
         if (world.kAA > 0 && p.aA > 1) p.aA = p.aA or 1   // g.java:581-583
+        // g.java:602-607 (proven): the terminal-velocity clamp lives in the
+        // e() head — `cn` counts consecutive capped ticks and resets the
+        // moment `ah` falls below 5120. (Write-only in the original —
+        // debug counter, no live consumer.)
+        if (p.ah > 5120) { p.ah = 5120; Entity.gCn++ } else Entity.gCn = 0
+        // g.java:615 (proven): `a(an())` — the per-tick wall rescan. The
+        // `an()` whitelist only gates the resolve half of `i.a(z2)`;
+        // `bb`/`bc`/`aT`/`aU` refresh on every state.
+        p.collideSides(world, p.rescanEligible())
         if (world.bh3) flightTick(p, pad)                      // g.n() bh3 arms
         else { dispatch(p, pad); postTail(p, pad) }
-        // g.java:578 (proven): terminal fall velocity 5120 (20px/tick =
-        // one cell) — without it long descents tunnel through floors.
-        if (p.ah > 5120) p.ah = 5120
     }
 
     private fun dispatch(p: Entity, pad: Pad) {

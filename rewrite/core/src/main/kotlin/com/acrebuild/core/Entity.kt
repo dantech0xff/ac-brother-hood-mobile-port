@@ -1001,7 +1001,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun refreshBoxes() {
         if (ax == 14 || ax == 37 || ax == 10 || ax == 5 || ax == 42) return
         val c = clip
-        if (c == null || S < 0 || T < 0) { W.fill(0); X.fill(0); Y.fill(0); return }
+        // clipless entities keep W as staged at spawn — the JAR never runs
+        // t() on one (bi[] always assigns a clip); records/tests set W directly.
+        if (c == null) return
+        if (S < 0 || T < 0) { W.fill(0); X.fill(0); Y.fill(0); return }
         val flags = drawFlags()
         val fi = c.frameIndex(S, T)
         val dx = c.frameDx[fi]; val dy = c.frameDy[fi]
@@ -3071,6 +3074,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
         242, 243, 263, 264, 265, 266, 358 -> true
         else -> false
     }
+
+    /** `an()` (g.java:335, proven): the `a(z2)` resolve gate evaluated in
+     *  the `e()` head every tick — `S<=43 || S==150 || {67-69,199,216,217,
+     *  298} || {20,49,243,259-266}`. (S20/S49/S243 overlap the `<=43`
+     *  range — verbatim.) The side-strip probes run either way; this flag
+     *  only gates the wall-push resolve inside `a(z2)`. */
+    fun rescanEligible(): Boolean =
+        S <= 43 || S == 150 || (S in 67..69) || S == 199 || S == 216 ||
+            S == 217 || S == 298 || (S in 259..266) || S == 20 || S == 49 ||
+            S == 243
 
     /**
      * `i.u()` (i.java:700, proven): recompute `au` = normalized distance
