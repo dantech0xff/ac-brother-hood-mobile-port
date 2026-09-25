@@ -206,8 +206,8 @@ class Level0World(
     override val npcs = ArrayList<Entity>()
     /** `k.bd[]`/`k.be` (k.java:97/2492, proven): per-frame draw list —
      *  entities sorted into draw order by `d(i)` each frame. */
-    val drawList = arrayOfNulls<Entity>(600)
-    var drawCount = 0
+    override val drawList = arrayOfNulls<Entity>(600)
+    override var drawCount = 0
     val pendingRemove = HashSet<Entity>()     // k.c() drain buffer
 
     // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
