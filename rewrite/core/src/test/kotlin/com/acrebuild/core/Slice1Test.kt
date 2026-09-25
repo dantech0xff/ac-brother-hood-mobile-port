@@ -23376,6 +23376,91 @@ class Slice245Test {
             "minAl=$minAl respawnAl=$respawnAl marks=$marks")
     }
 
+    @Test fun `mission-1 top claim-QTE zone binds script-1 and wins`() {
+        // Slice-266 win-chain verdict — level-1 CAN be completed, via a
+        // scripted QTE at the canyon TOP, not by surviving the climb.
+        // ax10-uid7 (S31, record f14=8) sits at (456,481) with
+        // W=[456,481,764,705]; Z[3]=rf(14)=8 = the done-sentinel script
+        // uid (NpcFsm.kt:1125-1127 `Z={r8[4],r8[11],r8[13],r8[14],
+        // r8[15]}`). Player overlap arms the lane sequence
+        // (Z[1]=2 → nibble pack {0,0,0,2} → single live lane, CS[2]=
+        // 16388 UP); the matching press at j>3 sets `aA=Z[3]=8`
+        // (NpcFsm.kt:1931), the draw side (aU(), NpcFsm.kt:10524-10525)
+        // latches `nl=1` on bh3, and the consumed arm binds
+        // `k.s(8)` = script index 1 = `scripts.bin` s1 (uid8):
+        // a 62-step type-2 block that walks uid1 (the ax25 record = the
+        // player) through op21 waypoints 511→-60 with a type-1 camera
+        // block, ending `op37[1]` → `screenL(15)` (Entity.kt:2308).
+        val w = world(aj = 1)
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        // Teleport into the S31 zone box — the claim mechanics under
+        // test (the ~600t leg verdict on REACHING it lives in the shaft
+        // bot above).
+        p.ak = 600; p.N = 600 shl 8
+        p.al = 540; p.O = 540 shl 8
+        p.ah = 0; p.ag = 0
+        val marks = mutableListOf<String>()
+        var zref: com.acrebuild.core.Entity? = null
+        var won = false; var bound = false; var t = 0
+        while (t++ < 300) {
+            // `missionWon` (not jC==15): stateL(15) immediately
+            // redirects to i=22 (medal screen) or i=10 (level select)
+            // when stamps/next-mission conditions hold — the flag is
+            // set on the iArg==15 entry itself.
+            if (w.missionWon) { won = true; break }
+            // Camera follows the player: au = offscreen score
+            // (|ak-(kO+200)|/400 + |al-(kP+120)|/120) — pinning to the
+            // player keeps au≈0 AND lets the et stamp ring roll the
+            // way it does in real flight (walls follow camY).
+            w.kP = p.al - 120; w.kO = p.ak - 200
+            // Lane prompt CS[2]=16388 (UP) — press every tick; the live
+            // lane consumes one edge, later presses are no-ops.
+            w.pad.e(16388); w.tick(emptyList()); w.pad.releaseFlush()
+            // Hold the player in the cy26-28 air pocket (x520-640, below
+            // the cy20-25 stamped-wall band). The chain under test is
+            // zone→script-1→op37[1]→screenL(15); the ~70-step waypoint
+            // ride crosses a 21-stamped band whose wrap stamps churn
+            // with the ring — pinning keeps the player alive while the
+            // script's key counter climbs to key62. (The ride path
+            // itself stays `inferred`.)
+            p.ak = 560; p.N = 560 shl 8
+            p.al = 560; p.O = 560 shl 8
+            p.ah = 0; p.ag = 0
+            val z = w.npcs.firstOrNull { it.ax == 10 && it.S == 31 }
+            if (z != null && z.claimActive()) bound = true
+            if (t % 25 == 0 || (z?.claimActive() == true && t % 8 == 0)) {
+                marks += "t$t jC=${w.jC} S=${p.S}@${p.ak},${p.al} " +
+                    "z(aB=${z?.aB},m=${z?.m},aA=${z?.aA},nl=${z?.nl}," +
+                    "claim=${z?.claimActive()},step=${z?.scriptStep})"
+            }
+            if (z != null && zref == null) zref = z
+        }
+        println("WINTOP won=$won bound=$bound marks=$marks")
+        // Verdict (proven — NpcFsm.kt:1826-1947 S31 arm + i.java:2205
+        // record fields + scripts.bin s1-key62): the zone arms its lane
+        // QTE on overlap, the UP press resolves it, `aA=8` binds
+        // script-1 via `k.s(8)` = `kEh.indexOf(8)` = 1 (the port fixed
+        // `w.kS` — the Entity stub that always returns -1 — to
+        // `w.kSIndex`), and the 62-step scripted ascent consumes the
+        // blk1 key62 `op37[1]` → `screenL(15)` → `missionWon`.
+        // Faithful detail: `i.be` is the cell-21 death-slide latch
+        // (static, set by `canyonCollide`'s aT/aU==21 arm at
+        // Entity.kt:1278-1281 and the S10 out-of-band kill at
+        // NpcFsm.kt:1316) — ANY cell-21 death in the canyon removes
+        // every S31 zone via `be → k.c(this)` (i.java:12350).
+        // Reaching (456,481) by play is the unfixed part — see the
+        // shaft bot's ~600t-leg verdict.
+        assertTrue(won,
+            "top-zone win chain: overlap → lane QTE → aA=8 → " +
+            "bindScript(k.s(8)) → script-1 ascent → screenL(15) — " +
+            "bound=$bound marks=$marks")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
