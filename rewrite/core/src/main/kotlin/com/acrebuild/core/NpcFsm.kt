@@ -7134,7 +7134,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
                 val r03 = 100 - w.kAE
                 w.kAF = if (e.aB >= r03) r03 else e.aB
                 w.iBh = 0                                  // bh = 0 (i.bh)
-                // e = 30 — i.e static unmapped (script var)
+                w.iE = 30                                  // i.e = 30 (i.java:39329)
                 if (w.kAJ != 0) { w.kX = w.kAJ; w.kAJ = 0 }
                 w.sfx(25)
             }

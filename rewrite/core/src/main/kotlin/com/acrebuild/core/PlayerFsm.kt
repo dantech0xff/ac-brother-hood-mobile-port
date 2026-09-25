@@ -2366,6 +2366,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         var z2 = true
         var z3 = true
         world.kAI++
+        // `i.B()` (g.java:13907, proven): canyon-wall collide — the call's
+        // return value is dead in n(); it runs for its side effects only.
+        p.canyonCollide(world)
         // B() (k.java:1619, proven): mission BGM — `aJ==1 → z(9)` else
         // `z(ee[aj])`; per-tick in n(), audioPlay dedups the live track.
         if (world.kAJ == 1) world.sfx(9) else { val t = world.kEE[world.kAj]; if (t != -1) world.sfx(t) }

@@ -1226,6 +1226,125 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
+     * `i.B()` (i.java:3844-4204, proven) — the flying-mode canyon collide
+     * run for side effects at `g.n()`'s head (g.java:13907; return value
+     * dead there). `i.w` first-call latch → dead-drag arm →
+     * `k.ai || i.e>0` gate:
+     *  - L36 (director active or post-impact window): clamp `ak` into the
+     *    `[k.O, k.O+400]` camera band, %260 y-wrap 4-corner probes, then
+     *    `b()`/`c()` extrusion on a fully-embedded edge (the left arm is
+     *    skipped when `k.ai` routes the `c()`-probe open side).
+     *  - L149 (`!k.ai && i.e<=0` quiet path): same probes, cell-21 kill
+     *    (`i.be=1` + `i(34)` + dead-drag), `!v() && al > k.P+240` →
+     *    `k.l(12)`, then the same extrude arms; falls through `t()` + 0.
+     */
+    fun canyonCollide(world: LevelCellSource): Boolean {
+        if (!world.iW) { world.iW = true; return false }          // Lc latch
+        if (world.iBe) {                                          // dead-drag arm
+            ag = 0; ah = 0; al -= world.kX
+            return false
+        }
+        if (world.kAi || world.iE > 0) {                          // L36
+            bb = false; bc = false
+            if (ak <= world.kO) ak = world.kO
+            else if (ak >= world.kO + 400) ak = world.kO + 400
+            val i7 = W[0]; val i8 = W[2]
+            val i9 = W[1] % 260 + 260; val i10 = W[3] % 260 + 260
+            aT = e(world, i7 / 20, i9 / 20); aU = e(world, i8 / 20, i9 / 20)
+            aV = e(world, i7 / 20, i10 / 20); aW = e(world, i8 / 20, i10 / 20)
+            bb = false; bc = false
+            if (aT >= 10 && aV >= 10) {                           // L118 gate
+                if (freeSideC(world)) { if (!world.kAi) slideLeftB(i7, i8, i9, world) }
+                else slideRightC(i7, i8, i9, world)               // L10f
+            } else if (aU >= 10 && aW >= 10) {                    // L118→L13b
+                if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
+                else slideRightC(i7, i8, i9, world)
+            }
+            refreshBoxes()                                        // L142 t()
+            return true
+        }
+        // L149 — quiet path: kill/fail checks + extrude.
+        val i7 = W[0]; val i8 = W[2]
+        val i9 = W[1] % 260 + 260; val i10 = W[3] % 260 + 260
+        aT = e(world, i7 / 20, i9 / 20); aU = e(world, i8 / 20, i9 / 20)
+        aV = e(world, i7 / 20, i10 / 20); aW = e(world, i8 / 20, i10 / 20)
+        bb = false; bc = false
+        if (aT == 21 || aU == 21) {                               // L1d4 kill
+            ag = 0; ah = 0; al -= world.kX
+            world.iBe = true
+            setAnim(34)
+        } else if (!yOverlapsCam(world) && al > world.kP + 240) { // L1f7
+            world.stateL(12)
+        } else if (aT >= 10 && aV >= 10) {                        // L214
+            if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
+            else slideRightC(i7, i8, i9, world)
+            refreshBoxes()
+            return true                                           // L23e
+        } else if (aU >= 10 && aW >= 10) {                        // L240
+            if (freeSideC(world)) slideLeftB(i7, i8, i9, world)   // L263
+            else slideRightC(i7, i8, i9, world)
+        }
+        refreshBoxes()                                            // L26a t()
+        return false
+    }
+
+    /** `i.b(int,int,int)` (i.java:4206-4265, proven): slide `ak` left by
+     *  right-edge-cell increments until the wrapped top-left corner is
+     *  free — up to 4 slides (r10 = 3,2,1,0), `ag=0` at the end. */
+    private fun slideLeftB(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
+        bb = true; aT = 10
+        var r10 = 3
+        while (aT >= 10) {
+            if (r10 < 0) break
+            r10--
+            ak -= (i8 % 20) + 1
+            refreshBoxes()                                        // t()
+            aT = e(world, W[0] / 20, i9 / 20)
+        }
+        ag = 0
+    }
+
+    /** `i.c(int,int,int)` (i.java:4267-4328, proven): slide `ak` right by
+     *  left-edge-cell complements until the wrapped top-right corner is
+     *  free — same 4-slide bound, `ag=0` at the end. */
+    private fun slideRightC(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
+        bc = true; aU = 10
+        var r10 = 3
+        while (aU >= 10) {
+            if (r10 < 0) break
+            r10--
+            ak += 20 - ((i7 + 20) % 20)
+            refreshBoxes()                                        // t()
+            aU = e(world, W[2] / 20, i9 / 20)
+        }
+        ag = 0
+    }
+
+    /** `i.c()` (i.java:4330-4408, proven): rings r10=1..4 probe the
+     *  wrapped-top corners at `±r10*20` — `true` when the LEFT side opens
+     *  first (→ `b()`), `false` on right-first or neither within 4 cells. */
+    private fun freeSideC(world: LevelCellSource): Boolean {
+        val i9 = W[1] % 260 + 260
+        var r10 = 1
+        while (r10 < 5) {
+            aT = e(world, (W[0] - r10 * 20) / 20, i9 / 20)
+            aU = e(world, (W[2] + r10 * 20) / 20, i9 / 20)
+            if (aT < 10) return true                              // L61→1
+            if (aU < 10) return false                             // L6c→0
+            r10++
+        }
+        return false                                              // L72→0
+    }
+
+    /** `i.v()` player arm (i.java:2155-2160 L144, proven): entity types
+     *  not whitelisted fall to `a(k.ac, Y)` — the Y box vs the camera
+     *  active rect (same predicate `flightAliveV` uses for `g.n()`). */
+    private fun yOverlapsCam(world: LevelCellSource): Boolean {
+        val ac = world.kAc ?: return true
+        return Y[0] <= ac[2] && Y[2] >= ac[0] && Y[1] <= ac[3] && Y[3] >= ac[1]
+    }
+
+    /**
      * `a()` — i.java `private void a()` :914-993 (proven). The push/contact
      * resolution run by ax9 (and S131/146 callers) against `k.aS`:
      *  - early-outs: S139 corpse; player S6 roll vs ax11; `g.a.ax==43`
@@ -4581,6 +4700,12 @@ interface LevelCellSource {
     /** `i.be` — D() camera X-lock: when set the autoscroll keeps `cA` (the
      *  `cN`-relative target write is skipped, k.java:2797). */
     var iBe: Boolean get() = false; set(_) {}
+    /** `i.w` static — `B()` first-call latch (i.java:3849; cleared in the
+     *  i.D() static reset at i.java:7166). */
+    var iW: Boolean get() = false; set(_) {}
+    /** `i.e` static — post-impact collide window: `=30` at the ax24-S20
+     *  shrine arm (i.java:39329), decays per frame (i.F() La92 :13192). */
+    var iE: Int get() = 0; set(_) {}
     /** `i.q` — gauge-charge mode: bD L326 mirrors `aB` vs sums it. */
     var iQ: Boolean
     /** `i.cC` — waypoint-phase cursor (0-6). */
