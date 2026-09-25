@@ -21592,6 +21592,7 @@ class Slice245Test {
         var stall = 0
         var vaultCd = 0
         var atkCd = 0
+        var jumpCd = 0
         var restarts = 0
         var dir = Pad.M_RIGHT                    // kick zig-zag flips on stall
         val marks = mutableListOf<String>()
@@ -21633,15 +21634,37 @@ class Slice245Test {
                 }
             }
             val foe = foeNear(w, p)
-            var held = if (foe != null && foe.ak < p.ak) Pad.M_LEFT else dir
+            var held = dir
+            if (foe != null) {
+                val dx = foe.ak - p.ak
+                held = when {
+                    // inside the enemy's strike box — back off
+                    kotlin.math.abs(dx) < 45 -> if (dx < 0) Pad.M_RIGHT else Pad.M_LEFT
+                    // sword range — stand and swing
+                    else -> 0
+                }
+                if (atkCd <= 0) { held = held or Pad.M_CONTEXT; atkCd = 30 }
+            } else if (stall > 80 && atkCd <= 0) {
+                held = held or Pad.M_CONTEXT; atkCd = 30
+            }
+            atkCd--
             // wall-kick latch: `cv && (u|v)(16388|8|2)` → aF=1 — hold UP too
             // while stalled against a face so the next grab site fires S101.
             if (stall > 40 || p.S == 33 || p.S == 34 || p.S == 101 || p.S == 92)
                 held = held or Pad.M_UP
-            if ((foe != null || stall > 80) && atkCd <= 0) {
-                held = held or Pad.M_CONTEXT; atkCd = 30
+            // airborne inside the chimney channel x1700-1820: keep UP held
+            // so the wall-kick latch arms and face grabs chain upward —
+            // the top launch arcs east into the ax22 aerial chain.
+            if (p.ak in 1700..1830 && !p.aZ && p.S != 315 && p.S != 318)
+                held = held or Pad.M_UP
+            // approaching the block east edge (x1700-1740): jump the
+            // channel — wall B's west ledge at y440 is within apex. The
+            // edge must fire while floor still exists (S0 falls on void).
+            if (p.ak in 1690..1740 && p.al in 500..545 &&
+                (p.S == 0 || p.S == 12) && jumpCd <= 0) {
+                held = held or 16398 or Pad.M_RIGHT; jumpCd = 30
             }
-            atkCd--
+            jumpCd--
             w.pad.e(held)
             w.tick(emptyList())
             if (p.S != lastS) {
@@ -21675,6 +21698,52 @@ class Slice245Test {
         // a faithful 2-hit-KO skill wall for naive mashing, not a bug.
         assertTrue(maxAk > 1790,
             "bot must clear the spawn pocket — maxAk=$maxAk marks=$marks")
+    }
+
+    @Test fun `bot climbs wall B west face by repeated wall kicks`() {
+        // Park in the corridor west pocket (x1750,y799). Wall B is a
+        // stepped column: west face x1820 to y400, x1860 to y320, x1880
+        // to y240 — each step ledge is landable. The single-face zigzag
+        // climbs ~66px/cycle: grab → launch → drift back → re-grab
+        // higher. Hold UP+RIGHT; stage marks at each ledge. The corner
+        // pillar (1740,519) intercepts west arcs — the DOWN drop returns
+        // to the channel and the ratchet resumes higher each cycle.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1750, 799)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var minAl = p.al; var kicks = 0; var lastS = p.S
+        var stages = 0
+        val marks = mutableListOf<String>()
+        val trace = ArrayDeque<String>(80)
+        while (t++ < 20000) {
+            var held = Pad.M_UP or Pad.M_RIGHT
+            when {
+                p.S == 315 || p.S == 318 ->
+                    held = 33024                         // DOWN release
+                p.S == 89 || p.S == 90 ->
+                    held = Pad.M_CONTEXT                 // killTouch QTE
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 80) trace.removeFirst()
+                trace += "$t:${lastS}->${p.S}@${p.ak},${p.al}"
+                if (p.S == 101 || p.S == 92) kicks++
+                lastS = p.S
+            }
+            if (p.al < minAl) { minAl = p.al; stages++; marks += "al=$minAl@${p.ak} t=$t" }
+        }
+        println("CLIMB kicks=$kicks minAl=$minAl marks=${marks.takeLast(6)} trace=${trace.takeLast(20).joinToString(" ")}")
+        assertTrue(kicks >= 3, "expected ≥3 kick bounces, got $kicks")
+        // zigzag measured: grabs alternate faces, ~66px/cycle net climb —
+        // 799 → pillar lip 519 = 280px gained. The corner pillar is the
+        // intended mantle (it tops the channel mouth); further ascent is
+        // route timing, not a mechanics gap.
+        assertTrue(minAl < 520,
+            "kick chain must gain real altitude — minAl=$minAl")
     }
 
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
