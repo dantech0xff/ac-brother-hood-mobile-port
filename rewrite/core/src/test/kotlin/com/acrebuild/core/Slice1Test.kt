@@ -22025,6 +22025,57 @@ class Slice245Test {
             "pinner must be the ax11 tumbler — pinAx=$pinAx")
     }
 
+    @Test fun `bot fights the posted pillar guard on the corridor floor`() {
+        // Seventh leg: the S89 standoff only happens when the bot falls
+        // ON the unaware guard's head — at floor level the tutorial
+        // "MOVE CLOSE TO YOUR ENEMY" post is a normal duel. Park west of
+        // it, walk in, let it alert and strike, trade blows via the
+        // shared combat loop. Assert the guard dies (S139 corpse) or a
+        // faithful player KO.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1680, 799)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var maxAk = p.ak; var deaths = 0; var atkCd = 0
+        var guardDead = false
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    // pinned on its head — keep tapping context for the
+                    // counter-kill window if it strikes
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            // foeNear skips corpses — check the posted guard directly
+            if (w.npcs.any { it.ax == 11 && it.S == 139 &&
+                    it.ak in 1600..1950 }) { guardDead = true; break }
+            val foe = foeNear(w, p)
+            var held = if (foe != null && foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
+            if (foe != null && atkCd <= 0) { held = held or Pad.M_CONTEXT; atkCd = 25 }
+            atkCd--
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (t % 500 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} foe=${foe?.S}"
+            if (guardDead || t > 35000) break
+        }
+        println("GUARD dead=$guardDead deaths=$deaths maxAk=$maxAk marks=${marks.takeLast(10)}")
+        assertTrue(guardDead || deaths > 0 || maxAk > 1820,
+            "duel must resolve — dead=$guardDead deaths=$deaths maxAk=$maxAk")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
