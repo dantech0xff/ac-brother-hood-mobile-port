@@ -2806,15 +2806,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
             w.kZ = false; w.kAa = false; w.kAb = false
             if (p.ga != null) p.ga = null
             val held = p.bM
-            if (held == null || held.ax != 13) {      // L12
-                w.kN()
-                w.iZ = true                           // i.z static (i.java:110)
-            } else {                                  // ax13 unlink arm
+            // i.java:54646-54680 (proven): the ax13 unlink arm runs only
+            // when the held entity IS an ax13; `k.n()` + `i.z=1` at L5c are
+            // UNCONDITIONAL — both branches join at L5c before them.
+            if (held != null && held.ax == 13) {      // ax13 unlink arm
                 held.aA = 0
                 held.bM = null
                 p.bM = null
                 p.aA = p.aA and -65
             }
+            w.kN()                                    // L5c — unconditional
+            w.iZ = true                               // i.z static (i.java:110)
         }
         // L13
         cd[2] = false
