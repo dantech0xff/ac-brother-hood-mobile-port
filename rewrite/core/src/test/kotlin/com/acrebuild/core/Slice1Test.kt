@@ -22416,4 +22416,92 @@ class Slice245Test {
             "east run must reach x3830 under the overhang — " +
             "maxAk=$maxAk deaths=$deaths")
     }
+
+    @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
+        // Twelfth leg — the ax10-S16 door deposits the player on the upper
+        // tier (~3812,559 over the y580 step). East is blocked by the
+        // x4000-4060 '20' stack (aY=4 face → S12's arm faithfully has no
+        // exit — proven dead-stall, g.java L16c0), so the route is UNDER
+        // it: aZ+DOWN drops through '5'@580 (a(257,8) — unreachable inside
+        // S12, so the approach hop-runs), S12 autoruns the walkway below
+        // the shelf through the ax44 slam-gate row (their W is all-zero —
+        // crush can't fire), the x4260 '20' column face gives S33 climb →
+        // pulsed-UP lip-scan → S92 mantle onto the '5'@580 east lip, the
+        // S37 monkey-bar shimmy carries east past the lip, S43 drops onto
+        // '20'@580's east face and S79 slides down to the deep floor —
+        // east to the ax2 checkpoint (4629,646).
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(3812, 559)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(3812, 559)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 40) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 4640) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = 0
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 4) && it.S != 139 &&
+                    it.ak - p.ak in -20..90 &&
+                    kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
+            // Route: hop the approach, drop through '5'@580, autorun the
+            // walkway (S12 ignores the gate row — their W is all-zero and
+            // crush can't fire), mantle the x4260 column, shimmy the '5'
+            // lip east, drop to the floor. Direction is never held during
+            // a landing tick (one grounded direction-tick → ax() → S12's
+            // faithful dead-stall at the '20' face).
+            if (p.aZ && p.ak in 3870..3990 && p.al in 540..620)
+                held = held or Pad.M_DOWN             // drop through '5'
+            else if (p.S == 33 || p.S == 34)
+                held = Pad.M_RIGHT or (if (t % 8 < 2) Pad.M_UP else 0)
+                                                      // pulsed UP drives the
+                                                      // lip-scan → S92 mantle
+            else if (p.S == 37 || p.S == 38)
+                held = Pad.M_RIGHT                    // '5' shimmy east (UP
+                                                      // vault-out is dead on
+                                                      // '5' hangs — slice 228)
+            else if (p.aZ)
+                held = if (p.ak > 3900) Pad.M_RIGHT   // autorun the walkway
+                          else held or Pad.M_UP       // hop approach
+            else if (!p.aZ && p.ah < 0)
+                held = held or Pad.M_RIGHT            // drift on the rise
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t in 25..120 || (t < 600 && t % 20 == 0))
+                marks += "t$t S${p.S}@${p.ak},${p.al} av=${p.av} ag=${p.ag} aX=${p.aX} aY=${p.aY} aT=${p.aT} aU=${p.aU} cq=${p.cq} co=${p.co}"
+            else if (t % 600 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("GATEROW checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(checkpoint,
+            "east run must reach x4640 past the gate row — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
 }
