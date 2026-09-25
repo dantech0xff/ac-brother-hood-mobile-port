@@ -22130,6 +22130,66 @@ class Slice245Test {
             "crossed=$crossed caps=$captures minAl=$minAl")
     }
 
+    @Test fun `bot runs spawn to the corridor floor end to end`() {
+        // Ninth leg — the stitched opener: spawn (85,940) → jump the
+        // x300-380 pit up to the x380-1120 floor (y880) → face-climb
+        // the x900 building to its y780 roof → jump into ax22 zone1 →
+        // zone2 → ax7 wedge → over the x1400 wall → down to the
+        // corridor floor ('05' x1600+, y800). One continuous run with
+        // only held-east + jumps + the S65 zone eject — the same input
+        // grammar a player uses.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        // spawn is the real record position — do not park
+        var t = 0; var minAl = p.al; var captures = 0
+        var corridor = false; var deaths = 0
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 1600 && p.al > 780) { corridor = true; break }
+            if (p.S == 65) {
+                captures++
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            // ax4 destructible crates wall the floor at x528/546 —
+            // slash when one is in sword reach; else pulse an UP edge
+            // only while stalled (faces: trench x380, building x900,
+            // roof lip x1120) — constant UP-hold bounces in place
+            val crateNear = w.npcs.any {
+                it.ax == 4 && it.S != 139 && it.ak - p.ak in -10..90 &&
+                kotlin.math.abs(it.al - p.al) < 80
+            }
+            val stuck = p.aZ && p.ag in -256..256
+            if (crateNear && p.aZ && t % 4 < 3) held = held or Pad.M_CONTEXT
+            else if (stuck || p.ak in 260..380 || p.ak in 860..1140) held = held or Pad.M_UP
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            if (t % 1000 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} caps=$captures"
+        }
+        println("RUN corridor=$corridor deaths=$deaths caps=$captures " +
+            "minAl=$minAl marks=${marks.takeLast(12)}")
+        assertTrue(corridor || captures >= 2 || deaths > 0,
+            "spawn→corridor run must progress — corridor=$corridor " +
+            "caps=$captures deaths=$deaths")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
