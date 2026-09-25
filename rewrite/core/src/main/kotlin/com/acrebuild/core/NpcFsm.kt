@@ -6732,6 +6732,12 @@ fun NpcFsm.initAx24(e: Entity, f: List<Int>, w: Level0World) {
         }
     }
     e.aB = rf(7)
+    // L392 generic record-init tail (i.java:2830→L392 proven): the arm
+    // ends `goto L392` — every record's `i(r8[5])` + `t()` runs there;
+    // without it the S19 shrine-precondition records stayed S0 and the
+    // bc() sweep could never find an `r0.S == 19` target.
+    e.setAnim(rf(5))
+    e.refreshBoxes()
 }
 
 // ============================================================ ax56 = ay()
@@ -7039,7 +7045,10 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
     }
     when (e.S) {
         6 -> {                                           // L171 drop line
-            if (e.al > e.ap) e.setAnim(9)
+            // `al > ap → goto L173` skips the i(9) — the wisp keeps
+            // rising while above its target line and only dies into
+            // the S9 impact anim on reaching it (or when bc() hits).
+            if (e.al <= e.ap) e.setAnim(9)
             e.ap += w.kX
             if (projSweepBc(e, w)) e.setAnim(9)
         }
