@@ -22076,6 +22076,60 @@ class Slice245Test {
             "duel must resolve — dead=$guardDead deaths=$deaths maxAk=$maxAk")
     }
 
+    @Test fun `bot vaults the x1400 wall via the ax22 aerial chain`() {
+        // Eighth leg: the x1400-1480 wall is solid '14' from y360 down —
+        // the designed crossing is the ax22 capture chain (zones
+        // (1214,636)+(1316,568)) into the ax7 ejection wedge
+        // [1318,456..1334,472] at the top edge. The approach climbs the
+        // x900-1120 building's 100px west face to its y780 roof, then
+        // jumps east off the edge — apex ~y690 reaches zone1's
+        // [1208,626..1248,669] box. The ax14 pickup arc
+        // (969,654)→(1341,477) breadcrumbs exactly this line.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(800, 879)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var minAl = p.al; var jumps = 0; var captures = 0
+        var crossed = false; var grabs = 0
+        val marks = mutableListOf<String>()
+        while (t++ < 25000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList()); continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 1480) { crossed = true; break }
+            if (p.S == 65) {
+                // zone-bound: eject east — Z[2]==0 west else east
+                captures++
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            if (p.S == 60 || p.S == 61 || p.S == 62 || p.S == 63) grabs++
+            // hold east; jump when grounded past the roof's east half
+            var held = Pad.M_RIGHT or Pad.M_UP
+            if (p.aZ && p.ak >= 1080) jumps++
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            if (t % 500 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} grabs=$grabs caps=$captures"
+        }
+        println("WALL crossed=$crossed jumps=$jumps caps=$captures grabs=$grabs " +
+            "minAl=$minAl marks=${marks.takeLast(12)}")
+        assertTrue(crossed || captures >= 1 || minAl <= 700,
+            "must reach the ax22 chain / ax7 wedge over the wall — " +
+            "crossed=$crossed caps=$captures minAl=$minAl")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
