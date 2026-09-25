@@ -22833,6 +22833,79 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
+    @Test fun `bot runs checkpoint6 toward checkpoint7 past the fence roof`() {
+        // Sixteenth leg — park on the '05' roof band (x8780,y265 — the
+        // roofline the prior leg reached at minAl=325 near x8650) and run
+        // east ABOVE the x9000 fence structure: '05' spans x8760-9320 at
+        // y260-280, passing ~180px over the wall top ('02'@y440); the
+        // ax44 row (x9026-9567) bars the low band below. Soldiers
+        // uid534 (9014,258) + uid515/582 (9723-9753 @y355) patrol the
+        // roof itself; cam bounds + destructibles below. Goal:
+        // checkpoint7 ax2 uid426 (10016,679).
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(8780, 265)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 9100; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(8780, 265)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 10010) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 4) && it.S != 139 &&
+                    it.ak - p.ak in -20..90 &&
+                    kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
+            val stuck = p.aZ && p.ag in -256..256
+            if (stuck) held = held or Pad.M_UP
+            // S33 face-climb needs UP held — M_RIGHT alone slides down
+            if (p.S == 33 || p.S == 92) held = Pad.M_UP
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 3000 && t % 50 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "foe=${foe?.let { "ax${it.ax}@${it.ak},${it.al}S${it.S}" }}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("CP67 checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(checkpoint,
+            "fence-roof run must reach checkpoint7 x10010 — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
