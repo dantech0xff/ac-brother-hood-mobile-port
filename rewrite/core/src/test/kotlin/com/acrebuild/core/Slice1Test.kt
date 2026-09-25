@@ -216,6 +216,16 @@ private fun missionPackFor(aj: Int): MissionPack {
  *  the same mechanism the original claim scripts use to keep actors live. */
 private fun keepLive(e: Entity) { e.P = e.P or 16 }
 
+/** Teleport the player onto an ax2 checkpoint record and arm the
+ *  entity's `P|16` force-tick so its `aY()` arm runs this tick —
+ *  without it, the `k.I()` au/park gate freezes the checkpoint until
+ *  the (unmoved) camera arrives (k.java L25f eligibility). In real
+ *  play the camera delivers the same tick on approach. */
+private fun overlapCheckpoint(w: Level0World, cp: Level0World.Checkpoint) {
+    w.player.setPositionPx(cp.ak, cp.al + 5)
+    w.npcs.firstOrNull { it.ax == 2 && it.aw == cp.aw }?.let(::keepLive)
+}
+
 private fun settleIntro(w: Level0World) {
     // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
     // even with auto-dismiss dialogs; the `I()` L108 gate suspends
@@ -642,7 +652,7 @@ class Level0WorldTest {
         val w = world()
         assertTrue(w.checkpoints.isNotEmpty(), "level 0 has ax2 records")
         val cp = w.checkpoints.first()
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed, "checkpoint should fire on overlap")
         assertNotNull(w.checkpointSnap)
@@ -674,7 +684,7 @@ class Level0WorldTest {
         val dead = w.npcs.last { it.ax == 11 }
         live.setPositionPx(live.homeX + 400, live.homeY)
         dead.setAnim(139) // killed before the checkpoint
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed)
         assertEquals(live.homeX + 400, live.ak,
@@ -705,7 +715,8 @@ class Level0WorldTest {
         val victim = w.npcs.first { it.ax == 11 }
         w.removeEntity(victim)
         w.tick(emptyList())                    // drain pendingRemove
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        settleIntro(w)                          // removal may re-bind the intro claim
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed)
         w.resetLevel(true)
@@ -717,7 +728,7 @@ class Level0WorldTest {
         // k.y() → fS=0 (tip marquee) — i.java:13482 / k.java:1027.
         val w = world()
         val cp = w.checkpoints.first()
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertEquals(0, w.kFS, "aY() arms the fS tip-marquee counter")
         // The fired record's slot tombstones → after reload the rebuilt
@@ -737,7 +748,7 @@ class Level0WorldTest {
                 (it.Z.getOrElse(5) { 0 } > 0 || it.Z.getOrElse(6) { 0 } > 0)
         }
         npc.S = 7                                   // mid-chase at pickup
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         w.resetLevel(true)
         val r = w.npcs.first { it.aw == npc.aw }
@@ -750,7 +761,7 @@ class Level0WorldTest {
         // stale checkpoint (would teleport the player mid-level).
         val w = world()
         val cp = w.checkpoints.first()
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertNotNull(w.checkpointSnap)
         w.loadMission(1)
@@ -760,14 +771,16 @@ class Level0WorldTest {
 
     @Test fun `checkpoint restore rebinds the linked ax5 director`() {
         // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — level-0's
-        // own ax2 records carry Z[0]=-1 (dead arm), so inject a linked
-        // checkpoint pointing at the real aw=36 ax5 record.
+        // own ax2 records carry Z[0]=-1 (dead arm), so write the link
+        // into a real checkpoint entity's Z[0] (the `aY()` `k.G=Z[0]`
+        // read is entity-side; the records' r8[7] feeds it).
         val w = world()
         val dir = w.npcs.firstOrNull { it.ax == 5 && it.aw == 36 }
             ?: return // record not spawned in this fixture
-        val cp = Level0World.Checkpoint(900, w.player.ak + 4, w.player.al, z0 = 36)
-        w.checkpoints = w.checkpoints + cp
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        val e = w.npcs.first { it.ax == 2 }
+        e.Z[0] = 36
+        val cp = w.checkpoints.first { it.aw == e.aw }
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertTrue(cp.consumed); assertEquals(36, w.kG)
         w.resetLevel(true)
@@ -15641,7 +15654,7 @@ class Slice152Test {
         w.kAx = 77; w.kAy = 12; w.kAz = 9; w.kAN = 3; w.kAL = 44
         w.kAj = 2; w.kAp[5] = 91
         w.kAZ = true; w.iBn = true
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         // bytes are stamped from live globals at write time — compare to
         // the snapshot the checkpoint captured
@@ -15664,7 +15677,7 @@ class Slice152Test {
         // k.java:5185-5203 — the k.a(z2) restore arm on resetLevel
         val w = world()
         val cp = w.checkpoints.first()
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         w.player.gJ = 9; w.player.gI = 2; w.kAp[3] = 8
         w.kAx = 55; w.kAz = 4; w.kAZ = true; w.iBn = true
         repeat(2) { w.tick(emptyList()) }
@@ -15685,7 +15698,7 @@ class Slice152Test {
         val w = world()
         val cp = w.checkpoints.first()
         w.kAZ = false; w.iBn = false
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
         assertEquals(0, w.kBA[68]); assertEquals(0, w.kBA[79])
     }
@@ -15699,7 +15712,7 @@ class Slice153Test {
     @Test fun `entity reset clears k statics before restore`() {
         val w = world()
         val cp = w.checkpoints.first()
-        w.player.setPositionPx(cp.ak, cp.al + 5)
+        overlapCheckpoint(w, cp)
         w.camAf = 40; w.camAg = -20; w.kAZ = true; w.iBn = true
         w.kAE = 5; w.kAF = 9; w.kAH = 3; w.iAJ = 7
         w.kAD = w.npcs.firstOrNull(); w.kAi = true
@@ -20866,5 +20879,43 @@ class Slice236Test {
         assertEquals(0, stray.S)                            // r8[5]=0 → i(0)
         for (i in 0..3) assertEquals(0, stray.Z[i],
             "ax65 Z[$i] should stay ctor-zero")
+    }
+}
+
+class Slice237Test {
+
+    @Test fun `ax2 init takes the Ld7f arm verbatim`() {
+        // i.java:9177 — `az=300; P|=0x80; Z=new int[1]; Z[0]=r8[7]`.
+        // Level-0's records carry r8[7]=-1 (dead director link) and
+        // r8[5]=0 → S=0; clip1 (bi[2]=1) gives the real 40x128 W box
+        // the `aY()` overlap gate reads.
+        val w = world()
+        val e = w.npcs.firstOrNull { it.ax == 2 && it.aw == 98 }
+            ?: error("level0 ax2 aw=98 missing")
+        assertEquals(300, e.az)
+        assertTrue((e.P and 128) != 0, "Ld7f arms P|0x80")
+        assertEquals(-1, e.Z[0])
+        assertEquals(0, e.S)
+        assertEquals(e.ak, e.W[0])
+        assertEquals(e.al - 100, e.W[1])
+        assertEquals(e.ak + 40, e.W[2])
+        assertEquals(e.al + 28, e.W[3])
+    }
+
+    @Test fun `aY fires through the entity tick and self-removes`() {
+        // i.java:38143 — `k.c(this)` inside aY(): the fired checkpoint
+        // entity tombstones its slot AND leaves bb[] — it cannot
+        // re-fire, and the record does not respawn on reload.
+        val w = world()
+        val cp = w.checkpoints.first()
+        val e = w.npcs.first { it.ax == 2 && it.aw == cp.aw }
+        overlapCheckpoint(w, cp)
+        w.tick(emptyList())
+        assertTrue(cp.consumed)
+        assertEquals(0, w.kFS)
+        assertNotNull(w.checkpointSnap)
+        w.tick(emptyList())                    // drain pendingRemove
+        assertNull(w.npcs.firstOrNull { it === e },
+            "k.c(this) removes the fired checkpoint entity")
     }
 }
