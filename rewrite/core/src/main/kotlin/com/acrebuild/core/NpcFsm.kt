@@ -9958,6 +9958,18 @@ fun NpcFsm.initAx45(e: Entity, f: List<Int>) {
     e.refreshBoxes()
 }
 
+/** ax2 checkpoint `Ld7f` (i.java:9177, proven): `az=300`; `P|=0x80`;
+ *  `Z=new int[1]; Z[0]=r8[7]` — the linked ax5 director uid `aY()`
+ *  copies into `k.G` on fire. Z alloc folded into the shared array. */
+fun NpcFsm.initAx2(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 300
+    e.P = e.P or 128
+    e.Z[0] = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
 /** ax31 `L1a79` (i.java:11259, proven): `az=r8[7]`;
  *  `Z[0]=r8[8]*1000; Z[1]=r8[9]*1000; Z[2]=r8[10]; Z[3]=0`. */
 fun NpcFsm.initAx31(e: Entity, f: List<Int>) {

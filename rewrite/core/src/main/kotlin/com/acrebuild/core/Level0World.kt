@@ -72,6 +72,8 @@ class Level0World(
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
+            2 to 1,       // ax2 checkpoint (bi[2]=1 — same invisible clip;
+                          // its 40x128 rect gives aY() the real W box)
             10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
                           // modules, proven) — zones still draw nothing
             29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
@@ -834,6 +836,7 @@ class Level0World(
             else if (type == 68) npcFsm.initAx68(e, f.toList())
             else if (type == 45) npcFsm.initAx45(e, f.toList())
             else if (type == 31) npcFsm.initAx31(e, f.toList())
+            else if (type == 2) npcFsm.initAx2(e, f.toList())
             else {
                 // L1bc7→L1bea (i.java:11476/11489, proven): every
                 // remaining type ({33,36,38,39,48,49,52,53,55,57,59,
@@ -3881,9 +3884,11 @@ class Level0World(
 
     /**
      * ax2 `aY()` (simple i.java:13477-13550, proven): the checkpoint
-     * trigger. Gate: `bh[aj]==3 → (k.ak!=0 || cp.al<aS.al)` else the
-     * entity-W∩player-W overlap — our cell-cross is the overlap
-     * approximation already used here. On fire:
+     * trigger, now driven by the ax2 entity's own `i.I()` arm
+     * (i.java:15499 `case 2 → L1e2e → aY()`). Gate: `bh[aj]==3 →
+     * (k.ak!=0 || this.al<aS.al)` else the `a(this.W, aS.W)` box
+     * overlap — verbatim now that clip 1 (bi[2]=1) gives the record
+     * real boxes. On fire:
      *  1. `k.y()` → `fS=0` arms the tip-marquee (k.java:1027-1039);
      *  2. `k.G = Z[0]` — linked ax5 uid, re-fired on restore;
      *  3. bA serializer (`i.X()`, writeIX) — `bA[16]=aw` is the
@@ -3894,30 +3899,35 @@ class Level0World(
      *     (a snapshot WRITE — entities do NOT move);
      *  6. `bg[i]==-99 → bf[i*22]=-99` — removal tombstones propagate.
      */
-    private fun fireCheckpoints() {
-        for (cp in checkpoints) {
-            if (cp.consumed) continue
-            // bh3 autoscroll gate (i.java:13481): only while the flying
-            // entity has started AND the checkpoint is below the player.
-            if (bh3) { if (kAk != 0 || cp.al < player.al) continue }
-            else if (Math.abs(cp.ak - player.ak) > cellPx ||
-                     player.al < cp.al - cellPx) continue
-            cp.consumed = true
-            kFS = 0                                   // k.y()
-            kG = cp.z0                                // k.G = Z[0]
-            checkpointSnap = writeIX(cp.aw)
-            // k.c(this): the record's own slot tombstones.
-            if (cp.slot >= 0 && cp.slot < slotFlags.size) slotFlags[cp.slot] = -99
-            // The `k.a(bb[i],as)` stamp loop — live state into `bf`.
-            for (n in npcs) {
-                if (n.asSlot < 0 || n.ax == 70 || pendingRemove.contains(n)) continue
-                stampImage(n)
-            }
-            // bg → bf tombstone propagation (i.java:13543-13547).
-            for (s in slotFlags.indices) {
-                if (slotFlags[s] == -99 && s * 22 < slotImage.size)
-                    slotImage[s * 22] = -99
-            }
+    private fun fireCheckpoint(e: Entity) {
+        // Gate head (aY, i.java:37976-37991, proven): bh3 levels only
+        // fire while the flying entity has started AND the checkpoint
+        // sits at-or-below the player; other levels take the real
+        // `a(W, aS.W)` box overlap (clip1 gives the entity real boxes).
+        if (bh3) { if (kAk != 0 || e.al < player.al) return }
+        else if (!rectsOverlap(e.W, player.W)) return
+        val cp = checkpoints.firstOrNull { it.aw == e.aw }
+        // `k.c(this)` already tombstoned the slot → aY() is idempotent
+        // bookkeeping-wise; `cp.consumed` is the port's dedup marker
+        // the d(true) restore scan also stamps.
+        if (cp != null && cp.consumed) return
+        if (cp != null) cp.consumed = true
+        kFS = 0                                       // k.y()
+        kG = e.Z[0]                                   // k.G = Z[0]
+        checkpointSnap = writeIX(e.aw)
+        // k.c(this) (k.java:16681, verbatim): tombstone the record's own
+        // `bg` slot AND null its `bb[]` slot — the fired checkpoint
+        // entity leaves the world immediately (no re-fire possible).
+        removeEntity(e)
+        // The `k.a(bb[i],as)` stamp loop — live state into `bf`.
+        for (n in npcs) {
+            if (n.asSlot < 0 || n.ax == 70 || pendingRemove.contains(n)) continue
+            stampImage(n)
+        }
+        // bg → bf tombstone propagation (i.java:13543-13547).
+        for (s in slotFlags.indices) {
+            if (slotFlags[s] == -99 && s * 22 < slotImage.size)
+                slotImage[s * 22] = -99
         }
     }
 
@@ -4696,7 +4706,6 @@ class Level0World(
             npcs += pendingInsert
             pendingInsert.clear()
         }
-        fireCheckpoints()
         fireScrollTriggers()
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
@@ -4833,6 +4842,7 @@ class Level0World(
         else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
         else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
         else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
+        else if (n.ax == 2) fireCheckpoint(n)
 
         else { npcFsm.tick(n, player); claimed = false }
         // `I()` dispatch tail L1f35 (i.java:18904-18934, proven): every
