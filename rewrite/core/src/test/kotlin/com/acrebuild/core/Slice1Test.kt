@@ -21955,6 +21955,76 @@ class Slice245Test {
             "below the pillar the bound zone or the posted guard must fire — catch=$sawBoundCatch pin=$sawPin")
     }
 
+    @Test fun `bot identifies the S89 pinner under the pillar`() {
+        // Sixth leg, probe: the S89 killTouch pin exit needs
+        // `e.ax==11 && e.j==6 && e.S==24` + context edge. Park on the
+        // pillar top, walk east off it (into the guard post), and when
+        // the pin lands, report every nearby entity's ax/S to identify
+        // the pinner and whether it ever reaches S24.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1753, 519)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var pinTicks = 0; var pinAx = -1; var pinS = -1; var exits = 0
+        var lastS = p.S
+        val marks = mutableListOf<String>()
+        while (t++ < 8000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak},${p.al} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.S == 89 || p.S == 90) {
+                pinTicks++
+                val near = w.npcs.filter {
+                    kotlin.math.abs(it.ak - p.ak) <= 60 &&
+                    kotlin.math.abs(it.al - p.al) <= 80
+                }
+                if (pinTicks == 1 || pinTicks % 400 == 0) {
+                    val desc = near.joinToString(",") {
+                        "ax${it.ax}#${it.aw} S${it.S} j${it.j} @${it.ak},${it.al}"
+                    }
+                    marks += "pin t=$t near=[$desc]"
+                    near.firstOrNull { it.j == 6 }?.let { pinAx = it.ax; pinS = it.S }
+                }
+                w.pad.e(Pad.M_CONTEXT)
+                w.tick(emptyList())
+                continue
+            }
+            if (lastS == 89 && p.S != 89) { exits++; marks += "pin->${p.S} t=$t" }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            lastS = p.S
+            if (exits >= 2 || (pinTicks > 0 && t > 6000)) break
+        }
+        println("PIN pinTicks=$pinTicks pinAx=$pinAx pinS=$pinS exits=$exits marks=${marks.takeLast(10)}")
+        assertTrue(pinTicks > 0, "probe must land in the killTouch pin — marks=$marks")
+        // VERDICT: the pinner is ax11#18 (j==6 tumbler). S89 has NO
+        // player-side release — the only exits are the entity-side
+        // grab-kill offers (ax11 needs e.S==24, ax47 needs S80, ax50
+        // needs S119). The posted guard patrols S2 unaware — the pin
+        // snapped the player onto its head, out of the spotB alert set —
+        // so it paces forever with the player riding: a verbatim
+        // standoff, resolvable in play either by pinning onto an
+        // already-ALERTED guard (strikes → counter-kill window) or not
+        // falling on unaware ones.
+        assertTrue(pinAx == 11,
+            "pinner must be the ax11 tumbler — pinAx=$pinAx")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
