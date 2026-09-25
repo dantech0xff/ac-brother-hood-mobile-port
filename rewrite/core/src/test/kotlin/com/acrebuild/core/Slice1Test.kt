@@ -21746,6 +21746,77 @@ class Slice245Test {
             "kick chain must gain real altitude — minAl=$minAl")
     }
 
+    @Test fun `bot rides the east-corridor ax22 aerial chain`() {
+        // Third leg, past wall B's stepped top: the east corridor holds
+        // three capture zones — (1975,605) Z2=1 east, (2064,695) Z2=0 west,
+        // (2104,546) Z2=1 east. ax22 only captures airborne players (the
+        // gB() anim gate — i.java:10167), so the leg is a hopscotch: fall
+        // through a zone box -> snap to its anchor -> held edge vaults out
+        // (ag=±3328, ah=-3840) -> fall into the next zone. A west-vault at
+        // (2064,695) is the designed error-correction back toward the wall.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        // keepLive — the camera sits at spawn so the corridor zones stay
+        // parked otherwise (k.java L25f eligibility; same helper the
+        // checkpoint tests use)
+        w.npcs.filter { it.ax == 22 }.forEach(::keepLive)
+        val p = w.player
+        // enter airborne inside the first zone's live box
+        // (measured W = [1959,592,1993,625]) — drop straight through it
+        p.setPositionPx(1975, 400)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        p.S = 43; p.ag = 256; p.ah = 2048
+        var t = 0; var captures = 0; var maxAk = p.ak
+        var lastS = p.S; var groundedTicks = 0
+        val marks = mutableListOf<String>()
+        val trace = ArrayDeque<String>(80)
+        while (t++ < 30000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    captures++
+                    marks += "capture@${p.ak},${p.al} t=$t"
+                    // the capture snap pins the player to the zone anchor —
+                    // the direction edge is the zone's own Z[2]
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList())
+                    continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+            }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 80) trace.removeFirst()
+                trace += "$t:${lastS}->${p.S}@${p.ak},${p.al}"
+                lastS = p.S
+            }
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak > 2176 && (p.aZ || p.S == 0 || p.S == 12)) {
+                groundedTicks++
+                if (groundedTicks > 40) { marks += "landed@${p.ak},${p.al} t=$t"; break }
+            }
+            if (t > 20000 && marks.size > 4) break
+        }
+        println("AIR marks=$marks maxAk=$maxAk trace=${trace.takeLast(20).joinToString(" ")}")
+        assertTrue(captures >= 2,
+            "aerial chain must capture the player ≥2 times — captures=$captures marks=$marks")
+        assertTrue(maxAk > 2150,
+            "vault chain must carry east past the S43 zone — maxAk=$maxAk")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
