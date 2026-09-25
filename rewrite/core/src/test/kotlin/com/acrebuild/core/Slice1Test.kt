@@ -22190,6 +22190,66 @@ class Slice245Test {
             "caps=$captures deaths=$deaths")
     }
 
+    @Test fun `bot walks the high road pillars to the checkpoint`() {
+        // Tenth leg — the post-wall high road: the ax7 throw lands on
+        // the spire base ledge (x1820-1860, top y400). East: an
+        // ax22 capture chain bridges the x1900-2200 void —
+        // zones (1975,605) → (2064,695) → (2104,546) — ejecting onto
+        // plateau x2200-2360 top y480 → drop to the '02' ledge x2360-2500
+        // → high block x2500-2660 top y520 → ax2 checkpoint (2594,485).
+        // The tunnel pit under the ledge drops to y840 — falling in
+        // is a faithful death.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1850, 399)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 30000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    if (deaths > 3) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak in 2520..2700 && p.al < 540) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            // past the needle's east edge release the direction so the
+            // fall drifts only slightly — the ax22 chain catches a
+            // near-vertical fall; full east speed sails over the tops
+            if (p.ak > 1910 && p.ak < 2200 && !p.aZ) held = 0
+            val stuck = p.aZ && p.ag in -256..256
+            if ((stuck && p.ak < 1860) || p.ak in 2500..2600) held = held or Pad.M_UP
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 40) marks += "t$t S${p.S}@${p.ak},${p.al} W=${p.W.contentToString()} " +
+                "aO=${p.aO} aP=${p.aP} aR=${p.aR} aQ=${p.aQ} aS=${p.aS} aV=${p.aV} aW=${p.aW} aZ=${p.aZ}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("HIGH checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl\n early=${marks.take(30)}\n late=${marks.takeLast(10)}")
+        assertTrue(checkpoint || maxAk > 2400,
+            "high road must progress east — checkpoint=$checkpoint " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
