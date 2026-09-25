@@ -22906,6 +22906,100 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
+    @Test fun `bot runs checkpoint7 to the win fuse through the tower`() {
+        // Seventeenth leg — the level-0 end-game. cp7 (10016,679) sits at
+        // the bottom of a 100px wall-kick well (pillar x9920-9940 west /
+        // wall x10040-10120 east, lip y560). Route: grounded hop into the
+        // east face arms S33 → the shaft-kick chain (dirHeld on the new
+        // facing + M_UP per S33/36/92/101) climbs the well onto the slab
+        // → east run onto the tower west column top (y439) → kill the
+        // posted soldier uid571 (it binds `g` and faithfully blocks the
+        // door) → stand inside ax10-S16 door uid87's box and press UP →
+        // fade-teleport to uid134 → drop to the low road (y780) → east
+        // past the 3-soldier pack uid89/90/92 → the ax42 win fuse at
+        // x11410. Soldier packs uid547/550/551/555 (10178-10470 @y654-662)
+        // patrol the slab; ax10 zones uid572 S43 (10497), uid88 S33
+        // (10915), uid578 S53 (11011), heavy guard uid45 (10931,464),
+        // ax13 rope uid93 (11312,441 aG=4), ax5 director uid115
+        // (11448,503) sit on the path.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10016, 715)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 10000; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var goal = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(10016, 715)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 11400 || w.jC == 15 || w.jC == 13) { goal = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val stuck = p.aZ && p.ag in -256..256
+            // Suppress stuck-UP inside the S16 door boxes — standing in
+            // one after a teleport would re-trigger the pair back.
+            if (stuck && p.S != 79 && p.ak !in 10580..10635 &&
+                p.ak !in 10780..10835) held = held or Pad.M_UP
+            // Hop into the shaft's east face — S33 needs an airborne
+            // wall hit, grounded runs just bounce back west.
+            if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
+            // S33/36/92/101 shaft-kick: hold the facing direction —
+            // after the bounce flips av the next wall is on the new
+            // facing side; dirHeld arms the grab, M_UP the kick.
+            if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
+                held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+            // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
+            // it and press UP → teleport east. Drop M_RIGHT so the run
+            // actually settles inside the box (aZ) before the edge.
+            if (p.ak in 10530..10620 && p.al in 380..455)
+                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // The door arm also needs `g == null` — the column-top
+            // soldier uid571 binds the interact target, so slash it
+            // while bound until the lock clears.
+            if (p.g != null && p.aZ)
+                held = held or Pad.M_CONTEXT
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 3000 && t % 50 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "aO=${p.aO} aR=${p.aR}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("CP7G goal=$goal deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(goal,
+            "checkpoint7→fuse run must reach x11410 through the tower " +
+            "(kick well, door 87→134, low road) — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
