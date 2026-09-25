@@ -22749,6 +22749,90 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
+    @Test fun `bot runs checkpoint5 toward checkpoint6 through the fence row`() {
+        // Fifteenth leg — park on checkpoint5 (ax2 uid101 @7110,718) and
+        // run east: ax5 director uid926 (7148), the low-road soldier pack
+        // uid44/602/603 (7361-7470, y917-918), ax13 rope uid333 (7444,325
+        // aG=4), ax4 destructibles (7688-9137), the 8-bar ax44 fence row
+        // (x7902-8183 @y717-799), ax37 cam bounds, the rooftop soldier
+        // pack uid587/537/523 (8620-8709 @y256-258) — toward checkpoint6
+        // ax2 uid102 (8926,757).
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        // SCRATCH — cell map cols x7100-8920 (cx 355-446), rows 12-48.
+        run {
+            val sb2 = StringBuilder()
+            for (cy in 12..48) {
+                sb2.append("r$cy ")
+                for (cx in 355..446) {
+                    val v = w.collisionCell(cx, cy)
+                    sb2.append(if (v == 0) "." else if (v < 10) "0$v" else "$v")
+                    sb2.append(' ')
+                }
+                sb2.append('\n')
+            }
+            println("CP56GRID\n$sb2")
+        }
+        p.setPositionPx(7110, 718)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 7300; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(7110, 718)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 8920) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 4) && it.S != 139 &&
+                    it.ak - p.ak in -20..90 &&
+                    kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
+            val stuck = p.aZ && p.ag in -256..256
+            if (stuck) held = held or Pad.M_UP
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 3000 && t % 50 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "foe=${foe?.let { "ax${it.ax}@${it.ak},${it.al}S${it.S}" }}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("CP56 checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(checkpoint,
+            "fence-row run must reach checkpoint6 x8920 — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
