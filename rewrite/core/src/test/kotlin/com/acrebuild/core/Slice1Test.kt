@@ -23151,6 +23151,108 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
+    @Test fun `bot drives mission-complete stats into mission 1`() {
+        // Nineteenth leg — continues past the FIN win: the jC==15 stats
+        // screen (M()) confirm arm (`pad.v(458784)` → persist →
+        // `pad.v(327712)` → `kAj++` → `stateL(30)`, Level0World.kt:2476-
+        // 2497) → af() browse (jC=30) confirm (`pad.v(65568)` →
+        // `stateL(9)`, :3680-3684) → the G() loader (jC=9: `loadPackI(1)`
+        // at jG==3, `spawnEntities()` at jG==164, `pad.w(65568)` release
+        // past it → `stateL(8)`, :3564-3579) → mission-1 gameplay —
+        // `kBh[1]==3` = the flying canyon (ax25 player record at
+        // (581,11963), 225 entities). Proves the I(aj) pack swap +
+        // mission-switch wiring end-to-end through real input.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10016, 715)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 10000; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0
+        var maxAk = p.ak
+        val marks = mutableListOf<String>()
+        var phase = 0           // 0=drive to win, 1=stats→af, 2=af→load, 3=load→play
+        while (t++ < 60000 && phase < 3) {
+            if (t % 50 == 0 || (phase == 0 && p.ak in 11150..12150))
+                marks += "t$t ph$phase S${p.S}@${p.ak},${p.al} jC=${w.jC} " +
+                    "jG=${w.jG} kAj=${w.kAj}"
+            when (phase) {
+                0 -> {
+                    if (w.jC == 15 || w.jC == 13) { phase = 1; continue }
+                    when {
+                        w.jC == 12 -> {
+                            w.pad.e(327712); w.tick(emptyList())
+                            w.pad.e(327712); w.tick(emptyList())
+                            deaths++
+                            w.player.setPositionPx(10016, 715)
+                            w.player.N = w.player.ak shl 8
+                            w.player.O = w.player.al shl 8
+                            if (deaths > 8) break; continue
+                        }
+                        w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                        p.S == 89 || p.S == 90 -> {
+                            w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                        }
+                        p.S == 315 || p.S == 318 || p.S == 164 -> {
+                            w.pad.e(33024); w.tick(emptyList()); continue
+                        }
+                    }
+                    if (p.S == 65) { w.pad.e(16396); w.tick(emptyList()); continue }
+                    var held = Pad.M_RIGHT
+                    val stuck = p.aZ && p.ag in -256..256
+                    if (stuck && p.S != 79 && p.ak !in 10580..10635 &&
+                        p.ak !in 10780..10835) held = held or Pad.M_UP
+                    if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
+                    if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
+                        held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                    if (p.ak in 10530..10620 && p.al in 380..455)
+                        held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+                    if (p.S == 33 && p.ak in 11285..11340)
+                        held = if (p.al > 735)
+                            (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                        else Pad.M_UP
+                    if (p.aZ && p.al >= 595 && p.ak in 11100..11330 && p.bM == null)
+                        held = Pad.M_RIGHT
+                    if (p.g != null && p.aZ)
+                        held = held or Pad.M_CONTEXT
+                    if (w.kC != null && w.kC!!.claimActive()) {
+                        w.pad.e(0); w.tick(emptyList()); continue
+                    }
+                    w.pad.e(held); w.tick(emptyList())
+                    if (p.ak > maxAk) maxAk = p.ak
+                }
+                1 -> {   // stats screen — two confirms: reveal-skip then advance
+                    if (w.jC == 30 || w.jC == 2) { phase = 2; continue }
+                    w.pad.e(327712); w.tick(emptyList())
+                }
+                2 -> {   // af() browse — confirm enters the G() loader
+                    if (w.jC == 9) { phase = 3; continue }
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+                }
+            }
+        }
+        // jC==9 loader: tick until past jG==164 then release-confirm → l(8)
+        while (t++ < 60000 && w.jC == 9) {
+            marks += "t$t load jC=${w.jC} jG=${w.jG} kAj=${w.kAj} " +
+                "loadedAj=${w.loadedAj} npcs=${w.npcs.size}"
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        for (i in 0 until 30) w.tick(emptyList())
+        val l1 = w.npcs.any { it.ax == 25 } || w.npcs.any { it.aw == 121 }
+        println("MSW jC=${w.jC} kAj=${w.kAj} loadedAj=${w.loadedAj} " +
+            "bh3=${w.bh3} npcs=${w.npcs.size} l1=$l1 " +
+            "p=${p.ak},${p.al} S=${p.S} marks=$marks")
+        assertTrue(w.jC == 8 && w.kAj == 1 && w.loadedAj == 1 && l1,
+            "mission-complete → stats → af → load must land in mission-1 " +
+            "play (jC=8, kAj=1, pack swapped, mission-1 records live) — " +
+            "got jC=${w.jC} kAj=${w.kAj} loadedAj=${w.loadedAj} " +
+            "npcs=${w.npcs.size} l1=$l1 marks=$marks")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
