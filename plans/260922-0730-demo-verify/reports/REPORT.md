@@ -1,8 +1,8 @@
 ---
 title: Golden-path verification — devin/land (10a200ec → eb6516f5)
 phase: demo-verify
-status: 8b2559cd-ledge-arms-VERIFIED-live-hang-mantle-vaultdrop
-build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208, stock) · 9ad6b723 (slice 210, stock) · 9584967a (slice 213, stock) · f9b486d7 (slice 214, stock) · 31289deb (slice 222+223, stock) · 8b2559cd (slices 217-233, stock)
+status: 290d62c2-golden-path-VERIFIED-hopscotch-roof-checkpoint-combat-ko-respawn
+build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
 date: 2026-09-24
 ---
@@ -665,3 +665,94 @@ open pocket col199 rows 8-11) and thin platform edge **(489,10)**
   `g6-t55.png` (checkpoint strip).
 - jdb evidence (in this run's transcript): per-tick consumer trace showing
   ledgeHangGrab=true → S61@4000,179 → S62 → S0 settle at 4010,179.
+
+# Run 10 — devin/land @ 290d62c2 (slices through 244) — STOCK build, full golden-path demo
+
+`./gradlew :android:assembleDebug` @ 290d62c2 → installed on emulator-5554,
+new pid 12591. **Launcher class moved** to `com.acrebuild.spike/.AndroidLauncher`
+(package restructure — `am start -n com.acrebuild.spike/.AndroidLauncher`).
+
+## Golden path (all on-screen, real input)
+
+- ✅ Boot → legal text card → jC23 attract → footer → jC18 title art → strip →
+  jC2 level-select rows → row tap → jC9 briefing ("ROME/COLOSSEUM/KILL
+  WOLFMEN") → jC21 intro dialog → SKIP → jC8 play at spawn (85,940). Full
+  chain re-verified on this HEAD — every screen renders correctly
+  (title art, menu rows, briefing card, dialog panel).
+- ✅ Real-input run east: spawn → right-hold cell5 → run S=11, ak 85→1379,
+  camera tracks (camX 8→1247), score ticks up to 8/100 en route. Wall at
+  x~1400 stops ground traversal (route up needs the slab/zones — unchanged).
+- ✅ KO → "DO YOU WANT TO RESTART?" banner → YES → full level reload →
+  hint card → jC21 → SKIP → spawn (verified pre-checkpoint-arming reload).
+- ⚠️ **adb input died mid-run** (same post-ANR symptom — no ANR this time,
+  died after a jdb suspend cycle): kCj/kCk/lastTouch frozen −1 while taps
+  did nothing. Switched to **mouse input through the emulator window** —
+  fully sufficient (clicks AND holds via left_mouse_down).
+- ⚠️ First screenrecord take (d1) captured only the **portrait home screen**
+  — screenrecord started before/while the app rotated to landscape caught
+  the launcher surface. Start recording after the app is in landscape.
+
+## ax22 hopscotch — full B-lift chain on camera (d4)
+
+Teleport-staged above zone-1 (documented assist; all captures/vaults/climbs
+are the game's own FSM + real touch edges):
+
+- ✅ Zone-1 (2064,695): overlap → **S65 snap to anchor**, e.S=1.
+- ✅ Up-cell edge → **vault WEST** (16390 arm) → captured by zone-2 at
+  (1982,605) — S65 again.
+- ✅ Up-cell edge → **vault EAST** (16396 arm) → captured by zone-3 at
+  (2104,546).
+- ✅ Up-cell edge → vault → **S203 edge-grab at (2200,479)** roof-B lip.
+- ✅ Up-cell edge → S62 mantle → **standing S=0 at (2210,479)** on roof-B.
+- ✅ Roof run east by real input → KO'd by the guard pack at **(2940,499)**
+  → jC12 → YES → **checkpoint respawn at (2590,519) x1=30** (no reload).
+  Repeated → same respawn ×3.
+- ✅ Combat on d5: teleport to the strip → lone guard melee — attack radial
+  (view 305,200) lands slashes (red alert border, score ticks 4→8/100),
+  guard strikes back → KO. Real exchange, both directions of damage.
+
+### NEW input-model findings (drives all future touch work)
+
+- **Pad cells come in two flavors**: `mounted` (zone-capture S65, edge-grabs,
+  rides) → fixed bottom-left wheel box view(−5..111 × 124..240), cells via
+  inner split x[33,72] y[162,201]; **not mounted** → player-relative 3×3
+  grid (±25px x, head−10..feet+10 y).
+- **Vault masks** (NpcFsm.kt tickZoneInteract L25): `padHeld(16390)` = up or
+  TL edge → WEST vault (Z[2]==0); `padHeld(16396)` = up or TR edge → EAST
+  vault (Z[2]!=0). `padHeld(33024)` = down edge → drop-through (Z[1]!=0).
+- **`padHeld` = `pad.v` = bB edge word** — fresh edges only; holds keep
+  firing because the input pipeline calls E() each frame while the pointer
+  is down. A mouse_hold at the right cell sustains the edge.
+- S65 captured → up cell (view ~60,140 → fixed pad) vaults whichever way
+  Z[2] points; same cell worked for all three chain vaults.
+- S203/S61 shared ledge-hang tail: `pad.v(16388)` up or toward-wall dir →
+  S62 climb; `pad.v(33024)` → release-drop.
+- **`resolvePadZone` returns −1 outside the active pad box** — touches
+  elsewhere update `lastMoveX/Y` but produce no pad edge (diagnostic:
+  bC/bB stays 0).
+- KO YES row-tap ≈ view(175,122); the dialog button hitbox lags the banner
+  by ~1 tick — retry if the tap bounces.
+
+### Window → view calibration (mouse input on emulator-5554 window)
+
+`viewX = (windowX − 108) / 1.1`, `viewY = (windowY − 35) / 1.1` (device
+2400×1080 rendered ~0.227/0.261 scale inside the emulator window at
+window-box ~(110,28)–(655,310)). Verified: fixed-pad cell5 (95,180)→
+window (213,233) runs; cell1-up (60,140)→(174,189) vaults/climbs;
+attack radial (305,215)→(478,252) slashes; KO YES (175,122)→(301,169).
+
+### Artifacts (`plans/260922-0730-demo-verify/reports/`)
+- **`d4-hopscotch-roof-ko-respawn.mp4`** (161.8 s) — THE money take:
+  zone-1 capture → 3 vaults → S203 → climb → roof run → KO → checkpoint
+  respawn → second KO → respawn.
+- `d5-fight-kos.mp4` (166 s) — respawn loop + lone-guard melee exchange
+  (slashes land, alert border) + KOs.
+- `d2-ko-reload.mp4` (169 s) — first KO → banner → reload → SKIP → spawn
+  + early zone attempts.
+- `d1-boot-traversal.mp4` — BROKEN take (portrait home screen only);
+  boot/menu proof is the live screencaps instead.
+- Key frames: `d4-zone1-capture.png` (S65 snap), `d4-vault-west.png` /
+  `d4-vault-east.png` (mid-vault), `d4-roof-standing.png`,
+  `d4-ko-roof.png`, `d4-respawn.png`, `d5-f38.png` (melee exchange),
+  `d5-f34.png` (standing on '5' strip), menus `d1-title/lsel/brief/dlg/
+  spawn/x499/x1379.png`.
