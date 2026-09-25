@@ -476,19 +476,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
             w.sfx(13); setAnim(73); return true
         }
         if (ax != 11 && ax != 73) return true   // L51→L86: other types no-op
-        // L29: ax11/73 live react by attacker anim (proven)
+        // Ld5-L112 (i.java:5757-5797, proven): `Z[0]==2 → i(6)`; then
+        // the attacker-anim chain — `aS.S ∈ {67,68,69,286,287}` → `g()`
+        // push-out — and EVERY swing lands `c(6,156,-1,-1)` + `k.A(13)`,
+        // combo or not (the `!=287 → L112` compare sends unlisted
+        // player anims straight to the shared react).
         if (Z[0] == 2) { setAnim(6); return true }
-        when (p.S) {
-            67 -> { hitAnimByType(6, 156); w.sfx(13) }
-            68, 69, 286 -> { resolvePush(w); hitAnimByType(6, 156); w.sfx(13) }
-            287 -> {                             // falls into the L61 dead arm
-                when (ax) {
-                    11 -> { ab = null; setAnim(0); releaseAe() }
-                    73 -> { setAnim(164); ah = 0; ag = 0; aj = 0; ai = 0 }
-                }
-            }
-            else -> {}
+        if (p.S == 67 || p.S == 68 || p.S == 69 || p.S == 286 || p.S == 287) {
+            resolvePush(w)
         }
+        hitAnimByType(6, 156)
+        w.sfx(13)
         return true
     }
 
