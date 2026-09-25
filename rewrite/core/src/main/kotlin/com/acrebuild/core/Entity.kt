@@ -31,6 +31,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var palette = 0                  // aH — clip palette slot (b.l(int))
     var remapTable = -1              // aA — az[] module-remap slot (b.a(int))
     var paletteAlpha = 255           // g(aH,alpha) — palette alpha (b.g)
+    /** `aa.j[0]` (i.java:13750, proven): the clip's slot-0 frame-alias —
+     *  F()'s ax29 arm writes it for the i.by==3 flicker, the Leec tail
+     *  publishes it on every ax29 draw. -1 = unset. */
+    var j0Frame = -1
+    /** `r16` of the ax64 S3-5 arm (i.java:13635, high-confidence): the
+     *  grab-scale `80 - (range·cA/cz)` the Lde8 overflow log guards
+     *  ("JUMP_MAN_MIN_SCALE_VALUE=80"). Stored for the draw side. */
+    var ax64Scale = 0
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
@@ -468,19 +476,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
             w.sfx(13); setAnim(73); return true
         }
         if (ax != 11 && ax != 73) return true   // L51→L86: other types no-op
-        // L29: ax11/73 live react by attacker anim (proven)
+        // Ld5-L112 (i.java:5757-5797, proven): `Z[0]==2 → i(6)`; then
+        // the attacker-anim chain — `aS.S ∈ {67,68,69,286,287}` → `g()`
+        // push-out — and EVERY swing lands `c(6,156,-1,-1)` + `k.A(13)`,
+        // combo or not (the `!=287 → L112` compare sends unlisted
+        // player anims straight to the shared react).
         if (Z[0] == 2) { setAnim(6); return true }
-        when (p.S) {
-            67 -> { hitAnimByType(6, 156); w.sfx(13) }
-            68, 69, 286 -> { resolvePush(w); hitAnimByType(6, 156); w.sfx(13) }
-            287 -> {                             // falls into the L61 dead arm
-                when (ax) {
-                    11 -> { ab = null; setAnim(0); releaseAe() }
-                    73 -> { setAnim(164); ah = 0; ag = 0; aj = 0; ai = 0 }
-                }
-            }
-            else -> {}
+        if (p.S == 67 || p.S == 68 || p.S == 69 || p.S == 286 || p.S == 287) {
+            resolvePush(w)
         }
+        hitAnimByType(6, 156)
+        w.sfx(13)
         return true
     }
 
@@ -1223,6 +1229,125 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ag < 0 -> bb
         ag > 0 -> bc
         else -> if (av) bb else bc
+    }
+
+    /**
+     * `i.B()` (i.java:3844-4204, proven) — the flying-mode canyon collide
+     * run for side effects at `g.n()`'s head (g.java:13907; return value
+     * dead there). `i.w` first-call latch → dead-drag arm →
+     * `k.ai || i.e>0` gate:
+     *  - L36 (director active or post-impact window): clamp `ak` into the
+     *    `[k.O, k.O+400]` camera band, %260 y-wrap 4-corner probes, then
+     *    `b()`/`c()` extrusion on a fully-embedded edge (the left arm is
+     *    skipped when `k.ai` routes the `c()`-probe open side).
+     *  - L149 (`!k.ai && i.e<=0` quiet path): same probes, cell-21 kill
+     *    (`i.be=1` + `i(34)` + dead-drag), `!v() && al > k.P+240` →
+     *    `k.l(12)`, then the same extrude arms; falls through `t()` + 0.
+     */
+    fun canyonCollide(world: LevelCellSource): Boolean {
+        if (!world.iW) { world.iW = true; return false }          // Lc latch
+        if (world.iBe) {                                          // dead-drag arm
+            ag = 0; ah = 0; al -= world.kX
+            return false
+        }
+        if (world.kAi || world.iE > 0) {                          // L36
+            bb = false; bc = false
+            if (ak <= world.kO) ak = world.kO
+            else if (ak >= world.kO + 400) ak = world.kO + 400
+            val i7 = W[0]; val i8 = W[2]
+            val i9 = W[1] % 260 + 260; val i10 = W[3] % 260 + 260
+            aT = e(world, i7 / 20, i9 / 20); aU = e(world, i8 / 20, i9 / 20)
+            aV = e(world, i7 / 20, i10 / 20); aW = e(world, i8 / 20, i10 / 20)
+            bb = false; bc = false
+            if (aT >= 10 && aV >= 10) {                           // L118 gate
+                if (freeSideC(world)) { if (!world.kAi) slideLeftB(i7, i8, i9, world) }
+                else slideRightC(i7, i8, i9, world)               // L10f
+            } else if (aU >= 10 && aW >= 10) {                    // L118→L13b
+                if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
+                else slideRightC(i7, i8, i9, world)
+            }
+            refreshBoxes()                                        // L142 t()
+            return true
+        }
+        // L149 — quiet path: kill/fail checks + extrude.
+        val i7 = W[0]; val i8 = W[2]
+        val i9 = W[1] % 260 + 260; val i10 = W[3] % 260 + 260
+        aT = e(world, i7 / 20, i9 / 20); aU = e(world, i8 / 20, i9 / 20)
+        aV = e(world, i7 / 20, i10 / 20); aW = e(world, i8 / 20, i10 / 20)
+        bb = false; bc = false
+        if (aT == 21 || aU == 21) {                               // L1d4 kill
+            ag = 0; ah = 0; al -= world.kX
+            world.iBe = true
+            setAnim(34)
+        } else if (!yOverlapsCam(world) && al > world.kP + 240) { // L1f7
+            world.stateL(12)
+        } else if (aT >= 10 && aV >= 10) {                        // L214
+            if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
+            else slideRightC(i7, i8, i9, world)
+            refreshBoxes()
+            return true                                           // L23e
+        } else if (aU >= 10 && aW >= 10) {                        // L240
+            if (freeSideC(world)) slideLeftB(i7, i8, i9, world)   // L263
+            else slideRightC(i7, i8, i9, world)
+        }
+        refreshBoxes()                                            // L26a t()
+        return false
+    }
+
+    /** `i.b(int,int,int)` (i.java:4206-4265, proven): slide `ak` left by
+     *  right-edge-cell increments until the wrapped top-left corner is
+     *  free — up to 4 slides (r10 = 3,2,1,0), `ag=0` at the end. */
+    private fun slideLeftB(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
+        bb = true; aT = 10
+        var r10 = 3
+        while (aT >= 10) {
+            if (r10 < 0) break
+            r10--
+            ak -= (i8 % 20) + 1
+            refreshBoxes()                                        // t()
+            aT = e(world, W[0] / 20, i9 / 20)
+        }
+        ag = 0
+    }
+
+    /** `i.c(int,int,int)` (i.java:4267-4328, proven): slide `ak` right by
+     *  left-edge-cell complements until the wrapped top-right corner is
+     *  free — same 4-slide bound, `ag=0` at the end. */
+    private fun slideRightC(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
+        bc = true; aU = 10
+        var r10 = 3
+        while (aU >= 10) {
+            if (r10 < 0) break
+            r10--
+            ak += 20 - ((i7 + 20) % 20)
+            refreshBoxes()                                        // t()
+            aU = e(world, W[2] / 20, i9 / 20)
+        }
+        ag = 0
+    }
+
+    /** `i.c()` (i.java:4330-4408, proven): rings r10=1..4 probe the
+     *  wrapped-top corners at `±r10*20` — `true` when the LEFT side opens
+     *  first (→ `b()`), `false` on right-first or neither within 4 cells. */
+    private fun freeSideC(world: LevelCellSource): Boolean {
+        val i9 = W[1] % 260 + 260
+        var r10 = 1
+        while (r10 < 5) {
+            aT = e(world, (W[0] - r10 * 20) / 20, i9 / 20)
+            aU = e(world, (W[2] + r10 * 20) / 20, i9 / 20)
+            if (aT < 10) return true                              // L61→1
+            if (aU < 10) return false                             // L6c→0
+            r10++
+        }
+        return false                                              // L72→0
+    }
+
+    /** `i.v()` player arm (i.java:2155-2160 L144, proven): entity types
+     *  not whitelisted fall to `a(k.ac, Y)` — the Y box vs the camera
+     *  active rect (same predicate `flightAliveV` uses for `g.n()`). */
+    private fun yOverlapsCam(world: LevelCellSource): Boolean {
+        val ac = world.kAc ?: return true
+        return Y[0] <= ac[2] && Y[2] >= ac[0] && Y[1] <= ac[3] && Y[3] >= ac[1]
     }
 
     /**
@@ -3171,6 +3296,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
 
         val ZERO_RECT = IntArray(4)
+        /** `k.bo` (k.java:24890-24925, proven): outfit table —
+         *  `{palette l(), remap a()}` per `k.bL` outfit index
+         *  (`{{0,-1},{3,1},{5,2},{6,3}}`). */
+        val K_BO = arrayOf(intArrayOf(0, -1), intArrayOf(3, 1),
+                           intArrayOf(5, 2), intArrayOf(6, 3))
         /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
          *  (written by `o()`, read by `b(x,y)` :9829). */
         var markerLx = -1
@@ -4351,6 +4481,395 @@ open class Entity(val ax: Int, var clip: Clip?) {
             }
         }
     }
+
+    /**
+     * `i.F()` (i.java:11782-14030, proven): the per-entity draw-style/FX
+     * prep proc. `k.I()`'s second pass over `bd[]` calls it on each
+     * entry, its `ad` link, `k.E`, and the player's `ae` marker (all
+     * except ax76/ax29 on `ad`). Sets `palette`/`remapTable`/
+     * `paletteAlpha` (the `aa.l()/a()/g()` clip draw-state), runs the
+     * parked-entity `s()` advance (L910), ticks the player's FX
+     * counters + the shrine-burst sparkle field, and emits the
+     * pure-draw calls (`j.a` lines/fills, the speech bubble, sparkle
+     * dots) through `w.drawFx*` collectors — the `aa.a(bg,…)` sprite
+     * blit itself stays renderer-side (Le4f, i.java:13640). Returns 0
+     * = suppress draw (L2f carrier gate / slow-mo off-tick), 1 = draw.
+     */
+    fun drawStyleF(w: LevelCellSource): Int {
+        // L2f (i.java:11804): ax43 negative-aw record under a live
+        // ax749 claim → skip the draw entirely.
+        if (ax == 43 && aw < 0) {
+            val c0 = w.kC
+            if (c0 != null && c0.claimAb() && c0.aw == 749) return 0
+        }
+        // L4a/Lca (i.java:11860-11873): soldier-family alert/corpse
+        // anims draw on the az=99 sub-layer.
+        if ((ax == 11 || ax == 17 || ax == 73) &&
+            (S == 21 || S == 0 || S == 135 || S == 20 || S == 69 ||
+             S == 106 || S == 107 || S == 94 || S == 117 ||
+             S == 164 || S == 168)) az = 99
+        // Ld0/Lfa (i.java:11877-11897): the player floats to az=100
+        // inside a locomotion/attack anim while no claim owns him.
+        if (ax == 0) {
+            val c0 = w.kC
+            if ((c0 == null || !c0.claimAb()) && (gC() || gB())) az = 100
+        }
+        // L100 (i.java:11899): the ax15 marker arms — S9 rope, S10
+        // tethered-zone chain (the ONLY ax dispatch F() keeps).
+        if (ax == 15) {
+            if (S == 9 && Z[4] != -1) {                  // L128 (:11913)
+                w.drawFxLine(Z[4] - w.kO, Z[5] - w.kP,
+                             ak - w.kO, al - w.kP, 0x44444444)
+                w.drawFxLine(Z[6] - w.kO, Z[7] - w.kP,
+                             ak - w.kO, al - w.kP, -0x77777778)
+            } else if (S == 10 && Z[0] != -1) {          // L1a7 (:11983)
+                val link = w.findByAw(Z[0])
+                if (link != null && link.ax == 14) {
+                    link.af = this
+                    val r15 = IntArray(4)
+                    r15[0] = ((link.W[0] + link.W[2]) shr 1) - w.kO
+                    r15[1] = ((W[0] + W[2]) shr 1) - w.kO
+                    r15[2] = W[3] - w.kP
+                    r15[3] = link.W[3] - w.kP
+                    w.drawFxLine(r15[0], r15[1], r15[2], r15[3],
+                                 0x44444444)
+                    w.drawFxLine(r15[0] + 1, r15[1] + 1,
+                                 r15[2], r15[3], -0x77777778)
+                    w.iR[0] = ak - 8; w.iR[1] = ak + 8
+                    w.iR[2] = al - 8; w.iR[3] = al + 8
+                    val ps = w.player.S
+                    // the second/third constants are stripped in the
+                    // fallback — inferred: the aerial family 234/235.
+                    if (ps != 233 && ps != 234 && ps != 235 &&
+                        overlapI(w.player.X, w.iR)) {
+                        // L349-L44a (i.java:12274-12389): walk `af`
+                        // hops; each second-hop ax14 tombstones.
+                        var hop: Entity? = link
+                        var guard = 0
+                        while (hop != null && guard++ < 64) {
+                            val nxt = hop.af ?: break
+                            if (nxt.Z[0] == -1) break
+                            val a2 = w.findByAw(nxt.Z[0]) ?: break
+                            val b2 = w.findByAw(a2.Z[0]) ?: break
+                            if (b2.ax == 14) {
+                                b2.P = b2.P or 128
+                                w.removeEntity(b2)
+                            }
+                            hop = nxt.af
+                        }
+                    }
+                }
+            }
+        }
+        // L455 palette dispatch (i.java:12389-12979): each arm sets the
+        // clip draw-state, then falls to L910 unless noted.
+        var leec = false
+        when {
+            ax == 10 -> {                       // L457: aU() + return
+                aUDraw(this, w, w.player)
+                return 1
+            }
+            ax == 13 -> leec = true             // L462: a(bg) → Leec
+            ax == 45 -> palette = Z[0]
+            ax == 30 || ax == 32 -> {           // L4a2 (:12450)
+                palette = 0
+                if (cGCount > 0) {
+                    cGCount--
+                    if (cGCount % 2 != 0) palette = 1
+                }
+            }
+            ax == 11 -> palette = if (Z[0] == 1 || Z[0] == 2) 1 else 0
+            ax == 47 || ax == 17 || ax == 73 -> palette = 0
+            ax == 68 -> palette = if (af?.ax == 30) 1 else 0
+            (ax == 0 || ax == 9 || ax == 4 ||
+             (ax == 67 && Z[0] == 11)) && w.missionBh() != 3 -> {
+                if (w.iCe) palette = 1
+                else if (ax == 9) {
+                    if (S == 21 || S == 22) ad = null
+                    palette = when (w.kAj) {
+                        2 -> 5; 3 -> 6; 5 -> 7; 6 -> 4; else -> 0
+                    }
+                } else palette = 0
+                // L619 (i.java:12635-12720): the ax9-Z[2]==47 burst.
+                if (ax == 9 && Z[2] == 47) {
+                    if (S == 4 || S == 5) {
+                        if (!w.kBK) return 1
+                        palette = 5
+                    }
+                    if (w.iCe && S == 4 && animFinished())
+                        w.removeEntity(this)
+                    if (w.iCe && S == 2 && animFinished()) P = P or 64
+                    if (S == 5) {
+                        ak = w.kO; al = w.kP           // screen-locked
+                        if (animFinished()) P = P or 64
+                        if (aC > 0 && (P and 64) != 0) {
+                            paletteAlpha = aC * 255 / 10
+                            aC--
+                            if (aC <= 0) {
+                                paletteAlpha = 255
+                                w.removeEntity(this)
+                                return 1
+                            }
+                        }
+                    } else paletteAlpha = 255
+                }
+                if (ax == 0) {                       // L709: k.bo outfit
+                    palette = K_BO[w.kBL.coerceIn(0, 3)][0]
+                    remapTable = K_BO[w.kBL.coerceIn(0, 3)][1]
+                }
+            }
+            ax == 43 -> {                      // L733/L784: `j.a(g,
+                // x,y,w,h,1)` is setClip (j.java:2731, proven) — clips
+                // the blit to the carrier's side column. Clip state is
+                // renderer-owned (drawEntity's clipScissor arm); no
+                // sim-side writes here.
+            }
+            ax == 79 -> { remapTable = Z[1]; palette = Z[0] }
+            ax == 46 -> remapTable = if (Z[6] == 0) Z[7] else -1
+            ax == 29 -> when (w.iBy) {                  // L893-L910
+                2 -> remapTable = 0
+                3 -> {
+                    remapTable = 0
+                    if (S != 28 && S != 20 && S != 4 && S != 24 &&
+                        S != 25 && S != 26 && S != 22)
+                        j0Frame = if (w.jG % 3 == 0L) 1 else 4
+                }
+                else -> remapTable = -1
+            }
+            ax == 61 -> palette = 0
+            ax == 74 -> palette = if (S == 3 || S == 4 || S == 5) 7 else 0
+        }
+        // L910 (i.java:12979-13050): tombstoned entities draw their
+        // corpse and skip everything below. Otherwise the parked-entity
+        // `s()` advance runs — but only on the active slow-mo tick.
+        if (!leec && (P and 128) == 0) {
+            if (clip != null && (P and 32) != 0 && (P and 16) == 0 &&
+                (!w.iAH || w.jG % maxOf(1, w.iAI) == 0L)) advanceAnim()
+            if (this === w.player && w.jC == 8) {
+                // player arm (i.java:13050-13185): the claim-bound
+                // shake counter; else `g.t--` iframes; else the i.bF
+                // flash oscillator.
+                val c0 = w.kC
+                if (c0 != null && c0.claimAb() && c0.cd[2]) {
+                    if (c0.cz > 0) {
+                        c0.cA++
+                        if (c0.cA > c0.cz) c0.cA = c0.cz
+                    }
+                } else if (!w.gS && !(w.iBB && w.iBF != -1)) {
+                    if (gt != 0) gt--                // La84 (i.java:13178)
+                } else if (!w.gS) {
+                    // i.bF flash oscillator (i.java:13085-13175):
+                    // i.bD rise/fall direction, i.bC one-shot/full
+                    // cycle, i.bE pulse count, i.bG clamp floor.
+                    if (w.iBD) {
+                        w.iBF += 5
+                        if (w.iBG != -1 && w.iBF > w.iBG) w.iBF = w.iBG
+                        if (w.iBC) {
+                            if (w.iBF >= 150) {
+                                w.iBF = 150
+                                if (w.iBE == 0) w.iBD = false
+                                else w.iBE--
+                            }
+                        } else if (w.iBF >= 100) w.iBB = false
+                    } else {
+                        w.iBF -= 5
+                        if (w.iBG != -1 && w.iBF < w.iBG) w.iBF = w.iBG
+                        if (!w.iBC) {
+                            if (w.iBF <= 70) {
+                                w.iBF = 70
+                                if (w.iBE == 0) w.iBD = true
+                                else w.iBE--
+                            }
+                        } else if (w.iBF <= 100) w.iBB = false
+                    }
+                }
+                // La92 (i.java:13185-13460): i.e-- + the shrine-burst
+                // sparkle field — f/g/h[360] lazy-alloc, spawns on
+                // `rand&127==0`, four dot offsets per active slot.
+                if (w.iE > 0) {
+                    w.iE--
+                    val f = w.iF ?: IntArray(360).also { w.iF = it }
+                    val g = w.iG ?: IntArray(360).also { w.iG = it }
+                    val h = w.iH ?: IntArray(360).also { w.iH = it }
+                    for (i in 0 until 360) {
+                        if (w.jNextInt() and 127 == 0 && g[i] == 0) {
+                            g[i] = kotlin.math.abs(w.jNextInt() % 40) + 60
+                            h[i] = kotlin.math.abs(w.jNextInt() % 60) + 60
+                            // `if (g[i] < 0) h[i] = -h[i]` — proven-dead:
+                            // g[i] was just set ≥60.
+                            f[i] = 0
+                        }
+                    }
+                    val cx = ak - w.kO
+                    val cy = ((W[1] + W[3]) shr 1) - w.kP
+                    for (i in 0 until 360) {
+                        if (g[i] > 15) {
+                            // Lbaf: the 4-point rosette around the
+                            // screen-anchored W-center (high-confidence
+                            // — alternating g/h amplitudes at
+                            // quarter phases).
+                            val ph = i * Trig.M / 360
+                            for (k2 in 0 until 4) {
+                                val a = ph + k2 * Trig.N
+                                w.drawFxDot(
+                                    cx + (Trig.sin(Trig.N - a) *
+                                          (g[i] + f[i]) shr 8),
+                                    cy + (Trig.sin(Trig.O - a) *
+                                          (h[i] + f[i]) shr 8))
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Lcac (i.java:13463-13640): non-player FX counters.
+                when {
+                    ax == 24 && S == 11 -> {
+                        cA++
+                        if (cA > cz) cA = cz
+                    }
+                    ax == 64 && S == 1 -> {
+                        val c0 = w.kC
+                        if (c0 != null && c0.claimAb() && c0.cd[2]) {
+                            if (cz <= 0) { cz = 999; cA = 0 }
+                            cA++
+                            if (cA > cz) cA = cz
+                        }
+                    }
+                    ax == 64 && (S == 3 || S == 4 || S == 5) -> {
+                        val c0 = w.kC
+                        if (c0 != null && c0.claimAb() && c0.cd[2]) {
+                            if (cz <= 0) { cz = S; cA = 0 }
+                            cA++
+                            if (cA > cz) cA = cz
+                        }
+                        if (cz <= 0) { cA = 0; cz = 0 }
+                        // r16 = 80 - (range·cA/cz); the divisor guards
+                        // "JUMP_MAN_MIN_SCALE_VALUE=80" — the range
+                        // constant is stripped (inferred: same 80).
+                        ax64Scale = 80 - 80 * cA / maxOf(1, cz)
+                    }
+                    ax == -999 -> {
+                        // Ldeb (i.java:13647): sentinel debug line —
+                        // off-screen → tail only.
+                        if (ak > w.kO + 400 || ak + 20 < w.kO) leec = true
+                        else w.drawFxLine(ak - w.kO, al - w.kP,
+                                          ak + 20 - w.kO, al - w.kP, -1)
+                    }
+                }
+            }
+        }
+        // Leec (i.java:13747-14030): post-draw tail.
+        // ax29's `aa.j[0] = r12` (:13750) is already carried by
+        // `j0Frame` — the i.by==3 arm writes it directly.
+        when (ax) {
+            60 -> { /* bk() lift cable draw (:13759) — renderer-side;
+                the renderer calls liftCableArm() for the S dispatch. */ }
+            58 -> { /* L10d8 (:13772): draw skipped entirely */ }
+            40 -> {
+                // `by()` (i.java:48822-49163, proven): the zipline rope.
+                // Gate `S==2 && Z[3]!=0`; finds the rider — an ax40
+                // bd-entry bound to `player.ac` on this rope (`s==this`)
+                // — then writes every marker's `al` (sag interpolation
+                // while riding, else rests at `al+1` into `Z[1]`) and
+                // emits the rope lines (straight when parked, sagging
+                // to `aS.ac` while `player.S==164`), color 0xFFC94F33.
+                if (S == 2 && Z[3] != 0) {
+                    val p = w.player
+                    var riding = false
+                    val ac = p.ac
+                    if (ac != null && ac.ax == 40) {
+                        var i = 0
+                        while (i < w.drawCount) {
+                            val e = w.drawList[i]
+                            if (e != null && e.ax == 40 && e.s === this &&
+                                ac.s === this && ac === e) {
+                                riding = p.S == 164
+                                break
+                            }
+                            i++
+                        }
+                    }
+                    var i = 0
+                    while (i < w.drawCount) {
+                        val e = w.drawList[i]
+                        if (e != null && e.ax == 40 && e.s === this) {
+                            if (riding && ac != null) {
+                                if (e.ak < ac.ak) {
+                                    e.al = e.Z[1] +
+                                        (e.ak - ak) * (ac.al - ac.Z[1]) /
+                                        (ac.ak - ak)
+                                } else if (e.ak > ac.ak) {
+                                    e.al = e.Z[1] +
+                                        (Z[3] - e.ak) * (ac.al - ac.Z[1]) /
+                                        (Z[3] - ac.ak)
+                                }
+                            } else if (e.ah == 0) {
+                                e.al = al + 1
+                                e.Z[1] = e.al
+                            }
+                        }
+                        i++
+                    }
+                    val y1 = Z[1] - w.kP
+                    if (riding && ac != null) {
+                        val gx = ac.ak - w.kO
+                        val gy = ac.W[1] - w.kP
+                        w.drawFxLine(ak - w.kO, y1, gx, gy, -3584205)
+                        w.drawFxLine(Z[3] - w.kO, y1, gx, gy, -3584205)
+                        w.drawFxLine(ak - w.kO, y1 + 1, gx, gy + 1,
+                                     -3584205)
+                        w.drawFxLine(Z[3] - w.kO, y1 + 1, gx, gy + 1,
+                                     -3584205)
+                    } else {
+                        w.drawFxLine(ak - w.kO, y1, Z[3] - w.kO, y1,
+                                     -3584205)
+                        w.drawFxLine(ak - w.kO, y1 + 1, Z[3] - w.kO,
+                                     y1 + 1, -3584205)
+                    }
+                }
+            }
+            11 -> {
+                // Lf2c-L108f (i.java:13790-13975): the overhead speech
+                // bubble — active while `Z[19]==0 && Z[20]>0`; picks a
+                // fresh line at `Z[20]==40`, wraps to ≤3 lines.
+                if (Z[19] == 0 && Z[20] > 0) {
+                    if (Z[20] == 40)
+                        cR = w.levelString(0, 74 + w.jRand(0, 2)) ?: ""
+                    val wrapped = w.wrapDialogText(cR, 120)
+                    val lines = minOf(wrapped.getOrElse(0) { 1 }, 3)
+                    val sx = ak - w.kO + (if (av) -120 else 0)
+                    val sy = al - w.kP - 65
+                    w.drawFxBubble(sx, sy, 120, lines, av, cR)
+                    Z[20]--
+                    if (Z[20] == 0) cR = ""
+                }
+                // L108f: S==169 → the short speech-tick line.
+                if (S == 169)
+                    w.drawFxLine(ak - w.kO, al - 65 - w.kP,
+                                 ak - w.kO, al - 45 - w.kP, -1)
+            }
+        }
+        // L10d8 (i.java:13985): ax43 → `j.a(g,0,0,400,240,1)` — a
+        // full-screen setClip reset (j.java:2731, proven), not a fill:
+        // renderer-side no-op here (scissor is per-draw-call).
+        // L10f2: slow-mo off-tick → suppress the draw.
+        if (w.iAH && w.jG % maxOf(1, w.iAI) != 0L) return 0
+        return 1
+    }
+
+    /**
+     * `bk()`'s S dispatch (i.java:42549-42585, proven) — which cable
+     * direction arm the renderer's lift-cable draw runs:
+     * `switch(S){9,10,16,17→L38; 11,13,14,15→L157; default→L267}`.
+     * Inside L38, S∈{9,10} falls to L4a (up) and S∈{16,17} to Lca
+     * (down); inside L157, S∈{13,15} falls to L169 (left) and
+     * S∈{11,14} to L1e9 (right). L267 is just the clip reset.
+     *
+     * Returns: 0 = no cable, 1 = up, 2 = down, 3 = left, 4 = right.
+     */
+    fun liftCableArm(): Int = when (S) {
+        9, 10 -> 1; 16, 17 -> 2; 13, 15 -> 3; 11, 14 -> 4; else -> 0
+    }
 }
 
 /** Minimal cell-source interface so `e()`/probes work against the level. */
@@ -4368,6 +4887,11 @@ interface LevelCellSource {
     var lockTarget: Entity?
     /** `k.q(uid)` lookup source (proven: entity list search by `aw`). */
     val npcs: List<Entity>
+    /** `k.bd[]`/`k.be` — the draw-order array `buildDrawList` fills
+     *  before `drawStylePass` runs `F()` per entry; `by()` scans it
+     *  for ax40 siblings (`bd[i].ax==40 && bd[i].s==rope`). */
+    val drawList: Array<Entity?> get() = emptyArray()
+    val drawCount: Int get() = 0
     /** `k.c(e)` — mark entity removed; applied after the npc tick pass
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
@@ -4581,6 +5105,12 @@ interface LevelCellSource {
     /** `i.be` — D() camera X-lock: when set the autoscroll keeps `cA` (the
      *  `cN`-relative target write is skipped, k.java:2797). */
     var iBe: Boolean get() = false; set(_) {}
+    /** `i.w` static — `B()` first-call latch (i.java:3849; cleared in the
+     *  i.D() static reset at i.java:7166). */
+    var iW: Boolean get() = false; set(_) {}
+    /** `i.e` static — post-impact collide window: `=30` at the ax24-S20
+     *  shrine arm (i.java:39329), decays per frame (i.F() La92 :13192). */
+    var iE: Int get() = 0; set(_) {}
     /** `i.q` — gauge-charge mode: bD L326 mirrors `aB` vs sums it. */
     var iQ: Boolean
     /** `i.cC` — waypoint-phase cursor (0-6). */
@@ -5012,6 +5542,38 @@ interface LevelCellSource {
     /** `g.p` (g.java:21) — kill-bonus flag the `k()` arms write
      *  (`Z[14]`→1/2 for ax11; own `Z[0]` for ax47/50). */
     var gP: Int get() = 0; set(_) {}
+
+    // -- slice 239: `i.F()` draw-style hooks (i.java:11782-14030) -------
+    /** `i.r[4]` (i.java:12198, proven): the ax15-S10 marker overlap box
+     *  `(ak-8, ak+8, al-8, al+8)` — a shared static in the original. */
+    val iR: IntArray get() = IntArray(4)
+    /** `i.f[]`/`i.g[]`/`i.h[]` (i.java:13193, proven): the 360-slot
+     *  shrine-burst sparkle field — lazy-allocated inside F()'s player
+     *  arm and shared by every draw. */
+    var iF: IntArray? get() = null; set(_) {}
+    var iG: IntArray? get() = null; set(_) {}
+    var iH: IntArray? get() = null; set(_) {}
+    /** `k.bL` (k.java:24778, proven): the outfit index into `K_BO` —
+     *  dual-uses as the af() browse cursor (menu write is separate). */
+    var kBL: Int get() = 0; set(_) {}
+    /** `j.a(g,x1,y1,x2,y2)` line + `j.b` fill — F()'s pure-draw calls
+     *  collected as (x1,y1,x2,y2,argb); the renderer blits them. */
+    fun drawFxLine(x1: Int, y1: Int, x2: Int, y2: Int, argb: Int) {}
+    /** `j.c(g,x,y,w,h)` (j.java:2844, proven) — 1px hollow rect outline
+     *  (the S31 zone's progress-bar frame). */
+    fun drawFxOutline(x: Int, y: Int, w: Int, h: Int, argb: Int) {}
+    /** `a.c()` (a.java:215, proven) — mark a script-prompt card slot
+     *  armed this draw pass; the renderer ticks + blits it at (a,b). */
+    fun drawFxPrompt(slot: Int) {}
+    /** `j.b(g,x,y,w,h)` (j.java:2818, proven) — filled rect (`j.b` =
+     *  fillRect; the S31 progress bar and similar fills). */
+    fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {}
+    /** `g.a(x,y,…)` sparkle dot — one point of the Lbaf rosette. */
+    fun drawFxDot(x: Int, y: Int) {}
+    /** `k.y.a(g,cR,x,y,w,lines,…)` (i.java:13942, proven): the ax11
+     *  overhead speech bubble — dark rect + border + wrapped `text`. */
+    fun drawFxBubble(x: Int, y: Int, w: Int, lines: Int, flip: Boolean,
+                     text: String) {}
 }
 
 /* `g.c(int)` (g.java:404, proven): interact-eligible player states —

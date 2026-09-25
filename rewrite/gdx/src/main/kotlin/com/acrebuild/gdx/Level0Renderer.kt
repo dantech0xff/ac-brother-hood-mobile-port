@@ -600,6 +600,43 @@ class Level0Renderer {
         fillAr(x, y + 1, 1, h - 2, argb); fillAr(x + w - 1, y + 1, 1, h - 2, argb)
     }
 
+    /**
+     * `i.F()`'s pure-draw calls (i.java:11782+, proven): drains the
+     * per-tick `fx*` collectors — rope/marker lines (`j.a`), dark
+     * columns + fullscreen veil (`j.a` fill), the ax11 speech bubble
+     * (`k.y.a` — dark panel, white border, wrapped body text on the
+     * `y` font), and the shrine-burst sparkle dots (`g.a`). All coords
+     * arrive screen-relative (world → camera already subtracted).
+     */
+    private fun fxOverlay(w: Level0World) {
+        for (r in w.fxRects) fillAr(r[0], r[1], r[2], r[3], r[4])
+        for (i in w.fxLines.indices) {
+            val l = w.fxLines[i]
+            drawLine(l[0], l[1], l[2], l[3], l[4])
+        }
+        for (i in w.fxBubbles.indices) {
+            val b = w.fxBubbles[i]
+            val text = w.fxBubbleText.getOrElse(i) { "" }
+            val x = b[0]; val y = b[1]; val bw = b[2]; val lines = b[3]
+            val bh = lines * 8 + 8
+            fillAr(x, y, bw, bh, -0x1000000)                 // ~opaque dark
+            outlineAr(x, y, bw, bh, -1)                      // white border
+            if (b[4] != 0)                                  // pointer nub
+                fillAr(x + bw, y + bh / 2 - 2, 3, 4, -1)
+            else
+                fillAr(x - 3, y + bh / 2 - 2, 3, 4, -1)
+            if (text.isNotEmpty()) drawText(text, x + 4, y + 3, 0, pack = 92)
+        }
+        for (o in w.fxOutlines) outlineAr(o[0], o[1], o[2], o[3], o[4])
+        // `a.c()` (a.java:215, proven): armed prompt-card slots — the
+        // renderer ticks + blits at the (a,b) the sim wrote.
+        for (slot in w.fxPrompts) {
+            val pr = Entity.scriptPrompts.getOrNull(slot) ?: continue
+            if (pr.anim.e >= 0) drawPrompt(pr, 62)
+        }
+        for (d in w.fxDots) fillAr(d[0], d[1], 2, 2, -0x33889900)  // sparkle
+    }
+
     /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
      *  rotated `white` quad (screen-space y-down → rotate by −dy). */
     private fun drawLine(x0: Int, y0: Int, x1: Int, y1: Int, argb: Int) {
@@ -1192,6 +1229,11 @@ class Level0Renderer {
                 drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
+
+        // `i.F()` FX primitives (i.java:11782+, proven): the per-tick
+        // drawFx* collectors — ropes/marker lines, dark columns, the
+        // speech bubble, sparkle dots; emitted in screen space already.
+        fxOverlay(world)
 
         // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
         // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —
@@ -1803,7 +1845,7 @@ class Level0Renderer {
         // `aa.l(i)` palette select + `aa.a(i)` az-remap select + `aa.g`
         // palette alpha, chosen per ax before the (P&128)==0 blit.
         var palette = e.palette
-        var alpha = 255
+        var alpha = e.paletteAlpha          // `aa.g` — F()'s palette alpha
         val last = e.T >= clip.frameCount(e.S) - 1
         // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
         // draws the rope segments (object Z[7] of clip61) BEFORE the
@@ -1840,15 +1882,9 @@ class Level0Renderer {
                     }
                     if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
                     if (world.iCe && e.S == 2 && last) e.P = e.P or 64
-                    if (e.S == 5) {
-                        e.ak = camX; e.al = camY
-                        if (last) e.P = e.P or 64
-                        if (e.aC > 0 && (e.P and 64) != 0) {
-                            alpha = (e.aC * 255) / 10
-                            e.aC--
-                            if (e.aC <= 0) { world.removeEntity(e); return }
-                        }
-                    }
+                    // S5 candle fade (i.java:3095): sim-side F() owns
+                    // `ak/al` snap, `P|=64`, `aC--`, removal — the
+                    // renderer only consumes `paletteAlpha`.
                 } else if (e.ax == 0 && world.kBL in boArt.indices) {
                     palette = boArt[world.kBL][0]
                     e.remapTable = boArt[world.kBL][1]
@@ -1893,6 +1929,60 @@ class Level0Renderer {
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
+        // `bk()` (i.java:42549-42920, proven): the ax60 lift draws its
+        // piston cable — a clip region over the corridor plus repeated
+        // link frames (anim 8 vertical / anim 12 horizontal) stepping
+        // to the `Z[5]` anchor, then the full-screen clip restore.
+        if (e.ax == 60) drawLiftCable(e, pack, camX, camY)
+    }
+
+    /** `i.bk()` verbatim: cover setClip + link frames per S arm
+     *  (`e.liftCableArm()` is the proven `switch(S)` dispatch). */
+    private fun drawLiftCable(e: Entity, pack: Int, camX: Int, camY: Int) {
+        when (e.liftCableArm()) {
+            1 -> {                                 // L4a (S9/S10) — cable runs up
+                val top = e.Z.getOrElse(5) { 0 } - camY
+                val bottom = e.al - camY
+                clipScissor(e.W[0] - camX, top, e.W[2] - e.W[0],
+                            bottom - top)
+                var y = bottom
+                while (y >= top) {
+                    drawFrame(pack, 8, 0, e.ak - camX, y - 28, 0)
+                    y -= 28
+                }
+            }
+            2 -> {                                 // Lca (S16/S17) — cable runs down
+                var y = e.al + 28 - camY
+                val end = e.Z.getOrElse(5) { 0 } - camY +
+                    (if (e.Z.getOrElse(1) { 0 } > 0) 28 else 0)
+                clipScissor(e.W[0] - camX, y, e.W[2] - e.W[0], end - y)
+                while (y <= end) {
+                    drawFrame(pack, 8, 0, e.ak - camX, y + 28, 0)
+                    y += 28
+                }
+            }
+            3 -> {                                 // L169 (S13/S15) — cable left
+                var x = e.ak - camX
+                val end = e.Z.getOrElse(5) { 0 } - camX
+                clipScissor(end, e.W[1] - camY, x - end,
+                            e.W[3] - e.W[1])
+                while (x >= end) {
+                    drawFrame(pack, 12, 0, x - 22, e.al - camY, 0)
+                    x -= 22
+                }
+            }
+            4 -> {                                 // L1e9 (S11/S14) — cable right
+                var x = e.ak + 16 - camX
+                val end = e.Z.getOrElse(5) { 0 } + 22 - camX
+                clipScissor(x, e.W[1] - camY, end - x,
+                            e.W[3] - e.W[1])
+                while (x <= end) {
+                    drawFrame(pack, 12, 0, x, e.al - camY, 0)
+                    x += 22
+                }
+            }
+        }
+        clipReset()                                // L267: j.a(g,0,0,400,240,1)
     }
 
     /** `i.a(Graphics)` ax13 rope draw (i.java:13391-13411, proven):

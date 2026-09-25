@@ -2034,72 +2034,11 @@ class NpcFsm(val world: LevelCellSource) {
             43 -> if (rectsOverlap(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
-            // `aU()` case-34 (i.java:9031-9139, proven): slope-rail ride.
-            // The original runs this inside i.a(Graphics) — per-frame,
-            // i.e. the same cadence as our tick — so the mutating part
-            // lives here; the rail LINE draws in the renderer. `aV()`'s
-            // own S34 tick arm is genuinely empty (the earlier comment
-            // was right) — aU() is where the S34 work happens.
-            34 -> {
-                e.P = e.P or 16
-                val wa = e.W
-                val fwd = e.Z[0] == 0
-                val free = player.af == null || player.af === e
-                val near = player.S != 9 &&
-                    ((player.af === e &&
-                      player.ak > wa[0] && player.ak < wa[2]) ||
-                     rectsOverlap(player.W, wa))
-                if (near) {
-                    val inside = player.ak >= wa[0] && player.ak <= wa[2]
-                    val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])
-                    val ry = wa[1] + (if (fwd)
-                        (slope * (player.ak - wa[0])) shr 8
-                    else
-                        (slope * (wa[2] - player.ak)) shr 8)
-                    if (free && inside &&
-                        player.W[1] >= ry - 20 && player.W[1] <= ry + 30) {
-                        player.af = e
-                        player.al = ry + 10 + 65          // i13+=10; al=i13+65
-                        player.ah = (slope * 1024) shr 8
-                        player.av = !fwd
-                        player.ag = if (fwd) 2560 else -2560
-                        if (player.S == 50 || player.gt != 0) player.al += 40
-                        else if (player.S != 164) player.setAnim(164)
-                        if (w.padHeld(33024)) {           // jump-off
-                            player.af = null; player.al += 40
-                            player.probeCells(world)      // aS.x()
-                            if (player.aR <= 20) player.setAnim(43)
-                            else { player.al -= 40
-                                   player.settleToGround(world) }
-                        } else if (w.padHeld(16388) ||
-                                   (fwd && w.padHeld(8)) ||
-                                   (!fwd && w.padHeld(2))) {  // attack-off
-                            player.af = null; player.al -= 40
-                            player.setAnim(157)
-                            player.ag = if (fwd) 8192 else -8192
-                            player.ah = -2560
-                            player.probeCells(world)
-                            if (player.aR <= 20) player.setAnim(157)
-                            else { player.ah = 0; player.ag = 0
-                                   player.settleToGround(world) }
-                        }
-                    } else if (player.af === e && player.S == 164) {
-                        player.af = null; player.setAnim(43)
-                        player.ag = 0; player.ah = 0
-                    }
-                } else if (free) {
-                    if (player.af === e && player.S == 164) {
-                        if (e.Z[1] == 1) {                // dismount-jump
-                            player.al -= 40; player.setAnim(157)
-                            player.ag = if (fwd) 8192 else -8192
-                            player.ah = -2560
-                        } else {
-                            player.setAnim(43); player.ag = 0; player.ah = 0
-                        }
-                    }
-                    player.af = null
-                }
-            }
+            // S34: `aV()`'s tick arm is the trivial L5e9
+            // (i.java:32830 proven) — the rail ride lives in `aU()`
+            // on the F() draw path; see `aUDraw` below and
+            // `Entity.drawStyleF`'s ax10 arm.
+            34 -> {}
             // S16 door-teleport (i.java:12326-12431 = L177d→L1850,
             // proven). `g.a != null` gate; `az=300`; `r8 = k.q(Z[0])`
             // = the destination-door entity. Bound player (`aS.ac ==
@@ -7134,7 +7073,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
                 val r03 = 100 - w.kAE
                 w.kAF = if (e.aB >= r03) r03 else e.aB
                 w.iBh = 0                                  // bh = 0 (i.bh)
-                // e = 30 — i.e static unmapped (script var)
+                w.iE = 30                                  // i.e = 30 (i.java:39329)
                 if (w.kAJ != 0) { w.kX = w.kAJ; w.kAJ = 0 }
                 w.sfx(25)
             }
@@ -10508,4 +10447,121 @@ fun NpcFsm.initAx8(e: Entity, f: List<Int>) {
     e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
     e.setAnim(rf(5))
     e.refreshBoxes()
+}
+
+/**
+ * `i.aU()` (i.java:32121, proven): the ax10 draw-side per-S proc —
+ * `switch(S){case 31→L437; case 34→L20; default→L579}`. Called from
+ * `Entity.drawStyleF`'s ax10 arm (the source's F()→aU() call);
+ * `aV()`'s own S34 tick arm is the trivial L5e9, so the rail ride
+ * genuinely lives here on the draw path. L437 (S31's draw arm) is not
+ * mined — the aV S31 claim-QTE arm is a different proc.
+ *
+ * L20 → the slope-rail ride (former `tickTrigger` 34 arm, same body):
+ * `P|=16`, `fwd = Z[0]==0`, `free = af==null||af===e`,
+ * `near = S!=9 && (af===e&&ak∈(W0,W2) || W-overlap)`; inside the rail
+ * band `ry-20..ry+30` it binds `af`, snaps `al = ry+75`, flings ±2560,
+ * mounts S164 (S50/gt→+40); padHeld 33024 → jump-off (al+40, probe,
+ * `aR<=20`→S43 else settle); padHeld 16388/fwd-8/!fwd-2 → attack-off
+ * (al-40, S157, ±8192/-2560, probe, settle if airborne); out of band
+ * while bound in S164 → release S43. `free&&!near`: bound S164 →
+ * `Z[1]==1` dismount-jump S157 else S43; then `af=null`.
+ */
+internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
+    if (e.S == 31) {
+        // L437 (i.java:32653-32840, proven): the claim-QTE zone's draw
+        // — gated on player overlap + `!(P&128)`. Column math, the
+        // `m`/`aA==Z[3]` prompt checks that latch `n`, the cyan
+        // progress bar (fill `j.b` + outline `j.c`), then the armed
+        // `bA[4-aD..3]` cards positioned at y=160 and ticked 62ms.
+        if (!Entity.overlapI(e.W, player.W) || (e.P and 128) != 0) return
+        val colW = 400 / (e.aD + 1)
+        val off = 4 - e.aD
+        if (e.m >= 10) {
+            val pr = Entity.scriptPrompts.getOrNull(e.m - 10)
+            if (pr != null && pr.anim.stopped()) { e.nl = 1; return }
+        } else if (e.aA == e.Z[3]) {
+            if (w.missionBh() == 3) { e.nl = 1; return }
+            val pr = Entity.scriptPrompts.getOrNull(e.m)
+            if (pr != null && pr.anim.stopped()) { e.nl = 1; return }
+        }
+        if (e.Z[2] < 9999) {
+            w.drawFxRect(20, 200, 360 * (e.Z[2] - e.aB) / e.Z[2],
+                         10, 0x33ebf4)
+            w.drawFxOutline(20, 200, 360, 10, -1)
+        }
+        var i = 0
+        while (i < e.aD) {
+            val pr = Entity.scriptPrompts.getOrNull(i + off)
+            if (pr != null) {
+                pr.a = colW - 10 + i * colW
+                pr.b = 160
+                w.drawFxPrompt(i + off)
+            }
+            i++
+        }
+        return
+    }
+    if (e.S != 34) {
+        // L579 default: no draw-side work.
+        return
+    }
+    e.P = e.P or 16
+    val wa = e.W
+    val fwd = e.Z[0] == 0
+    val free = player.af == null || player.af === e
+    val near = player.S != 9 &&
+        ((player.af === e &&
+          player.ak > wa[0] && player.ak < wa[2]) ||
+         Entity.overlapI(player.W, wa))
+    if (near) {
+        val inside = player.ak >= wa[0] && player.ak <= wa[2]
+        val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])
+        val ry = wa[1] + (if (fwd)
+            (slope * (player.ak - wa[0])) shr 8
+        else
+            (slope * (wa[2] - player.ak)) shr 8)
+        if (free && inside &&
+            player.W[1] >= ry - 20 && player.W[1] <= ry + 30) {
+            player.af = e
+            player.al = ry + 10 + 65          // i13+=10; al=i13+65
+            player.ah = (slope * 1024) shr 8
+            player.av = !fwd
+            player.ag = if (fwd) 2560 else -2560
+            if (player.S == 50 || player.gt != 0) player.al += 40
+            else if (player.S != 164) player.setAnim(164)
+            if (w.padHeld(33024)) {           // jump-off
+                player.af = null; player.al += 40
+                player.probeCells(w)          // aS.x()
+                if (player.aR <= 20) player.setAnim(43)
+                else { player.al -= 40
+                       player.settleToGround(w) }
+            } else if (w.padHeld(16388) ||
+                       (fwd && w.padHeld(8)) ||
+                       (!fwd && w.padHeld(2))) {  // attack-off
+                player.af = null; player.al -= 40
+                player.setAnim(157)
+                player.ag = if (fwd) 8192 else -8192
+                player.ah = -2560
+                player.probeCells(w)
+                if (player.aR <= 20) player.setAnim(157)
+                else { player.ah = 0; player.ag = 0
+                       player.settleToGround(w) }
+            }
+        } else if (player.af === e && player.S == 164) {
+            player.af = null; player.setAnim(43)
+            player.ag = 0; player.ah = 0
+        }
+    } else if (free) {
+        if (player.af === e && player.S == 164) {
+            if (e.Z[1] == 1) {                // dismount-jump
+                player.al -= 40; player.setAnim(157)
+                player.ag = if (fwd) 8192 else -8192
+                player.ah = -2560
+            } else {
+                player.setAnim(43); player.ag = 0; player.ah = 0
+            }
+        }
+        player.af = null
+    }
 }

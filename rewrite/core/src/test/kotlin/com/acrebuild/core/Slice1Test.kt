@@ -806,10 +806,12 @@ class Level0WorldTest {
         repeat(9) { w.tick(emptyList()) }
         w.player.applyHit(18, 0, null, w)
         assertEquals(85, w.player.x1, "still iframe-protected on last tick")
-        // intro claim-script dialogs (l(21)) eat sim ticks — drain iframes
-        // with a bound instead of a fixed count (g.t = 10 ticks).
-        var guard = 0
-        while (w.player.gt > 0 && guard++ < 40) w.tick(emptyList())
+        // i.F()'s La84 decays g.t on the DRAW path — and only while no
+        // cd[2]-claim owns the player (i.java:13066, proven). This
+        // fixture's ax5 director claims him, so release the flag and
+        // drain at the verbatim site.
+        w.kC?.cd?.set(2, false)
+        repeat(12) { w.player.drawStyleF(w) }
         assertEquals(0, w.player.gt)
         w.player.setAnim(0)
         w.iBh = 0
@@ -12785,8 +12787,8 @@ class Slice122Test {
         w.player.setPositionPx(px, ry + h)
         w.player.refreshBoxes()
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
-        assertSame(t, w.player.af)
+        t.drawStyleF(w)                              // rail lives on
+        assertSame(t, w.player.af)                   // aU() (draw path)
         assertEquals(ry + 75, w.player.al)          // i13+=10; al=i13+65
         assertEquals((slope * 1024) shr 8, w.player.ah)
         assertEquals(2560, w.player.ag)
@@ -12795,7 +12797,7 @@ class Slice122Test {
         // ride-release: leave the rail x-range while S164
         w.player.setPositionPx(t.W[2] + 40, ry + 500)
         w.player.refreshBoxes()
-        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
+        t.drawStyleF(w)
         assertNull(w.player.af)
         assertEquals(43, w.player.S)                // Z[1]!=1 → plain fall
         assertEquals(0, w.player.ag); assertEquals(0, w.player.ah)
@@ -12814,14 +12816,14 @@ class Slice122Test {
         w.player.setPositionPx(px, ry + h)
         w.player.refreshBoxes()
         w.player.setAnim(0)
-        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
+        t.drawStyleF(w)
         assertSame(t, w.player.af)
         // walk off → Z[1]==1 arm: al-=40, i(157), ag=+8192, ah=-2560
         val al0 = w.player.al
         w.player.setPositionPx(t.W[2] + 40, ry + 500)
         w.player.refreshBoxes()
         w.player.al = al0                            // restore hang height
-        w.npcFsm.tickTrigger(t, w, w.player, w.pad)
+        t.drawStyleF(w)
         assertNull(w.player.af)
         assertEquals(157, w.player.S)
         assertEquals(8192, w.player.ag)
@@ -20917,5 +20919,645 @@ class Slice237Test {
         w.tick(emptyList())                    // drain pendingRemove
         assertNull(w.npcs.firstOrNull { it === e },
             "k.c(this) removes the fired checkpoint entity")
+    }
+}
+
+// Slice 238 — i.B() flying canyon-wall collide (i.java:3844-4204, proven):
+// i.w latch, dead-drag arm, k.ai/i.e gate → L36 (camera band + extrude),
+// L149 (cell-21 kill / below-screen k.l(12) / extrude). Helpers:
+// b() L10a slide-LEFT, c(r7,r8,r9) L10f slide-RIGHT, c() no-arg L32 probe.
+class Slice238Test {
+
+    private fun flyWorld(): Level0World = world().also {
+        it.kAj = 1                                   // MISSION_BH[1]==3 — flying
+        it.iW = false                                // fresh latch
+    }
+
+    private fun placeW0W1(p: Entity, x0: Int, y1: Int) {
+        p.refreshBoxes()
+        p.setPositionPx(p.ak + (x0 - p.W[0]), p.al + (y1 - p.W[1]))
+        p.refreshBoxes()
+    }
+
+    @Test fun `first call latches iW and returns false`() {
+        val w = flyWorld()
+        val p = w.player
+        p.setPositionPx(1500, 900); p.refreshBoxes()
+        assertFalse(p.canyonCollide(w))
+        assertTrue(w.iW, "Lc latch i.w set on first call (i.java:3849)")
+        // second call runs the real logic — quiet path over open sky → 0
+        assertFalse(p.canyonCollide(w))
+    }
+
+    @Test fun `director pass clamps ak into the kO camera band`() {
+        val w = flyWorld()
+        val p = w.player
+        p.canyonCollide(w)                           // latch
+        w.kAi = true                                 // L36 gate
+        w.kO = 1000
+        p.setPositionPx(1600, 400); p.refreshBoxes()
+        p.canyonCollide(w)
+        assertEquals(1400, p.ak, "ak >= kO+400 clamps to kO+400 (L59)")
+        p.setPositionPx(500, 400); p.refreshBoxes()
+        p.canyonCollide(w)
+        assertEquals(1000, p.ak, "ak <= kO clamps to kO (L55)")
+    }
+
+    @Test fun `cell 21 top corner arms iBe and plays i34`() {
+        val w = flyWorld()
+        val p = w.player
+        // level-0's only reachable cell-21: (133,23) → px (2660,460); the
+        // (86,26) cell sits below the %260 wrap floor — proven dead.
+        placeW0W1(p, 2660, 460)
+        p.canyonCollide(w)                           // latch
+        assertEquals(21, w.collisionCell(p.W[0] / 20, (p.W[1] % 260 + 260) / 20))
+        val alBefore = p.al
+        p.canyonCollide(w)
+        assertTrue(w.iBe, "i.be armed on cell-21 contact (L1e2)")
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertEquals(alBefore - w.kX, p.al, "dead-drag al -= k.X (L1d9)")
+        assertEquals(34, p.S, "i(34) splat anim (L1e9)")
+    }
+
+    @Test fun `below screen in quiet path runs k_l_12`() {
+        val w = flyWorld()
+        val p = w.player
+        p.canyonCollide(w)                           // latch
+        w.kP = 0
+        p.setPositionPx(5000, 500); p.refreshBoxes() // Y outside cam rect
+        assertFalse(p.canyonCollide(w))
+        assertEquals(12, w.jC, "L1f7: !v() && al > k.P+240 → k.l(12)")
+    }
+
+    @Test fun `iE decays once per world tick`() {
+        val w = flyWorld()
+        w.iE = 30
+        w.tick(emptyList())
+        assertEquals(29, w.iE, "i.e-- per frame (i.java:13192)")
+    }
+
+    @Test fun `iE resets in the world D block`() {
+        val w = flyWorld()
+        w.iE = 30; w.iW = true
+        w.loadMission(1)                             // rebuild runs i.D()
+        assertEquals(0, w.iE)
+        assertFalse(w.iW)
+    }
+
+    @Test fun `ax24 S20 shrine arm sets iE to 30`() {
+        // i.java:39329 — the L36 gate's only producer: overlap arms the
+        // 30-frame post-impact collide window.
+        val w = flyWorld()
+        val p = w.player
+        p.setPositionPx(1500, 900); p.refreshBoxes()
+        val shrine = Entity(24, null)
+        shrine.S = 20
+        shrine.setPositionPx(1500, 900)
+        shrine.W[0] = p.W[0] - 5; shrine.W[1] = p.W[1] - 5
+        shrine.W[2] = p.W[2] + 5; shrine.W[3] = p.W[3] + 5
+        w.npcs.add(0, shrine)
+        w.npcFsm.tickAx24(shrine, w, w.player)
+        assertEquals(30, w.iE, "L36 gate armed via ax24-S20 overlap")
+    }
+
+    @Test fun `dead drag arm runs when iBe already set`() {
+        val w = flyWorld()
+        val p = w.player
+        w.iW = true                                  // latch already consumed
+        w.iBe = true
+        p.setPositionPx(1500, 900); p.refreshBoxes()
+        p.ag = 99; p.ah = 99
+        val alBefore = p.al
+        assertFalse(p.canyonCollide(w))
+        assertEquals(0, p.ag); assertEquals(0, p.ah)
+        assertEquals(alBefore - w.kX, p.al)
+    }
+}
+
+class Slice239Test {
+    // slice 239 — `i.F()` draw-style/FX proc (i.java:11782-14030): the
+    // palette/remap/alpha dispatch, az layering, marker lines, the
+    // player FX counters (gt--/iE--/bF oscillator/sparkles), and the
+    // `drawStylePass()` second-pass driver (k.java:10032-10150).
+
+    private fun ent(ax: Int, w: Level0World): Entity {
+        val e = Entity(ax, null)
+        e.aw = 7000 + ax
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `soldier alert anims sink to az 99`() {
+        val w = world()
+        val e = ent(11, w); e.S = 21
+        e.drawStyleF(w)
+        assertEquals(99, e.az, "L4a: ax11 S∈{21,…,168} → az=99")
+    }
+
+    @Test fun `player floats to az 100 in a locomotion anim`() {
+        val w = world()
+        val p = w.player; p.S = 0
+        p.drawStyleF(w)
+        assertEquals(100, p.az, "Ld0: unclaimed ax0 locomotion → az=100")
+    }
+
+    @Test fun `ax11 palette arm follows Z0 uniform`() {
+        val w = world()
+        val e = ent(11, w)
+        e.Z[0] = 1; e.drawStyleF(w)
+        assertEquals(1, e.palette, "L4d3: Z[0]==1 → l(1)")
+        e.Z[0] = 0; e.drawStyleF(w)
+        assertEquals(0, e.palette)
+    }
+
+    @Test fun `ax30 blink arm toggles palette per cGCount parity`() {
+        val w = world()
+        val e = ent(30, w)
+        e.cGCount = 3
+        e.drawStyleF(w)
+        assertEquals(2, e.cGCount); assertEquals(0, e.palette)
+        e.drawStyleF(w)
+        assertEquals(1, e.cGCount); assertEquals(1, e.palette,
+            "L4a2: odd cGCount → l(1) flash frame")
+    }
+
+    @Test fun `player arm decays gt under jC8 without a claim`() {
+        val w = world()
+        val p = w.player; p.gt = 5; w.iBB = false
+        p.drawStyleF(w)
+        assertEquals(4, p.gt, "La84: g.t-- when the flash cycle isn't running")
+    }
+
+    @Test fun `player arm suppresses gt decay while the flash runs`() {
+        val w = world()
+        val p = w.player; p.gt = 5
+        w.iBB = true; w.iBF = 50; w.iBD = true
+        p.drawStyleF(w)
+        assertEquals(5, p.gt, "flash oscillator active → La84 skipped")
+        assertEquals(55, w.iBF, "bD rise +5 (i.java:13100)")
+    }
+
+    @Test fun `iE decays and allocates the sparkle field in F`() {
+        val w = world()
+        w.iE = 30
+        w.player.drawStyleF(w)
+        assertEquals(29, w.iE, "La92: i.e-- inside the player arm")
+        assertNotNull(w.iF); assertNotNull(w.iG); assertNotNull(w.iH)
+    }
+
+    @Test fun `ax15 S10 marker emits lines and the iR box`() {
+        val w = world()
+        val zone = ent(14, w); zone.aw = 424242
+        val m = ent(15, w); m.S = 10; m.Z[0] = 424242
+        m.setPositionPx(500, 700); m.refreshBoxes()
+        zone.setPositionPx(300, 300)
+        zone.refreshBoxes()
+        zone.W[0] = 280; zone.W[1] = 280; zone.W[2] = 320; zone.W[3] = 330
+        m.drawStyleF(w)
+        assertEquals(2, w.fxLines.size, "L1a7: two j.a marker lines")
+        assertEquals(intArrayOf(492, 508, 692, 708).toList(), w.iR.toList(),
+            "L2c8: i.r = {ak-8, ak+8, al-8, al+8}")
+    }
+
+    @Test fun `slow mo off tick returns 0`() {
+        val w = world()
+        w.iAH = true; w.iAI = 2
+        w.jG = 1L
+        val e = ent(11, w)
+        assertEquals(0, e.drawStyleF(w), "L10f2: i.aH && j.g%aI!=0 → skip")
+        w.jG = 2L
+        assertEquals(1, e.drawStyleF(w))
+    }
+
+    @Test fun `ax24 S11 counter increments and caps at cz`() {
+        val w = world()
+        val e = ent(24, w); e.S = 11; e.cz = 3; e.cA = 2
+        e.drawStyleF(w); assertEquals(3, e.cA)
+        e.drawStyleF(w); assertEquals(3, e.cA, "Ldb0: cA++ cap cz")
+    }
+
+    @Test fun `ax29 remap arm follows iBy`() {
+        val w = world()
+        val e = ent(29, w)
+        w.iBy = 3; e.S = 10
+        e.drawStyleF(w)
+        assertEquals(0, e.remapTable)
+        assertTrue(e.j0Frame == 1 || e.j0Frame == 4,
+            "L8f5: j0 flicker 1/4 by j.g%3")
+        w.iBy = 1; e.drawStyleF(w)
+        assertEquals(-1, e.remapTable, "L910: default → a(-1)")
+    }
+
+    @Test fun `ax11 speech window writes bubble and decrements Z20`() {
+        val w = world()
+        val e = ent(11, w)
+        e.Z[20] = 40; e.Z[19] = 0
+        e.setPositionPx(500, 700); e.refreshBoxes()
+        e.drawStyleF(w)
+        assertEquals(1, w.fxBubbles.size, "Lf2c: Z20>0 → bubble emit")
+        assertEquals(39, e.Z[20], "Z[20]-- per draw")
+    }
+
+    @Test fun `ax0 outfit arm applies K_BO table`() {
+        val w = world()
+        w.kBL = 1                                    // outfit {3,1}
+        w.player.drawStyleF(w)
+        assertEquals(3, w.player.palette)
+        assertEquals(1, w.player.remapTable)
+    }
+
+    @Test fun `drawStylePass drives F on bd entries plus kE`() {
+        val w = world()
+        w.iE = 30
+        w.player.gt = 5
+        w.drawStylePass()
+        assertEquals(29, w.iE, "player F() via the second pass")
+        assertEquals(4, w.player.gt)
+        assertEquals(100, w.player.az)
+    }
+
+    @Test fun `drawStylePass skips ad F on ax76 and ax29 links`() {
+        val w = world()
+        val e = ent(11, w)
+        e.Z[8] = 888                                 // ax11 in-play
+        e.setPositionPx(w.kO + 200, w.kP + 120)      // camera center:
+        e.refreshBoxes()                             // au=0 → in-play
+        e.S = 21                                     // its own F → az=99
+        val marker = Entity(29, null); marker.S = 0
+        e.ad = marker
+        w.iBy = 2                                    // ax29 arm → remap=0
+        w.drawStylePass()
+        assertEquals(99, e.az, "entry's own F() ran via the pass")
+        assertEquals(-1, marker.remapTable,
+            "ax29 ad-link is F()-excluded — remapTable untouched")
+    }
+}
+
+class Slice240Test {
+    // slice 240 — `i.bk()` ax60 lift cable (i.java:42549-42920): the
+    // S→direction dispatch moved into `liftCableArm()` (the renderer
+    // owns the setClip regions + link-frame loops); plus the ax43
+    // `j.a(g,…,1)` re-read as setClip, not a fill (j.java:2731).
+
+    private fun ent(ax: Int, w: Level0World): Entity {
+        val e = Entity(ax, null)
+        e.aw = 7100 + ax
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `liftCableArm maps the verbatim S dispatch`() {
+        val w = world()
+        val e = ent(60, w)
+        for (s in intArrayOf(9, 10)) { e.S = s
+            assertEquals(1, e.liftCableArm(), "S$s → L4a (up)") }
+        for (s in intArrayOf(16, 17)) { e.S = s
+            assertEquals(2, e.liftCableArm(), "S$s → Lca (down)") }
+        for (s in intArrayOf(13, 15)) { e.S = s
+            assertEquals(3, e.liftCableArm(), "S$s → L169 (left)") }
+        for (s in intArrayOf(11, 14)) { e.S = s
+            assertEquals(4, e.liftCableArm(), "S$s → L1e9 (right)") }
+        for (s in intArrayOf(0, 1, 8, 12, 18, 34, -1)) { e.S = s
+            assertEquals(0, e.liftCableArm(), "S$s → L267 (no cable)") }
+    }
+
+    @Test fun `ax43 drawStyleF emits no fill - jcall is setClip`() {
+        // L733/L784 + L10d8 (i.java:12769-12860/13985-14005): the three
+        // `j.a(g,…,1)` calls are Graphics.setClip (j.java:2731, proven)
+        // — clip regions + restore, renderer-owned. No fxRects, ever.
+        val w = world()
+        val cv = ent(51, w)                          // any cv carrier
+        cv.W[0] = 100; cv.W[1] = 0
+        cv.W[2] = 200; cv.W[3] = 240
+        w.cv = cv
+        val e = ent(43, w)
+        e.setPositionPx(w.kO + 150, w.kP + 100)
+        e.refreshBoxes()
+        val before = w.fxRects.size
+        e.drawStyleF(w)
+        assertEquals(before, w.fxRects.size,
+            "ax43 arms emit clip regions, not fills — renderer-owned")
+        assertEquals(1, e.drawStyleF(w), "F() still returns 1 to draw")
+    }
+}
+
+class Slice241Test {
+    // slice 241 — `i.by()` ax40 zipline rope (i.java:48822-49163):
+    // rider scan (ax40 bd-entry === player.ac on the same rope `s`),
+    // marker `al` writes (sag vs rest), and the rope-line draws
+    // (5-arg `j.a` = drawLine, j.java:2792).
+
+    private fun rope(w: Level0World, x: Int, y: Int): Entity {
+        val r = Entity(40, null)
+        r.S = 2
+        r.setPositionPx(x, y); r.refreshBoxes()
+        r.Z[1] = y + 20                            // rope line y
+        r.Z[3] = x + 400                           // far anchor x
+        w.npcs.add(r)
+        return r
+    }
+
+    private fun marker(rope: Entity, w: Level0World, x: Int): Entity {
+        val m = Entity(40, null)
+        m.s = rope
+        m.setPositionPx(x, 0); m.refreshBoxes()
+        m.Z[1] = 600                               // marker rest row
+        w.npcs.add(m)
+        return m
+    }
+
+    private fun drawSlot(w: Level0World, vararg es: Entity) {
+        es.forEachIndexed { i, e -> w.drawList[i] = e }
+        w.drawCount = es.size
+    }
+
+    @Test fun `parked markers rest below the rope and draw two lines`() {
+        val w = world()
+        val r = rope(w, 1000, 500)
+        val m1 = marker(r, w, 1100)
+        val m2 = marker(r, w, 1300)
+        drawSlot(w, m1, m2)
+        w.player.ac = null
+        w.fxLines.clear()
+        r.drawStyleF(w)
+        assertEquals(r.al + 1, m1.al, "L17b: parked al = rope.al+1")
+        assertEquals(m1.al, m1.Z[1], "L17b: Z[1] = al")
+        assertEquals(r.al + 1, m2.al)
+        assertEquals(2, w.fxLines.size, "L29d: 2 straight rope lines")
+        val l = w.fxLines[0]
+        assertEquals(r.ak - w.kO, l[0]); assertEquals(r.Z[1] - w.kP, l[1])
+        assertEquals(r.Z[3] - w.kO, l[2]); assertEquals(r.Z[1] - w.kP, l[3])
+        assertEquals(-3584205, l[4], "rope color 0xFFC94F33")
+        assertEquals(r.Z[1] - w.kP + 1, w.fxLines[1][1], "2px rope")
+    }
+
+    @Test fun `rider sags markers and draws four lines`() {
+        val w = world()
+        val r = rope(w, 1000, 500)                 // ak=1000, Z1=520, Z3=1400
+        val m1 = marker(r, w, 1100)                // left of rider
+        val m2 = marker(r, w, 1300)                // right of rider
+        val g = Entity(40, null)                   // the gondola = aS.ac
+        g.s = r
+        g.setPositionPx(1200, 550); g.refreshBoxes()
+        g.Z[1] = 30                                // gondola hang offset
+        w.npcs.add(g)
+        w.player.ac = g
+        w.player.S = 164                           // zipline-hang anim
+        drawSlot(w, g, m1, m2)
+        w.fxLines.clear()
+        r.drawStyleF(w)
+        // left formula: Z[1] + (m.ak-r.ak)*(g.al-g.Z[1])/(g.ak-r.ak)
+        assertEquals(600 + 100 * (550 - 30) / 200, m1.al, "L119-left sag")
+        // right formula: Z[1] + (r.Z3-m.ak)*(g.al-g.Z[1])/(r.Z3-g.ak)
+        assertEquals(600 + 100 * (550 - 30) / 200, m2.al, "L119-right sag")
+        assertEquals(4, w.fxLines.size, "L1ac: 4 sagged rope lines")
+        val gx = g.ak - w.kO; val gy = g.W[1] - w.kP
+        assertEquals(intArrayOf(r.ak - w.kO, r.Z[1] - w.kP, gx, gy,
+                     -3584205).toList(), w.fxLines[0].toList())
+        assertEquals(intArrayOf(r.Z[3] - w.kO, r.Z[1] - w.kP, gx, gy,
+                     -3584205).toList(), w.fxLines[1].toList())
+        assertEquals(intArrayOf(r.ak - w.kO, r.Z[1] - w.kP + 1, gx,
+                     gy + 1, -3584205).toList(), w.fxLines[2].toList())
+    }
+
+    @Test fun `gate requires S2 and nonzero Z3`() {
+        val w = world()
+        val r = rope(w, 1000, 500)
+        val m1 = marker(r, w, 1100)
+        drawSlot(w, m1)
+        w.fxLines.clear()
+        r.S = 3                                    // wrong state
+        r.drawStyleF(w)
+        assertEquals(0, w.fxLines.size)
+        assertEquals(0, m1.al, "no marker write outside S2")
+        r.S = 2; r.Z[3] = 0                        // no far anchor
+        r.drawStyleF(w)
+        assertEquals(0, w.fxLines.size)
+    }
+
+    @Test fun `rider on rope but player not hanging falls back parked`() {
+        val w = world()
+        val r = rope(w, 1000, 500)
+        val m1 = marker(r, w, 1100)
+        val g = Entity(40, null)
+        g.s = r
+        g.setPositionPx(1200, 550); g.refreshBoxes()
+        w.npcs.add(g)
+        w.player.ac = g
+        w.player.S = 0                             // standing, not S164
+        drawSlot(w, g, m1)
+        w.fxLines.clear()
+        r.drawStyleF(w)
+        assertEquals(r.al + 1, m1.al, "r9=0 → L17b rest, not sag")
+        assertEquals(2, w.fxLines.size)
+    }
+}
+
+class Slice242Test {
+    // slice 242 — `i.aU()` L437: the ax10-S31 claim-QTE zone draw arm
+    // (i.java:32653-32840): overlap+P&128-clear gate, `n` latch checks,
+    // cyan progress bar (`j.b` fill + `j.c` outline), `bA[4-aD..3]`
+    // card row at y=160.
+
+    private fun zone(w: Level0World): Entity {
+        val e = Entity(10, null)
+        e.S = 31
+        e.setPositionPx(w.kO + 200, w.kP + 100)
+        // ax10 is a zone: refreshBoxes() leaves W staged — set the
+        // overlap rect directly over the player.
+        e.W[0] = w.kO + 100; e.W[2] = w.kO + 300
+        e.W[1] = w.kP + 40;  e.W[3] = w.kP + 140
+        w.npcs.add(e)
+        w.player.setPositionPx(w.kO + 200, w.kP + 100)
+        w.player.refreshBoxes()                    // player inside W
+        return e
+    }
+
+    @Test fun `overlap gate + hidden bit both block the draw`() {
+        val w = world()
+        val e = zone(w)
+        e.aD = 1; e.Z[2] = 50
+        w.fxRects.clear(); w.fxOutlines.clear(); w.fxPrompts.clear()
+        w.player.setPositionPx(w.kO + 390, w.kP + 5)  // outside W
+        w.player.refreshBoxes()
+        e.drawStyleF(w)
+        assertEquals(0, w.fxRects.size, "no overlap → L452 return")
+        assertEquals(0, w.fxPrompts.size)
+        w.player.setPositionPx(w.kO + 200, w.kP + 100)
+        w.player.refreshBoxes()
+        e.P = 128                                  // hidden → return
+        e.drawStyleF(w)
+        assertEquals(0, w.fxRects.size, "P&128 → L452 return")
+    }
+
+    @Test fun `armed zone draws bar and positions the card row`() {
+        val w = world()
+        val e = zone(w)
+        e.aD = 2                                   // slots 2,3
+        e.Z[2] = 100; e.aB = 25                    // bar: 360*75/100=270
+        val pr2 = ScriptPrompt().apply { anim.e = 0 }
+        val pr3 = ScriptPrompt().apply { anim.e = 0 }
+        Entity.scriptPrompts[2] = pr2
+        Entity.scriptPrompts[3] = pr3
+        try {
+            w.fxRects.clear(); w.fxOutlines.clear(); w.fxPrompts.clear()
+            assertEquals(1, e.drawStyleF(w))
+            assertEquals(intArrayOf(20, 200, 270, 10, 0x33ebf4).toList(),
+                         w.fxRects[0].toList(), "j.b cyan fill")
+            assertEquals(intArrayOf(20, 200, 360, 10, -1).toList(),
+                         w.fxOutlines[0].toList(), "j.c white outline")
+            assertEquals(listOf(2, 3), w.fxPrompts.toList())
+            val colW = 400 / 3
+            assertEquals(colW - 10, pr2.a); assertEquals(160, pr2.b)
+            assertEquals(colW - 10 + colW, pr3.a); assertEquals(160, pr3.b)
+        } finally {
+            Entity.scriptPrompts[2] = null
+            Entity.scriptPrompts[3] = null
+        }
+    }
+
+    @Test fun `m-over-10 stopped card latches n and returns`() {
+        val w = world()
+        val e = zone(w)
+        e.aD = 1; e.m = 12
+        Entity.scriptPrompts[2] = ScriptPrompt()   // e=-1 → stopped
+        try {
+            w.fxPrompts.clear()
+            e.drawStyleF(w)
+            assertEquals(1, e.nl, "L4d5: bA[m-10].b() → n = 1")
+            assertEquals(0, w.fxPrompts.size, "early return — no card row")
+        } finally { Entity.scriptPrompts[2] = null }
+    }
+
+    @Test fun `aA==Z3 with bh3 latches n directly`() {
+        val w = world()
+        val e = zone(w)
+        e.aD = 1; e.m = 0
+        e.aA = e.Z[3]
+        w.kAj = 1                                  // MISSION_BH[1] == 3
+        w.fxPrompts.clear()
+        e.drawStyleF(w)
+        assertEquals(1, e.nl, "bh==3 → n = 1")
+        assertEquals(0, w.fxPrompts.size)
+    }
+
+    @Test fun `aA==Z3 non-bh3 still needs the card done`() {
+        val w = world()
+        val e = zone(w)
+        e.aD = 1; e.m = 0
+        e.aA = e.Z[3]
+        w.kAj = 0                                  // MISSION_BH[0] == 4
+        Entity.scriptPrompts[0] = ScriptPrompt()   // stopped → n=1
+        try {
+            e.drawStyleF(w)
+            assertEquals(1, e.nl, "bA[m].b() → n = 1")
+        } finally { Entity.scriptPrompts[0] = null }
+    }
+}
+
+class Slice243Test {
+    // slice 243 — `i.C()` live-react arm verbatim fix (i.java:5757-5797):
+    // `aS.S ∈ {67,68,69,286,287}` → `g()` push; EVERY swing (incl. 287
+    // and unlisted anims) lands `c(6,156,-1,-1)` + `k.A(13)`. Pre-fix the
+    // port sent 287 into the dead arm and no-op'd unlisted anims.
+
+    private fun soldier(w: Level0World): Entity {
+        val e = Entity(11, null)
+        e.aB = 100                               // live: aB > 0
+        e.Z[0] = 0                               // not weakened
+        e.setPositionPx(w.kO + 240, w.kP + 100)
+        w.npcs.add(e)
+        w.player.setPositionPx(w.kO + 200, w.kP + 100)
+        w.player.refreshBoxes()
+        return e
+    }
+
+    @Test fun `S287 on a live soldier reacts like any combo swing`() {
+        val w = world()
+        val e = soldier(w)
+        w.player.S = 287
+        assertTrue(e.hitReact(w))
+        assertEquals(6, e.S, "c(6,156,-1,-1) → ax11 anim 6 (was S0 death arm)")
+        assertEquals(0, e.Z[0], "victim stays unwounded in Z[0]")
+    }
+
+    @Test fun `S287 on a live ax73 hits the 156 react, not the death arm`() {
+        val w = world()
+        val e = soldier(w)
+        // ax73 port via ctor ax — Entity(73) maps to the heavy-guard type
+        val h = Entity(73, null)
+        h.aB = 5000; h.Z[0] = 0                // aB > bu[au] → skips weaken
+        h.setPositionPx(w.kO + 240, w.kP + 100)
+        w.npcs.add(h)
+        w.player.S = 287
+        assertTrue(h.hitReact(w))
+        assertEquals(156, h.S, "c(6,156) → ax73 anim 156 (was S164 death arm)")
+        assertEquals(0, h.Z[0])
+    }
+
+    @Test fun `unlisted attacker anim still lands the shared react`() {
+        val w = world()
+        val e = soldier(w)
+        e.S = 3                                  // any prior anim
+        w.player.S = 112                         // not in {67,68,69,286,287}
+        assertTrue(e.hitReact(w))
+        assertEquals(6, e.S, "L112 shared react runs for every swing")
+    }
+
+    @Test fun `weakened Z0==2 short-circuits to i(6)`() {
+        val w = world()
+        val e = soldier(w)
+        e.Z[0] = 2
+        e.S = 144
+        w.player.S = 67
+        assertTrue(e.hitReact(w))
+        assertEquals(6, e.S, "Lc2: Z[0]==2 → i(6), no push/react")
+    }
+}
+
+class Slice244Test {
+    // slice 244 — ax9 candle S5 fade: F() owns `aC--`/`paletteAlpha`/
+    // `ak,al` snap/`P|64` (i.java:3095); the renderer consumes
+    // `e.paletteAlpha` (double-decrement fix).
+
+    private fun candle(w: Level0World): Entity {
+        val e = Entity(9, null)
+        e.S = 5
+        e.Z[2] = 47                     // candle flag
+        e.P = 64                        // burn started (anim latch)
+        e.aC = 5
+        w.kBK = true
+        w.npcs.add(e)
+        return e
+    }
+
+    @Test fun `drawStyleF owns the fade - alpha write + one aC decrement`() {
+        val w = world()
+        val e = candle(w)
+        e.drawStyleF(w)
+        assertEquals(127, e.paletteAlpha, "aC*255/10 = 5*25 = 127")
+        assertEquals(4, e.aC, "exactly one decrement per F() call")
+        e.drawStyleF(w)
+        assertEquals(3, e.aC, "second call → 3 (no renderer-side tick)")
+        assertEquals(102, e.paletteAlpha)
+    }
+
+    @Test fun `aC hits zero - entity removed + alpha restored`() {
+        val w = world()
+        val e = candle(w)
+        e.aC = 1
+        e.drawStyleF(w)
+        assertEquals(0, e.aC)
+        assertEquals(255, e.paletteAlpha, "tail restores full alpha")
+        assertTrue(e in w.pendingRemove, "fade-out → k.c(this) queue")
+    }
+
+    @Test fun `unlit candle keeps alpha 255`() {
+        val w = world()
+        val e = candle(w)
+        e.aC = 0
+        e.drawStyleF(w)
+        assertEquals(255, e.paletteAlpha)
+        assertEquals(0, e.aC)
     }
 }

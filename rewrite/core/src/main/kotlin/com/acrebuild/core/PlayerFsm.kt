@@ -69,8 +69,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // l()-family + S38-boost-exit jump.)
         p.cp = false; p.cq = false; p.ct = false; p.cu = false
         p.cv = false; p.cw = false; p.z = false
-        // i.java:4072-4073 (proven): per-tick iframe + hit-flash decay
-        if (p.gt > 0) p.gt--
+        // `g.t--` runs inside `i.F()`'s La84 arm (i.java:13183, proven)
+        // — gated on `j.c==8 && !claimed && !g.s && !(i.bB&&i.bF!=-1)`;
+        // ported in `Entity.drawStyleF`, driven by `drawStylePass()`.
         if (world.iBh > 0) world.iBh--       // g.java:572 — i.bh lock
         if (p.bh > 0) p.bh--
         // g.java:594 (proven): `i.bq` crate-top level clears when the
@@ -2366,6 +2367,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         var z2 = true
         var z3 = true
         world.kAI++
+        // `i.B()` (g.java:13907, proven): canyon-wall collide — the call's
+        // return value is dead in n(); it runs for its side effects only.
+        p.canyonCollide(world)
         // B() (k.java:1619, proven): mission BGM — `aJ==1 → z(9)` else
         // `z(ee[aj])`; per-tick in n(), audioPlay dedups the live track.
         if (world.kAJ == 1) world.sfx(9) else { val t = world.kEE[world.kAj]; if (t != -1) world.sfx(t) }
