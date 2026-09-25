@@ -701,6 +701,7 @@ class Level0World(
         kF = null; kC = null; kAD = null            // k.F/C/aD
         kAi = false                                 // k.ai = false
         kAZ = false                                 // k.aZ = false
+        iW = false; iE = 0                          // i.w/i.e (i.java:7166/7252)
         camAf = 0; camAg = 0                        // k.af = k.ag = 0
         kAE = 100; kAF = 0; kAH = -1                // k.aE/aF/aH
         kN()                                        // k.n(-1) — wall release
@@ -975,6 +976,8 @@ class Level0World(
     override var iBT = false                   // i.bT — director armed
     override var iBj = false                   // i.bj — finale freeze
     override var iBe = false                   // i.be — D() X-lock
+    override var iW = false                    // i.w — B() first-call latch
+    override var iE = 0                        // i.e — post-impact collide window
     override var iQ = false                    // i.q — gauge-charge mode
     override var iCC = 0                       // i.cC — waypoint phase
     override var iCD = -1                      // i.cD — active phase
@@ -4709,6 +4712,10 @@ class Level0World(
         fireScrollTriggers()
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
+        // `i.e--` per frame — the verbatim site is inside `i.F()`'s
+        // per-frame counter block (i.java:13187-13192, still unported);
+        // decayed once per tick here (`inferred` on the per-call cadence).
+        if (iE > 0) iE--
 
         // k.m(cJ) per-tick (k.java:3320 proven, `bh[aj]!=3` gate):
         // the verbatim tracker — lookahead margin, scroll walls, bounds,
