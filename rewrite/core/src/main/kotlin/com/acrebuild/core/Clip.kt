@@ -105,6 +105,15 @@ class Clip private constructor(
                          dx, dy, (flags xor (frameFlags[fi] and 15)) and 15)
     }
 
+    /** Alloc-free `frameDraw` — writes `out` in place (render-loop scratch). */
+    fun frameDraw(anim: Int, frame: Int, flags: Int, out: FrameDraw) {
+        val fi = frameIndex(anim, frame)
+        out.module = frameModule[fi] or ((frameFlags[fi] and 0xC0) shl 2)
+        out.dx = if (flags and 1 != 0) -frameDx[fi] else frameDx[fi]
+        out.dy = if (flags and 2 != 0) -frameDy[fi] else frameDy[fi]
+        out.transform = (flags xor (frameFlags[fi] and 15)) and 15
+    }
+
     /** `az[aA][i]` (b.java:926/1057, proven): when an `aa.a(table)`
      *  remap slot is armed, drawable-object index `i` resolves through
      *  table `aA`. Tables are sparse (key,value) overlays on an identity
@@ -116,7 +125,16 @@ class Clip private constructor(
         return if (obj in t.indices) t[obj] else obj
     }
 
-    class FrameDraw(val module: Int, val dx: Int, val dy: Int, val transform: Int)
+    class FrameDraw(var module: Int, var dx: Int, var dy: Int, var transform: Int)
+
+    /** Alloc-free placement accessors (`b.java:915`): index `k` of object
+     *  `obj`'s draw list — module, flags, x, y read straight from the quad
+     *  pool. The render loop uses these instead of `placements()`. */
+    fun placementCount(obj: Int): Int = objPlaceCount[obj]
+    fun placementModule(obj: Int, k: Int): Int = placements[(objPlaceStart[obj] + k) * 4]
+    fun placementFlags(obj: Int, k: Int): Int = placements[(objPlaceStart[obj] + k) * 4 + 1]
+    fun placementX(obj: Int, k: Int): Int = placements[(objPlaceStart[obj] + k) * 4 + 2]
+    fun placementY(obj: Int, k: Int): Int = placements[(objPlaceStart[obj] + k) * 4 + 3]
 
     /** Composite sprite draw list (`b.java:915`): one entry per placement. */
     fun placements(obj: Int): List<Triple<Int, Int, Pair<Int, Int>>> {

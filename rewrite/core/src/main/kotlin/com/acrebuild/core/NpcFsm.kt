@@ -34,8 +34,9 @@ import kotlin.math.abs
  *   gravity via `aj=1536` when `!aZ`.
  *
  * Simplifications (flagged): `b(i)` (LOS) → same-row within ±1 cell AND
- * player inside the Z[9..12] alert box AND NPC facing covers the player —
- * the original also gates on player stealth states not yet ported.
+ * player inside the Z[9..12] alert box AND NPC facing covers the player.
+ * The stealth-state gates are ported (`losL`/`spotB`: `aA&8` hide flag,
+ * blind poses S∈{267,268,291}, the ax69-ride blind arm, `iBn` notice).
  * `aC()` chase-timeout: ported as the 60-tick countdown → `i(k?3:2)`.
  * `aE()` assassination QTE, `j()`/`k()` damage/stealth-kill intake, `aD()`
  * platform links — omitted this slice.
@@ -183,8 +184,8 @@ class NpcFsm(val world: LevelCellSource) {
             }
             in 8..13 -> crush(e, player)
         }
-        // P&16 keeps the door unintegrated (static prop); anims still tick.
-        e.advanceAnim()
+        // P&16 keeps the door unintegrated (static prop); its one-per-tick
+        // anim advance comes from the I() preamble (i.java:15232).
     }
 
     /** `bf()` (i.java:14608, proven): ax58 anim-running — true iff its S is
@@ -296,10 +297,8 @@ class NpcFsm(val world: LevelCellSource) {
         e.refreshBoxes()                                     // t()
         if (e.av) e.P = e.P or 1 else e.P = e.P and -2       // L900-902
         pushL897(e, player)                                  // a(k.aS,P,W)
-        if (!e.cu && e.S >= 0 &&
-            (!world.iAH || world.jG % maxOf(1, world.iAI) == 0L)) {
-            e.advanceAnim()                                  // s()
-        }
+        // anim advance lives in the I() preamble (i.java:15232) — the
+        // source has exactly one `s()` per ticked entity.
     }
 
     // `case 11/17/23/47/50 → L104` — the shared soldier dispatch:
@@ -1056,6 +1055,21 @@ class NpcFsm(val world: LevelCellSource) {
     // (i.java:2882) + the zone arms {33,34,36,43,53}. S16 (door-teleport,
     // L177d) ported in slice 99; the rope-attach reading in this comment
     // was wrong — the arm is a door/teleport pair, not a rope zone.
+
+    /** ax22 record init Le87 (i.java:9339-9381, proven): `az=1`, Z stays
+     *  the fresh `int[4]` (records with S-field `r8[5] != 0` leave it all
+     *  zero); when `r8[5] == 0` the fill is `Z = {0, r8[4], r8[7], r8[11]}`.
+     *  `P |= 512` → L1bea shared tail. W is NOT record-derived: the `I()`
+     *  preamble's `b=1` + the L1f35 `if (b) t()` tail rebuild it from the
+     *  clip-14 rect every tick ([-6,-10,34,33] around the anchor). */
+    fun initAx22(e: Entity, f: List<Int>) {
+        fun rf(i: Int) = if (i < f.size) f[i] else 0
+        e.az = 1
+        if (rf(5) == 0) {
+            e.Z[1] = rf(4); e.Z[2] = rf(7); e.Z[3] = rf(11)
+        }
+        e.P = e.P or 512
+    }
 
     /** Init arm L96 (i.java:2882): `aB=0; P|=512; az=0` then S-switch. */
     fun initTrigger(e: Entity, f: List<Int>) {
@@ -2230,7 +2244,7 @@ class NpcFsm(val world: LevelCellSource) {
     }
 
     fun tickDestructible(e: Entity, player: Entity) {
-        e.advanceAnim()   // universal s() in the outer tick (i.java:6407)
+        // anim advance: I() preamble (i.java:15232)
         // W comes from clip3 rects via t() — refresh like ax44 (slice-19
         // pitfall: volumes never take the probe paths that recompute it).
         e.refreshBoxes()
@@ -3576,7 +3590,7 @@ class NpcFsm(val world: LevelCellSource) {
      * - bk==27 springboard: S∈{19,21,23,32,35,38} armed; W∩playerW →
      *   `ah=768+k.Y` + op40 grab + `i(S+1)`; then for S∈{19,21,23} the
      *   `bd[]` scan arms ax68-linked children (`ad.i(2)`, `d(8,…)`
-     *   floatie — unported, `r0.i(10)`); even S∈{20,22,24,33,36,39}
+     *   floatie → `spawnFloatie`, `r0.i(10)`); even S∈{20,22,24,33,36,39}
      *   despawn on `r()`; S∈{25..31,34,37} are dead.
      * - Z[0]==5 (bk=35) interactive: S28 — `X∩playerW && !v()` →
      *   spawn/re-pin the ae pickup (`i.a(71,ak,al)` at the view edge);
@@ -3585,8 +3599,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   W∩playerW` → `aA|=8`,`g.e`,`az-1`; release arm restores aA/az).
      */
     fun tickDecor(e: Entity, player: Entity) {
-        e.advanceAnim()   // universal s()
-        e.refreshBoxes()
+        e.refreshBoxes()  // anim advance: I() preamble (i.java:15232)
         if (decorClip(e.Z[0]) == 27) {
             when (e.S) {
                 19, 21, 23, 32, 35, 38 -> {
@@ -3711,7 +3724,7 @@ class NpcFsm(val world: LevelCellSource) {
      *   (`P|=128`), otherwise `k.c(this)` — the pickup is collected.
      */
     fun tickPickup(e: Entity, player: Entity) {
-        e.advanceAnim()
+        // anim advance: I() preamble (i.java:15232)
         if (e.W.contentEquals(Entity.ZERO_RECT)) return      // L6 W==null
         if (Entity.overlapI(player.Y, e.W) && !player.isHolding()) {
             e.aF = 1
@@ -3761,7 +3774,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  prompt markers (S31/32/33 → `aS.i(216/214)` on a 65568 tap).
      */
     fun tickRequestMarker(e: Entity, player: Entity, pad: Pad) {
-        e.advanceAnim()
+        // anim advance: I() preamble (i.java:15232)
         when (e.S) {
             30, 38 -> {                   // L9/L15 — equip pickups
                 if (!Entity.overlapI(player.W, e.W)) return
@@ -4003,8 +4016,7 @@ class WaypointPool {
  *  linked-entity anim watcher + attach-sync + charge gauge — runs every
  *  tick the phase arm doesn't `return` early. */
 fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
-    val w = world
-    e.advanceAnim()
+    val w = world                                              // s(): I() preamble
     // pre-switch (L0-L6): chase-progress row while the player is airborne
     if (player.al < 260) w.kAR = (w.kBu / 20 - 1) - player.al / 400
     var tail = true
@@ -6621,7 +6633,7 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
  *  the homing delta is the waypoint's position in the scroll frame, so
  *  `bt.a/b` act as a direction vector × `bt.f` speed — verbatim. */
 fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()                                            // e() s() preamble
+    // anim advance: I() preamble (i.java:15232)
     if (!e.runnerBz) e.runnerBz = e.al > w.kP + e.Z[7]          // L7 latch
     val chainDone = e.bs >= e.runnerC
     if (e.runnerBz && e.Z[0] != 3 && chainDone && !e.inPlayV(w)) {
@@ -6800,7 +6812,7 @@ private fun NpcFsm.runnerTravelAnim(e: Entity, x: Int, y: Int) {
  *  k.P+240; no waypoint chain — (aq,ar) destination + az() travel check;
  *  burst fires on frame `T==3 && U==0` with timers Z[7]/Z[6]. */
 fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()                                            // e() s() preamble
+    // anim advance: I() preamble (i.java:15232)
     if (!e.runnerBz) e.runnerBz = e.al > w.kP                 // L7 latch
     if (!e.runnerBz) return                                 // L10 unarmed
     if (!e.inPlayV(w) && e.al > w.kP + 240) {               // L14 offscreen
@@ -6920,7 +6932,7 @@ private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
 
 /** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
  *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
- *  semantics; `d(8,…)` floatie spawns remain unported (noted). */
+ *  semantics; `d(8,…)`/`d(9,…)` floatie spawns → `spawnFloatie`. */
 private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
     var hit = false
     for (r0 in w.npcs) {
@@ -6974,7 +6986,7 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
                 if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
                 if (r0.aB > 0) {
                     r0.aB -= Entity.WEAPON_K[w.weaponSlot]
-                    when (r0.iP) {
+                    when (r0.pv) {
                         0 -> if (r0.aB > 0) r0.cGCount = 6
                              else { r0.setAnim(15); r0.cGCount = 0 }
                         2 -> if (r0.aB > 0) r0.cGCount = 6
@@ -7195,7 +7207,7 @@ private fun leverOccupied(e: Entity, w: Level0World, p: Entity): Boolean {
  * same bind tail. S4 parks (`P|32`).
  */
 fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()
+    // anim advance: I() preamble (i.java:15232)
     if (e.claimActive()) { e.runClaimScript(w); return }  // ab() → aa()
     when (e.S) {
         0, 5, 7, 9, 11 -> {                               // L9 — armed wait
@@ -7581,7 +7593,7 @@ fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
 }
 
 fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
-    e.advanceAnim()
+    // anim advance: I() preamble (i.java:15232)
     if (e.claimActive()) { e.runClaimScript(w); return }        // ab()→aa()
     when (e.S) {
         7 -> {                                                  // L7 cut/re-offer
@@ -7921,7 +7933,8 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
 // JAR manifest lacks the property → false → censored S10/11/12 set):
 //  S2 →r()→ bK?3:10 (re-center player X); S3/S10 →r()→ bK?4:11 +
 //  `af=null; G()`; S4/S11: `aA==1` →r()→ `bw=-1,bx=57,l(13)` (mission
-//  advance, unported); `aA!=1`: Z[0]==0 →r()→ `aS.S==244` → bK?5:12 →
+//  advance — `kBw=-1;kBx=57;screenL(13)` below); `aA!=1`: Z[0]==0 →r()→
+//  `aS.S==244` → bK?5:12 →
 //  `aS.i(0), P&=-65, E(), af=null`, else park on overlap or
 //  `aS.az=100; G(); P|=32|64`; Z[0]==1 →r()→ `i(7)`.
 //  S5/S12: Z[0]==0 && r() → bK?4:11, then same park/release tail.
@@ -9673,10 +9686,8 @@ fun NpcFsm.initAx74(e: Entity, f: List<Int>, w: LevelCellSource) {
 }
 
 fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
-    // s() ordering (i.java:6407 L25-L34, proven): the universal anim
-    // advance runs in the shared per-tick TAIL — after the FSM arm — so
-    // an arm's r() still sees last-frame state before s() wraps T.
-    try {
+    // anim advance: I() preamble (i.java:15232) — before the arm, so
+    // an `r()` check sees the just-advanced frame (source ordering).
     when (e.S) {                                   // bN() switch (proven)
         0 -> {                                     // L4-17: collect scan
             val d = e.h(e.ak - p.ak, e.al - p.al)  // k.h octagonal
@@ -9742,9 +9753,6 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
         }
         else -> return                             // L65
     }
-    } finally {
-        e.advanceAnim()                            // universal s() tail (i.java:6407)
-    }
 }
 
 // ============================================================ ax76 = bO()
@@ -9756,6 +9764,222 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
 // S2 damage cycle: `aC` sibling-chain countdown (`k.q(o)` → `i(2)` chain),
 // per-tick `g.d(g.u[k.au])` while overlapping. S3/S5 → i(S+1) once the
 // player hitbox leaves `X`; S4/S6 end anims → `k.c`.
+
+/** ax32 `Lc15` (i.java:8951, proven) — damageable wall/prop init:
+ *  `aA=0; j=0; aB=r8[7]` HP; `aC=r8[8]; aF=r8[9]; p=r8[10]` — the
+ *  subtype latching the bc()/L97 p-switch anims (15/19/25/36); `cG=0`;
+ *  `p != 3 → i.bU += aB` (gauge accumulate — runs BEFORE the bV gate,
+ *  verbatim); `n = aF`; then the `i.bV` kill-bitmap router:
+ *  `bV==1 && p==0 → aB=0`, `bV==2 && p!=3 → aB=0`. Tail `i(r8[5])`. */
+fun NpcFsm.initAx32(e: Entity, f: List<Int>, w: LevelCellSource) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.aA = 0; e.j = 0
+    e.aB = rf(7); e.aC = rf(8); e.aF = rf(9)
+    e.pv = rf(10)                                   // i.p — subtype
+    e.cGCount = 0
+    if (e.pv != 3) w.iBU += e.aB
+    e.nl = e.aF
+    if ((w.iBV == 1 && e.pv == 0) || (w.iBV == 2 && e.pv != 3)) e.aB = 0
+    e.setAnim(rf(5))                                // L1bea — i(r8[5])
+    e.refreshBoxes()                                // t()
+}
+
+/** ax16 `L595` (i.java:7988, proven): request-marker init — `az=200`
+ *  default; the request-marker anims {31,32,33} override to `az=-1`.
+ *  Shared `i(r8[5])` finish. */
+fun NpcFsm.initAx16(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = if (rf(5) in 31..33) -1 else 200
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax21 `Lc8c` (i.java:9017, proven): mission-director init — only when
+ *  `r8[5] <= 1`: `aA=0; j=0; az=r8[8]; aB=r8[7]; Z[0..3]=r8[9..12]`,
+ *  `Z[4]=r8[24]`, `Z[5..15]=r8[13..23]`; registers `k.B=r7`; then MUTATES
+ *  THE RECORD (`r8[0]→48`, `r8[5]→0`) and spawns `ad=new i(r8)` — the
+ *  ax48 in-mission director delegate (Ld7c→i(0)). S>1 records take only
+ *  the L1bea finish. */
+fun NpcFsm.initAx21(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    if (rf(5) > 1) { e.setAnim(rf(5)); return }      // gate → plain finish
+    e.aA = 0; e.j = 0
+    e.az = rf(8); e.aB = rf(7)
+    e.Z[0] = rf(9); e.Z[1] = rf(10); e.Z[2] = rf(11); e.Z[3] = rf(12)
+    e.Z[4] = rf(24)
+    for (i in 5..15) e.Z[i] = rf(i + 8)              // Z[5..15] = r8[13..23]
+    w.kB = e                                         // k.B = r7
+    e.ad = Entity(48, w.clipFor(13)).apply {         // mutated record → new i(r8)
+        aw = e.aw; setPositionPx(e.ak, e.al); P = e.P; av = e.av
+        setAnim(0)                                   // Ld7c → L1bea → i(0)
+        refreshBoxes()
+    }
+    e.setAnim(0)                                     // mutated r8[5]=0 → i(0)
+    e.refreshBoxes()
+}
+
+/** ax29 `L10a8` (i.java:9671, proven): boss-duel init — `az=100`,
+ *  `aB=800` (boss HP), `aD=2`, `m=2`, `aC=30`, `aF=30`, `n=60`,
+ *  `Z[0..4]={r8[4], r8[7], r8[8], r8[9], r8[10]}`; `r8[5]!=30 → k.aU=r7`
+ *  (boss handle). */
+fun NpcFsm.initAx29(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 100; e.aB = 800; e.aD = 2; e.m = 2
+    e.aC = 30; e.aF = 30; e.nl = 60
+    e.Z[0] = rf(4); e.Z[1] = rf(7); e.Z[2] = rf(8)
+    e.Z[3] = rf(9); e.Z[4] = rf(10)
+    if (rf(5) != 30) w.kAU = e
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax41 `L1172` (i.java:9799, proven): `az=r8[7]; P|=0x1000` (knockable
+ *  prop flag). */
+fun NpcFsm.initAx41(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7); e.P = e.P or 4096
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax43 `L11e8` (i.java:9872, proven): ride-carrier init —
+ *  `Z[0..2]=r8[8..10]`; `r8[8]!=-1 → h(k.s(r8[8]))` (bind the linked
+ *  claim script); `az=r8[7]`. */
+fun NpcFsm.initAx43(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(8); e.Z[1] = rf(9); e.Z[2] = rf(10)
+    if (rf(8) != -1) e.bindScript(w.kSIndex(rf(8)), w)
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax51 `Ldbc` (i.java:9213, proven): crate init — `az=r8[7]`;
+ *  `Z[0]=0; Z[1]=r8[8]` (the generic Z-fill's `Z[0]=r8[7]` was WRONG —
+ *  the original hardcodes Z[0]=0); `r8[5]==8 → P|=0x80` (sensor flag);
+ *  `Z[1]!=-1 → h+k(k.s(Z[1]))` (linked-entity claim pair). */
+fun NpcFsm.initAx51(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = 0; e.Z[1] = rf(8)
+    if (rf(5) == 8) e.P = e.P or 128
+    if (e.Z[1] != -1) {
+        e.bindScript(w.kSIndex(e.Z[1]), w)             // h(k.s(Z[1]))
+        e.scriptKeyStep(w.kSIndex(e.Z[1]), w)          // k(k.s(Z[1]))
+    }
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax58 `L1540` (i.java:10402, proven): lever/counterweight init —
+ *  `Z[0]=r8[7]`; `Z[0]!=-1 → h(k.s(Z[0]))` + `P|=0x210` (512|16);
+ *  `az=0`. */
+fun NpcFsm.initAx58(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(7)
+    if (e.Z[0] != -1) {
+        e.bindScript(w.kSIndex(e.Z[0]), w)
+        e.P = e.P or 512 or 16
+    }
+    e.az = 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax61 `La53` (i.java:8673, proven): `az=101` only. */
+fun NpcFsm.initAx61(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 101
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax66 `L17cd` (i.java:10819, proven): moving-platform init —
+ *  `az=r8[9]`; then three Z arms keyed on the record anim r8[5]:
+ *  - S∈{12,14,19} (L17ed): `Z[0]=r8[8], Z[1]=r8[10],
+ *    aC=(S==14?Z[0]:Z[1]), Z[4]=r8[7], r8[4]==999→aA=999, P|=0x10`
+ *  - S∈[6,10]∪[24,28] (L186f): `Z[0]=r8[8], Z[1]=Z[0], Z[2]=ak, Z[3]=al`
+ *  - else (L18a3): `Z[0]=r8[7]`
+ *  All three then `P|=0x200` (L18b4) → `i(r8[5])`. */
+fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(9)
+    val s = rf(5)
+    if (s == 12 || s == 14 || s == 19) {
+        e.Z[0] = rf(8); e.Z[1] = rf(10)
+        e.aC = if (s == 14) e.Z[0] else e.Z[1]
+        e.Z[4] = rf(7)
+        if (rf(4) == 999) e.aA = 999
+        e.P = e.P or 16
+    } else if ((s in 6..10) || (s in 24..28)) {
+        e.Z[0] = rf(8); e.Z[1] = e.Z[0]
+        e.Z[2] = e.ak; e.Z[3] = e.al
+    } else {
+        e.Z[0] = rf(7)
+    }
+    e.P = e.P or 512
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax37 `L633` (i.java:8074, proven): scroll-bound trigger init —
+ *  `Z[0..3]=r8[15..18]`; `P|=0x200`; `(P&0x20)==0 → P|=0x10`. L1bea
+ *  skips ax37 (no `i()` finish) — this arm has no setAnim call. */
+fun NpcFsm.initAx37(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.Z[0] = rf(15); e.Z[1] = rf(16); e.Z[2] = rf(17); e.Z[3] = rf(18)
+    e.P = e.P or 512
+    if ((e.P and 32) == 0) e.P = e.P or 16
+}
+
+/** ax75 `Ldb1` (i.java:9206, proven): `az=r8[7]` only. */
+fun NpcFsm.initAx75(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax68 `Lfc9` (i.java:9536, proven): `az=99` only. The L1bea finish
+ *  special-cases ax68 to `i(0)` — kept verbatim here. */
+fun NpcFsm.initAx68(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 99
+    e.setAnim(0)
+    e.refreshBoxes()
+}
+
+/** ax45 `L122b` (i.java:9916, proven): bare `goto L1bea` — the record
+ *  takes ONLY the `i(r8[5])` finish; `Z` stays the ctor's zero-filled
+ *  array (the generic Z-fill does not apply). */
+fun NpcFsm.initAx45(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax2 checkpoint `Ld7f` (i.java:9177, proven): `az=300`; `P|=0x80`;
+ *  `Z=new int[1]; Z[0]=r8[7]` — the linked ax5 director uid `aY()`
+ *  copies into `k.G` on fire. Z alloc folded into the shared array. */
+fun NpcFsm.initAx2(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 300
+    e.P = e.P or 128
+    e.Z[0] = rf(7)
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
+
+/** ax31 `L1a79` (i.java:11259, proven): `az=r8[7]`;
+ *  `Z[0]=r8[8]*1000; Z[1]=r8[9]*1000; Z[2]=r8[10]; Z[3]=0`. */
+fun NpcFsm.initAx31(e: Entity, f: List<Int>) {
+    fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = rf(7)
+    e.Z[0] = rf(8) * 1000; e.Z[1] = rf(9) * 1000
+    e.Z[2] = rf(10); e.Z[3] = 0
+    e.setAnim(rf(5))
+    e.refreshBoxes()
+}
 
 /** Record init (L361 at i.java:3546, proven): `az=r8[7]`, `aC=r8[8]`
  *  (chain countdown), `o=r8[9]` (sibling aw link), `Z=new int[2]` +
@@ -10192,7 +10416,8 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
  *  blind, `v()` out-of-play, `l()` zone miss, or own `aA ∉ {0,1}` →
  *  false. On spot: alive player → `av = !av` (verbatim facing flip);
  *  `bn` → `aS.aA&=-9` + `aS.b(aY[0].Z[4],0,0,-1,-1)` projectile (the
- *  `k.aY` pool is unported → inert); `aA=1` + ax11 `i(5)` (ax73
+ *  `k.aY` pool is allocated but never filled — proven-dead → inert);
+ *  `aA=1` + ax11 `i(5)` (ax73
  *  `Z0==3 → i(155)+aq=ak∓60` else `i(154)`); then `af.ax==69 &&
  *  af.S∈{6,2}` → the ax69 bind (freeze both, `af.i(7)+aA=1`,
  *  `aq=af.ak`) else true. */

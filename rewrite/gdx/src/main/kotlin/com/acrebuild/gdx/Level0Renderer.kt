@@ -17,7 +17,6 @@ import com.badlogic.gdx.graphics.g2d.PixmapPacker
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.TextureAtlas
 import com.badlogic.gdx.graphics.g2d.TextureRegion
-import com.badlogic.gdx.graphics.glutils.FrameBuffer
 import com.badlogic.gdx.utils.ScreenUtils
 
 /**
@@ -39,7 +38,10 @@ class Level0Renderer {
     @Volatile var offsetX: Int = 0; private set
     @Volatile var offsetY: Int = 0; private set
 
-    private lateinit var fbo: FrameBuffer
+    // Direct-render viewport: the 400×240 scene draws straight into the
+    // letterboxed GL viewport — identical output to the old FBO+blit
+    // (integer `sc` + nearest ⇒ same pixels) minus one fullscreen copy
+    // per frame, which was a real cost on software-GL emulators.
     private lateinit var batch: SpriteBatch
     private lateinit var white: TextureRegion
     private lateinit var font: BitmapFont
@@ -51,6 +53,7 @@ class Level0Renderer {
     private lateinit var packer: PixmapPacker
     private lateinit var atlas: TextureAtlas
     private val drawScratch = TextureRegion()
+    private val fdScratch = Clip.FrameDraw(0, 0, 0, 0)   // render-loop scratch
     /** `bW`/`y` = pack-1 entries 1/3 (k.java:3966-3967) — the game's two
      *  bitmap fonts. Glyph ids index each clip's OBJECT space (shared
      *  charmap `j.f(2)` = pack-1 entry-2). `l()` → palette variant. */
@@ -76,8 +79,6 @@ class Level0Renderer {
 
     fun create(world: Level0World) {
         this.world = world
-        fbo = FrameBuffer(Pixmap.Format.RGBA8888, Level0World.VIEW_W, Level0World.VIEW_H, false)
-        fbo.colorBufferTexture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest)
         batch = SpriteBatch()
         font = BitmapFont()
         clips = world.clips
@@ -233,15 +234,19 @@ class Level0Renderer {
             drawModule(pack, obj, x, y, flags, palette)
             return
         }
-        for ((m0, pf, off) in clip.placements(obj)) {
+        for (k in 0 until clip.placementCount(obj)) {
             // target object index: ap | ((aq & 0xC0) << 2) (b.java:920)
+            val m0 = clip.placementModule(obj, k)
+            val pf = clip.placementFlags(obj, k)
             val m = m0 or ((pf and 0xC0) shl 2)
             var mw = if (m < clip.moduleW.size) clip.moduleWidth(m) else 0
             var mh = if (m < clip.moduleW.size) clip.moduleHeight(m) else 0
             val tf = flags xor pf
             if (tf and 4 != 0) { val tmp = mw; mw = mh; mh = tmp }
-            val dx = if (flags and 1 != 0) -(off.first + mw) else off.first
-            val dy = if (flags and 2 != 0) -(off.second + mh) else off.second
+            val dx = if (flags and 1 != 0) -(clip.placementX(obj, k) + mw)
+                     else clip.placementX(obj, k)
+            val dy = if (flags and 2 != 0) -(clip.placementY(obj, k) + mh)
+                     else clip.placementY(obj, k)
             if (pf and 16 == 0) {
                 drawModule(pack, m, x + dx, y + dy, tf and 15, palette)
             } else {
@@ -260,9 +265,10 @@ class Level0Renderer {
         val clip = clips[pack] ?: clips[-pack] ?: return
         if (anim < 0 || anim >= clip.animCount() ||
             frame < 0 || frame >= clip.frameCount(anim)) return
-        val fd = clip.frameDraw(anim, frame, flags)
-        drawObject(pack, fd.module and 0x3FFF, x - fd.dx, y - fd.dy,
-                   fd.transform, 0, palette)
+        clip.frameDraw(anim, frame, flags, fdScratch)
+        drawObject(pack, fdScratch.module and 0x3FFF,
+                   x - fdScratch.dx, y - fdScratch.dy,
+                   fdScratch.transform, 0, palette)
     }
 
     /** `a.b(j.f)` + `a.c()` (a.java:99-114) — one script-prompt card:
@@ -699,11 +705,13 @@ class Level0Renderer {
         }
     }
 
-    /** `j.a(g,x,y,w,h,true)` — GL scissor in FBO space (Y-flip). */
+    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. */
     private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
         batch.flush()
         Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
-        Gdx.gl.glScissor(x, Level0World.VIEW_H - y - h, w, h)
+        Gdx.gl.glScissor(offsetX + x * scale,
+                         offsetY + (Level0World.VIEW_H - y - h) * scale,
+                         w * scale, h * scale)
     }
     private fun clipReset() {
         batch.flush()
@@ -812,7 +820,8 @@ class Level0Renderer {
 
     /** `b(i,i2,i3,z2,z3)` (k.java:5903-6150, proven) — the menu panel +
      *  row renderer. The `c()→bw` tap hook is the world's `menuRowAt`;
-     *  the j.c==2 side soft-buttons are unported (jC==2 unreachable). */
+     *  the j.c==2 per-row side icons are drawn below (clip-93 frames
+     *  9/5 and 4/0 for row-0/others — k.java:5903-6150). */
     private fun menuPanel(world: Level0World, x: Int, y: Int, w: Int,
                           z2: Boolean, z3: Boolean) {
         val clipA2 = clips[93]
@@ -906,6 +915,13 @@ class Level0Renderer {
                 drawText(strA, i14 - menuEz, i9 + (i4 shr 1) + i15,
                          3, palette = pal, pack = 91)
                 clipReset()
+            }
+            // z[12] blink marker beside strings 32/33/34 (k.java:6080-6092,
+            // proven): drawn only while `!eJ`, phase `j.g%10 > 5`, at
+            // (rowTextX+86, rowCenterY-7) — clip-12 anim 1 frame 0.
+            if (world.menuRowEntry(i13) in 32..34 && !world.kEJ &&
+                (world.jG % 10) > 5) {
+                drawFrame(12, 1, 0, i14 + 86, i9 + (i4 shr 1) - 7, 0)
             }
             if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
                 var i16 = i10 / 2
@@ -1053,8 +1069,15 @@ class Level0Renderer {
     }
 
     fun render(world: Level0World) {
-        fbo.begin()
-        ScreenUtils.clear(0.07f, 0.07f, 0.09f, 1f)
+        // letterbox viewport — same math the FBO blit used to compute.
+        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
+        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
+        if (sc < 1) sc = 1
+        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
+        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
+        Gdx.gl.glViewport(0, 0, sw, sh)
+        ScreenUtils.clear(0f, 0f, 0f, 1f)          // black letterbox bars
+        Gdx.gl.glViewport(offsetX, offsetY, dw, dh)
         batch.projectionMatrix.setToOrtho2D(
             0f, 0f, Level0World.VIEW_W.toFloat(), Level0World.VIEW_H.toFloat())
         batch.begin()
@@ -1169,6 +1192,15 @@ class Level0Renderer {
                 drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
+
+        // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
+        // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —
+        // fill 400×240 + alpha-100 + blit `cd`. The 3/4/6-arg j.a forms
+        // are unrecovered stubs; by shape it's the "input locked" dim —
+        // translucent black over the scene, under HUD + dialogs. Drawn
+        // every frame while `kAm` holds (no persistent back-buffer).
+        if (world.kAm) fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
+                              0x64000000.toInt())
 
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
@@ -1715,21 +1747,6 @@ class Level0Renderer {
         }
 
         batch.end()
-        fbo.end()
-
-        // letterbox blit (same as PixelRenderer)
-        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
-        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
-        if (sc < 1) sc = 1
-        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
-        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
-        ScreenUtils.clear(0f, 0f, 0f, 1f)
-        batch.projectionMatrix.setToOrtho2D(0f, 0f, sw.toFloat(), sh.toFloat())
-        batch.begin()
-        batch.draw(fbo.colorBufferTexture,
-                   offsetX.toFloat(), offsetY.toFloat(), dw.toFloat(), dh.toFloat(),
-                   0, 0, Level0World.VIEW_W, Level0World.VIEW_H, false, true)
-        batch.end()
     }
 
     /** `b.java:907` 8-arg path: draw the frame's module at anchor - offset. */
@@ -1760,11 +1777,11 @@ class Level0Renderer {
         for (i in 0 until 5) {
             val x = t[i * 2]; val y = t[i * 2 + 1]
             if (!((x != e.ak && x > -200) || (y != e.al && y > -120))) continue
-            val fd = clip.frameDraw(anim, frame, if (e.av) 1 else 0)
-            val obj = clip.remap(e.remapTable, fd.module)
+            clip.frameDraw(anim, frame, if (e.av) 1 else 0, fdScratch)
+            val obj = clip.remap(e.remapTable, fdScratch.module)
             batch.setColor(1f, 1f, 1f, (255 * (100 - i * 20) / 100) / 255f)
-            drawObject(pack, obj, x - camX - fd.dx, y - camY - fd.dy,
-                       fd.transform, palette = 0)
+            drawObject(pack, obj, x - camX - fdScratch.dx, y - camY - fdScratch.dy,
+                       fdScratch.transform, palette = 0)
             batch.setColor(1f, 1f, 1f, 1f)
         }
     }
@@ -1868,10 +1885,11 @@ class Level0Renderer {
             e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7
         }
 
-        val fd = clip.frameDraw(e.S, e.T, e.drawFlags())
-        val obj = clip.remap(e.remapTable, fd.module)      // az[aA][i11]
+        clip.frameDraw(e.S, e.T, e.drawFlags(), fdScratch)
+        val obj = clip.remap(e.remapTable, fdScratch.module)  // az[aA][i11]
         if (alpha != 255) batch.setColor(1f, 1f, 1f, alpha / 255f)
-        drawObject(pack, obj, e.ak - camX - fd.dx, e.al - camY - fd.dy, fd.transform,
+        drawObject(pack, obj, e.ak - camX - fdScratch.dx,
+                   e.al - camY - fdScratch.dy, fdScratch.transform,
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
@@ -1940,7 +1958,7 @@ class Level0Renderer {
         clips.entries.firstOrNull { it.value === clip }?.key
 
     fun dispose() {
-        fbo.dispose(); batch.dispose()
+        batch.dispose()
         if (::font.isInitialized) font.dispose()
         if (::atlas.isInitialized) atlas.dispose()
         if (::packer.isInitialized) packer.dispose()

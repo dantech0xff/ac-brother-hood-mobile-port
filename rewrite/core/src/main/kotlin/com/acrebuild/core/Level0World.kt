@@ -72,9 +72,12 @@ class Level0World(
             44 to 32,
             4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
             5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
+            2 to 1,       // ax2 checkpoint (bi[2]=1 — same invisible clip;
+                          // its 40x128 rect gives aY() the real W box)
             10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
                           // modules, proven) — zones still draw nothing
             29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
+            61 to 71,     // ax61 multi-tool (bi[61]=71, proven)
             41 to 30,     // ax41 knockable prop (bi[41]=30, proven)
             8 to 5,       // ax8 knife/param projectiles (bi[8]=5, proven);
                           // bi[12]=8 has no pack-3 entry-008 → ax12 stays
@@ -195,8 +198,8 @@ class Level0World(
         private set
     /** `i.br` — mission-0 tutorial-hint "still pending" flags, one per
      *  `A[]={30,31,32}` slot (i.java:164/6181); persisted through
-     *  bA[76..]. All pending until a `c(i)` hint arm fires — the hint
-     *  arm itself is not yet ported. */
+     *  bA[76..]. All pending until a `c(i)` hint arm fires — ported as
+     *  `tutorialHint` (:1658) with callers in NpcFsm. */
     private var hintPending = BooleanArray(3) { true }
 
     override val player = Entity(0, clips[0]).apply { aw = -1 }
@@ -761,7 +764,10 @@ class Level0World(
             // types join as their clips + init arms get verified.
             val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
                           else ENTITY_CLIP[type]
-            if (clipIdx == null && type != 42) continue
+            // Every record spawns (proven, i.java:7600 dispatch): a null
+            // clip means clipless (bi[ax]=-1 or missing pack-3 entry —
+            // invisible but still ticking via i.I()). Entity handles
+            // clip=null defensively.
             val recSlot = slotOf[i] ?: -1
             // d(true): a `-99` slot was consumed before the checkpoint —
             // the record does not respawn (simple k.java:5972-5975).
@@ -809,13 +815,37 @@ class Level0World(
             else if (type == 47) npcFsm.initAx47(e, f.toList())
             else if (type == 50) npcFsm.initAx50(e, f.toList())
             else if (type == 17) npcFsm.initAx17(e, f.toList())
+            else if (type == 22) npcFsm.initAx22(e, f.toList())
             else if (type == 24) npcFsm.initAx24(e, f.toList(), this)
             else if (type == 64) npcFsm.initAx64(e, f.toList())
             else if (type == 74) npcFsm.initAx74(e, f.toList(), this)
             else if (type == 76) npcFsm.initAx76(e, f.toList())
             else if (type == 15) npcFsm.initAx15(e, f.toList(), this)
-            else if (type != 37)
-                for (i in e.Z.indices) if (7 + i < f.size) e.Z[i] = f[7 + i]
+            else if (type == 32) npcFsm.initAx32(e, f.toList(), this)
+            else if (type == 16) npcFsm.initAx16(e, f.toList())
+            else if (type == 21) npcFsm.initAx21(e, f.toList(), this)
+            else if (type == 29) npcFsm.initAx29(e, f.toList(), this)
+            else if (type == 41) npcFsm.initAx41(e, f.toList())
+            else if (type == 43) npcFsm.initAx43(e, f.toList(), this)
+            else if (type == 51) npcFsm.initAx51(e, f.toList(), this)
+            else if (type == 58) npcFsm.initAx58(e, f.toList(), this)
+            else if (type == 61) npcFsm.initAx61(e, f.toList())
+            else if (type == 66) npcFsm.initAx66(e, f.toList(), this)
+            else if (type == 37) npcFsm.initAx37(e, f.toList())
+            else if (type == 75) npcFsm.initAx75(e, f.toList())
+            else if (type == 68) npcFsm.initAx68(e, f.toList())
+            else if (type == 45) npcFsm.initAx45(e, f.toList())
+            else if (type == 31) npcFsm.initAx31(e, f.toList())
+            else if (type == 2) npcFsm.initAx2(e, f.toList())
+            else {
+                // L1bc7→L1bea (i.java:11476/11489, proven): every
+                // remaining type ({33,36,38,39,48,49,52,53,55,57,59,
+                // 62,63,65,70,71,77} + the default) routes through the
+                // "Unknown Actor Type" print into the shared finish —
+                // NO Z writes (Z stays the ctor's zero-filled array),
+                // and ax37/70 skip the `i()` call.
+                if (type != 70) e.setAnim(f[5])
+            }
             // palette slot (proven i.java:4180-4194): ax11 picks aH=1 for
             // Z[0]∈{1,2} (red-uniform variant), aH=0 otherwise; the player
             // uses bo[bL][0]=0 for level 0 (bo={{0,-1},{3,1},{5,2},{6,3}},
@@ -2208,7 +2238,7 @@ class Level0World(
         while (true) {                               // L2 — re-entry for i=22 only
             kEg = 0; val ex = jC; kCZ = 0; kCb = true; kCu = 0; kFd = -1; kFe = 0; kDw = 0
             jG = 0                                   // j.g=0 (k.java:2047)
-            if (i == 27) audioStop()                 // e.b() — audio stop (unported)
+            if (i == 27) audioStop()                 // e.b()
             when {
                 i == 9 -> {                          // L7: renderer teardown
                     // `fO=0; ac(); ad(); e.b(); L()` (k.java:1685-1690
@@ -2220,7 +2250,7 @@ class Level0World(
                     kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
-                    scrollBounds()                   // b(true) — scroll refresh (unported)
+                    scrollBounds()                   // k.b(true) — window + veil latch
                     kAD = null
                     if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
@@ -2673,9 +2703,8 @@ class Level0World(
         }
     }
 
-    /** Row hit-test for the touch-confirm (`inferred` layout — the
-     *  orig's rects live in the unported draw proc at :6020-6120; rows
-     *  stack at ~36px inside the `b(93,67,214)` panel). */
+    /** Row hit-test for the touch-confirm — layout proven: `menuRowRects`
+     *  mirrors the ported `b()` draw proc's `i9` walk (k.java:5977-6148). */
     fun menuRowAt(y: Int): Int {
         if (kEy <= 0) return -1
         // `c(i,i9,i3,i4)` per drawn row (k.java:6117 — the b() loop's own
@@ -2835,23 +2864,35 @@ class Level0World(
             }
         }
     }
+    /** Row label (k.java:6046-6140, proven). `j.c==19` →
+     *  `d(0,10)+" "+(row+1)` = "LEVEL n"; every other state →
+     *  `d(0, eA[bv][i21])` + per-string suffix arms where `i21` is the
+     *  `m(bv,row)`-resolved index (verbatim `i21=0` pin for row0&jC==2 —
+     *  m already returns 0 there, kept as a comment for provenance).
+     *  Suffixes: 32/33/34 & 103 → `bW.l(3)` pal (the z[12] blink beside
+     *  32/33/34 under `!eJ` draws in the renderer — slice 226);
+     *  83/84 → ": "+d(0, bE/bF?21:20); 97 → ": "+d(0,35+au);
+     *  123 → ": "+d(0,124+(cm==1?0:1)). */
     fun menuRowText(i13: Int): Pair<String, Int> {
-        if (jC == 19) {
-            val iM = menuM(kBv, i13)
-            var strD = d0(kEA[kBv][iM]) ?: "?"
-            var pal = 0
-            when (kEA[kBv][iM]) {
-                32, 33, 34 -> pal = 3
-                83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
-                84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
-                97 -> strD += ": " + (d0(35 + kAu) ?: "")
-                103 -> pal = 3
-                123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
-            }
-            return strD to pal
+        if (jC == 19) return "${d0(10) ?: "LEVEL"} ${i13 + 1}" to 0
+        val iM = menuM(kBv, i13)
+        var strD = d0(kEA[kBv][iM]) ?: "?"
+        var pal = 0
+        when (kEA[kBv][iM]) {
+            32, 33, 34 -> pal = 3
+            83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
+            84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
+            97 -> strD += ": " + (d0(35 + kAu) ?: "")
+            103 -> pal = 3
+            123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
         }
-        return "${d0(10) ?: "LEVEL"} ${i13 + 1}" to 0
+        return strD to pal
     }
+    /** Resolved `eA[bv][i21]` index for row `i13` (k.java:6095) — used by
+     *  the `z[12]` blink gate (strings 32/33/34 only) and palette arms.
+     *  -1 under jC==19 (LEVEL-n rows bypass the table). */
+    fun menuRowEntry(i13: Int): Int =
+        if (jC == 19) -1 else kEA[kBv][menuM(kBv, i13)]
     /** jc19 sub-label `d(0, eX[eW[i13]])` drawn on `y` (:6092).
      *  `eW={2,2,1,1,2,0,3,2,2}` `eX={51,52,53,54}` (:299-300). */
     fun menuRowSub(i13: Int): String? {
@@ -3592,7 +3633,7 @@ class Level0World(
                     kJT = 0                          // held pad bits flush
                     return true                      // → `j.t=0`, skip frame
                 }
-                scrollBounds()                       // b(true)
+                scrollBounds()                       // k.b(true) — window + veil latch
                 kEg = 0
                 menuL(kEy)
                 menuQ(pressY)
@@ -3659,7 +3700,64 @@ class Level0World(
     /** Stats screen (L466): `d(0,bx)` + "TOUCH THE SCREEN" blink. */
     val statsVisible get() = kAl && jC == 31 && kBx >= 0
     fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
-    private fun scrollBounds() { /* b(true) — scroll refresh, unported */ }
+    /**
+     * `k.b(boolean)` (k.java:9062-9340, proven). Every port caller passes
+     * `true` (`stateL(12/13)` :2224, `stateL(14)`-in-jc8/21 :2271, the
+     * jc12/13 tick arm :3596) — the `b(false)` early-out `jc∈{12,13,31}`
+     * (:9064-9072) is unreachable from those sites; kept as a `full`
+     * param anyway for the verbatim shape.
+     *
+     * (1) input-lock veil latch: `k.am && !k.dd → k.dd=1` then the
+     *     `j.a` veil ops (:9080-9101 — the 3/4/6-arg forms are
+     *     unrecovered stubs; by shape they are `fill 400×240`,
+     *     `alpha-strip 100`, `blit cd`, `reset` — inferred translucent
+     *     black dim while input is locked; drawn by the renderer every
+     *     frame while `kAm` holds, since our immediate-mode pass has no
+     *     persistent back-buffer to draw into once).
+     * (2) visible et-cell window: `camX/20 .. (camX+399)/20` ×
+     *     `camY/20 .. (camY+239)/20`; the `(bt-21)/(bp-21)`,
+     *     `(bu-13)/(bq-13)` rescales are proven 1 (`bt=bp`, `bu=bq` at
+     *     level load :19116-19118). Negative camY gets the `-20`
+     *     floor-division bias (:9084); `vy0<0` clamps only when
+     *     `bh[aj]!=3` (flying missions scroll above the level).
+     *     `vx1/vy1` are never clamped (verbatim).
+     * (3) `dM` full-invalidate + `dN..dQ` previous-window compare +
+     *     `h()` edge-strip marks (:9185-9290) — proven-dead
+     *     bookkeeping: `h()` (:15935+) computes ring-bank slots of the
+     *     tile back-buffer; our renderer draws the window fresh every
+     *     frame. The compare/flag state is kept verbatim for parity.
+     * (4) tail (:9306+) = the eu 420×260 toroidal blit via `d()` rects
+     *     — already covered verbatim by the renderer's eu arm.
+     */
+    internal var visX0 = 0; internal var visY0 = 0
+    internal var visX1 = 0; internal var visY1 = 0
+    internal var visDirty = false              // k.dM
+    private fun scrollBounds() = scrollBounds(true)
+    private fun scrollBounds(full: Boolean) {
+        if (!full && (jC == 12 || jC == 13 || jC == 31)) return  // L1c
+        if (kAm && !kDd) kDd = true                            // veil latch
+        var sy = camY
+        if (sy < 0) sy -= 20                    // :9084 floor-div bias
+        var vx0 = camX / 20
+        val vx1 = (camX + 399) / 20
+        var vy0 = sy / 20
+        val vy1 = (sy + 239) / 20
+        val cols = level.etCols                 // k.bt (== bp at load)
+        val rows = level.etRows                 // k.bu (== bq at load)
+        if (vx0 < 0) vx0 = 0 else if (vx0 > cols - 1) vx0 = cols - 1
+        if (vy0 < 0) { if (!bh3) vy0 = 0 } else if (vy0 > rows - 1) vy0 = rows - 1
+        if (!visDirty) {
+            if (vx0 != visX0 || vx1 != visX1) {
+                if (vx1 < visX0 || vx0 > visX1) visDirty = true
+                // else h() edge strips — proven-dead (see head comment)
+            }
+            if (!visDirty && (vy0 != visY0 || vy1 != visY1)) {
+                if (vy1 < visY0 || vy0 > visY1) visDirty = true
+            }
+        }
+        if (visDirty) visDirty = false          // h(full rect) — dead
+        visX0 = vx0; visY0 = vy0; visX1 = vx1; visY1 = vy1
+    }
 
     /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
      *  synthetic kAh has no per-tick fn; the equivalent is the ax37
@@ -3686,8 +3784,8 @@ class Level0World(
     /** `j.c == 21` modal-dialog phase (screen-L target of op105's
      *  `k.l(21)`): world keeps ticking but the claimer is `cd[0]`-halted;
      *  the original's dialog screen dismisses on input → `k.C.Z()`
-     *  (i.java:19425 `cd[0]=false`) resumes the script. The visual
-     *  `b(9,1+aj,str,str)` draw is unported (`inferred`); the lifecycle
+     *  (i.java:19425 `cd[0]=false`) resumes the script. The
+     *  `b(9,1+aj,str,str)` draw lives in the renderer (jC21 modal); the
      *  contract — arm on 21, dismiss on next press → `resumeScript` —
      *  is what the claim VM observes. The arming tick's own press can't
      *  dismiss: the modal check runs at the top of the NEXT tick, so the
@@ -3786,9 +3884,11 @@ class Level0World(
 
     /**
      * ax2 `aY()` (simple i.java:13477-13550, proven): the checkpoint
-     * trigger. Gate: `bh[aj]==3 → (k.ak!=0 || cp.al<aS.al)` else the
-     * entity-W∩player-W overlap — our cell-cross is the overlap
-     * approximation already used here. On fire:
+     * trigger, now driven by the ax2 entity's own `i.I()` arm
+     * (i.java:15499 `case 2 → L1e2e → aY()`). Gate: `bh[aj]==3 →
+     * (k.ak!=0 || this.al<aS.al)` else the `a(this.W, aS.W)` box
+     * overlap — verbatim now that clip 1 (bi[2]=1) gives the record
+     * real boxes. On fire:
      *  1. `k.y()` → `fS=0` arms the tip-marquee (k.java:1027-1039);
      *  2. `k.G = Z[0]` — linked ax5 uid, re-fired on restore;
      *  3. bA serializer (`i.X()`, writeIX) — `bA[16]=aw` is the
@@ -3799,30 +3899,35 @@ class Level0World(
      *     (a snapshot WRITE — entities do NOT move);
      *  6. `bg[i]==-99 → bf[i*22]=-99` — removal tombstones propagate.
      */
-    private fun fireCheckpoints() {
-        for (cp in checkpoints) {
-            if (cp.consumed) continue
-            // bh3 autoscroll gate (i.java:13481): only while the flying
-            // entity has started AND the checkpoint is below the player.
-            if (bh3) { if (kAk != 0 || cp.al < player.al) continue }
-            else if (Math.abs(cp.ak - player.ak) > cellPx ||
-                     player.al < cp.al - cellPx) continue
-            cp.consumed = true
-            kFS = 0                                   // k.y()
-            kG = cp.z0                                // k.G = Z[0]
-            checkpointSnap = writeIX(cp.aw)
-            // k.c(this): the record's own slot tombstones.
-            if (cp.slot >= 0 && cp.slot < slotFlags.size) slotFlags[cp.slot] = -99
-            // The `k.a(bb[i],as)` stamp loop — live state into `bf`.
-            for (n in npcs) {
-                if (n.asSlot < 0 || n.ax == 70 || pendingRemove.contains(n)) continue
-                stampImage(n)
-            }
-            // bg → bf tombstone propagation (i.java:13543-13547).
-            for (s in slotFlags.indices) {
-                if (slotFlags[s] == -99 && s * 22 < slotImage.size)
-                    slotImage[s * 22] = -99
-            }
+    private fun fireCheckpoint(e: Entity) {
+        // Gate head (aY, i.java:37976-37991, proven): bh3 levels only
+        // fire while the flying entity has started AND the checkpoint
+        // sits at-or-below the player; other levels take the real
+        // `a(W, aS.W)` box overlap (clip1 gives the entity real boxes).
+        if (bh3) { if (kAk != 0 || e.al < player.al) return }
+        else if (!rectsOverlap(e.W, player.W)) return
+        val cp = checkpoints.firstOrNull { it.aw == e.aw }
+        // `k.c(this)` already tombstoned the slot → aY() is idempotent
+        // bookkeeping-wise; `cp.consumed` is the port's dedup marker
+        // the d(true) restore scan also stamps.
+        if (cp != null && cp.consumed) return
+        if (cp != null) cp.consumed = true
+        kFS = 0                                       // k.y()
+        kG = e.Z[0]                                   // k.G = Z[0]
+        checkpointSnap = writeIX(e.aw)
+        // k.c(this) (k.java:16681, verbatim): tombstone the record's own
+        // `bg` slot AND null its `bb[]` slot — the fired checkpoint
+        // entity leaves the world immediately (no re-fire possible).
+        removeEntity(e)
+        // The `k.a(bb[i],as)` stamp loop — live state into `bf`.
+        for (n in npcs) {
+            if (n.asSlot < 0 || n.ax == 70 || pendingRemove.contains(n)) continue
+            stampImage(n)
+        }
+        // bg → bf tombstone propagation (i.java:13543-13547).
+        for (s in slotFlags.indices) {
+            if (slotFlags[s] == -99 && s * 22 < slotImage.size)
+                slotImage[s * 22] = -99
         }
     }
 
@@ -4567,7 +4672,29 @@ class Level0World(
                 kAk = 0
             }
         } else {
-            for (n in npcs) tickNpc(n)
+            // `k.I()` bh[aj]!=3 arm (k.java L215→L2d9, proven): every
+            // entity re-scores `au` via `u()` FIRST (parked entities
+            // still update their LOD tier), then the eligibility gate:
+            // P|256 held → skip; au<2 → skip when parked `P&32` without
+            // the force-tick `P&16`; au>=2 → tick only under `P&16`;
+            // ax71 excluded entirely; `ag()→af()` pushes the ghost-trail
+            // slot before `I()`. `ac`/`ab` links tick unconditionally —
+            // the `ac.ax!=10` guard exists ONLY in the bh3 arm
+            // (verbatim asymmetry).
+            for (n in npcs) {
+                n.recomputeAu(camX, camY, ::kBk)
+                if ((n.P and 256) != 0) continue
+                if (n.au < 2) {
+                    if ((n.P and 32) != 0 && (n.P and 16) == 0) continue
+                } else {
+                    if ((n.P and 16) == 0) continue
+                }
+                if (n.ax == 71) continue
+                if (n.hasTrail()) n.pushTrail()
+                tickNpc(n)
+                n.ac?.let { tickNpc(it) }
+                n.ab?.let { tickNpc(it) }
+            }
         }
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
@@ -4579,7 +4706,6 @@ class Level0World(
             npcs += pendingInsert
             pendingInsert.clear()
         }
-        fireCheckpoints()
         fireScrollTriggers()
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
@@ -4630,9 +4756,49 @@ class Level0World(
     /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
      *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
     private fun tickNpc(n: Entity) {
-        // `i.cu` world-freeze (i.java:15294 L109, proven): while the ax10
+        // `I()` head guards (i.java:15167 L9 + :15173 L21, proven):
+        // j.c==14 skips the entity tick outright; so does ax21 while a
+        // u9 dialog is suspended (k.C != null && k.u == 9).
+        if (jC == 14) return
+        if (n.ax == 21 && kC != null && dlgU == 9) return
+        // L34 (i.java:15182-15236, proven): under `k.al` only entities
+        // whose `aa` clip IS k.z[12] still run this block. Inside it,
+        // `y` is an anim-freeze counter — positive values (<100) count
+        // down and wrap to -1 (y>=100 never decrements: the aOp latched
+        // sentinel); `y<=0` runs `s()` gated `!cu && S>=0 &&
+        // (!aH || j.g % aI == 0)`.
+        if (!kAl || n.clip === clips[12]) {
+            if (n.y > 0) {
+                if (n.y < 100) n.y--
+                if (n.y == 0) n.y--
+            } else if (!Entity.icu && n.S >= 0 &&
+                (!iAH || jG % maxOf(1, iAI) == 0L)) {
+                n.advanceAnim()                                        // s()
+            }
+        }
+        // L85→L9a (i.java:15238-15244, proven): `m()` = `{ y = 0 }`
+        // (i.java:11774) — while not claim-suspended the freeze counter
+        // resets every tick, so the y-stall only persists under claim
+        // suspension. Skipped for ax==0 (the player slot type).
+        if ((kC == null || kC?.claimAb() != true) && n.ax != 0) n.y = 0
+        // `I()` preamble La5 (i.java:15250, proven): `b = true` every
+        // tick — the box-dirty flag is a per-tick suppress latch, not a
+        // persistent one. Arms that manage W themselves (ax15, ax60,
+        // ax66 ride states) clear `b` inside their proc to keep the tail
+        // from rebuilding it.
+        n.b = true
+        // L108 dispatch gate (i.java:15252-15262, proven): while a claim
+        // script suspends the world OR a u9 dialog runs, only P|512
+        // entities, the claimer itself, and ax8/ax24 still dispatch —
+        // everything else returns here. (The ax==0 `k.E.P|=128` arm is
+        // player-slot territory — no ax0 npc records exist.)
+        val suspended = kC?.claimAb() == true || (jC == 21 && dlgU == 9)
+        if (suspended && (n.P and 512) == 0 && kC !== n &&
+            n.ax != 8 && n.ax != 24) return
+        // `i.cu` world-freeze (i.java:15264 L109, proven): while the ax10
         // S55 claim zone holds it, every non-ax10 entity skips `I()`.
         if (Entity.icu && n.ax != 10) return
+        var claimed = true
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
         else if (n.ax == 4) npcFsm.tickDestructible(n, player)
@@ -4676,8 +4842,15 @@ class Level0World(
         else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
         else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
         else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
+        else if (n.ax == 2) fireCheckpoint(n)
 
-        else npcFsm.tick(n, player)
+        else { npcFsm.tick(n, player); claimed = false }
+        // `I()` dispatch tail L1f35 (i.java:18904-18934, proven): every
+        // arm `goto L1f35` — `if (b) t()` box refresh, the `av` facing bit
+        // into `P|1`, then the `a(k.aS, P, W)` player push. The fallback
+        // branch is excluded: `npcFsm.tick` already runs the same tail —
+        // the L849 superset for soldiers or defaultArm for unclaimed ax.
+        if (claimed) npcFsm.defaultArm(n, player)
         // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
         // every entity except soldiers (11) and civilians (17).
         if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)

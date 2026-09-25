@@ -37,7 +37,8 @@ package com.acrebuild.core
  * - S5 land arm (L464): jump press → `i(21)` roll-jump, direction held →
  *   `l()`, anim end → `i(aO>12 ? 79 : 0)`.
  * - S6 (L139): on `r()` clear velocities + `P|=64`; `!u(16388)` → `i(0)`.
- * - S10 dash (L1315): `ag /= 2` per tick (plus `ab` mirror — not ported).
+ * - S10 dash (L1315): `ag /= 2` per tick (plus the `ab` mirror — the held
+ *   prop tracks the player's box at :943).
  * - S32 arm (structured g.java `case 32`): `r()` → `ag=0; i(Q==79?79:0)`.
  * - S199 arm (case 199): grounded → wall stop, L/R hold → `ag=±2560` or
  *   flip `av`, release → `ag=0; i(79)`.
@@ -1605,6 +1606,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * (g.java:687-712, proven): standing inside a type-19 cell with an
      * open side (aV==0 → face left; aW==0 → face right) snaps `ak` to the
      * open side's grid edge — the ledge pull-up entry.
+     * PROVEN-DEAD on shipped content: the == 19 checks are exact and no
+     * level pack's `et` grid contains a type-19 cell, so the S63 entry
+     * never fires; kept verbatim for parity.
      */
     private fun wallClimb(p: Entity): Boolean {
         when {
@@ -2068,7 +2072,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                      pad.u(Pad.M_TAP_L) || pad.v(Pad.M_TAP_L) ||
                      pad.u(Pad.M_TAP_R) || pad.v(Pad.M_TAP_R))) p.aF = 1
         // L3ad8: `cw && aO==5` → i(280) ceiling grab — zero all motion and
-        // snap `al` onto the ceiling grid row.
+        // snap `al` onto the ceiling grid row. `aO` here is av()'s
+        // shifted (al-20) probe — the cell ABOVE the head — so the grab
+        // fires when a rise reaches under a '5' lip, not inside it.
         if (p.cw && p.aO == 5) {
             p.setAnim(280)
             p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0
@@ -2564,8 +2570,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     /** `i.v()` ax25 tail (i.java:597-640, proven subset) — the flying
      *  player stays "alive" while its `Y` box overlaps the camera rect
-     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The special-ax arms
-     *  and the `u()`/`au>i` screen-score guard are NPC-side, unported. */
+     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The `u()`/`au>i`
+     *  screen-score guard is `offscreenScore`/`inPlayV` on Entity. */
     private fun flightAliveV(p: Entity): Boolean {
         val ac = world.kAc ?: return true
         return p.Y[0] <= ac[2] && p.Y[2] >= ac[0] && p.Y[1] <= ac[3] && p.Y[3] >= ac[1]
