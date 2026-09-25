@@ -17160,12 +17160,16 @@ class Slice180Test {
         w.kQ = 230                                        // bh3 camera init
         val p = w.player; p.setAnim(0); p.ag = -2048; p.ah = 0
         val pad = Pad()
+        // input arm (iBi=0 && gE=0): z3 tail decays ah 768/tick toward
+        // kY(-1792), z2 tail decays ag the same way.
         w.playerFsm.tick(p, pad)
-        assertEquals(w.kY, p.ah, "no-input glide = kY descent")
+        assertEquals(-768, p.ah, "z3 tail: ah -= 768 toward kY")
         assertEquals(-1280, p.ag, "ag decays 768 toward 0 (-2048+768)")
         w.playerFsm.tick(p, pad)
+        assertEquals(-1536, p.ah)
         assertEquals(-512, p.ag)
         w.playerFsm.tick(p, pad)
+        assertEquals(w.kY, p.ah, "glide settles at kY descent")
         assertEquals(0, p.ag, "bank settles to 0")
     }
 
@@ -17174,7 +17178,8 @@ class Slice180Test {
         val w = world(aj = 1)
         w.stateL(8)
         w.kQ = 230                                        // bh3 camera init
-        w.iBi = true                                      // seat latch (i.java:15216/9571) — steering arm
+        // input arm runs when !iBi && !gE (g.java:14393-14396) — iBi
+        // stays false: the climb/grab latches own the scripted arm.
         val p = w.player; p.setAnim(0); p.ag = 0; p.ah = 0
         val pad = Pad()
         pad.held = 4112                                   // u(4112) left
@@ -17250,7 +17255,7 @@ class Slice180Test {
             "iBB consumes the waypoint target")
         // homing arm: aq/ar set → ak/al step toward them at ±10.
         val al0 = p.al
-        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false; w.iBi = true
+        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false
         w.playerFsm.tick(p, Pad())
         assertEquals(p.aq - 15, p.ak, "ak steps +10 toward aq")
         // verbatim: ar/al both += kX(-7), then ar<al → al-=10, then
@@ -17264,7 +17269,8 @@ class Slice180Test {
         val w = world(aj = 1)
         w.stateL(8)
         w.kQ = 230
-        w.iBi = true                                 // seat latch — flap lives in bi&&!E
+        // input arm (iBi=0 && gE=0): the flap lives in the aC()+input
+        // arm — kAI cooldown elapsed → flap(p, false).
         val p = w.player; p.setAnim(4); w.kAI = 11   // cooldown elapsed
         p.ah = w.kY                                  // z4 glide condition
         w.kBB = 1                                    // !bB==0&&bC==0 → skip
@@ -23251,6 +23257,88 @@ class Slice245Test {
             "play (jC=8, kAj=1, pack swapped, mission-1 records live) — " +
             "got jC=${w.jC} kAj=${w.kAj} loadedAj=${w.loadedAj} " +
             "npcs=${w.npcs.size} l1=$l1 marks=$marks")
+    }
+
+    @Test fun `bot climbs the mission-1 shaft until the alert stall`() {
+        // Twentieth leg — mission 1 (kBh[1]==3, bh3 flying): the ax25
+        // glider record IS the player slot (k.java:4647). `g.n()`'s
+        // glide arm (PlayerFsm.kt:2400+) holds S0; `pad.u(16388)` climbs
+        // (ah -= 768 to -2048+kY while kQ>117), `pad.u(33024)` dives
+        // (ah += 768 to 2048+kY while kQ<230), LEFT/RIGHT bank ag±768.
+        // `canyonCollide` (Entity.kt:1247): cells >=10 extrude the box,
+        // cell 21 kills (`iBe` dead-drag → `stateL(12)`). The bot banks
+        // left/right around wrapped wall columns while holding climb;
+        // `k.aE` drains ~0.14/tick while `k.aH<0` (Level0World.kt:2383-2395)
+        // — empty → stall S24 → x1=0 → S2 → l(12) = the designed fail.
+        val w = world(aj = 1)
+        // Faithful entry — the G() loader arms camResetC()'s bh3 init
+        // (kQ=230, kX=-7, dT, dR=-1, dS=-2) at `pad.w(65568)` past jG=164;
+        // entering via stateL(8) directly leaves kQ=0 (climb gate dead).
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        var t = 0; var deaths = 0
+        var minAl = p.al; var maxAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 12000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> { deaths++; break }
+                w.jC == 15 -> break               // won
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                // `i.bi || g.E` = scripted arm owns the flight (wind/
+                // countdown latch — climb-sequence or grab-QTE). Idle-tick
+                // those ticks; live input runs otherwise.
+                w.iBi || Entity.gE -> {
+                    if (t % 100 == 0)
+                        marks += "t$t lock S${p.S}@${p.ak},${p.al} " +
+                            "v=${p.ag},${p.ah} kAE=${w.kAE}"
+                    w.tick(emptyList()); continue
+                }
+            }
+            // The flight is a vertical shaft: scroll `al -= kX` carries
+            // the glider, LEFT/RIGHT banks `ag±768` dodge wall columns
+            // (cells >=10 extrude, 21 kills). canyonCollide wraps y at
+            // %260 — sample the wrapped row a screen ahead, ±3 cols;
+            // bank toward the side with more open cells, drift toward
+            // the perch band x~295 when walls are even.
+            val wrapRow = ((p.al - 90) % 260 + 260) % 260 / 20
+            var left = 0; var right = 0
+            val c0 = p.ak / 20
+            for (dx in -3..3) {
+                val cell = p.e(w, c0 + dx, wrapRow)
+                if (cell < 10) { if (dx < 0) left++ else if (dx > 0) right++ }
+            }
+            // default climb (u(16388) → ah-768 floor -2048+kY while
+            // kQ>117) — the shaft is climbed at ~7px/t; the designed
+            // timer is the `k.aE` alert meter draining while `k.aH<0`
+            // (~700t ≈ 43s of flight budget; the mid-shaft perch zone
+            // (295,6959) is the leg destination).
+            var held = 16388
+            if (p.ak > 335) held = Pad.M_LEFT            // drift toward perch x295
+            else if (p.ak < 255) held = Pad.M_RIGHT
+            if (right < left) held = Pad.M_LEFT
+            else if (left < right) held = Pad.M_RIGHT
+            w.pad.e(held); w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            if (p.al > maxAl) maxAl = p.al
+            if (t % 100 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al}%${(p.al % 260 + 260) % 260} " +
+                    "v=${p.ag},${p.ah} h=$held kAE=${w.kAE} " +
+                    "kX=${w.kX} iAJ=${w.iAJ} jC=${w.jC} x1=${p.x1}"
+        }
+        println("FLY jC=${w.jC} deaths=$deaths " +
+            "al=$minAl-$maxAl iBe=${w.iBe} marks=$marks")
+        // The designed window: `k.aE=100` drains ~1 per ~7 ticks while
+        // `k.aH<0` (no ax21 wave arm exists in level-1 records) →
+        // `k.aE<=0 && k.aH<0` → stall S24 → `x1=0` → S2 → l(12). The leg
+        // verifies live input (bank/climb), ~3500px of shaft progress,
+        // and the faithful stall → mission-fail path.
+        assertTrue(w.jC == 12 && deaths == 1 && minAl < 9000,
+            "flight leg: live input + shaft progress before the designed " +
+            "stall — deaths=$deaths jC=${w.jC} minAl=$minAl marks=$marks")
     }
 
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
