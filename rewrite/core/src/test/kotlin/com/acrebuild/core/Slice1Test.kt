@@ -6312,10 +6312,17 @@ class Slice56Test {
     }
 
     @Test fun `S6 drop line anim-9 past ap and on bc hit (L171)`() {
+        // L171 (i.java:14062-14078, proven): `al > ap → goto L173` SKIPS
+        // the i(9) — the wisp keeps rising while above its target line
+        // and dies into the S9 impact anim only once `al <= ap`. (The
+        // arm reads inverted at first glance: `al > ap → continue`.)
         val w = world()
-        val e = ax24(w, 6, 100, 100); e.ap = 50   // al(100) > ap(50) → i(9)
+        val e = ax24(w, 6, 100, 100); e.ap = 50   // al(100) > ap(50) → alive
         w.npcFsm.tickAx24(e, w, w.player)
-        assertEquals(9, e.S)
+        assertEquals(6, e.S, "al>ap keeps the drop line flying")
+        e.al = 50; e.setPositionPx(100, 50); e.ap = 50   // al<=ap → i(9)
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertEquals(9, e.S, "al<=ap dies into the S9 impact anim")
     }
 
     @Test fun `bc sweeps ax54 victim for kill + countKill (L26 arm)`() {
@@ -23597,6 +23604,148 @@ class Slice245Test {
         }
         println("PILLARDROP ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} marks=$marks")
         assertTrue(true)
+    }
+
+    @Test fun `bot flight drop-lines arm the canyon shrines and refill the meter`() {
+        // Slice-267 — the k.aE alert meter (i.java:2548, reset 100/0/-1
+        // in D() on every fail-reload) funds ~600t per leg: `g.n()`
+        // drains aE-1 per 6 ticks while k.aH<0 (g.java:5851-5856 —
+        // aH<0 → aG--; aG==0 → aG=6, aE--), and S24 stall → x1=0 →
+        // l(12) on empty (g.java:5861-5871). Checkpoint bands CANNOT
+        // segment the ascent: `aY()` ticks only under `au<2` and the
+        // fixed-speed drift camera bottoms ~1500px above the cp1
+        // window in one leg (proven: the shaft run's minCamY≈9988 vs
+        // the required [8000,8480]). The REAL refill mechanism is the
+        // shrine chain: free-glide auto-emits ax24-S6 drop-lines via
+        // `e(false)`/`flap(p,false)` (g.java:6330-6355 + PlayerFsm —
+        // k.aI≥10 gate, ~100px drop, af==aS); the drop-line's `bc()`
+        // sweep converts overlapped ax24-S19 lay-children to S20
+        // shrines (i.java L171/L181 + bc case-24, NpcFsm.kt:6945), and
+        // the S20 arm on player overlap pays `k.aF=min(aB,100-aE)`
+        // (+3/t into aE), `e=30` wall-immunity, `k.X=kAJ` conveyor
+        // restore, `sfx(25)`, and aS.i(21). Level-1 carries 6×S19
+        // along the corridor (x∈{222,397,413,454,475,599}) — the
+        // designed leg loop is fly → drop-line arms the shrine → fly
+        // through it → refill.
+        val w = world(aj = 1)
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        var t = 0; var deaths = 0
+        var s6Emitted = 0; var shrinesArmed = 0; var shrineFired = false
+        var kAFMax = 0; var iEMax = 0; var pS21 = false
+        var minAl = Int.MAX_VALUE
+        val seen = mutableSetOf<Int>()
+        val marks = mutableListOf<String>()
+        // Phase A — real flight from spawn (~400t): proves the k.aI≥10
+        // auto-emitter produces drop-lines on the actual climb path.
+        while (t++ < 400) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    deaths++
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                w.iBi || Entity.gE -> { w.tick(emptyList()); continue }
+            }
+            w.pad.e(16388); w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            for (n in w.npcs) {
+                if (n.ax == 24 && n.S == 6 &&
+                    seen.add(System.identityHashCode(n))) {
+                    s6Emitted++
+                    if (s6Emitted <= 4) marks += "S6@t$t p=${p.ak},${p.al} w=${n.ak},${n.al}"
+                }
+            }
+        }
+        marks += "PHASEA s6=$s6Emitted al=${p.al} minAl=$minAl kAE=${w.kAE}"
+        // Phase B — probe: hover the player under the S19 at (397,8437)
+        // (its lay box is -15,-81,39,93 on the anchor); the drop-lines
+        // rise ~180px and must sweep it into S20. The probe then snaps
+        // the camera to the shrine (au<2 else the entity parks) and
+        // pins the player inside its box (-21,-80,42,92) so L181's
+        // overlap arm fires — the canyon's leftward airflow otherwise
+        // drags the probe off-column before the slow climb can cover
+        // the ~50px gap (a real pilot steers through it).
+        p.ak = 397; p.N = 397 shl 8
+        p.al = 8540; p.O = 8540 shl 8
+        p.ah = 0; p.ag = 0; p.setAnim(4)
+        var probe = 0
+        while (probe++ < 900 && w.jC == 8) {
+            // Hover under the S19 so the rising drop-line sweep can
+            // reach it; once a shrine arms, fly into its box — L181
+            // fires on player↔shrine overlap.
+            var mask = 0
+            if (p.ak < 405) mask = mask or 8256           // M_RIGHT
+            if (p.al > 8500) mask = mask or 16388         // M_UP
+            w.pad.e(mask)
+            w.tick(emptyList())
+            for (n in w.npcs) {
+                if (n.ax == 24 && n.S == 6 &&
+                    seen.add(System.identityHashCode(n))) {
+                    s6Emitted++
+                    if (s6Emitted <= 4) marks += "S6@probe$probe p=${p.ak},${p.al} w=${n.ak},${n.al}"
+                }
+                if (n.ax == 24 && n.S == 20) {
+                    if (seen.add(10000 + n.aw)) {
+                        shrinesArmed++
+                        marks += "SHRINE@probe$probe uid${n.aw}@${n.ak},${n.al} p=${p.ak},${p.al}"
+                        // Snap the camera to the shrine (via the k.O/k.P
+                        // projections): au recompute parks the entity
+                        // while the cam is far away.
+                        w.kO = n.ak - 200; w.kP = n.al - 230
+                    }
+                    if (!shrineFired) {
+                        // Pin the player inside the shrine box
+                        // (-21,-80,42,92) until L181's overlap arm fires.
+                        p.ak = n.ak; p.N = n.ak shl 8
+                        p.al = n.al - 40; p.O = p.al shl 8
+                        p.ah = 0; p.ag = 0
+                        p.refreshBoxes()
+                    }
+                }
+            }
+            if (w.kAF > kAFMax) kAFMax = w.kAF
+            if (w.iE > iEMax) iEMax = w.iE
+            if (p.S == 21) { pS21 = true; shrineFired = true }
+            if (w.kAF > 0) shrineFired = true
+            if (probe % 100 == 0)
+                marks += "pb$probe S${p.S}@${p.ak},${p.al} kAE=${w.kAE} " +
+                    "kAF=${w.kAF} iE=${w.iE} s6=$s6Emitted sh=$shrinesArmed"
+            if (probe <= 60) {
+                val s6 = w.npcs.firstOrNull { it.ax == 24 && it.S == 6 }
+                val s19 = w.npcs.firstOrNull { it.ax == 24 && it.S == 19 }
+                if (s6 != null && probe % 5 == 0)
+                    marks += "DL$probe w=${s6.ak},${s6.al} X=${s6.X?.contentToString()} " +
+                        "ap=${s6.ap} s19W=${s19?.W?.contentToString()} p=${p.ak},${p.al}"
+            }
+            if (shrineFired && probe > 60) break
+        }
+        println("SHRINES s6=$s6Emitted armed=$shrinesArmed fired=$shrineFired " +
+            "kAFMax=$kAFMax iEMax=$iEMax pS21=$pS21 minAl=$minAl " +
+            "deaths=$deaths marks=$marks")
+        // Verdict (proven — flap() + bc() case-24 + L181): the player's
+        // own drop-lines convert the S19 columns into S20 shrines, and
+        // flying through one charges the k.aF refill pool (+iE=30
+        // wall-immunity + S21) — the canyon's real meter economy.
+        assertTrue(s6Emitted >= 1,
+            "free-glide must auto-emit ax24-S6 drop-lines (k.aI>=10 " +
+            "gate) — s6=$s6Emitted marks=$marks")
+        assertTrue(shrinesArmed >= 1,
+            "a drop-line sweep must convert an ax24-S19 into the S20 " +
+            "shrine — armed=$shrinesArmed s6=$s6Emitted marks=$marks")
+        assertTrue(shrineFired,
+            "flying through the armed S20 shrine must fire L181 " +
+            "(k.aF refill + iE + S21) — fired=$shrineFired " +
+            "kAFMax=$kAFMax iEMax=$iEMax marks=$marks")
     }
 
 }
