@@ -627,6 +627,13 @@ class Level0Renderer {
                 fillAr(x - 3, y + bh / 2 - 2, 3, 4, -1)
             if (text.isNotEmpty()) drawText(text, x + 4, y + 3, 0, pack = 92)
         }
+        for (o in w.fxOutlines) outlineAr(o[0], o[1], o[2], o[3], o[4])
+        // `a.c()` (a.java:215, proven): armed prompt-card slots — the
+        // renderer ticks + blits at the (a,b) the sim wrote.
+        for (slot in w.fxPrompts) {
+            val pr = Entity.scriptPrompts.getOrNull(slot) ?: continue
+            if (pr.anim.e >= 0) drawPrompt(pr, 62)
+        }
         for (d in w.fxDots) fillAr(d[0], d[1], 2, 2, -0x33889900)  // sparkle
     }
 

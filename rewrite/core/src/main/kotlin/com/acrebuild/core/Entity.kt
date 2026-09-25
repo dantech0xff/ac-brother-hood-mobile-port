@@ -5561,7 +5561,14 @@ interface LevelCellSource {
     /** `j.a(g,x1,y1,x2,y2)` line + `j.b` fill — F()'s pure-draw calls
      *  collected as (x1,y1,x2,y2,argb); the renderer blits them. */
     fun drawFxLine(x1: Int, y1: Int, x2: Int, y2: Int, argb: Int) {}
-    /** `j.a(g,x,y,w,h,color)` filled rect (ax43 column/veil draws). */
+    /** `j.c(g,x,y,w,h)` (j.java:2844, proven) — 1px hollow rect outline
+     *  (the S31 zone's progress-bar frame). */
+    fun drawFxOutline(x: Int, y: Int, w: Int, h: Int, argb: Int) {}
+    /** `a.c()` (a.java:215, proven) — mark a script-prompt card slot
+     *  armed this draw pass; the renderer ticks + blits it at (a,b). */
+    fun drawFxPrompt(slot: Int) {}
+    /** `j.b(g,x,y,w,h)` (j.java:2818, proven) — filled rect (`j.b` =
+     *  fillRect; the S31 progress bar and similar fills). */
     fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {}
     /** `g.a(x,y,…)` sparkle dot — one point of the Lbaf rosette. */
     fun drawFxDot(x: Int, y: Int) {}
