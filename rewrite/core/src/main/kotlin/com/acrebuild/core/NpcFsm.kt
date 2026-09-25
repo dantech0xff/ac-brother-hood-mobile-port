@@ -10468,9 +10468,42 @@ fun NpcFsm.initAx8(e: Entity, f: List<Int>) {
  * `Z[1]==1` dismount-jump S157 else S43; then `af=null`.
  */
 internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
+    if (e.S == 31) {
+        // L437 (i.java:32653-32840, proven): the claim-QTE zone's draw
+        // — gated on player overlap + `!(P&128)`. Column math, the
+        // `m`/`aA==Z[3]` prompt checks that latch `n`, the cyan
+        // progress bar (fill `j.b` + outline `j.c`), then the armed
+        // `bA[4-aD..3]` cards positioned at y=160 and ticked 62ms.
+        if (!Entity.overlapI(e.W, player.W) || (e.P and 128) != 0) return
+        val colW = 400 / (e.aD + 1)
+        val off = 4 - e.aD
+        if (e.m >= 10) {
+            val pr = Entity.scriptPrompts.getOrNull(e.m - 10)
+            if (pr != null && pr.anim.stopped()) { e.nl = 1; return }
+        } else if (e.aA == e.Z[3]) {
+            if (w.missionBh() == 3) { e.nl = 1; return }
+            val pr = Entity.scriptPrompts.getOrNull(e.m)
+            if (pr != null && pr.anim.stopped()) { e.nl = 1; return }
+        }
+        if (e.Z[2] < 9999) {
+            w.drawFxRect(20, 200, 360 * (e.Z[2] - e.aB) / e.Z[2],
+                         10, 0x33ebf4)
+            w.drawFxOutline(20, 200, 360, 10, -1)
+        }
+        var i = 0
+        while (i < e.aD) {
+            val pr = Entity.scriptPrompts.getOrNull(i + off)
+            if (pr != null) {
+                pr.a = colW - 10 + i * colW
+                pr.b = 160
+                w.drawFxPrompt(i + off)
+            }
+            i++
+        }
+        return
+    }
     if (e.S != 34) {
-        // L437 (S31's draw arm) unmined — the aV S31 claim-QTE arm is
-        // a different proc. L579 default: no draw-side work.
+        // L579 default: no draw-side work.
         return
     }
     e.P = e.P or 16

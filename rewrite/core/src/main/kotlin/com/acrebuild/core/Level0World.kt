@@ -1021,6 +1021,16 @@ class Level0World(
     override fun drawFxLine(x1: Int, y1: Int, x2: Int, y2: Int, argb: Int) {
         if (fxLines.size < 512) fxLines.add(intArrayOf(x1, y1, x2, y2, argb))
     }
+    /** `j.c` outline drains (bounded, drawn via `outlineAr`). */
+    val fxOutlines = ArrayList<IntArray>()
+    /** `a.c()` — prompt-card slot indexes armed this pass (≤ 4). */
+    val fxPrompts = ArrayList<Int>()
+    override fun drawFxOutline(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        if (fxOutlines.size < 64) fxOutlines.add(intArrayOf(x, y, w, h, argb))
+    }
+    override fun drawFxPrompt(slot: Int) {
+        if (fxPrompts.size < 8) fxPrompts.add(slot)
+    }
     override fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {
         if (fxRects.size < 256) fxRects.add(intArrayOf(x, y, w, h, argb))
     }
@@ -2133,7 +2143,8 @@ class Level0World(
      * this path per the source.
      */
     fun drawStylePass() {
-        fxLines.clear(); fxRects.clear()
+        fxLines.clear(); fxRects.clear(); fxOutlines.clear()
+        fxPrompts.clear()
         fxDots.clear(); fxBubbles.clear(); fxBubbleText.clear()
         buildDrawList()
         for (i in 0 until drawCount) {
