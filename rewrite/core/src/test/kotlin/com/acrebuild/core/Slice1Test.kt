@@ -21817,6 +21817,74 @@ class Slice245Test {
             "vault chain must carry east past the S43 zone — maxAk=$maxAk")
     }
 
+    @Test fun `bot rides the corridor - pit - east-wall-face loop verbatim`() {
+        // Fourth leg, VERDICT: the east corridor floor ends at a pit
+        // x2100-2180; the far wall (x2180-2380, top y480) is the climb.
+        // Measured cycle (all verbatim): run east -> the (2064,695)
+        // WEST zone catches a straggler and vaults it back for a retry ->
+        // (1975,605) -> (2104,546) east vaults -> wall-grab S101 at
+        // (2179,518) -> kick launch arcs west-up (apex ~2112,447) -> falls
+        // to corridor floor -> loop. The x2180 face is a single-face
+        // climb — each launch clears the face's x-range going west — the
+        // ascent needs human-level zigzag timing, same class of skill
+        // gate as the corner pillar and the x2773 guard pack.
+        // Neighbour note: ax10-S43 at (2176,468) is a ledge-assassination
+        // zone (hang S60/61 -> i(203) victim carry), not a climb assist.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        w.npcs.filter { it.ax == 22 || it.ax == 2 }.forEach(::keepLive)
+        val p = w.player
+        p.setPositionPx(1980, 799)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var maxAk = p.ak; var captures = 0; var grabs = 0; var floorReturns = 0
+        var lastS = p.S
+        val marks = mutableListOf<String>()
+        val trace = ArrayDeque<String>(80)
+        while (t++ < 15000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    captures++
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+            }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 80) trace.removeFirst()
+                trace += "$t:${lastS}->${p.S}@${p.ak},${p.al}"
+                if (p.S == 101) grabs++
+                if (grabs > 0 && (p.S == 5 || p.S == 0) && p.al > 750) floorReturns++
+                lastS = p.S
+            }
+            if (p.ak > maxAk) maxAk = p.ak
+            if (captures >= 6 && grabs >= 2 && floorReturns >= 2) break
+        }
+        println("LOOP captures=$captures grabs=$grabs floorReturns=$floorReturns maxAk=$maxAk trace=${trace.takeLast(16).joinToString(" ")}")
+        // verbatim cycle proven: zones capture, vaults carry east, the
+        // face grab + kick + west-drift floor return repeats forever —
+        // a designed loop, not a port softlock.
+        assertTrue(captures >= 4, "aerial chain must re-capture — captures=$captures")
+        assertTrue(grabs >= 1, "must reach the x2180 face grab — grabs=$grabs trace=$trace")
+        assertTrue(floorReturns >= 1,
+            "kick off the face must return to the corridor floor — floorReturns=$floorReturns")
+        assertTrue(maxAk >= 2179, "must reach the face x2180 — maxAk=$maxAk")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
