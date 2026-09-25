@@ -2234,11 +2234,13 @@ class Level0World(
         }
         camB += kX                                                       // L71 wind
         val q = ae.al - camB                                             // L72
+        kQ = q                                                           // `k.Q = r0`
         if (!iBj) {                                                      // L74-L82
             if (q <= 117) {                                              // L74
-                // Q=117 writeback is into k.Q — display-only, unmodeled
+                kQ = 117
                 if (ae.ah < kY) ae.ah = kY
             } else if (q >= 230) {                                       // L79
+                kQ = 230
                 if (ae.ah > kY) ae.ah = kY
             }
         }
@@ -4036,7 +4038,13 @@ class Level0World(
         jC = 8                                   // back to play (j.c==8)
         kAl = false
         kDe = false                               // f() `de=false` (:5131)
-        kM(kAd)                                   // C()/f() `m(ad)` snap
+        // a(false)→C() tail (k.java:6619 L55 → k.java:1851-1875 proven):
+        // the bh3 arm snaps `cA=O=aS.ak-200`, `cB=P=aS.al-230`, re-arms
+        // `X=V=-7`, `Q=230`, resets the conveyor (`dU/dR/aR=-1/dS/dT`).
+        // `m(ad)` was the wrong sub-arm — it runs the `!kZ` non-bh3
+        // tracker (`camB=p.al-150`), never the flying respawn snap.
+        // C() itself branches on bh3 — call it verbatim.
+        camResetC()
     }
 
     /**
