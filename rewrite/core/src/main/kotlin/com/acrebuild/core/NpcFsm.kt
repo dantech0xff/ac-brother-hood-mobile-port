@@ -1850,11 +1850,11 @@ class NpcFsm(val world: LevelCellSource) {
                     Entity.gE = false
                     if (e.Z[0] != 0) Entity.icu = false
                     if (e.aA > 0) {                                    // L6bb
-                        e.bindScript(w.kS(e.aA), w)
+                        e.bindScript(w.kSIndex(e.aA), w)
                         e.P = e.P or 512 or 16
                         w.kC = e
-                        e.bindScript(w.kS(e.aA), w)   // verbatim double h()
-                        e.scriptKeyStep(w.kS(e.aA), w)
+                        e.bindScript(w.kSIndex(e.aA), w)   // verbatim double h()
+                        e.scriptKeyStep(w.kSIndex(e.aA), w)
                         e.P = e.P or 128
                     } else if (w.missionBh() == 3) {
                         w.removeEntity(e)                              // L70d
