@@ -23280,13 +23280,27 @@ class Slice245Test {
             w.tick(emptyList())
         }
         val p = w.player
-        var t = 0; var deaths = 0
+        var t = 0; var deaths = 0; var respawnAl = -1
         var minAl = p.al; var maxAl = p.al
+        var snapFired = false
         val marks = mutableListOf<String>()
         while (t++ < 12000) {
             when {
-                w.jC == 12 || w.jC == 13 -> { deaths++; break }
                 w.jC == 15 -> break               // won
+                w.jC == 12 || w.jC == 13 -> {
+                    // designed stall → fail screen → context press →
+                    // reload() → a() → C() bh3 arm: respawn at the record
+                    // spawn (no checkpoint can ever fire here — see the
+                    // verdict below) and snap camY = p.al-230.
+                    deaths++
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    if (respawnAl == -1) respawnAl = p.al
+                    continue
+                }
                 w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
                 // `i.bi || g.E` = scripted arm owns the flight (wind/
                 // countdown latch — climb-sequence or grab-QTE). Idle-tick
@@ -23316,29 +23330,50 @@ class Slice245Test {
             // timer is the `k.aE` alert meter draining while `k.aH<0`
             // (~700t ≈ 43s of flight budget; the mid-shaft perch zone
             // (295,6959) is the leg destination).
+            // Climb is a held-mask, not an exclusive choice — steer bits
+            // OR into it so the glider banks WITHOUT losing the climb
+            // (k.java l(x,30) clamp keeps camY rising at ~kX/2 while
+            // the glider outclimbs the frame).
             var held = 16388
-            if (p.ak > 335) held = Pad.M_LEFT            // drift toward perch x295
-            else if (p.ak < 255) held = Pad.M_RIGHT
-            if (right < left) held = Pad.M_LEFT
-            else if (left < right) held = Pad.M_RIGHT
+            var steer = 0
+            if (p.ak > 335) steer = Pad.M_LEFT           // drift toward perch x295
+            else if (p.ak < 255) steer = Pad.M_RIGHT
+            if (right < left) steer = Pad.M_LEFT
+            else if (left < right) steer = Pad.M_RIGHT
+            held = held or steer
             w.pad.e(held); w.tick(emptyList())
+            if (w.checkpointSnap != null) snapFired = true
             if (p.al < minAl) minAl = p.al
             if (p.al > maxAl) maxAl = p.al
-            if (t % 100 == 0)
+            if (t % 100 == 0 || (p.al <= 8360 && p.al >= 8190)) {
+                val cp = w.npcs.firstOrNull { it.ax == 2 && it.al == 8360 }
                 marks += "t$t S${p.S}@${p.ak},${p.al}%${(p.al % 260 + 260) % 260} " +
-                    "v=${p.ag},${p.ah} h=$held kAE=${w.kAE} " +
-                    "kX=${w.kX} iAJ=${w.iAJ} jC=${w.jC} x1=${p.x1}"
+                    "v=${p.ag},${p.ah} h=$held kAE=${w.kAE} kAk=${w.kAk} " +
+                    "kX=${w.kX} iAJ=${w.iAJ} jC=${w.jC} x1=${p.x1} " +
+                    "cp=${cp?.au},${cp?.ay},${cp?.P},${cp?.al} cam=${w.camY}"
+            }
         }
-        println("FLY jC=${w.jC} deaths=$deaths " +
-            "al=$minAl-$maxAl iBe=${w.iBe} marks=$marks")
-        // The designed window: `k.aE=100` drains ~1 per ~7 ticks while
-        // `k.aH<0` (no ax21 wave arm exists in level-1 records) →
-        // `k.aE<=0 && k.aH<0` → stall S24 → `x1=0` → S2 → l(12). The leg
-        // verifies live input (bank/climb), ~3500px of shaft progress,
-        // and the faithful stall → mission-fail path.
-        assertTrue(w.jC == 12 && deaths == 1 && minAl < 9000,
-            "flight leg: live input + shaft progress before the designed " +
-            "stall — deaths=$deaths jC=${w.jC} minAl=$minAl marks=$marks")
+        println("FLY jC=${w.jC} deaths=$deaths snap=$snapFired " +
+            "respawnAl=$respawnAl al=$minAl-$maxAl iBe=${w.iBe} marks=$marks")
+        // Verdict (proven, k.java:1851-1875 C() + k.java:6890-6960 D()):
+        // cp1 (418,8360) CANNOT fire on level-1. `aY()` only ticks while
+        // `au<2` → camY ∈ (8000,8480), but every respawn runs `a()` →
+        // `C()` → bh3 arm `cB=P=aS.al-230` (≈11733) and re-arms `X=-7`;
+        // the drift (`camB+=kX`, `P+=l(cB-P,30)` ≈ kX/2 ≈ -3.5/t, -2/t
+        // after the single `i.aJ`-gated halving at aE≤25) grinds only
+        // ~2000px before the `k.aE` stall caps the leg (~600t: aE=100
+        // drains 1/6t while k.aH=-1, never armed by the absent ax21).
+        // camY bottoms out ~9600 — the cp1 window stays 1500px away.
+        // The conveyor that could jump the camera (`k.dU` world-shift)
+        // is ax21-gated (`i.bD()` arms `k.aR` only at aS.al<260) — dead
+        // here; `i.bW` phase-checkpoints are likewise ax21-only.
+        assertTrue(deaths >= 2 && minAl < 8360 && !snapFired,
+            "canyon legs: player out-climbs the drift camera (past " +
+            "cp1's al=8360 band) while the camera resets to " +
+            "p.al-230≈11733 every respawn — cp1's au window (camY " +
+            "8000-8480) is unreachable in a ~600t k.aE leg, so the " +
+            "checkpoint stays unfired — snap=$snapFired deaths=$deaths " +
+            "minAl=$minAl respawnAl=$respawnAl marks=$marks")
     }
 
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
