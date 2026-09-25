@@ -4692,6 +4692,17 @@ class Level0World(
         player.integrate()
         player.advanceAnim()
 
+        // `k.I()` player-link tail (k.java:8798-8810 L2df-L32a,
+        // proven): immediately after `aS.I()` the player's `ac`/`ab`
+        // links tick UNCONDITIONALLY — no au/P&256/P&32 gate — and
+        // `ad` ticks when `ax == -999`. This is what lets an
+        // ax10-S16 destination door run `bi()`: `bindAc` holds it
+        // via `P|256` so the generic entity loop skips it, but the
+        // player's own link chain still ticks it each frame.
+        player.ac?.let { tickNpc(it) }
+        player.ab?.let { tickNpc(it) }
+        player.ad?.let { if (it.ax == -999) tickNpc(it) }
+
         if (bh3) {
             // `k.I()` bh3 arm (k.java:2529-2572, proven): every entity
             // re-scores `au` via `u()`; only eligible entities
