@@ -600,6 +600,36 @@ class Level0Renderer {
         fillAr(x, y + 1, 1, h - 2, argb); fillAr(x + w - 1, y + 1, 1, h - 2, argb)
     }
 
+    /**
+     * `i.F()`'s pure-draw calls (i.java:11782+, proven): drains the
+     * per-tick `fx*` collectors — rope/marker lines (`j.a`), dark
+     * columns + fullscreen veil (`j.a` fill), the ax11 speech bubble
+     * (`k.y.a` — dark panel, white border, wrapped body text on the
+     * `y` font), and the shrine-burst sparkle dots (`g.a`). All coords
+     * arrive screen-relative (world → camera already subtracted).
+     */
+    private fun fxOverlay(w: Level0World) {
+        for (r in w.fxRects) fillAr(r[0], r[1], r[2], r[3], r[4])
+        for (i in w.fxLines.indices) {
+            val l = w.fxLines[i]
+            drawLine(l[0], l[1], l[2], l[3], l[4])
+        }
+        for (i in w.fxBubbles.indices) {
+            val b = w.fxBubbles[i]
+            val text = w.fxBubbleText.getOrElse(i) { "" }
+            val x = b[0]; val y = b[1]; val bw = b[2]; val lines = b[3]
+            val bh = lines * 8 + 8
+            fillAr(x, y, bw, bh, -0x1000000)                 // ~opaque dark
+            outlineAr(x, y, bw, bh, -1)                      // white border
+            if (b[4] != 0)                                  // pointer nub
+                fillAr(x + bw, y + bh / 2 - 2, 3, 4, -1)
+            else
+                fillAr(x - 3, y + bh / 2 - 2, 3, 4, -1)
+            if (text.isNotEmpty()) drawText(text, x + 4, y + 3, 0, pack = 92)
+        }
+        for (d in w.fxDots) fillAr(d[0], d[1], 2, 2, -0x33889900)  // sparkle
+    }
+
     /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
      *  rotated `white` quad (screen-space y-down → rotate by −dy). */
     private fun drawLine(x0: Int, y0: Int, x1: Int, y1: Int, argb: Int) {
@@ -1192,6 +1222,11 @@ class Level0Renderer {
                 drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
+
+        // `i.F()` FX primitives (i.java:11782+, proven): the per-tick
+        // drawFx* collectors — ropes/marker lines, dark columns, the
+        // speech bubble, sparkle dots; emitted in screen space already.
+        fxOverlay(world)
 
         // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
         // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —

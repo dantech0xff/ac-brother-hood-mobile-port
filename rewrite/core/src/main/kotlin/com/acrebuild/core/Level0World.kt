@@ -1005,6 +1005,35 @@ class Level0World(
     // -- ax29 boss FSM (i.aP) statics ----------------------------------
     override var kAU: Entity? = null           // k.aU
     override var kE: Entity? = null            // k.E
+    // -- slice 239: `i.F()` draw-style state (i.java:11782+) ------------
+    override val iR = IntArray(4)              // i.r — ax15-S10 marker box
+    override var iF: IntArray? = null          // i.f — sparkle field (lazy 360)
+    override var iG: IntArray? = null          // i.g — x-amplitude
+    override var iH: IntArray? = null          // i.h — y-amplitude
+    /** `i.F()`'s pure-draw collectors — the `j.a`/`j.b`/`g.a`/`k.y.a`
+     *  primitives emitted each tick; `Level0Renderer` drains per frame
+     *  (bounded: the source draws straight to screen). */
+    val fxLines = ArrayList<IntArray>()
+    val fxRects = ArrayList<IntArray>()
+    val fxDots = ArrayList<IntArray>()
+    val fxBubbles = ArrayList<IntArray>()
+    val fxBubbleText = ArrayList<String>()
+    override fun drawFxLine(x1: Int, y1: Int, x2: Int, y2: Int, argb: Int) {
+        if (fxLines.size < 512) fxLines.add(intArrayOf(x1, y1, x2, y2, argb))
+    }
+    override fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {
+        if (fxRects.size < 256) fxRects.add(intArrayOf(x, y, w, h, argb))
+    }
+    override fun drawFxDot(x: Int, y: Int) {
+        if (fxDots.size < 2048) fxDots.add(intArrayOf(x, y))
+    }
+    override fun drawFxBubble(x: Int, y: Int, w: Int, lines: Int,
+                              flip: Boolean, text: String) {
+        if (fxBubbles.size < 32) {
+            fxBubbles.add(intArrayOf(x, y, w, lines, if (flip) 1 else 0))
+            fxBubbleText.add(text)
+        }
+    }
     override fun kAyAt(i: Int): Entity? = kAY.getOrNull(i)
     override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
@@ -1258,7 +1287,7 @@ class Level0World(
     var kFo = 0                        // k.fO
     var kFC = 0                        // k.fC — af() title fade (20→255)
     var kFQ = 1                        // k.fQ — af() unlocked row count
-    var kBL = 0                        // k.bL — af() browse cursor
+    override var kBL = 0               // k.bL — outfit index into Entity.K_BO + af() browse cursor
     var kFR = -1                       // k.fR — af() pending-nav timer
     /** `k.fP` (k.java:344) — the 4 medal-count thresholds. */
     val kFP = intArrayOf(0, 2, 5, 7)
@@ -2090,6 +2119,32 @@ class Level0World(
             if (ae != null && (ae.P and 128) == 0) {
                 drawInsert(ae); ae.advanceAnim()
             }
+        }
+    }
+
+    /**
+     * `k.I()`'s SECOND `bd[]` pass (k.java:10032-10150, proven): after
+     * `buildDrawList`, each entry gets `ad.F()` (excluding ax76/ax29)
+     * then `F()`; the player-side `ae` link was already handled inside
+     * the build itself. While `E.P&128==0` and (`j.c==8` or the
+     * `j.c==21 && u==8` dialog overlay) the `k.E` companion also gets
+     * `F()` + `s()`. Runs once per tick — the FX primitive collectors
+     * drain at render; `i.e--`/`g.t--`/counters/sparkles all live on
+     * this path per the source.
+     */
+    fun drawStylePass() {
+        fxLines.clear(); fxRects.clear()
+        fxDots.clear(); fxBubbles.clear(); fxBubbleText.clear()
+        buildDrawList()
+        for (i in 0 until drawCount) {
+            val e = drawList[i] ?: break
+            e.ad?.let { if (it.ax != 76 && it.ax != 29) it.drawStyleF(this) }
+            e.drawStyleF(this)
+        }
+        if ((player.P and 128) == 0 &&
+            (jC == 8 || (jC == 21 && dlgU == 8))) {
+            kE?.drawStyleF(this)
+            kE?.advanceAnim()
         }
     }
 
@@ -4712,11 +4767,6 @@ class Level0World(
         fireScrollTriggers()
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
-        // `i.e--` per frame — the verbatim site is inside `i.F()`'s
-        // per-frame counter block (i.java:13187-13192, still unported);
-        // decayed once per tick here (`inferred` on the per-call cadence).
-        if (iE > 0) iE--
-
         // k.m(cJ) per-tick (k.java:3320 proven, `bh[aj]!=3` gate):
         // the verbatim tracker — lookahead margin, scroll walls, bounds,
         // lerp `l(dx/2, kX|28)`, cO shake. Replaces the placeholder follow.
@@ -4753,6 +4803,11 @@ class Level0World(
         // below camera bottom: i.java:1389 (proven) — al > k.P + 240 → l(12).
         // Fires when the player falls past where the clamped camera can follow.
         else if (player.al > camY + VIEW_H) stateL(12)
+
+        // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
+        // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`
+        // companion tick — `i.e--`/`g.t--`/sparkles/counters live here.
+        drawStylePass()
 
         tickIndex++; jG++
         } finally {
