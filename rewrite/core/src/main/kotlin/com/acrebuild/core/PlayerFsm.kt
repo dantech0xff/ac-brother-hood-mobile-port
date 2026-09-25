@@ -2400,7 +2400,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         when (p.S) {
             0, 4, 5, 17, 18 -> {
                 if (p.S == 0 && p.animFinished()) p.T = (p.clip?.frameCount(0) ?: 0) - 2
-                if (!world.iBi || Entity.gE) {
+                // L437 gate (g.java:14393-14396, proven): `i.bi || g.E →
+                // scripted arm` (wind `ah = kY*iAI` while the countdown
+                // `i.b(r3)` owns the sim); else `aC()` + input. `i.bi` is
+                // the "sequence owns player" latch (S10 climb / ax64 grab)
+                // — scripted runs only while it or `g.E` is set.
+                if (world.iBi || Entity.gE) {
                     if (world.kQ >= 230) {
                         z3 = false
                         p.ah = if (world.iAH) world.kY * world.iAI else world.kY
