@@ -1928,6 +1928,60 @@ class Level0Renderer {
                    palette = palette)
         if (alpha != 255) batch.setColor(1f, 1f, 1f, 1f)
         if (e.ax == 43 && world.cv != null) clipReset()
+        // `bk()` (i.java:42549-42920, proven): the ax60 lift draws its
+        // piston cable — a clip region over the corridor plus repeated
+        // link frames (anim 8 vertical / anim 12 horizontal) stepping
+        // to the `Z[5]` anchor, then the full-screen clip restore.
+        if (e.ax == 60) drawLiftCable(e, pack, camX, camY)
+    }
+
+    /** `i.bk()` verbatim: cover setClip + link frames per S arm
+     *  (`e.liftCableArm()` is the proven `switch(S)` dispatch). */
+    private fun drawLiftCable(e: Entity, pack: Int, camX: Int, camY: Int) {
+        when (e.liftCableArm()) {
+            1 -> {                                 // L4a (S9/S10) — cable runs up
+                val top = e.Z.getOrElse(5) { 0 } - camY
+                val bottom = e.al - camY
+                clipScissor(e.W[0] - camX, top, e.W[2] - e.W[0],
+                            bottom - top)
+                var y = bottom
+                while (y >= top) {
+                    drawFrame(pack, 8, 0, e.ak - camX, y - 28, 0)
+                    y -= 28
+                }
+            }
+            2 -> {                                 // Lca (S16/S17) — cable runs down
+                var y = e.al + 28 - camY
+                val end = e.Z.getOrElse(5) { 0 } - camY +
+                    (if (e.Z.getOrElse(1) { 0 } > 0) 28 else 0)
+                clipScissor(e.W[0] - camX, y, e.W[2] - e.W[0], end - y)
+                while (y <= end) {
+                    drawFrame(pack, 8, 0, e.ak - camX, y + 28, 0)
+                    y += 28
+                }
+            }
+            3 -> {                                 // L169 (S13/S15) — cable left
+                var x = e.ak - camX
+                val end = e.Z.getOrElse(5) { 0 } - camX
+                clipScissor(end, e.W[1] - camY, x - end,
+                            e.W[3] - e.W[1])
+                while (x >= end) {
+                    drawFrame(pack, 12, 0, x - 22, e.al - camY, 0)
+                    x -= 22
+                }
+            }
+            4 -> {                                 // L1e9 (S11/S14) — cable right
+                var x = e.ak + 16 - camX
+                val end = e.Z.getOrElse(5) { 0 } + 22 - camX
+                clipScissor(x, e.W[1] - camY, end - x,
+                            e.W[3] - e.W[1])
+                while (x <= end) {
+                    drawFrame(pack, 12, 0, x, e.al - camY, 0)
+                    x += 22
+                }
+            }
+        }
+        clipReset()                                // L267: j.a(g,0,0,400,240,1)
     }
 
     /** `i.a(Graphics)` ax13 rope draw (i.java:13391-13411, proven):

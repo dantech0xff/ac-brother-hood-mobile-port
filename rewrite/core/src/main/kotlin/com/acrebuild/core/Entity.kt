@@ -3303,10 +3303,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  (`{{0,-1},{3,1},{5,2},{6,3}}`). */
         val K_BO = arrayOf(intArrayOf(0, -1), intArrayOf(3, 1),
                            intArrayOf(5, 2), intArrayOf(6, 3))
-        /** ax43 `j.a` veil color (i.java:12820/14010, inferred — the
-         *  setColor constant is stripped in the fallback; a translucent
-         *  black matches the cv-scene darkening). */
-        const val CV_VEIL = -0x78000000
         /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
          *  (written by `o()`, read by `b(x,y)` :9829). */
         var markerLx = -1
@@ -4624,16 +4620,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     remapTable = K_BO[w.kBL.coerceIn(0, 3)][1]
                 }
             }
-            ax == 43 -> {                      // L733/L784 dark column
-                val cv = w.cv
-                if (cv != null) {
-                    val mid = (cv.W[0] + cv.W[2]) shr 1
-                    val x = if (ak <= mid) cv.W[0] - w.kO
-                            else cv.W[2] - w.kO
-                    val wd = if (ak <= mid) mid - cv.W[0]
-                             else 400 - x
-                    w.drawFxRect(x, 0, wd, 240, CV_VEIL)
-                }
+            ax == 43 -> {                      // L733/L784: `j.a(g,
+                // x,y,w,h,1)` is setClip (j.java:2731, proven) — clips
+                // the blit to the carrier's side column. Clip state is
+                // renderer-owned (drawEntity's clipScissor arm); no
+                // sim-side writes here.
             }
             ax == 79 -> { remapTable = Z[1]; palette = Z[0] }
             ax == 46 -> remapTable = if (Z[6] == 0) Z[7] else -1
@@ -4773,7 +4764,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
         // ax29's `aa.j[0] = r12` (:13750) is already carried by
         // `j0Frame` — the i.by==3 arm writes it directly.
         when (ax) {
-            60 -> { /* bk() lift cable draw (:13759) — renderer-side */ }
+            60 -> { /* bk() lift cable draw (:13759) — renderer-side;
+                the renderer calls liftCableArm() for the S dispatch. */ }
             58 -> { /* L10d8 (:13772): draw skipped entirely */ }
             40 -> { /* by() zipline rope draw (:13777) — renderer-side */ }
             11 -> {
@@ -4797,12 +4789,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                  ak - w.kO, al - 45 - w.kP, -1)
             }
         }
-        // L10d8 (i.java:13985): the ax43 fullscreen veil — a second
-        // `j.a` on top of the column draw above.
-        if (ax == 43) w.drawFxRect(0, 0, 400, 240, CV_VEIL)
+        // L10d8 (i.java:13985): ax43 → `j.a(g,0,0,400,240,1)` — a
+        // full-screen setClip reset (j.java:2731, proven), not a fill:
+        // renderer-side no-op here (scissor is per-draw-call).
         // L10f2: slow-mo off-tick → suppress the draw.
         if (w.iAH && w.jG % maxOf(1, w.iAI) != 0L) return 0
         return 1
+    }
+
+    /**
+     * `bk()`'s S dispatch (i.java:42549-42585, proven) — which cable
+     * direction arm the renderer's lift-cable draw runs:
+     * `switch(S){9,10,16,17→L38; 11,13,14,15→L157; default→L267}`.
+     * Inside L38, S∈{9,10} falls to L4a (up) and S∈{16,17} to Lca
+     * (down); inside L157, S∈{13,15} falls to L169 (left) and
+     * S∈{11,14} to L1e9 (right). L267 is just the clip reset.
+     *
+     * Returns: 0 = no cable, 1 = up, 2 = down, 3 = left, 4 = right.
+     */
+    fun liftCableArm(): Int = when (S) {
+        9, 10 -> 1; 16, 17 -> 2; 13, 15 -> 3; 11, 14 -> 4; else -> 0
     }
 }
 
