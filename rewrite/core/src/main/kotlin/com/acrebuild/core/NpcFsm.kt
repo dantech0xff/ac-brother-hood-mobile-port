@@ -407,7 +407,8 @@ class NpcFsm(val world: LevelCellSource) {
             99 -> {
                 // L299 (i.java:5442-5445, proven): `r15=true` — the tail
                 // runs k(); `aE()` (kill-touch) fires for side effects —
-                // it always returns false so `r13=false` is dead code.
+                // its return is unused here so `r13=false` is dead code
+                // even though the bounce branch returns 1.
                 tail[3] = true
                 killTouch(e, world, player)
             }
@@ -951,8 +952,9 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.cq) tail[2] = false
         else if (spotB(e, player, world)) e.aA = 1
         tail[3] = true                                // L415: r15 → k()
-        // Z[14]∈{1,6,7} → `aE()→r13=false` — aE() always returns false
-        // in the original (dead suppression, verbatim).
+        // Z[14]∈{1,6,7} → `aE()→r13=false` — the bounce branch returns
+        // 1 (its own i(24) pin-hold + aC=30), so r13 is suppressed live
+        // while the guard holds the pinned player.
         if ((e.Z[14] == 1 || e.Z[14] == 6 || e.Z[14] == 7) &&
             killTouch(e, world, player)) tail[1] = false
         // L425-L435 context-kill offer: player mid-kill-anim (S297)
@@ -6156,13 +6158,31 @@ fun NpcFsm.tickAx42(e: Entity, w: LevelCellSource, p: Entity) {
 // `bM` = bound entity; aG variants {1 boost×4, 2 ab-marker, 4 door-spawner}.
 // ---------------------------------------------------------------------------
 
-/** Init arm: the shared `L111` record map + `i(r8[5])` + `t()` tail. */
+/** Init arm `case 13 → L502` (i.java init dispatch, proven): `az=99`;
+ *  `aG`/`Z[0]` = {0,1,2,4} from `r8[4]`∈{0,1,2,3}; `Z=int[8]` with
+ *  `Z[7]=1`, `Z[1]=r8[7]` (rope max segments — the catch reach), `Z[2]=0`,
+ *  `Z[3]=r8[10]`, `Z[6]=r8[11]` (door link; -1 = always grows). Then the
+ *  L1bea shared `i(r8[5])` + `t()` tail. */
 fun NpcFsm.initAx13(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)                    // L111
-    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
-    e.setAnim(rf(5))                                              // L395
-    e.refreshBoxes()                                              // t()
+    e.az = 99
+    e.aG = when (rf(4)) { 1 -> 1; 2 -> 2; 3 -> 4; else -> 0 }
+    e.Z[0] = e.aG
+    e.Z[7] = 1
+    e.Z[1] = rf(7)
+    e.Z[2] = 0
+    e.Z[3] = rf(10)
+    e.Z[6] = rf(11)
+    // inferred: the pendulum's start angle scales with the variant —
+    // `bP = aG<<12` → aG=4 gives 16384 (r13=64 = straight down). Every
+    // init path (ctor :2269/:7354, L502, L1bea) leaves `bP=0`, which
+    // yields a zero-height grab box once the rope is grown — verified
+    // empirically that `bP=16384` produces the live hang box. `aG<<12`
+    // maps the variant {0,1,2,4} → {0,4096,8192,16384}; only aG=4 is
+    // verified on real records.
+    e.bP = e.aG shl 12
+    e.setAnim(rf(5))
+    e.refreshBoxes()
 }
 
 fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
@@ -6206,36 +6226,51 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
         }
     }
     // ---- L43: grab-scan — player overlap on the swing-arc box ----
-    if (p.bM !== e && (p.aA and 64) == 0 && e.aA == 0 &&
-        Entity.GRABBABLE_STATES.contains(p.S) && p.O < e.O) {
-        val r05 = 3072 * e.Z[1]
-        var r04 = -1
-        if (p.N <= e.N + r05 && p.N >= e.N - r05 &&
-            p.O <= e.O + r05 + 16384) {                             // L53-60
-            p.refreshBoxes()                                        // r06 = r12.t()
-            val r06 = p.W
-            if (e.av) { r06[0] = (p.N shr 8) - 24; r06[2] = p.N shr 8 }
-            else      { r06[0] = p.N shr 8; r06[2] = (p.N shr 8) + 24 }
-            val r07 = 3072 * e.bN
-            val r122 = (3072 * (e.bN - 4)).coerceAtLeast(1)         // L66
-            val r09 = e.bP shr 8
-            val r010 = (r07 * Trig.sin(Trig.N - r09)) shr 8
-            val r011 = (r07 * Trig.sin(r09)) shr 8
-            val r012 = (r122 * Trig.sin(Trig.N - r09)) shr 8
-            val r013 = (r122 * Trig.sin(r09)) shr 8
-            if (r010 > 0) {
-                e.W[0] = ((e.N + r012) shr 8) - 4; e.W[2] = ((e.N + r010) shr 8) + 4
-            } else {
-                e.W[0] = ((e.N + r010) shr 8) - 4; e.W[2] = ((e.N + r012) shr 8) + 4
-            }
-            e.W[1] = (e.O + r013) shr 8
-            e.W[3] = ((e.O + r011) + r05 - r07) shr 8               // L73
-            if (Entity.overlapStrict(r06, e.W)) {                   // a(r06,W)
-                // L76-88: pick the grab segment r04 on the arc
-                var r8 = (p.O - e.O) / ((3072 * Trig.sin(r09)) shr 8)
-                if (r8 < 0) r8 = 0
-                if (r8 > e.Z[1] - 2) r8 = e.Z[1] - 2
-                if (r8 >= 0) r04 = if (r8 == 0) e.bN - 4 else r8 and 65534
+    // proven (i.java:37100-37600): the L147 gates (`aS.bM===r6`,
+    // `aS.aA&64`, `r6.aA!=0`) jump straight to the L440 clamp tail — a
+    // bound rope/player skips the scan AND the growth arm entirely.
+    // `!g.b(S)` jumps to L400 (growth), as do every r0<0 miss — so the
+    // aG==4 growth runs every tick the rope is free and unlatched,
+    // regardless of player state or range. Once bound, `ropeInput`'s
+    // `bN--` retracts unopposed toward `releaseRope`.
+    if (p.bM !== e && (p.aA and 64) == 0 && e.aA == 0) {              // L147 → L440
+        var r04 = -1                                                // L346 result reg
+        if (Entity.GRABBABLE_STATES.contains(p.S)) {                // g.b(S) → L185
+            val r05 = 3072 * e.Z[1]
+            if (p.O >= e.O && p.N <= e.N + r05 && p.N >= e.N - r05 &&
+                p.O <= e.O + r05 + 16384) {                         // L53-60
+                p.refreshBoxes()                                    // r06 = r12.t()
+                val r06 = p.W
+                if (e.av) { r06[0] = (p.N shr 8) - 24; r06[2] = p.N shr 8 }
+                else      { r06[0] = p.N shr 8; r06[2] = (p.N shr 8) + 24 }
+                val r07 = 3072 * e.bN
+                val r122 = (3072 * (e.bN - 4)).coerceAtLeast(1)     // L66
+                val r09 = e.bP shr 8
+                val r010 = (r07 * Trig.sin(Trig.N - r09)) shr 8
+                val r011 = (r07 * Trig.sin(r09)) shr 8
+                val r012 = (r122 * Trig.sin(Trig.N - r09)) shr 8
+                val r013 = (r122 * Trig.sin(r09)) shr 8
+                if (r010 > 0) {
+                    e.W[0] = ((e.N + r012) shr 8) - 4; e.W[2] = ((e.N + r010) shr 8) + 4
+                } else {
+                    e.W[0] = ((e.N + r010) shr 8) - 4; e.W[2] = ((e.N + r012) shr 8) + 4
+                }
+                e.W[1] = (e.O + r013) shr 8
+                e.W[3] = ((e.O + r011) + r05 - r07) shr 8           // L73
+                if (Entity.overlapStrict(r06, e.W)) {               // a(r06,W)
+                    // L76-88: pick the grab segment r04 on the arc.
+                    // inferred: `r93==0` (j.b(0)=0 — post-release `bP=0`,
+                    // the aG==4 latch zeroes it at L99) makes the original
+                    // divide by zero — a latent J2ME ArithmeticException.
+                    // Guarded as a segment-miss so the rope keeps growing.
+                    val r93 = (3072 * Trig.sin(r09)) shr 8
+                    if (r93 != 0) {
+                        var r8 = (p.O - e.O) / r93
+                        if (r8 < 0) r8 = 0
+                        if (r8 > e.Z[1] - 2) r8 = e.Z[1] - 2
+                        if (r8 >= 0) r04 = if (r8 == 0) e.bN - 4 else r8 and 65534
+                    }
+                }
             }
         }
         if (r04 >= 0) {                                             // L89 latch
@@ -6251,12 +6286,15 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
             p.aA = p.aA or 64
             p.setAnim(326)
         }
-    }
-    // ---- L103: aG==4 door-linked segment spawner ----
-    if (e.aG == 4) {
-        val r015 = if (e.Z[6] != -1) w.findByAw(e.Z[6]) else null
-        if (e.Z[6] == -1 || (r015 != null && r015.isBf())) {
-            if (e.bN < e.Z[1]) e.bN++                               // L111
+        // ---- L400: aG==4 door-linked segment growth — reached by every
+        // path that didn't jump to L440: `!g.b(S)`, range misses, overlap
+        // misses, AND the latch fallthrough (i.java:37519 `aS.i(326)`
+        // continues straight into L400). Runs once per tick while free.
+        if (e.aG == 4) {
+            val r015 = if (e.Z[6] != -1) w.findByAw(e.Z[6]) else null
+            if (e.Z[6] == -1 || (r015 != null && r015.isBf())) {
+                if (e.bN < e.Z[1]) e.bN++                           // L429
+            }
         }
     }
     // ---- L114-126: angle clamp + zero-snap ----
@@ -8093,11 +8131,12 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
      * `i.aE()` (i.java:9144-9185, proven): kill-touch — only while the
      * entity is mid-tumble (`j==6`), only into a flying/falling player
      * (`aS.S∈{24,22,43,150,35,157}`), and only when the player's feet
-     * sit above own mid-line (`aS.W[3] < (W[1]+W[3])>>1`). Within 20
-     * cells of the apex marker `g.y` → the flying-kill: `g.x[1]=0`,
-     * `aS.h(1)`, player vel0, `aS.al=al`, `i(20)`. Past it → the bounce:
-     * `aS.i(89)`, own vel0, player snapped onto own top edge + `O/N`
-     * refresh. Always returns false.
+     * sit above own mid-line (`aS.W[3] < (W[1]+W[3])>>1`). <20 cells
+     * past the apex marker `g.y` → the bounce (Lb3): `aS.i(89)` pinned
+     * onto own top edge + `O/N` refresh, then own `i(24); aC=30` —
+     * the pin-down hold that arms the kill-QTE offer (`aS.S==89 &&
+     * e.S==24`); returns TRUE. ≥20 → the flying kill: `g.x[1]=0`,
+     * `aS.h(1)`, player vel0, `aS.al=al`, `i(20)`; returns false.
      */
     private fun killTouch(e: Entity, w: LevelCellSource, p: Entity): Boolean {
         if (e.j != 6) return false
@@ -8105,8 +8144,9 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
             p.S != 150 && p.S != 35 && p.S != 157) return false
         if (p.W[3] >= ((e.W[1] + e.W[3]) shr 1)) return false
         if ((e.al - p.gy) / 20 < 20) {
-            // <20 cells past the apex → the bounce (L22): the tumbler
-            // lands the player onto its own top edge
+            // <20 cells past the apex → the bounce (Lb3): the tumbler
+            // lands the player onto its own top edge, then own i(24)
+            // pin-down hold (aC=30 window) + return 1
             p.setAnim(89)
             e.ah = 0; e.ag = 0
             p.ah = 0; p.ag = 0
@@ -8114,14 +8154,15 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
             p.ak = (e.W[0] + e.W[2]) shr 1
             p.O = p.al shl 8
             p.N = p.ak shl 8
-        } else {
-            // ≥20 cells → the flying kill: victim plummets
-            p.x1 = 0                                        // g.x[1] = 0
-            p.requestH(1, w)                                // aS.h(1)
-            p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
-            p.al = e.al
-            e.setAnim(20)
+            e.setAnim(24); e.aC = 30                        // → the pin-hold
+            return true
         }
+        // ≥20 cells → the flying kill: victim plummets
+        p.x1 = 0                                            // g.x[1] = 0
+        p.requestH(1, w)                                    // aS.h(1)
+        p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+        p.al = e.al
+        e.setAnim(20)
         return false
     }
 

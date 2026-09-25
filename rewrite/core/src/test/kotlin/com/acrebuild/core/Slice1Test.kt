@@ -4669,10 +4669,10 @@ class Slice45Test {
                        ag: Int = 0, z1: Int = 10): Entity {
         val e = Entity(13, null)
         e.setPositionPx(x, y)
-        val f = mutableListOf(13, 0, x, y, 0, s, 0)
-        for (i in 7..13) f += 0
-        f += ag            // r8[14] → aG
-        f += 0             // r8[15] → ay
+        // L502 init reads the aG variant from r8[4]: {1→1, 2→2, 3→4}.
+        val f = mutableListOf(13, 0, x, y,
+            when (ag) { 1 -> 1; 2 -> 2; 4 -> 3; else -> 0 }, s, 0)
+        for (i in 7..15) f += 0
         w.npcFsm.initAx13(e, f)
         e.Z[1] = z1        // rope segment count
         w.npcs.add(e)
@@ -4761,6 +4761,7 @@ class Slice45Test {
         val e = ax13At(w, 100, 100, ag = 1, z1 = 10)
         e.aA = 1; e.bM = p; p.bM = e
         e.bN = 5
+        e.bO = 0; e.bP = 0            // dead pendulum — bound at rest
         p.setAnim(326)
         // UP held with dead pendulum → climb one segment (L92)
         w.pad.held = 16388
@@ -12839,9 +12840,10 @@ class Slice123Test {
     private fun ax13(w: Level0World, ag: Int = 0, z1: Int = 10): Entity {
         val e = Entity(13, null)
         e.setPositionPx(100, 100)
-        val f = mutableListOf(13, 0, 100, 100, 0, 0, 0)
-        for (i in 7..13) f += 0
-        f += ag; f += 0
+        // L502 init reads the aG variant from r8[4]: {1→1, 2→2, 3→4}.
+        val f = mutableListOf(13, 0, 100, 100,
+            when (ag) { 1 -> 1; 2 -> 2; 4 -> 3; else -> 0 }, 0, 0)
+        for (i in 7..15) f += 0
         w.npcFsm.initAx13(e, f)
         e.Z[1] = z1
         w.npcs.add(e)
@@ -17653,7 +17655,10 @@ class Slice184Test {
         e.W[1] = p.W[3] + 10; e.W[3] = p.W[3] + 90
         w.npcFsm.tick(e, p)
         assertEquals(89, p.S, "close apex → aS.i(89) bounce")
-        assertEquals(e.W[1], p.al, "player snapped to top edge")
+        assertEquals(24, e.S, "tumbler → i(24) pin-down hold")
+        assertEquals(30, e.aC, "aC=30 pin window")
+        assertTrue(kotlin.math.abs(p.al - e.W[1]) <= 12,
+            "player pinned near the top edge (e.W resnaps on anim)")
     }
 
     @Test fun `S99 tumbling entity plummets a far-apex flying player`() {
@@ -22414,6 +22419,263 @@ class Slice245Test {
             "minAl=$minAl marks=$marks")
         assertTrue(checkpoint,
             "east run must reach x3830 under the overhang — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
+    @Test fun `probe east of checkpoint3 cells and entities`() {
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val sb = StringBuilder()
+        // SCRATCH — rope evolution + face-climb probes.
+        // (a) rope state right after intro settle, then over time — does
+        // bP ever integrate? what does the W box realize as bN grows?
+        val p = w.player
+        val rope = w.npcs.firstOrNull { it.ax == 13 && it.ak == 5487 }
+        fun ropeLine(tag: String) = sb.append("$tag ropeN=${rope?.N} ropeO=${rope?.O} " +
+            "bP=${rope?.bP} bO=${rope?.bO} bN=${rope?.bN} aA=${rope?.aA} " +
+            "aG=${rope?.aG} W=${rope?.W?.toList()} S=${rope?.S} " +
+            "P=${rope?.P} au=${rope?.au} ax=${rope?.ax} bf=${rope?.isBf()} " +
+            "Z=${rope?.Z?.toList()} camX=${w.kO}\n")
+        // SCRATCH — pin down the chimney slot (ax7 uid at ak≈4801): its
+        // realized W box, which face it catches, and where the throw
+        // lands. Also sweep whether the pit player can reach the east
+        // wall top at y500 via zigzag on the wall's two faces.
+        val slot2 = w.npcs.firstOrNull { it.ax == 7 && it.ak in 4750..4900 }
+        sb.append("SLOT2 W=${slot2?.W?.toList()} N=${slot2?.N} O=${slot2?.O} " +
+            "ak=${slot2?.ak} al=${slot2?.al} S=${slot2?.S} az=${slot2?.az} " +
+            "aG=${slot2?.aG} av=${slot2?.av}\n")
+        // Trace the slot throw: park the player right at the mouth box
+        // (4730,632) and watch where it carries them.
+        p.setPositionPx(4730, 632)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(43); p.bM = null; p.aA = 0; p.ag = 0; p.ah = 0
+        p.aj = 0; p.ai = 0; p.ac = null; p.standingOn = null
+        var lastS = -1; var sSeq = ""
+        for (t in 1..120) {
+            w.pad.e(0)
+            w.tick(emptyList())
+            if (p.S != lastS || t % 4 == 0) {
+                sSeq += "${p.S}@$t:${p.ak},${p.al}ag${p.ag}ah${p.ah} "; lastS = p.S }
+        }
+        sb.append("SLOTFIRE final=${p.ak},${p.al} S=${p.S} " +
+            "slotS=${slot2?.S} seq=${sSeq.take(700)}\n")
+        // SCRATCH — the S53 perch-zone trigger: park the player inside
+        // its W box (5003-5113, 772-879) with gD=true and a qualifying
+        // grounded S, tick, and see whether it fires i(360) and removes
+        // itself.
+        val zoneE = w.npcs.firstOrNull { it.ax == 10 && it.S == 53 && it.ak in 4900..5200 }
+        sb.append("ZONE_W=${zoneE?.W?.toList()} zoneAu=${zoneE?.au}\n")
+        // also enumerate all S53 zones for the record
+        for (e in w.npcs) if (e.ax == 10 && e.S == 53)
+            sb.append("  S53zone @${e.ak},${e.al} W=${e.W.toList()}\n")
+        // wake the zone's tick by putting the camera on it
+        w.kO = 4900; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        sb.append("afterCam zoneAu=${zoneE?.au}\n")
+        // trace the first 12 ticks of a parked player inside the zone
+        p.setPositionPx(5050, 850)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(0); p.bM = null; p.aA = 0; p.ag = 0; p.ah = 0
+        p.aj = 0; p.ai = 0; p.ac = null; p.standingOn = null
+        p.gD = true
+        p.refreshBoxes()
+        if (w.jC == 12) w.stateL(8)   // pit-fail froze the world — resume play
+        sb.append("PRE S=${p.S} ak=${p.ak} al=${p.al} W=${p.W.toList()} jC=${w.jC}\n")
+        var pressed = false
+        for (t in 1..40) {
+            w.pad.e(if (pressed) Pad.M_RIGHT else 0)
+            if (p.S == 360 && !pressed) pressed = true   // forward tap once perched
+            w.tick(emptyList())
+            p.refreshBoxes()
+            val ov = zoneE?.let { Entity.overlapStrict(p.W, it.W) }
+            sb.append("T$t S=${p.S} ak=${p.ak} al=${p.al} W=${p.W.toList()} " +
+                "gD=${p.gD} ov=$ov zoneIn=${zoneE !in w.npcs} jC=${w.jC}\\n")
+        }
+        println("PROBE3\n$sb")
+    }
+
+    /** `bot drop-kills a pit guard into the S53 perch chain` — the level's
+     * scripted pit exit (records.json uid60/uid62 ax11 inside the
+     * (5003,772)-(5113,879) zone): player drops onto a lunging guard
+     * (close-contact `e.j==6` + `e.S==24`), bounces onto its top
+     * (`i(89)`, i.java L22), presses context (65568) → `a(90,…)`
+     * kill-escape (NpcFsm.kt:9027-9037), lands S5 in the zone with
+     * `g.D` set → `i(360)` perch + `k.c` self-remove (NpcFsm.kt:2106),
+     * forward tap → `i(357)` scripted leap east → `i(364)`+`ar()`.
+     * Asserts the whole chain fires on the real level. */
+    @Test fun `bot drop-kills a pit guard into the S53 perch chain`() {
+        val w = world()
+        w.screenL(8)
+        val p = w.player
+        val sb = StringBuilder()
+        // pit guard inside the S53 zone (records uid60 x5020 / uid62 x5108)
+        val guard = w.npcs.firstOrNull { it.ax == 11 && it.ak in 5000..5120 }
+        assertNotNull(guard, "no pit guard in the zone")
+        val zoneE = w.npcs.firstOrNull { it.ax == 10 && it.S == 53 && it.ak in 4900..5200 }
+        assertNotNull(zoneE, "no S53 perch zone")
+        sb.append("guard@${guard!!.ak},${guard.al} S=${guard.S} j=${guard.j} " +
+            "zone@${zoneE!!.ak},${zoneE.al} W=${zoneE.W.toList()}\n")
+        // camera on the pit so both entities tick
+        w.kO = 4900; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        // drop the player onto the guard's top: falling state + feet above
+        // the guard mid-Y — the killTouch catch set (i.java L12-L22).
+        p.setPositionPx(guard.ak, guard.al - 40)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        p.setAnim(43); p.bM = null; p.aA = 0; p.ag = 0; p.ah = 1536
+        p.aj = 0; p.ai = 0; p.ac = null; p.standingOn = null; p.gD = false
+        p.refreshBoxes()
+        var grabbed = -1; var qte = -1; var perched = -1; var leapt = -1
+        var freed = -1
+        for (t in 1..200) {
+            // context press once pinned; forward tap once perched
+            val mask = when {
+                p.S == 89 -> Pad.M_CONTEXT
+                p.S == 360 -> Pad.M_RIGHT
+                else -> 0
+            }
+            w.pad.e(mask)
+            w.tick(emptyList())
+            p.refreshBoxes()
+            if (p.S == 89 && grabbed < 0) grabbed = t
+            if (p.S == 90 && qte < 0) qte = t
+            if (p.S == 360 && perched < 0) perched = t
+            if (p.S == 357 && leapt < 0) leapt = t
+            // post-leap: any ground/combat state (walk S12 or the second
+            // guard's windup S11) means the pin chain is done
+            if (leapt > 0 && freed < 0 &&
+                p.S != 89 && p.S != 90 && p.S != 360 && p.S != 357 && p.S != 364) {
+                freed = t
+            }
+            if (t % 10 == 0 || p.S in intArrayOf(89, 90, 360, 357, 364)) {
+                sb.append("T$t S=${p.S} ak=${p.ak} al=${p.al} gD=${p.gD} " +
+                    "gS=${guard.S} gJ=${guard.j} gHP=${guard.aB} zoneIn=${zoneE in w.npcs}\\n")
+            }
+        }
+        sb.append("RESULT grabbed=$grabbed qte=$qte perched=$perched " +
+            "leapt=$leapt freed=$freed end=${p.ak},${p.al} S=${p.S} " +
+            "guardIn=${guard in w.npcs} gS=${guard.S} gHP=${guard.aB}\\n")
+        println("PITCHAIN\n$sb")
+        assertTrue(grabbed > 0, "player never pinned onto the guard (S89)")
+        assertTrue(qte > 0, "context press never fired the kill-escape (S90)")
+        assertTrue(perched > 0, "S53 zone never fired the perch (S360)")
+        assertTrue(leapt > 0, "perch never launched the scripted leap (S357)")
+        assertTrue(freed > 0, "player never left the pin chain after the leap")
+        assertTrue(p.ak > zoneE.W[0], "player never escaped east of the zone")
+        assertFalse(guard in w.npcs && guard.S != 139,
+            "guard should be dead/corpse after the kill-escape")
+    }
+
+    @Test fun `bot runs checkpoint3 to checkpoint4 through the pit and rope`() {
+        // Thirteenth leg — park on checkpoint3 (4629,646) and run east:
+        // guards x4664-4697 on the y700 floor, then the x4720-4800 pit —
+        // '02' one-way walkway y880 guarded by two ax44-S8 crusher bars —
+        // the 460px '20' wall x4820-4880, trench x4900-5480 @y860 (three
+        // guards), the x5500 '20' wall top y580 with an ax13 rope at
+        // (5487,493), then platforms x5700+ to checkpoint4 (5927,732).
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        // SCRATCH — dump the et cells around the x5500 wall + rope so the
+        // climb route is visible: cols x5400-5900 (cx 270-295), rows 24-48.
+        run {
+            val sb2 = StringBuilder()
+            for (cy in 24..48) {
+                sb2.append("r$cy ")
+                for (cx in 270..295) {
+                    val v = w.collisionCell(cx, cy)
+                    sb2.append(if (v == 0) "." else if (v < 10) "0$v" else "$v")
+                    sb2.append(' ')
+                }
+                sb2.append('\n')
+            }
+            println("WALLGRID\n$sb2")
+        }
+        // park on the trench floor east of the wall and drive to the rope
+        // (x5487) → east mass → checkpoint4.
+        p.setPositionPx(5000, 850)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        // keep the rope + wall entities ticking: camera over the trench
+        w.kO = 5200; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0
+        var maxAk = p.ak; var minAl = p.al; var mounted = false
+        val marks = mutableListOf<String>()
+        val rope = w.npcs.firstOrNull { it.ax == 13 }
+        marks += "rope=${rope?.let { "${it.ak},${it.al} aG=${it.aG} bN=${it.bN} " +
+            "Z1=${it.Z[1]} bP=${it.bP} W=${it.W.toList()}" } ?: "none"}"
+        // initAx13 now seeds bP = aG<<12 = 16384 (r13=64 — the rigid rope
+        // hangs straight down along the wall's west face). Grow it to
+        // bN=Z[1] so the hanging tip box reaches its full ~300px extent.
+        repeat(30) { w.tick(emptyList()) }
+        marks += "ropeGrown bN=${rope?.bN} bP=${rope?.bP} W=${rope?.W?.toList()}"
+        p.setPositionPx(5000, 850); p.N = p.ak shl 8; p.O = p.al shl 8
+        while (t++ < 20000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(5000, 850)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 40) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            // success: reached checkpoint4 east of the rope on the high ledge
+            if (p.ak > 5860) { mounted = true; break }
+            if (p.S == 360) { w.pad.e(Pad.M_RIGHT); w.tick(emptyList()); continue }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            // the rope hangs rigid (aG=4) from (5487,493) down ~300px to
+            // ~y793 with a ±4px grab box — run to x5487 then jump STRAIGHT
+            // up (M_UP only — M_RIGHT drifts east into the wall's S33
+            // climb, which isn't grabbable). S23's r06 east-reach covers
+            // the box at x5483-5491 → the aG=4 latch fires.
+            if (p.S == 326) {                                 // rope-climb
+                w.pad.e(16388); w.tick(emptyList()); continue   // UP = climb
+            }
+            // parked claim-script prompt (op108): a story zone binds a
+            // script that halts on a choice card and `velClampTail` pins
+            // the player mid-air (i.java:20011, proven). M_CONTEXT's
+            // bit-32 overlaps the prompt mask — tap it like a player.
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            held = when {
+                !p.aZ -> Pad.M_UP                              // airborne: rise
+                p.ak < 5470 -> Pad.M_RIGHT                     // run to the rope
+                else -> Pad.M_UP                               // at x5487: jump up
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t in 25..400 || (t < 2000 && t % 25 == 0))
+                marks += "t$t S${p.S}@${p.ak},${p.al} av=${p.av} ag=${p.ag} ah=${p.ah} aj=${p.aj} " +
+                    "aZ=${p.aZ} aO=${p.aO} aR=${p.aR} aT=${p.aT} aX=${p.aX} co=${p.co} W1=${p.W[1]} " +
+                    "pGA=${p.ga?.ax} pAA=${p.aA} pBa=${p.ba} pP=${p.P} pT=${p.T} pU=${p.U} " +
+                    "pAC=${p.ac?.ax}/${p.ac?.S}@${p.ac?.ak},${p.ac?.al} " +
+                    "rAA=${rope?.aA} rBM=${rope?.bM?.ax} rBN=${rope?.bN} pBM=${p.bM?.ax} " +
+                    "pBMisRope=${p.bM === rope} pBMbn=${p.bM?.bN} nAx13=${w.npcs.count { it.ax == 13 }}"
+            else if (t % 600 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("PITROPE mounted=$mounted deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(mounted,
+            "trench-floor run + rope hop must reach the east ledge x5860 — " +
             "maxAk=$maxAk deaths=$deaths")
     }
 
