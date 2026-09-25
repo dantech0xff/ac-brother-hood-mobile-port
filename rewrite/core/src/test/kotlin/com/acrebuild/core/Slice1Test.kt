@@ -21885,6 +21885,76 @@ class Slice245Test {
         assertTrue(maxAk >= 2179, "must reach the face x2180 — maxAk=$maxAk")
     }
 
+    @Test fun `bot zigzags the channel to the pillar mantle then meets the posted guard`() {
+        // Fifth leg, VERDICT: park at the pillar top (1753,519) — the
+        // chimney channel x1740-1820 is open y200-800, the pillar face
+        // x1740 spans y520-680 and the wall-B west face x1820 spans
+        // y400-800, so the zigzag overlaps in y520-680. Measured run:
+        // 11→43 fall → corridor floor → run east → kicks (1799,749) →
+        // (1761,683) → (1799,617) → launch → ledge-grab 60@1740,519 →
+        // mantle 62 → stand on pillar top → walk east, fall off →
+        // ax10-S36 bound zone catch (315) → drop → S89 killTouch pin by
+        // the ax11 guard posted at ~x1759 — the tutorial's
+        // "MOVE CLOSE TO YOUR ENEMY" encounter. Combat, not a dead-end:
+        // clearing it (or dodging) is the game, and the step staircase
+        // above (x1820→y400 → x1860→y320 → x1880→y200) is the next leg.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1753, 519)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var maxAk = p.ak; var minAl = p.al; var kicks = 0
+        var sawPillarTop = false; var sawBoundCatch = false; var sawPin = false
+        var lastS = p.S
+        val marks = mutableListOf<String>()
+        val trace = ArrayDeque<String>(80)
+        while (t++ < 8000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak},${p.al} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    sawBoundCatch = true
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+                p.S == 89 || p.S == 90 -> {
+                    sawPin = true
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+            }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            if ((p.S == 101 || p.S == 92) && p.S != lastS) {
+                kicks++; marks += "kick@${p.ak},${p.al} t=$t"
+            }
+            if (p.S != lastS) {
+                if (trace.size == 80) trace.removeFirst()
+                trace += "$t:${lastS}->${p.S}@${p.ak},${p.al}"
+            }
+            lastS = p.S
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) { minAl = p.al; marks += "al=$minAl@${p.ak} t=$t" }
+            if (p.aZ && p.al in 500..525 && p.ak in 1740..1770) sawPillarTop = true
+            if (sawPin || (kicks >= 3 && t > 3000)) break
+        }
+        println("STAIR minAl=$minAl maxAk=$maxAk kicks=$kicks pillar=$sawPillarTop catch=$sawBoundCatch pin=$sawPin marks=${marks.takeLast(10)} trace=${trace.takeLast(20).joinToString(" ")}")
+        assertTrue(kicks >= 3,
+            "channel zigzag must produce ≥3 face kicks — kicks=$kicks marks=$marks")
+        assertTrue(sawPillarTop || minAl <= 525,
+            "zigzag must mantle the pillar top — pillar=$sawPillarTop minAl=$minAl")
+        assertTrue(sawBoundCatch || sawPin,
+            "below the pillar the bound zone or the posted guard must fire — catch=$sawBoundCatch pin=$sawPin")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
