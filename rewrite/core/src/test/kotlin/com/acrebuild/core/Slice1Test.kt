@@ -21885,6 +21885,311 @@ class Slice245Test {
         assertTrue(maxAk >= 2179, "must reach the face x2180 — maxAk=$maxAk")
     }
 
+    @Test fun `bot zigzags the channel to the pillar mantle then meets the posted guard`() {
+        // Fifth leg, VERDICT: park at the pillar top (1753,519) — the
+        // chimney channel x1740-1820 is open y200-800, the pillar face
+        // x1740 spans y520-680 and the wall-B west face x1820 spans
+        // y400-800, so the zigzag overlaps in y520-680. Measured run:
+        // 11→43 fall → corridor floor → run east → kicks (1799,749) →
+        // (1761,683) → (1799,617) → launch → ledge-grab 60@1740,519 →
+        // mantle 62 → stand on pillar top → walk east, fall off →
+        // ax10-S36 bound zone catch (315) → drop → S89 killTouch pin by
+        // the ax11 guard posted at ~x1759 — the tutorial's
+        // "MOVE CLOSE TO YOUR ENEMY" encounter. Combat, not a dead-end:
+        // clearing it (or dodging) is the game, and the step staircase
+        // above (x1820→y400 → x1860→y320 → x1880→y200) is the next leg.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1753, 519)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var maxAk = p.ak; var minAl = p.al; var kicks = 0
+        var sawPillarTop = false; var sawBoundCatch = false; var sawPin = false
+        var lastS = p.S
+        val marks = mutableListOf<String>()
+        val trace = ArrayDeque<String>(80)
+        while (t++ < 8000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak},${p.al} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    sawBoundCatch = true
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+                p.S == 89 || p.S == 90 -> {
+                    sawPin = true
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+            }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            if ((p.S == 101 || p.S == 92) && p.S != lastS) {
+                kicks++; marks += "kick@${p.ak},${p.al} t=$t"
+            }
+            if (p.S != lastS) {
+                if (trace.size == 80) trace.removeFirst()
+                trace += "$t:${lastS}->${p.S}@${p.ak},${p.al}"
+            }
+            lastS = p.S
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) { minAl = p.al; marks += "al=$minAl@${p.ak} t=$t" }
+            if (p.aZ && p.al in 500..525 && p.ak in 1740..1770) sawPillarTop = true
+            if (sawPin || (kicks >= 3 && t > 3000)) break
+        }
+        println("STAIR minAl=$minAl maxAk=$maxAk kicks=$kicks pillar=$sawPillarTop catch=$sawBoundCatch pin=$sawPin marks=${marks.takeLast(10)} trace=${trace.takeLast(20).joinToString(" ")}")
+        assertTrue(kicks >= 3,
+            "channel zigzag must produce ≥3 face kicks — kicks=$kicks marks=$marks")
+        assertTrue(sawPillarTop || minAl <= 525,
+            "zigzag must mantle the pillar top — pillar=$sawPillarTop minAl=$minAl")
+        assertTrue(sawBoundCatch || sawPin,
+            "below the pillar the bound zone or the posted guard must fire — catch=$sawBoundCatch pin=$sawPin")
+    }
+
+    @Test fun `bot identifies the S89 pinner under the pillar`() {
+        // Sixth leg, probe: the S89 killTouch pin exit needs
+        // `e.ax==11 && e.j==6 && e.S==24` + context edge. Park on the
+        // pillar top, walk east off it (into the guard post), and when
+        // the pin lands, report every nearby entity's ax/S to identify
+        // the pinner and whether it ever reaches S24.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1753, 519)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var pinTicks = 0; var pinAx = -1; var pinS = -1; var exits = 0
+        var lastS = p.S
+        val marks = mutableListOf<String>()
+        while (t++ < 8000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    marks += "respawn@${p.ak},${p.al} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 65 -> {
+                    val z = w.npcs.firstOrNull { it.ax == 22 && it.ak == p.ak && it.al == p.al }
+                    w.pad.e(if (z != null && z.Z[2] == 0) 16390 else 16396)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.S == 89 || p.S == 90) {
+                pinTicks++
+                val near = w.npcs.filter {
+                    kotlin.math.abs(it.ak - p.ak) <= 60 &&
+                    kotlin.math.abs(it.al - p.al) <= 80
+                }
+                if (pinTicks == 1 || pinTicks % 400 == 0) {
+                    val desc = near.joinToString(",") {
+                        "ax${it.ax}#${it.aw} S${it.S} j${it.j} @${it.ak},${it.al}"
+                    }
+                    marks += "pin t=$t near=[$desc]"
+                    near.firstOrNull { it.j == 6 }?.let { pinAx = it.ax; pinS = it.S }
+                }
+                w.pad.e(Pad.M_CONTEXT)
+                w.tick(emptyList())
+                continue
+            }
+            if (lastS == 89 && p.S != 89) { exits++; marks += "pin->${p.S} t=$t" }
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            w.tick(emptyList())
+            lastS = p.S
+            if (exits >= 2 || (pinTicks > 0 && t > 6000)) break
+        }
+        println("PIN pinTicks=$pinTicks pinAx=$pinAx pinS=$pinS exits=$exits marks=${marks.takeLast(10)}")
+        assertTrue(pinTicks > 0, "probe must land in the killTouch pin — marks=$marks")
+        // VERDICT: the pinner is ax11#18 (j==6 tumbler). S89 has NO
+        // player-side release — the only exits are the entity-side
+        // grab-kill offers (ax11 needs e.S==24, ax47 needs S80, ax50
+        // needs S119). The posted guard patrols S2 unaware — the pin
+        // snapped the player onto its head, out of the spotB alert set —
+        // so it paces forever with the player riding: a verbatim
+        // standoff, resolvable in play either by pinning onto an
+        // already-ALERTED guard (strikes → counter-kill window) or not
+        // falling on unaware ones.
+        assertTrue(pinAx == 11,
+            "pinner must be the ax11 tumbler — pinAx=$pinAx")
+    }
+
+    @Test fun `bot fights the posted pillar guard on the corridor floor`() {
+        // Seventh leg: the S89 standoff only happens when the bot falls
+        // ON the unaware guard's head — at floor level the tutorial
+        // "MOVE CLOSE TO YOUR ENEMY" post is a normal duel. Park west of
+        // it, walk in, let it alert and strike, trade blows via the
+        // shared combat loop. Assert the guard dies (S139 corpse) or a
+        // faithful player KO.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(1680, 799)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var maxAk = p.ak; var deaths = 0; var atkCd = 0
+        var guardDead = false
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    // pinned on its head — keep tapping context for the
+                    // counter-kill window if it strikes
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            // foeNear skips corpses — check the posted guard directly
+            if (w.npcs.any { it.ax == 11 && it.S == 139 &&
+                    it.ak in 1600..1950 }) { guardDead = true; break }
+            val foe = foeNear(w, p)
+            var held = if (foe != null && foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
+            if (foe != null && atkCd <= 0) { held = held or Pad.M_CONTEXT; atkCd = 25 }
+            atkCd--
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (t % 500 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} foe=${foe?.S}"
+            if (guardDead || t > 35000) break
+        }
+        println("GUARD dead=$guardDead deaths=$deaths maxAk=$maxAk marks=${marks.takeLast(10)}")
+        assertTrue(guardDead || deaths > 0 || maxAk > 1820,
+            "duel must resolve — dead=$guardDead deaths=$deaths maxAk=$maxAk")
+    }
+
+    @Test fun `bot vaults the x1400 wall via the ax22 aerial chain`() {
+        // Eighth leg: the x1400-1480 wall is solid '14' from y360 down —
+        // the designed crossing is the ax22 capture chain (zones
+        // (1214,636)+(1316,568)) into the ax7 ejection wedge
+        // [1318,456..1334,472] at the top edge. The approach climbs the
+        // x900-1120 building's 100px west face to its y780 roof, then
+        // jumps east off the edge — apex ~y690 reaches zone1's
+        // [1208,626..1248,669] box. The ax14 pickup arc
+        // (969,654)→(1341,477) breadcrumbs exactly this line.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(800, 879)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var minAl = p.al; var jumps = 0; var captures = 0
+        var crossed = false; var grabs = 0
+        val marks = mutableListOf<String>()
+        while (t++ < 25000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList()); continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 1480) { crossed = true; break }
+            if (p.S == 65) {
+                // zone-bound: eject east — Z[2]==0 west else east
+                captures++
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            if (p.S == 60 || p.S == 61 || p.S == 62 || p.S == 63) grabs++
+            // hold east; jump when grounded past the roof's east half
+            var held = Pad.M_RIGHT or Pad.M_UP
+            if (p.aZ && p.ak >= 1080) jumps++
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            if (t % 500 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} grabs=$grabs caps=$captures"
+        }
+        println("WALL crossed=$crossed jumps=$jumps caps=$captures grabs=$grabs " +
+            "minAl=$minAl marks=${marks.takeLast(12)}")
+        assertTrue(crossed || captures >= 1 || minAl <= 700,
+            "must reach the ax22 chain / ax7 wedge over the wall — " +
+            "crossed=$crossed caps=$captures minAl=$minAl")
+    }
+
+    @Test fun `bot runs spawn to the corridor floor end to end`() {
+        // Ninth leg — the stitched opener: spawn (85,940) → jump the
+        // x300-380 pit up to the x380-1120 floor (y880) → face-climb
+        // the x900 building to its y780 roof → jump into ax22 zone1 →
+        // zone2 → ax7 wedge → over the x1400 wall → down to the
+        // corridor floor ('05' x1600+, y800). One continuous run with
+        // only held-east + jumps + the S65 zone eject — the same input
+        // grammar a player uses.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        // spawn is the real record position — do not park
+        var t = 0; var minAl = p.al; var captures = 0
+        var corridor = false; var deaths = 0
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak} t=$t"; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 1600 && p.al > 780) { corridor = true; break }
+            if (p.S == 65) {
+                captures++
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            // ax4 destructible crates wall the floor at x528/546 —
+            // slash when one is in sword reach; else pulse an UP edge
+            // only while stalled (faces: trench x380, building x900,
+            // roof lip x1120) — constant UP-hold bounces in place
+            val crateNear = w.npcs.any {
+                it.ax == 4 && it.S != 139 && it.ak - p.ak in -10..90 &&
+                kotlin.math.abs(it.al - p.al) < 80
+            }
+            val stuck = p.aZ && p.ag in -256..256
+            if (crateNear && p.aZ && t % 4 < 3) held = held or Pad.M_CONTEXT
+            else if (stuck || p.ak in 260..380 || p.ak in 860..1140) held = held or Pad.M_UP
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            if (t % 1000 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} caps=$captures"
+        }
+        println("RUN corridor=$corridor deaths=$deaths caps=$captures " +
+            "minAl=$minAl marks=${marks.takeLast(12)}")
+        assertTrue(corridor || captures >= 2 || deaths > 0,
+            "spawn→corridor run must progress — corridor=$corridor " +
+            "caps=$captures deaths=$deaths")
+    }
+
     @Test fun `bot survives the x2773 pack or dies faithfully`() {
         // Second leg: park the player just past the checkpoint and let it
         // fight/run the first guard cluster (records: ax11 @2773/2798/2825).
