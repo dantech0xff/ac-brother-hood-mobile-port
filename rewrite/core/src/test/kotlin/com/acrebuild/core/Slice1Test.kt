@@ -22283,4 +22283,137 @@ class Slice245Test {
         assertTrue(maxAk > 2650 || deaths > 0,
             "either progress or a faithful KO — maxAk=$maxAk deaths=$deaths")
     }
+
+    @Test fun `dump void floor support`() {
+        val w = world(); w.stateL(8); settleIntro(w)
+        for (cx in 132..148) {
+            print((cx * 20).toString() + ":")
+            for (cy in 22..34) {
+                val v = w.collisionCell(cx, cy)
+                print(if (v == 0) "  ." else "%3d".format(v))
+            }
+            println()
+        }
+        w.npcs.filter { it.W[2] > 2680 && it.W[0] < 2920 && it.W[1] > 440 && it.W[1] < 700 }
+            .forEach { println("ax${it.ax} @(${it.ak},${it.al}) S${it.S} W=${it.W.contentToString()}") }
+    }
+
+    @Test fun `dump gate row boxes`() {
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        w.player.setPositionPx(2980, 499)
+        repeat(30) { w.tick(emptyList()) }
+        w.npcs.filter { (it.ax == 44 || it.ax == 72 || it.ax == 78) &&
+            it.ak in 2800..3100 }.forEach {
+            println("ax${it.ax} @(${it.ak},${it.al}) S${it.S} W=${it.W.contentToString()} " +
+                "Z=[${it.Z.take(6).joinToString()}]")
+        }
+    }
+
+    @Test fun `probe void under-floor landing`() {
+        val w = world(); w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(2840, 560)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        for (t in 0..40) {
+            w.pad.e(Pad.M_RIGHT); w.tick(emptyList())
+            println("t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} ah=${p.ah} x1=${p.x1} aZ=${p.aZ}")
+        }
+    }
+
+    @Test fun `probe door park at 3801`() {
+        val w = world(); w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(3801, 839)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        for (t in 0..30) {
+            w.pad.e(Pad.M_RIGHT or Pad.M_UP); w.tick(emptyList())
+            println("t$t S${p.S}@${p.ak},${p.al} ac=${p.ac?.ax}:${p.ac?.ak},${p.ac?.al} " +
+                "kAn=${w.kAn} kAo=${w.kAo} P=${p.P} ov=" +
+                w.npcs.filter { it.W[0] < p.W[2] && it.W[2] > p.W[0] &&
+                    it.W[1] < p.W[3] && it.W[3] > p.W[1] }
+                    .joinToString("|") { "ax${it.ax}S${it.S}@${it.ak},${it.al}o${it.oId}" })
+        }
+    }
+
+    @Test fun `bot runs checkpoint to checkpoint2 through the guard pack`() {
+        // Eleventh leg — park on the checkpoint floor (ax2 @2594,485 sits
+        // on the high-block top y520) and run east: step down the
+        // x2660-2760 staircase, then DROP off the '02' one-way walkway to
+        // the continuous y680 floor — the y500 walkway is a trap: three
+        // ax44 S8 crusher bars (2943/2980/3017) guard it and it dead-ends
+        // into the x3040-3060 overhang (solid only y280-520). The low
+        // floor runs underneath it, east past the 3-guard pack
+        // (2773/2798/2825) to the second ax2 checkpoint (3895,553).
+        // Slash when a living ax11/ax4 closes in; never jump under bars.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(2594, 519)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    if (deaths > 4) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 3830) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            // under-route: the y680 floor passes the wall through the
+            // y540-679 slit. Entry: the S107 vault settles facing east —
+            // hold LEFT|DOWN to flip av then a(257,8) off the ledge's
+            // west edge into the under-band; then east again
+            if (p.al < 560 && p.ak in 2880..2930)
+                held = Pad.M_LEFT or Pad.M_DOWN
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 4) && it.S != 139 &&
+                    it.ak - p.ak in -20..90 &&
+                    kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
+            val stuck = p.aZ && p.ag in -256..256
+            // bars 1-2 are crossed while parked (W=0); gate-3 arms as the
+            // player nears — jump over its [3004-3032] box: apex feet <470
+            // clears the bar top, landing past 3032 at the wall face
+            if (stuck || (p.ak in 2990..3010 && p.al < 560) || p.ak in 3440..3520)
+                held = held or Pad.M_UP
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t in 20..115) marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} ah=${p.ah} x1=${p.x1}" +
+                (if (p.ak in 2740..2920) " aZ=${p.aZ} ga=${p.standingOn?.ax} aQ=${p.aQ} W3=${p.W[3]}" else "") +
+                (if (p.ak in 2900..3100) " g=" + w.npcs.filter { it.ax == 44 && it.ak in 2900..3100 }
+                    .joinToString("|") { "[${it.ak}]W${it.W.contentToString()}" } else "") +
+                (if (t in 60..95) " ov=" + w.npcs.filter {
+                        it.W[0] < p.W[2] && it.W[2] > p.W[0] &&
+                        it.W[1] < p.W[3] && it.W[3] > p.W[1] }
+                    .joinToString("|") { "ax${it.ax}@${it.ak},${it.al}S${it.S}" } else "")
+            else if (t < 400 && t % 25 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+            else if (t % 600 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("EAST checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(checkpoint,
+            "east run must reach x3830 under the overhang — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
 }
