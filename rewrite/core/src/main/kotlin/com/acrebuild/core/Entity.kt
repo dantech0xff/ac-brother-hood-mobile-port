@@ -4767,7 +4767,69 @@ open class Entity(val ax: Int, var clip: Clip?) {
             60 -> { /* bk() lift cable draw (:13759) — renderer-side;
                 the renderer calls liftCableArm() for the S dispatch. */ }
             58 -> { /* L10d8 (:13772): draw skipped entirely */ }
-            40 -> { /* by() zipline rope draw (:13777) — renderer-side */ }
+            40 -> {
+                // `by()` (i.java:48822-49163, proven): the zipline rope.
+                // Gate `S==2 && Z[3]!=0`; finds the rider — an ax40
+                // bd-entry bound to `player.ac` on this rope (`s==this`)
+                // — then writes every marker's `al` (sag interpolation
+                // while riding, else rests at `al+1` into `Z[1]`) and
+                // emits the rope lines (straight when parked, sagging
+                // to `aS.ac` while `player.S==164`), color 0xFFC94F33.
+                if (S == 2 && Z[3] != 0) {
+                    val p = w.player
+                    var riding = false
+                    val ac = p.ac
+                    if (ac != null && ac.ax == 40) {
+                        var i = 0
+                        while (i < w.drawCount) {
+                            val e = w.drawList[i]
+                            if (e != null && e.ax == 40 && e.s === this &&
+                                ac.s === this && ac === e) {
+                                riding = p.S == 164
+                                break
+                            }
+                            i++
+                        }
+                    }
+                    var i = 0
+                    while (i < w.drawCount) {
+                        val e = w.drawList[i]
+                        if (e != null && e.ax == 40 && e.s === this) {
+                            if (riding && ac != null) {
+                                if (e.ak < ac.ak) {
+                                    e.al = e.Z[1] +
+                                        (e.ak - ak) * (ac.al - ac.Z[1]) /
+                                        (ac.ak - ak)
+                                } else if (e.ak > ac.ak) {
+                                    e.al = e.Z[1] +
+                                        (Z[3] - e.ak) * (ac.al - ac.Z[1]) /
+                                        (Z[3] - ac.ak)
+                                }
+                            } else if (e.ah == 0) {
+                                e.al = al + 1
+                                e.Z[1] = e.al
+                            }
+                        }
+                        i++
+                    }
+                    val y1 = Z[1] - w.kP
+                    if (riding && ac != null) {
+                        val gx = ac.ak - w.kO
+                        val gy = ac.W[1] - w.kP
+                        w.drawFxLine(ak - w.kO, y1, gx, gy, -3584205)
+                        w.drawFxLine(Z[3] - w.kO, y1, gx, gy, -3584205)
+                        w.drawFxLine(ak - w.kO, y1 + 1, gx, gy + 1,
+                                     -3584205)
+                        w.drawFxLine(Z[3] - w.kO, y1 + 1, gx, gy + 1,
+                                     -3584205)
+                    } else {
+                        w.drawFxLine(ak - w.kO, y1, Z[3] - w.kO, y1,
+                                     -3584205)
+                        w.drawFxLine(ak - w.kO, y1 + 1, Z[3] - w.kO,
+                                     y1 + 1, -3584205)
+                    }
+                }
+            }
             11 -> {
                 // Lf2c-L108f (i.java:13790-13975): the overhead speech
                 // bubble — active while `Z[19]==0 && Z[20]>0`; picks a
@@ -4827,6 +4889,11 @@ interface LevelCellSource {
     var lockTarget: Entity?
     /** `k.q(uid)` lookup source (proven: entity list search by `aw`). */
     val npcs: List<Entity>
+    /** `k.bd[]`/`k.be` — the draw-order array `buildDrawList` fills
+     *  before `drawStylePass` runs `F()` per entry; `by()` scans it
+     *  for ax40 siblings (`bd[i].ax==40 && bd[i].s==rope`). */
+    val drawList: Array<Entity?> get() = emptyArray()
+    val drawCount: Int get() = 0
     /** `k.c(e)` — mark entity removed; applied after the npc tick pass
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
