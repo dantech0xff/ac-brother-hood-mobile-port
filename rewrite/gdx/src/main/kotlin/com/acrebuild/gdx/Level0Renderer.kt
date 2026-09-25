@@ -1845,7 +1845,7 @@ class Level0Renderer {
         // `aa.l(i)` palette select + `aa.a(i)` az-remap select + `aa.g`
         // palette alpha, chosen per ax before the (P&128)==0 blit.
         var palette = e.palette
-        var alpha = 255
+        var alpha = e.paletteAlpha          // `aa.g` — F()'s palette alpha
         val last = e.T >= clip.frameCount(e.S) - 1
         // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
         // draws the rope segments (object Z[7] of clip61) BEFORE the
@@ -1882,15 +1882,9 @@ class Level0Renderer {
                     }
                     if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
                     if (world.iCe && e.S == 2 && last) e.P = e.P or 64
-                    if (e.S == 5) {
-                        e.ak = camX; e.al = camY
-                        if (last) e.P = e.P or 64
-                        if (e.aC > 0 && (e.P and 64) != 0) {
-                            alpha = (e.aC * 255) / 10
-                            e.aC--
-                            if (e.aC <= 0) { world.removeEntity(e); return }
-                        }
-                    }
+                    // S5 candle fade (i.java:3095): sim-side F() owns
+                    // `ak/al` snap, `P|=64`, `aC--`, removal — the
+                    // renderer only consumes `paletteAlpha`.
                 } else if (e.ax == 0 && world.kBL in boArt.indices) {
                     palette = boArt[world.kBL][0]
                     e.remapTable = boArt[world.kBL][1]
