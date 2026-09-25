@@ -641,6 +641,12 @@ class Level0World(
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
         run {
             val rec = level.playerRecord()
+            // The original's record-spawn makes `k.aS` the entity built
+            // from the ax0/ax25 record (k.java:17204-17223, proven) — the
+            // shared init's `aw = r8[1]` gives the player the record's
+            // uid. Claim scripts then reach it via `findByAw(uid)`
+            // (script 250 blk1 tgt=5 walks the player onto the road).
+            if (rec != null && rec.size > 1) player.aw = rec[1]
             // i.java:2415-2427 (proven) — the ax25 flying player-slot
             // init (runs after the shared vel-clear): `az=202`,
             // `g.e(90)` (x1), `aA=2`, `aB=3`, `ah=-2560`, `aq=ar=-1`,
@@ -1974,13 +1980,15 @@ class Level0World(
             if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400
             if (kT > 0 && camB < kT) camB = kT
             if (kU > 0 && camB > kU - 240) camB = kU - 240
-        }
-        // ---- L325+ settle ----
-        val r6 = if (iAH && iAI > 0) iAI else 1
-        if ((r5 and kAd) != 0) {                                    // L331 snap
-            camX = camA; camY = camB; camCC = 0; camCD = 0
-            kU = 0; kSBound = 0; kT = 0; kR = 0                     // snap clears walls
-        } else if (ae != null) {
+            // ---- L325+ settle — inside the `!k.Z` arm: the original's
+            // `if (k.Z != 0) goto L9cd` (k.java:5507) skips tracking AND
+            // the settle lerp, so a claim script owning the camera gets
+            // sole write access to k.O/k.P.
+            val r6 = if (iAH && iAI > 0) iAI else 1
+            if ((r5 and kAd) != 0) {                                // L331 snap
+                camX = camA; camY = camB; camCC = 0; camCD = 0
+                kU = 0; kSBound = 0; kT = 0; kR = 0                 // snap clears walls
+            } else if (ae != null) {
             if (ae.ax == 43 && ae.S != 1) {                         // L339: speed-follow
                 camX += camCC / r6
                 camCD = lerpStep(camB - camY, 28)
@@ -1995,6 +2003,7 @@ class Level0World(
             if (kAb || (gcx != null && gcx.ax == 43 && gcx.cd[3]) ||
                 (ga2 != null && ga2.ax == 43 && ga2.cd != null && ga2.cd[3])) {
                 kAb = false; camX = camA
+            }
             }
         }
         // L359: g.v full warp
@@ -4822,9 +4831,13 @@ class Level0World(
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
-        // below camera bottom: i.java:1389 (proven) — al > k.P + 240 → l(12).
-        // Fires when the player falls past where the clamped camera can follow.
-        else if (player.al > camY + VIEW_H) stateL(12)
+        // below camera bottom: i.java:4137-4145 (proven) —
+        // `if (!v()) { if (al > k.P + 240) l(12) }` — the fail is gated by
+        // the `i.v()` in-play predicate: while the player's box intersects
+        // `k.ac` (the camera view) the check is skipped, so claim scripts
+        // that dip the player below the view edge (e.g. script 104's gap
+        // descent at the x5500 wall) do not kill the run mid-cutscene.
+        else if (!player.inPlayV(this) && player.al > camY + VIEW_H) stateL(12)
 
         // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
         // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`
