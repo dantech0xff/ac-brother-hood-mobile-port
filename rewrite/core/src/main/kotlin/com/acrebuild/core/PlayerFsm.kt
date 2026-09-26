@@ -152,6 +152,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             12 -> {
                 p.gD = false                      // D = false
                 p.co++
+                // g.java L16c0 (proven): every non-transition path —
+                // `ag==0`/`aO!=0`, wall strip `i10<19`/`i10>=24`, vault
+                // tier i8∉{1,2,3}, `co<=2`, or `z()`/`ak()` false —
+                // `goto L17c9` → `O()` + the L17cc grounded block
+                // (… → `l()` input arms). So a run never dead-ends input:
+                // `l()` sees dir/UP every tick — a pinned runner can still
+                // turn, brake, or jump out. Only a fired transition
+                // (i(74)/i(107-109)/lip/S33) exits early via L353d.
+                var transitioned = false
                 if (p.ag != 0 && p.aO == 0) {
                     val i8 = if (p.av) p.aX else p.aY
                     val i9 = if (p.av) p.aT else p.aU
@@ -159,23 +168,26 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                         p.ai = 0; p.ag = 0; p.al = p.W[1]
                         p.ak += if (p.av) -20 else 20
                         p.setAnim(74)
+                        transitioned = true
                     } else if (i9 >= 19 && i9 < 24) {
-                        if (i8 == 1) { p.ag = 0; p.ah = 0; p.setAnim(107) }
-                        else if (i8 == 2) { p.ag = 0; p.ah = 0; p.setAnim(108) }
-                        else if (i8 == 3) { p.ag = 0; p.ah = 0; p.setAnim(109) }
+                        if (i8 == 1) { p.ag = 0; p.ah = 0; p.setAnim(107); transitioned = true }
+                        else if (i8 == 2) { p.ag = 0; p.ah = 0; p.setAnim(108); transitioned = true }
+                        else if (i8 == 3) { p.ag = 0; p.ah = 0; p.setAnim(109); transitioned = true }
                         else if (p.co > 2 && p.pushColumnBlocked(world)) {
                             if (p.ledgeLipGrab(world)) {       // ak()
                                 p.aj = 0; p.ah = 0; p.ag = 0
                             } else {
                                 p.setAnim(33); p.ag = 0; p.ah = -4096
                             }
+                            transitioned = true
                         }
                     }
-                } else {
-                    // g.java:3569-3572 (proven): `ag==0 || aO!=0 → L17c9`
-                    // — `i.O()` timewarp disarm, then the shared L17cc
-                    // grounded block (open head/feet → l(); embedded →
-                    // i(79)). This is what re-arms cp/cq/z on the
+                }
+                if (!transitioned) {
+                    // `ag==0 || aO!=0 → L17c9`, plus every non-transition
+                    // path above — `i.O()` timewarp disarm, then the
+                    // shared L17cc grounded block (open head/feet → l();
+                    // embedded → i(79)). Re-arms cp/cq/z on the
                     // stopped/blocked tick — e.g. pinned at a crate.
                     p.timewarpOff(world)
                     groundedTail(p, pad)
