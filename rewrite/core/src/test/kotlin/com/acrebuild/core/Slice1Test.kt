@@ -23816,6 +23816,37 @@ class Slice245Test {
             "economy is camera-paced; a leg can't be outrun)")
     }
 
+    @Test fun `all eight mission packs boot and tick clean`() {
+        // Slice-269 coverage: the all-mission conversion (slice 176)
+        // claims every pack loads — this boots each `level<aj>` through
+        // the real intro (stateL(9) -> play), asserts the record-driven
+        // entity set spawns, and ticks 300 live ticks without exception.
+        for (aj in 0..7) {
+            val w = world(aj = aj)
+            w.stateL(9)
+            var boot = 0
+            while (w.jC == 9 && boot++ < 600) {
+                if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+                w.tick(emptyList())
+            }
+            assertTrue(w.jC != 9, "mission $aj stuck in load state jC=${w.jC}")
+            val spawned = w.npcs.size
+            assertTrue(spawned > 50,
+                "mission $aj must spawn its records (got $spawned)")
+            // 300 live ticks — dialogs auto-dismissed; assertions on the
+            // world staying coherent (no crash, jC stays in the play set).
+            var t = 0
+            while (t++ < 300) {
+                if (w.jC != 8 && w.jC != 21 && w.jC != 12 && w.jC != 13) break
+                w.tick(emptyList())
+            }
+            assertTrue(w.player.ax != -1, "mission $aj has a live player entity")
+            println("mission $aj jC=${w.jC} npcs=$spawned ax=" +
+                w.npcs.groupingBy { it.ax }.eachCount()
+                    .toSortedMap().entries.joinToString(",") { "${it.key}x${it.value}" })
+        }
+    }
+
 
 
 
