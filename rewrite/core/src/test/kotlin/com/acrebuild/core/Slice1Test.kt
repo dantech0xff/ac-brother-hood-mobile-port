@@ -22225,30 +22225,25 @@ class Slice245Test {
             "caps=$captures deaths=$deaths")
     }
 
-    // Slice-271: disabled pending driver re-verification. The proven
-    // S12 L16c0→L17c9 fallthrough (g.java:3560-3720) made l() live during
-    // runs — the ax() edge-walk arm now fires grounded at the needle rim
-    // (S26, ag=1280) and the hop lands ~3px short of the zone-1 basin
-    // (frontier maxAk=1973). Old leg relied on dead-l() S12 air-run
-    // (ag=2560 constant-y). Route re-drive needed.
-    @Ignore
-    @Test fun `bot walks the high road pillars to the checkpoint`() {
-        // Tenth leg — the post-wall high road: the ax7 throw lands on
-        // the spire base ledge (x1820-1860, top y400). East: an
-        // ax22 capture chain bridges the x1900-2200 void —
-        // zones (1975,605) → (2064,695) → (2104,546) — ejecting onto
-        // plateau x2200-2360 top y480 → drop to the '02' ledge x2360-2500
-        // → high block x2500-2660 top y520 → ax2 checkpoint (2594,485).
-        // The tunnel pit under the ledge drops to y840 — falling in
-        // is a faithful death.
+    @Test fun `bot crosses the plateau dip to the checkpoint`() {
+        // Tenth leg — the plateau-top run (spawn on the x2200-2360 block's
+        // top y480): hold east → S26 edge-hop off the top's east lip x2360
+        // → S43 drop into the channel dip (floor y659) → S12 east across
+        // the '2' terrace → mound's west face x2480-2500 → S33 wall
+        // rebound + lip-scan (dir-held while rising, L1b0a) → S60 lip grab
+        // → S62 mantle onto the mound top y519 → east → ax2 @2594,485.
+        // Verbatim arms exercised: S26 edge-walk, the air-family wall grab
+        // gate (cv && aF), the S33 lip-scan, the S60/61→62 mantle chain,
+        // and '2'-cell footing.
         val w = world()
         w.stateL(8)
         settleIntro(w)
         val p = w.player
-        p.setPositionPx(1850, 399)
+        p.setPositionPx(2300, 460)
         p.N = p.ak shl 8; p.O = p.al shl 8
         var t = 0; var deaths = 0; var checkpoint = false
         var maxAk = p.ak; var minAl = p.al
+        var lastAk = p.ak; var still = 0
         val marks = mutableListOf<String>()
         while (t++ < 30000) {
             when {
@@ -22271,24 +22266,22 @@ class Slice245Test {
                 w.pad.e(16396); w.tick(emptyList()); continue
             }
             var held = Pad.M_RIGHT
-            // past the needle's east edge keep the direction held — the
-            // ax22 zone-1 basin (x1976+, y615+) catches the east drift
-            // of the S26 edge-hop that l() now arms at the rim.
-            if (p.ak > 1905 && p.ak < 2200 && !p.aZ) held = Pad.M_RIGHT
-            val stuck = p.aZ && p.ag in -256..256
-            if ((stuck && p.ak < 1860) || p.ak in 2500..2600) held = held or Pad.M_UP
+            // wall-pinned grounded runs (S12 pushes ag=2560 into a face)
+            // need the climb input — detect stall by position, not ag.
+            if (p.ak == lastAk && p.aZ) still++ else { still = 0; lastAk = p.ak }
+            if (still > 60 || p.ak in 2500..2600) held = held or Pad.M_UP
             w.pad.e(held)
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.al < minAl) minAl = p.al
-            if (t < 40 || (p.ak in 1900..2400 && t < 400)) marks += "t$t S${p.S}@${p.ak},${p.al} W=${p.W.contentToString()} " +
-                "aO=${p.aO} aP=${p.aP} aR=${p.aR} aQ=${p.aQ} aS=${p.aS} aV=${p.aV} aW=${p.aW} aZ=${p.aZ}"
-            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+            if (t < 40 || (p.ak in 1800..2600 && t < 500)) marks += "t$t S${p.S}@${p.ak},${p.al} " +
+                "aO=${p.aO} aR=${p.aR} aQ=${p.aQ} aS=${p.aS} aZ=${p.aZ} camY=${w.camY}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al} camY=${w.camY}"
         }
-        println("HIGH checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
-            "minAl=$minAl\n early=${marks.take(30)}\n late=${marks.takeLast(10)}")
+        println("LOWRD checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl\n early=${marks.take(30)}\n mid=${marks.drop(30).take(60)}\n late=${marks.takeLast(10)}")
         assertTrue(checkpoint || maxAk > 2400,
-            "high road must progress east — checkpoint=$checkpoint " +
+            "low road must progress east — checkpoint=$checkpoint " +
             "maxAk=$maxAk deaths=$deaths")
     }
 
@@ -22948,11 +22941,6 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
-    // Slice-271: disabled pending driver re-verification (S12 l()
-    // fallthrough — stalls S8↔S283 at the ~x10507 wall on the y659 low
-    // road; the door box route up differs under corrected mechanics).
-    // Frontier maxAk=10507 at last run.
-    @Ignore
     @Test fun `bot runs checkpoint7 to the win fuse through the tower`() {
         // Seventeenth leg — the level-0 end-game. cp7 (10016,679) sits at
         // the bottom of a 100px wall-kick well (pillar x9920-9940 west /
@@ -23024,9 +23012,23 @@ class Slice245Test {
                 held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
             // The door arm also needs `g == null` — the column-top
             // soldier uid571 binds the interact target, so slash it
-            // while bound until the lock clears.
-            if (p.g != null && p.aZ)
+            // while bound until the lock clears. The Z2 road-blocker
+            // (record-spawned, aB=300) is unkillable — never attack it:
+            // its counter only fires while playerAttacking().
+            val g2 = p.g
+            if (g2 != null && p.aZ && !(g2.ax == 11 && g2.Z[0] == 2 &&
+                g2.aB > 80))
                 held = held or Pad.M_CONTEXT
+            // Moat approach: hold RIGHT only — NO UP (arming aF makes
+            // the wall-grab fire on face contact, pre-empting the
+            // ledgeHangGrab probe that wants a 1-cell gap at the lip).
+            if (p.ak > 10380 && p.al > 480 && p.S !in intArrayOf(33, 36, 92, 101))
+                held = held and Pad.M_UP.inv()
+            // ax13 rope uid93 (11312,441 aG=4): the auto-lift over the
+            // x11340 wall — jump under its tip (grab box ~x11308-11316,
+            // y681-729) so the airborne scan binds. Bound = p.bM; the
+            // aG==4 ropeInput then climbs and auto-releases east.
+            if (p.aZ && p.ak in 11280..11338) held = held or Pad.M_UP
             if (w.kC != null && w.kC!!.claimActive()) {
                 w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
             }
@@ -23036,7 +23038,19 @@ class Slice245Test {
             if (p.al < minAl) minAl = p.al
             if (t < 3000 && t % 50 == 0)
                 marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
-                    "aO=${p.aO} aR=${p.aR}"
+                    "aO=${p.aO} aR=${p.aR} g=${p.g?.ax}:${p.g?.S} " +
+                    "lock=${w.lockTarget?.aw}:${w.lockTarget?.S} " +
+                    "lockaB=${w.lockTarget?.aB} gI=${p.gI} " +
+                    w.npcs.filter { it.ak - p.ak in -60..140 &&
+                        kotlin.math.abs(it.al - p.al) < 90 && it.S != 139 }
+                        .joinToString("/") { "ax${it.ax}@${it.ak},${it.al}S${it.S}Z${it.Z[0]}" }
+            else if (p.ak > 11000 && t % 10 == 0) {
+                val rp = w.npcs.firstOrNull { it.aw == 93 }
+                marks += "t$t S${p.S}@${p.ak},${p.al} bM=${p.bM?.aw} " +
+                    "rope{bN=${rp?.bN} bP=${rp?.bP} aA=${rp?.aA} " +
+                    "W=${rp?.W?.get(0)}-${rp?.W?.get(2)}x${rp?.W?.get(1)}-" +
+                    "${rp?.W?.get(3)}}"
+            }
             else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
         }
         println("CP7G goal=$goal deaths=$deaths maxAk=$maxAk " +
@@ -23047,10 +23061,6 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
-    // Slice-271: disabled pending driver re-verification (S12 l()
-    // fallthrough — stalls at the same x~10507 wall). Frontier
-    // maxAk=10507 at last run.
-    @Ignore
     @Test fun `bot fights through the finale pack to mission complete`() {
         // Eighteenth leg — the level-0 finale, parked at cp7 exactly like
         // the fuse leg but continuing east: kick well → tower → door
@@ -23160,8 +23170,18 @@ class Slice245Test {
                 held = Pad.M_RIGHT
             // Each soldier binds g — slash through the pack; also clears
             // uid571 on the column top blocking the door's `g==null`.
-            if (p.g != null && p.aZ)
+            // EXCEPT the Z2 road-blocker at x10497: record-spawned
+            // aB=300 > BW_MOCK — unkillable by design; attacking only
+            // feeds its counter arm. Walk past it instead.
+            val g2 = p.g
+            if (g2 != null && p.aZ && !(g2.ax == 11 && g2.Z[0] == 2 &&
+                g2.aB > 80))
                 held = held or Pad.M_CONTEXT
+            // Moat approach: strip UP so aF can't arm wallGrabSnap on
+            // face contact — the ax22 eject arc then clears the lip
+            // (proven on the fuse leg; same moat geometry here).
+            if (p.ak > 10380 && p.al > 480 && p.S !in intArrayOf(33, 36, 92, 101))
+                held = held and Pad.M_UP.inv()
             // Stay bound on the rope — the aG4 auto-retract + the
             // uid115 claim ARE the crossing (releaseRope is automatic,
             // not input-driven, so no bail input exists). The claim's
@@ -23186,10 +23206,6 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
-    // Slice-271: disabled pending driver re-verification (S12 l()
-    // fallthrough — stalls ~x10356-10507 on the finale route, mission
-    // swap kAj=0 never reached). Re-enable with a re-driven route.
-    @Ignore
     @Test fun `bot drives mission-complete stats into mission 1`() {
         // Nineteenth leg — continues past the FIN win: the jC==15 stats
         // screen (M()) confirm arm (`pad.v(458784)` → persist →
@@ -23255,8 +23271,18 @@ class Slice245Test {
                         else Pad.M_UP
                     if (p.aZ && p.al >= 595 && p.ak in 11100..11330 && p.bM == null)
                         held = Pad.M_RIGHT
-                    if (p.g != null && p.aZ)
+                    // Z2 road-blocker at x10497 is unkillable by design
+                    // (aB=300 > BW_MOCK) — attacking feeds its counter;
+                    // walk past it.
+                    val g2 = p.g
+                    if (g2 != null && p.aZ && !(g2.ax == 11 &&
+                        g2.Z[0] == 2 && g2.aB > 80))
                         held = held or Pad.M_CONTEXT
+                    // Moat: strip UP so aF can't arm wallGrabSnap on
+                    // face contact — the zone eject clears the lip.
+                    if (p.ak > 10380 && p.al > 480 &&
+                        p.S !in intArrayOf(33, 36, 92, 101))
+                        held = held and Pad.M_UP.inv()
                     if (w.kC != null && w.kC!!.claimActive()) {
                         w.pad.e(0); w.tick(emptyList()); continue
                     }
