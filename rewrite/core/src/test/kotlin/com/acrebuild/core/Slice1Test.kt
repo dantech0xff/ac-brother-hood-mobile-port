@@ -21660,7 +21660,8 @@ class Slice245Test {
     private fun foeNear(w: Level0World, p: Entity): Entity? =
         w.npcs.firstOrNull {
             (it.ax == 11 || it.ax == 73 || it.ax == 50 || it.ax == 47 ||
-             it.ax == 4 || it.ax == 41) &&          // ax4/ax41 = destructibles
+             it.ax == 41 ||
+             (it.ax == 4 && it.S in 5..8)) &&        // ax4 S9/21 = inert props
             it.S != 139 && it.S != 0 &&
             kotlin.math.abs(it.ak - p.ak) <= 160 &&
             kotlin.math.abs(it.al - p.al) < 60
@@ -23787,10 +23788,18 @@ class Slice245Test {
         val milestones = intArrayOf(1400, 2500, 3900, 4650, 5950, 7150,
                                     8950, 10020, 11410, 12150)
         var mi = 0
+        var prevDoorS = -1                       // door-phase edge detector
+        var doorS1Ticks = 0                      // consecutive door-S1 count
         while (t++ < 140000) {
             when {
                 w.jC == 15 || w.missionWon -> { won = true; marks += "WON@${p.ak} t=$t"; break }
                 w.jC == 12 || w.jC == 13 -> {
+                    val dieNear = w.npcs.filter {
+                        (it.ax == 11 || it.ax == 73 || it.ax == 47 || it.ax == 50) &&
+                        kotlin.math.abs(it.ak - p.ak) < 250 &&
+                        kotlin.math.abs(it.al - p.al) < 120 }
+                        .joinToString(",") { "ax${it.ax}@${it.ak},${it.al}S${it.S}" }
+                    marks += "died@${p.ak},${p.al} S${p.S} near=$dieNear"
                     w.pad.e(327712); w.tick(emptyList())
                     w.pad.e(327712); w.tick(emptyList())
                     deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
@@ -23801,10 +23810,12 @@ class Slice245Test {
                     if (vaultCd <= 0) { w.pad.e(16396); vaultCd = 40 }
                     vaultCd--; w.tick(emptyList()); continue
                 }
-                p.S == 280 || p.S == 38 || p.S == 54 -> {
+                (p.S == 280 || p.S == 38 || p.S == 54) && p.ak < 3000 -> {
                     // '5'-lip hang → mantle (slice-273): the fixed S38 arm
                     // takes u(16388) → enterStateMasked(54,8); S280/S54
-                    // transition on their own.
+                    // transition on their own. Scoped to the channel region
+                    // — in the crusher corridor the hang states belong to
+                    // the shimmy route (held RIGHT, not UP-mantle).
                     w.pad.e(Pad.M_UP); w.tick(emptyList()); continue
                 }
                 p.S == 315 -> {
@@ -23896,28 +23907,88 @@ class Slice245Test {
                         jumpCd--
                     }
                 }
-                // cp1 under-route: drop off the '02' walkway below the
-                // x3040 overhang (LEFT|DOWN to flip under the west edge),
-                // then hop bar-3's box at 3004-3032.
+                // cp2→tower verified route (slice-274): plateau floor →
+                // 3-cell step hop @2640-2720 → run off x2740-2900 dropping
+                // into the under-slab corridor (y540-680) → corridor walk
+                // → hop onto the ax10-S34 rail band @3140-3200 → pillar
+                // floor → door-A teleport (UP @x3760-3820/y780-850) → S285
+                // at fuse-B (3804,578) → upper tier run-off @x3840-3920 →
+                // '5'-strip underside grab / '2' walkway → S37 shimmy east.
                 p.ak in 2500..3900 -> {
-                    if (p.ak in 2660..2790 && p.al < 640)
-                        held = Pad.M_LEFT or Pad.M_DOWN      // under-band drop
-                    if (p.ak in 2990..3035 && p.aZ && p.al > 460)
-                        held = held or Pad.M_UP              // hop bar-3
-                }
-                // cp2→cp3 under-route: drop '5'@580, autorun the walkway
-                // (RIGHT only on landing — a direction tick dead-stalls
-                // into the '20' face), pulsed-UP lip-scan at the x4260
-                // column → S92 mantle, '5' shimmy east, drop.
-                p.ak in 3900..4700 -> {
                     held = when {
-                        p.aZ && p.al < 600 && p.ak < 4020 ->
-                            Pad.M_DOWN                       // drop through '5'
-                        p.S == 37 || (p.al in 540..620 && p.ak in 4060..4300) ->
-                            Pad.M_RIGHT                      // '5' shimmy
-                        p.ak in 4240..4320 ->
-                            Pad.M_RIGHT or (if (t % 8 < 2) Pad.M_UP else 0)
-                        !p.aZ -> Pad.M_RIGHT                 // rise drift
+                        p.aZ && p.ak in 2640..2720 ->
+                            Pad.M_RIGHT or Pad.M_UP          // 3-cell step hop
+                        !p.aZ && p.ak in 2740..2900 && p.al in 460..700 ->
+                            0                                // corridor drop
+                        p.aZ && p.al in 540..679 && p.ak < 3160 ->
+                            Pad.M_RIGHT                      // corridor walk
+                        p.aZ && p.ak in 3140..3200 && p.al in 650..690 ->
+                            Pad.M_RIGHT or Pad.M_UP          // rail-band hop
+                        // door-A zone x3784-3818/y737-837 — grounded UP.
+                        // aZ required: airborne UP triggers ledge-grabs
+                        // that drop him into the door-crush band instead.
+                        p.aZ && p.al in 780..850 && p.ak in 3760..3820 &&
+                            p.S != 284 ->
+                            Pad.M_RIGHT or Pad.M_UP          // door-A teleport
+                        // corridor floor (lethal — blades are synced):
+                        // jump west IMMEDIATELY — exposure is the landing
+                        // tick only. The arc reaches the face ~x3885.
+                        p.aZ && p.al in 700..790 && p.ak >= 3860 ->
+                            Pad.M_UP or Pad.M_LEFT
+                        // falling post-drop: drift west + buffered jump.
+                        !p.aZ && p.al in 600..790 && p.ak >= 3860 ->
+                            Pad.M_UP or Pad.M_LEFT
+                        else -> Pad.M_RIGHT
+                    }
+                }
+                // '5'-strip top + corridor → shimmy → east exit (slice-274,
+                // proven end-to-end): the corridor is a sealed slot —
+                // '5' ceiling, '20' faces, 11 synchronized crushers on the
+                // floor. Route: strip top → face west + DOWN → S257 drops
+                // through '5' → land → jump west → face-grab x3880 →
+                // S101 → S36 bounce → S280 '5' grab → S37 shimmy east.
+                p.ak in 3900..4700 -> {
+                    // Phase-gate the drop on the gauntlet's door cycle:
+                    // the ax44 run ~1 tick apart (west lags east: door-1
+                    // @3898 = door-2 pos −1, door-3 = +1); only S0's slam
+                    // is lethal (he survives S3 on the floor). Land =
+                    // trigger+14 ≡ same pos, so fire ONLY on door-2's 2nd
+                    // S1 tick → lands door-2 pos2 → door-1 pos1, door-3
+                    // pos3, all safe; the S0s then fall at land+4/+5/+6
+                    // once he is rising above the blade band.
+                    val landDoor = w.npcs.firstOrNull {
+                        it.ax == 44 && it.ak in 3920..3960 }
+                    if (landDoor != null) {
+                        if (landDoor.S == 1) doorS1Ticks++
+                        else doorS1Ticks = 0
+                    }
+                    val doorEdge = doorS1Ticks == 2
+                    held = when {
+                        // '5' strip top x3900-3999: converge to x3920-3940
+                        // facing WEST, wait for S1's 2nd tick, DOWN →
+                        // S257 (exit ~30px west → lands x3919 → squat S21
+                        // → rise S22 west → face-grab x3880 by ~t22).
+                        p.aZ && p.al in 560..620 && p.ak in 3900..3999 -> when {
+                            !p.av -> if (p.ak < 3930) Pad.M_RIGHT
+                                     else Pad.M_LEFT
+                            p.ak > 3940 -> Pad.M_LEFT
+                            p.ak < 3920 -> Pad.M_RIGHT
+                            doorEdge -> Pad.M_DOWN
+                            else -> 0              // stand west, wait phase
+                        }
+                        // corridor floor: jump west immediately — the floor
+                        // is lethal, exposure is the landing tick only.
+                        p.aZ && p.al in 700..790 && p.ak in 3880..3999 ->
+                            Pad.M_UP or Pad.M_LEFT
+                        // falling post-S257: drift west + buffered jump.
+                        !p.aZ && p.al in 600..790 && p.ak in 3880..3999 ->
+                            Pad.M_UP or Pad.M_LEFT
+                        // '5' shimmy east under the bar; UP|RIGHT mantles
+                        // at the east lip x4240+.
+                        p.S == 37 || p.S == 38 || p.S == 280 ->
+                            if (p.ak < 4240) Pad.M_RIGHT
+                            else Pad.M_RIGHT or Pad.M_UP
+                        p.S == 54 -> Pad.M_RIGHT or Pad.M_UP  // east-lip mantle
                         else -> Pad.M_RIGHT
                     }
                 }
@@ -23954,13 +24025,23 @@ class Slice245Test {
                         else Pad.M_UP
                 }
             }
-            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
-            if (atkCd <= 0 && foe != null) atkCd = 30 else atkCd--
+            // Attack gate (slice-274): CONTEXT only when the foe is
+            // actually reachable — the 160px foeNear scan otherwise baits
+            // air-swing loops at unreachable patrols on the tier below.
+            if (foe != null && atkCd <= 0 &&
+                kotlin.math.abs(foe.ak - p.ak) <= 80 &&
+                kotlin.math.abs(foe.al - p.al) < 50) {
+                held = held or Pad.M_CONTEXT; atkCd = 30
+            }
+            atkCd--
             w.pad.e(held)
             w.tick(emptyList())
             if (p.S != lastS) {
                 if (trace.size == 80) trace.removeFirst()
-                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
+                val d2 = w.npcs.firstOrNull { it.ax == 44 &&
+                    it.ak in 3850..4300 }
+                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}" +
+                    " d=${d2?.S}/$doorS1Ticks")
                 lastS = p.S
             }
             if (p.ak > maxAk) { maxAk = p.ak; stall = 0 }
@@ -23986,16 +24067,16 @@ class Slice245Test {
         println("CAPSTONE won=$won deaths=$deaths maxAk=$maxAk minAl=$minAl t=$t")
         println("CAPSTONE marks=${marks.takeLast(20)}")
         println("CAPSTONE trace=${trace.joinToString(" ")}")
-        // Proven frontier (slice 273): corridor → shaft → chamber → dip
-        // → '5'-lip mantle (needs the fixed S38 arm) → valley floor →
-        // ax22 chain @2064→@1975→@2104 → wall-C lip → wall-C top →
-        // plateau-face hop → cp2 at x2594. Assert locks the crossing.
-        assertTrue(maxAk > 2600,
-            "capstone must cross the channel to checkpoint-2 — " +
-            "maxAk=$maxAk marks=${marks.takeLast(8)}")
+        // Proven frontier (slice 274): cp2 → corridor drop → rail ride →
+        // pillar → door-A teleport → upper tier → the door gauntlet:
+        // strip top → phase-gated S257 drop on door-2's 2nd S1 tick →
+        // land pos2 (lone S0 slam falls outside the ~6-tick W-bottom
+        // window) → S21/S22 → face-grab x3880 → S36 → S280 '5' grab →
+        // S37 shimmy → mantle x4330 → east corridor run to x6052. The
+        // new frontier is combat vs the x6490 patrol (dies at x6390 in
+        // a respawn loop) — next slice's work.
+        assertTrue(maxAk > 5800,
+            "capstone must cross the door gauntlet and reach the east " +
+            "corridor — maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
-
-
-
-
 }
