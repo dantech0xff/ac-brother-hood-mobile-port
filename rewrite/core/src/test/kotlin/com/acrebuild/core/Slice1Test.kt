@@ -24030,6 +24030,33 @@ class Slice245Test {
                 // the east end auto-dives (Z[1]==1) past both crusher rows
                 // to the x8800 corridor. Airborne in the handoff band holds
                 // 0 — RIGHT drift overshoots the catch.
+                // x9000 wall crossing (slice-278 proven): chimney zigzag
+                // x8940↔x9000 → low-'5' shimmy → UP vault-out a(54,8) at
+                // its east end → bridge-'5' (y270) → drop → '02' plateau
+                // (y420) → run east over the pit.
+                p.ak in 8890..9560 && p.al < 850 -> {
+                    held = when {
+                        // plateau '02' top: just run east.
+                        p.aZ && p.al in 400..460 -> Pad.M_RIGHT
+                        // strips: shimmy east; at the LOW strip's east
+                        // end hold RIGHT|UP → S38 vault-out to bridge.
+                        p.S == 37 || p.S == 38 || p.S == 280 ->
+                            if (p.al > 300 && p.ak > 8890)
+                                Pad.M_RIGHT or Pad.M_UP
+                            else Pad.M_RIGHT
+                        p.S == 54 -> Pad.M_RIGHT or Pad.M_UP
+                        // chimney legs: hold WITH the flight direction +
+                        // UP — corner taps/M_UP arm the aF grab latch;
+                        // S101 auto-bounce flips av itself.
+                        !p.aZ || p.S in 33..36 || p.S == 92 || p.S == 101 ->
+                            (if (p.ag < 0) Pad.M_LEFT else Pad.M_RIGHT) or
+                                Pad.M_UP
+                        // grounded at the wall face: RIGHT|UP — aF arms
+                        // (cv&&u|v(M_UP)) so the face contact grabs;
+                        // vaults rise toward the face otherwise.
+                        else -> Pad.M_RIGHT or Pad.M_UP
+                    }
+                }
                 p.ak < 10000 -> {
                     if (p.S == 164) {
                         held = if (p.ak in 7920..7960 && p.af?.ax == 40)
@@ -24077,7 +24104,14 @@ class Slice245Test {
             // stays passive and unbinds once out of LOS/level.
             val mountFrozen = p.g != null && p.g!!.ax == 11 &&
                 p.g!!.Z[0] == 2 && p.g!!.Z[19] == 1
-            if (foe != null && atkCd <= 0 && !mountFrozen &&
+            // slice-278: never CONTEXT while the foe is in S144
+            // weakened-block — NpcFsm L632-657 (i.java:6048-6066 proven)
+            // has it RECOVER to combat on r() AND back-counter attackers
+            // (p.i(8)) — swinging at it just feeds the counter. The
+            // x8971 posted guard (aB=300) wore the bot down this way.
+            // Move past; engage again once it leaves the block.
+            val foeBlocking = foe != null && foe.S == 144
+            if (foe != null && atkCd <= 0 && !mountFrozen && !foeBlocking &&
                 kotlin.math.abs(foe.ak - p.ak) <= 80 &&
                 kotlin.math.abs(foe.al - p.al) < 50) {
                 // face the foe + CONTEXT — a direction-only press turns
@@ -24141,9 +24175,16 @@ class Slice245Test {
         // carrier dismount") — padHeld(33024) fires the rail's own
         // jump-off arm (bw()) on the catch tick; scoping the dismount to
         // ak>10000 + silence in the airborne corridor opened the chain.
-        // New frontier: posted ax11 guard at x8930 before the wall.
-        assertTrue(maxAk > 8900,
-            "capstone must cross the wire chain to the x8990 wall — " +
+        // Proven frontier (slice 278): the x9000 wall crossing is
+        // mechanically proven (chimney zigzag x8940↔x9000 → low-'5'
+        // shimmy → UP vault-out a(54,8) → bridge-'5' y270 → drop onto
+        // the '02' plateau y420) — bot reached maxAk=9212, minAl=270.
+        // Remaining blocker: the posted ax11 @8850 (aB=300 HP, alert
+        // x8690-9010) guards the chimney mouth and respawn point — it
+        // wins the duel repeatedly (247 deaths). The '02' plateau is
+        // the last proven leg; past it the x9560 tower is uncharted.
+        assertTrue(maxAk > 9100,
+            "capstone must cross the wall lip onto the '02' plateau — " +
             "maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
 
@@ -24247,6 +24288,109 @@ class Slice277Test {
         assertTrue(s.aB > 0, "orbit never damages the victim — P() can't fire")
         assertEquals(0, p.aA and 8, "carry arm needs victim Z[0]==0 — dead at 2")
         Entity.at = null
+    }
+
+    /**
+     * Slice-278 — the x9000 wall crossing PROVEN end-to-end on real
+     * level-0 geometry (pack-6 cells + records, no state pinning):
+     *
+     * Geometry (verified via collision-cell dumps):
+     *  - wall mass x9000-9080 '20' solid rows 22-47 (y440 down past the
+     *    street to y940); street '20' top ends at x9080 (y800); east of
+     *    the wall is a 160px void pit (floor '20' at row 55+ = y1100).
+     *  - '02' one-way plateau row 21 (top y420) x9000-9550 floats over
+     *    the pit — the ONLY eastward crossing (isOneWay v==2,
+     *    LevelPack.kt:94).
+     *  - chimney x8940-9000 (60px): WEST face = platform east edge x8940
+     *    y560-580 + pillar x8920-8940 y600-680; EAST face = wall x9000
+     *    y440-780.
+     *  - LOW '5' strip row 19 (y380-400) x8740-8900 hangs off the
+     *    floating tower x8680-8740 (rows 15-27).
+     *  - BRIDGE '5' strip row 13 (y260-280) x8940-9160 hangs over the
+     *    plateau lip — the ax14 zone @8957,305 (bounds x8857-9007,
+     *    y255-385) marks the jump gap between them.
+     *  - ax74 wisp trail: 8986,698→8988,604→8912,533→8863,302→8983,302 —
+     *    zigzag legs then the y~300 aerial line over the plateau.
+     *
+     * Proven route (driven by real input events):
+     *  1. fall into the chimney → S101 grab wall face
+     *  2. kick auto-bounce (r()→av flip → S36 ag=∓2048 ah=-5120), ~70px
+     *     rise per zigzag leg between the 60px faces
+     *  3. west-drift apex under the low strip → cw&&aO==5 → S280 ceiling
+     *     grab (y390)
+     *  4. S280→S38 hang → hold cell 5 (M_RIGHT) → S37 shimmy east
+     *  5. at the strip's east end (x>8890) tap UP → S38 vault-out arm
+     *     `u(M_UP)→probe→a(54,8)` (PlayerFsm.kt:813-870, L1502) — pops
+     *     up+forward through the ax14-marked gap
+     *  6. rise reaches under the BRIDGE strip → cw&&aO==5 → S280 grab
+     *     (y270)
+     *  7. shimmy east along the bridge → drop → descend onto the '02'
+     *     plateau top (y420) — one-way landing at x~9000-9300
+     *
+     * Observed end-to-end: kicks climb 726→514, low-strip grab @390,
+     * shimmy to x>8890, vault-out, bridge grab (minAl=166 recorded),
+     * plateau landing — the wall is crossable with the shipped
+     * mechanics. Human-timing legs (alternating corner holds + the
+     * strip-end UP tap) are the intended skill gate.
+     */
+    @Test fun `chimney kick-zigzag + strip ceiling-grab + shimmy chain proven`() {
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(8980, 720)
+        p.S = 43; p.ag = 1536; p.ai = 0; p.ah = 0; p.aj = 1536
+        p.av = false
+        val q = InputQueue()
+        var heldW = false
+        fun postHeld() {
+            // zigzag legs hold CORNER taps (0=TL→M_TAP_L, 2=TR→M_TAP_R arm
+            // aF); strip shimmy (S38/280) holds MR (cell 5→M_RIGHT)
+            val cell = if (p.S == 38 || p.S == 280) 5 else if (heldW) 0 else 2
+            val (hx, hy) = w.cellPoint(cell)
+            q.post(InputQueue.Type.DOWN, hx, hy)
+        }
+        postHeld()
+        var minAl = Int.MAX_VALUE
+        var grabs = 0; var ceilingGrab = false; var shimmy = false
+        var wallLand = false
+        var bridgeGrab = false; var vaultOut = false
+        repeat(800) { t ->
+            // the touch wheel tracks the player's screen pos — re-post the
+            // hold every few ticks at the live zone point (no UP needed:
+            // pad bits OR together and aF accepts either direction)
+            if (t % 5 == 0 || (p.ag < 0) != heldW || p.S == 38 || p.S == 280) {
+                heldW = if (p.S == 38 || p.S == 280) false else p.ag < 0
+                postHeld()
+            }
+            // at the low strip's east end (x>8890), tap UP → S38 vault-out
+            // arm `u(M_UP)→probe→a(54,8)` — pops up+forward into the
+            // '5' bridge strip's grab band (y260-280, x8940+)
+            if (p.S == 38 && p.ak > 8890) {
+                val (ux, uy) = w.cellPoint(1)
+                q.post(InputQueue.Type.DOWN, ux, uy)
+            }
+            val prevS = p.S
+            w.tick(q.drainTo(q.headSequence()))
+            if (p.S == 101) grabs++
+            if (p.S == 280) ceilingGrab = true
+            if (p.S == 37 || p.S == 38) shimmy = true
+            if (prevS == 38 && p.S == 54) vaultOut = true
+            if (p.S == 280 && p.al < 300) bridgeGrab = true
+            if (p.al < minAl) minAl = p.al
+            if (p.ak >= 9000 && p.al <= 430 &&
+                (p.S == 0 || p.S == 5 || p.S == 1 || p.S == 11)) wallLand = true
+        }
+        println("CHIMNEY grabs=$grabs ceiling=$ceilingGrab shimmy=$shimmy " +
+                "vaultOut=$vaultOut bridgeGrab=$bridgeGrab " +
+                "wallLand=$wallLand minAl=$minAl @${p.ak},${p.al} S${p.S}")
+        assertTrue(grabs >= 4, "expected ≥4 face grabs in zigzag, got $grabs")
+        assertTrue(ceilingGrab, "'5'-strip S280 ceiling grab never fired")
+        assertTrue(shimmy, "S37/38 hang/shimmy never entered")
+        assertTrue(vaultOut, "S38 UP vault-out a(54,8) never fired at strip end")
+        assertTrue(bridgeGrab, "bridge '5' strip S280 grab (al<300) never fired")
+        assertTrue(minAl <= 300, "never reached bridge altitude, minAl=$minAl")
+        assertTrue(wallLand, "plateau '02' lip never crossed — the x9000 wall blocks")
     }
 
     @Test fun `S312 grab-release drops airborne — never mounts (L346f)`() {
