@@ -17865,6 +17865,9 @@ class Slice184Test {
     }
 }
 
+// file-scope tuning knob for the capstone gauntlet dwell (swept 0..6)
+private const val POLE_WAIT_TICKS = 6
+
 class Slice185Test {
 
     /** L78 (i.java:4886-4898, proven): the integrator runs at the TOP of
@@ -23779,6 +23782,7 @@ class Slice245Test {
         var t = 0; var deaths = 0; var won = false
         var maxAk = p.ak; var minAl = p.al
         var stall = 0; var vaultCd = 0; var atkCd = 0; var jumpCd = 0
+        var lastFoe: Entity? = null
         var dir = Pad.M_RIGHT
         val marks = mutableListOf<String>()
         val trace = ArrayDeque<String>(80)
@@ -23786,27 +23790,49 @@ class Slice245Test {
         val milestones = intArrayOf(1400, 2500, 3900, 4650, 5950, 7150,
                                     8950, 10020, 11410, 12150)
         var mi = 0
-        var prevDoorS = -1                       // door-phase edge detector
         var doorS1Ticks = 0                      // consecutive door-S1 count
+        var doorPulse = 0                        // UP-edge cadence in the door box
+        var topUpHeld = false                    // UP-edge cadence on the massif top
+        // pole cycle→phase map, hoisted for the strip arm too
+        fun polePh(e: Entity) = when (e.S) {
+            0 -> 0; 1 -> 1 + e.T.coerceAtMost(2)
+            2 -> 4; 3 -> 5 + e.T.coerceAtMost(1); else -> 0 }
         while (t++ < 140000) {
             when {
                 w.jC == 15 || w.missionWon -> { won = true; marks += "WON@${p.ak} t=$t"; break }
                 w.jC == 12 || w.jC == 13 -> {
                     val dieNear = w.npcs.filter {
-                        (it.ax == 11 || it.ax == 73 || it.ax == 47 || it.ax == 50) &&
                         kotlin.math.abs(it.ak - p.ak) < 250 &&
-                        kotlin.math.abs(it.al - p.al) < 120 }
+                        kotlin.math.abs(it.al - p.al) < 160 }
                         .joinToString(",") { "ax${it.ax}@${it.ak},${it.al}S${it.S}" }
-                    marks += "died@${p.ak},${p.al} S${p.S} near=$dieNear"
+                    marks += "died@${p.ak},${p.al} S${p.S} x1=${p.x1} near=$dieNear" +
+                        " " + trace.takeLast(6)
                     w.pad.e(327712); w.tick(emptyList())
                     w.pad.e(327712); w.tick(emptyList())
                     deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
                     if (deaths > 300) break; continue
                 }
                 w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
-                p.S == 65 || p.S == 203 -> {
-                    if (vaultCd <= 0) { w.pad.e(16396); vaultCd = 40 }
-                    vaultCd--; w.tick(emptyList()); continue
+                p.S == 65 -> {
+                    // ax22 capture-zone vault-out (aN() L25/L27): the
+                    // exit mask is keyed by the armed zone's Z[2] —
+                    // Z[2]!=0 → 16396 → EAST vault (+3328); Z[2]==0 →
+                    // 16390 → WEST (-3328, the 'return to sender' for
+                    // falling into the shaft). The armed zone is the one
+                    // in S1: channel zones stay west, the massif-face
+                    // catch @10414 (Z[2]=1) throws back EAST onto the
+                    // face lip.
+                    val zn = w.npcs.firstOrNull { it.ax == 22 && it.S == 1 }
+                    w.pad.e(if (zn != null && zn.Z[2] != 0) 16396 else 16390)
+                    w.tick(emptyList()); continue
+                }
+                p.S == 203 -> {
+                    // slice-279: S203 at the massif lip is a ledge-hang
+                    // (ax10-S43 arm i.java:L852-ish sets 203 on a S60/61
+                    // hang inside the lip zone; gh==null → G() drops to a
+                    // plain hang) — v(M_UP) takes the shared tail's
+                    // climb-up S62 (PlayerFsm L2460, proven).
+                    w.pad.e(Pad.M_UP); w.tick(emptyList()); continue
                 }
                 (p.S == 280 || p.S == 38 || p.S == 54) && p.ak < 3000 -> {
                     // '5'-lip hang → mantle (slice-273): the fixed S38 arm
@@ -24030,27 +24056,209 @@ class Slice245Test {
                 // the east end auto-dives (Z[1]==1) past both crusher rows
                 // to the x8800 corridor. Airborne in the handoff band holds
                 // 0 — RIGHT drift overshoots the catch.
-                // x9000 wall crossing (slice-278 proven): chimney zigzag
-                // x8940↔x9000 → low-'5' shimmy → UP vault-out a(54,8) at
-                // its east end → bridge-'5' (y270) → drop → '02' plateau
-                // (y420) → run east over the pit.
-                p.ak in 8890..9560 && p.al < 850 -> {
+                // x9000 crossing (zipline route): chimney zigzag
+                // x8940↔x9000 → bridge-'5' hang → shimmy east past the
+                // tower overhang → UP vault a(54,8) onto the strip top
+                // (y260) → walk east under the parked gondola → bx() L53
+                // auto-bind (S164) → script 52 rides to (9615,231) →
+                // TAP_R dismount fling east onto the far tower. The '02'
+                // pole corridor below is bypassed entirely — that is the
+                // whole point of the zipline.
+                p.ak in 8890..10300 && p.al < 850 -> {
                     held = when {
-                        // plateau '02' top: just run east.
-                        p.aZ && p.al in 400..460 -> Pad.M_RIGHT
+                        // Riding the ax40 zipline gondola (bound, S164):
+                        // script 52 holds 35 steps then lerps the gondola
+                        // east to (9615,231) — the rider is pinned to
+                        // e.ak. Past the last pole (9556), TAP_R fires
+                        // the L37 dismount: S157 fling (+2048,-2560)
+                        // arcs onto the far tower (x9700+, top y360).
+                        // L37 dismount at the LAST pole: an early fling
+                        // lands ~9672, inside the 9723-guard's patrol —
+                        // its chase strike KOs (meter is empty here).
+                        // Dismounting at >=9590 throws the arc ~+55px
+                        // further, landing ~9850 — past the first
+                        // guard's patrol bound — a clean run to the lip.
+                        p.ac != null && p.ac!!.ax == 40 && p.S == 164 ->
+                            if (p.ak >= 9590) Pad.M_TAP_R else 0
+                        // FAR TOWER top (x9700-9979 @ y360): two aB>200
+                        // elite ax11s patrol it (x9723/x9753, alert to
+                        // ~x9903) and chase at run speed — every duel
+                        // drains the meter and every hop gets struck
+                        // mid-arc. The survivable line is the SHAFT
+                        // descent: x9860+ opens below y380 — run east
+                        // off/through it, fall the shaft, land the y600
+                        // ledge (x9880-10119), dodge its two crushers,
+                        // then off the east end to floor y720 → the
+                        // ax2@10016 checkpoint → pillar x10080 → ax5.
+                        // KILL-HOP on the top: the S157 fling lands ON
+                        // guard1 (@9723) and kills it outright (S89 →
+                        // its S139) — the same landing-crush works on
+                        // guard2. Hop while it's ~35-70px ahead so the
+                        // arc apex comes down on its head; a hop too
+                        // close or aimed past just lands into its
+                        // lunge reach (struck on touchdown at ~9803).
+                        p.aZ && p.al in 330..400 && p.ak in 9600..10080 ->
+                            if (foe != null && foe.ax == 11 &&
+                                foe.aB > 200 &&
+                                kotlin.math.abs(foe.ak - p.ak) in 35..70)
+                                (if (foe.ak > p.ak) Pad.M_RIGHT
+                                 else Pad.M_LEFT) or Pad.M_UP
+                            else Pad.M_RIGHT
+                        // shaft descent / ledge / under-corridor: drift
+                        // and run east toward the pillar face. Ledge-
+                        // hang states (S56-63) excluded — the vault-west
+                        // loop lands the bot on the column's west face;
+                        // it must mantle UP to keep climbing, not steer.
+                        !p.aZ && p.S !in 33..38 && p.S !in 56..63 &&
+                            p.S != 92 && p.S != 101 &&
+                            p.ak in 9820..10100 && p.al in 380..700 ->
+                            Pad.M_RIGHT
+                        p.S in 56..63 && p.ak in 9700..9860 ->
+                            Pad.M_UP
+                        // corridor's east end = 40px kick channel
+                        // x9980-10019: east = tower face '14' x10020+,
+                        // west = floating '14' x9960-79 y560-639. S33
+                        // rebound off the east face rises ~72px; hold
+                        // TOWARD it early (dirKey arms the lip-scan),
+                        // then switch AWAY mid-rise — releasing dirKey
+                        // drops to the else-branch and aA() fires the
+                        // S36 kick from the higher position so the arc
+                        // reaches the west face's '14' (bottom edge
+                        // y639) instead of landing under it.
+                        p.S == 33 && p.ak in 9850..10320 ->
+                            if (p.al <= 660) (if (p.av) Pad.M_RIGHT else Pad.M_LEFT)
+                            else (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                        // past the channel, faces DO carry lips in the
+                        // rebound's reach (the finale tower x10660-819
+                        // tops at y360, ~80px above its massif base) —
+                        // hold TOWARD+UP the whole rise: dirKey keeps the
+                        // lip-scan armed until anim-end, where grabbing
+                        // the top edge is how the terraces chain.
+                        p.S == 33 && p.ak > 10320 ->
+                            (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                        (p.S in 34..38 || p.S in 56..63 || p.S == 92 || p.S == 101) &&
+                            p.ak in 9850..10320 ->
+                            (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                        p.aZ && p.al in 560..720 && p.ak in 9820..10330 ->
+                            // corridor floor 'ff' ends at the massif face
+                            // (x10020-79 '14' y660-719). Press in; the S33
+                            // rebound + lip-scan above climbs the face.
+                            Pad.M_RIGHT
+                        // under-tower pocket (the zone's west vault drops
+                        // the player here, x~9700-9780): its only exits
+                        // are UP — run EAST to the column's west face
+                        // (x9780-9860, '14' y400-720) and climb back
+                        // toward the top; the face's lip grabs chain the
+                        // ascent (S33/36/60/62 run in the trace). Scoped
+                        // to the pocket — the respawn corridor at x~8896
+                        // also sits at al>560 and must run EAST anyway.
+                        p.aZ && p.al > 560 && p.ak in 6000..9819 ->
+                            Pad.M_RIGHT
+                        // plateau '02' top: the ax44 pole gauntlet.
+                        // scope: the '02' mesa ONLY — the door-gauntlet
+                        // ax44 crushers (x5950-7150) share the y-band.
+                        // al>430 = actually ON the slab (aZ stays true
+                        // through airborne S22 — an airborne eval drains
+                        // the dwell budget for nothing).
+                        // al-band now 430..560: the mesa top is ~y440 and
+                        // the shaft's under-ledge corridor is y620-720 —
+                        // an unbounded >430 swallowed the cellar floor
+                        // (plan() returns 0 instantly for ak>9560 → the
+                        // bot stood in the pocket forever, x9765 stall).
+                        p.aZ && p.al in 430..560 && p.ak > 9000 -> {
+                            // POLE-TIMING v4 — S0's crush NEVER fires for
+                            // these timed poles: the 0,2,4,6 bank runs the
+                            // Z[3] countdown → setAnim(S+1) BEFORE the
+                            // `e.S==0||e.S==4` crush check, so the single
+                            // S0 tick always transitions first
+                            // (NpcFsm.kt:163-178). Cycle on clip32:
+                            // S0(1) → S1(3) → S2(1) → S3(2,crush) —
+                            // period 7, danger = S3's 2 ticks only.
+                            val poles = w.npcs.filter { it.ax == 44 &&
+                                it.al in 400..460 && it.ak > 9000 }
+                            // STRICT live-model arm (offline-solver
+                            // proven): crush kills only on a pole's
+                            // S3.T1 tick = ph6 — dead(ak,dt) iff a pole
+                            // W-overlaps the box at ak AND its phase at
+                            // +dt ticks is 6. Every eval runs a small
+                            // BFS over wait/run/hop through that exact
+                            // model and takes the first action of a
+                            // surviving plan — the greedy per-eval
+                            // choices drifted off the solver's needed
+                            // wait-positioned schedule and died.
+                            fun deadAt(ak0: Int, dt: Int) = poles.any {
+                                ak0 - 9 <= it.W[2] &&
+                                ak0 + 10 >= it.W[0] &&
+                                (polePh(it) + dt) % 7 == 6 }
+                            // (state,t) → first-action mask. BFS: wait
+                            // (+1t), run (+10,+1t), hop (squat+10@+1t,
+                            // descent-tail +74/+82@+11/+12t, touchdown
+                            // +98@+13t — every node must avoid ph6).
+                            fun plan(): Int {
+                                val q = ArrayDeque<Pair<IntArray, Int>>()
+                                val seen = HashSet<Long>()
+                                q.add(intArrayOf(p.ak, 0) to 0)
+                                while (q.isNotEmpty()) {
+                                    val (s, first) = q.removeFirst()
+                                    val ak = s[0]; val dt = s[1]
+                                    if (ak + 10 >= 9560) return first
+                                    if (dt > 60 ||
+                                        !seen.add(ak.toLong() shl 16 or
+                                                  dt.toLong())) continue
+                                    if (!deadAt(ak, dt + 1)) q.add(
+                                        intArrayOf(ak, dt + 1) to
+                                        if (dt == 0) 0 else first)
+                                    if (!deadAt(ak + 10, dt + 1)) q.add(
+                                        intArrayOf(ak + 10, dt + 1) to
+                                        if (dt == 0) Pad.M_RIGHT else first)
+                                    val hopOk = !deadAt(ak + 10, dt + 1) &&
+                                        !deadAt(ak + 74, dt + 11) &&
+                                        !deadAt(ak + 82, dt + 12) &&
+                                        !deadAt(ak + 98, dt + 13)
+                                    if (hopOk) q.add(
+                                        intArrayOf(ak + 98, dt + 13) to
+                                        if (dt == 0)
+                                            Pad.M_UP or Pad.M_RIGHT
+                                        else first)
+                                }
+                                return Pad.M_UP or Pad.M_RIGHT
+                            }
+                            plan()
+                        }
+                        // plateau drop (post-bridge, airborne over the
+                        // mesa): plain RIGHT — a lingering TAP/UP edge on
+                        // the landing tick re-fires landArm into an
+                        // involuntary hop straight into the S3 crushers.
+                        !p.aZ && p.ak > 9080 -> Pad.M_RIGHT
                         // strips: shimmy east; at the LOW strip's east
                         // end hold RIGHT|UP → S38 vault-out to bridge.
-                        p.S == 37 || p.S == 38 || p.S == 280 ->
-                            if (p.al > 300 && p.ak > 8890)
+                        p.S == 37 || p.S == 38 || p.S == 280 -> when {
+                            // BRIDGE '5' (x8900-9299 @ y260): shimmy east
+                            // past the tower overhang — its r12 face ends
+                            // at x9020, so at ak>9020 the UP-arm's head
+                            // probe (al-20) sees sky (aO==0) → a(54,8)
+                            // vaults onto the strip top. Standing box top
+                            // (~y200) overlaps the parked gondola's W
+                            // bottom (y222) → bx() L53 auto-bind → ride.
+                            p.al in 250..340 && p.ak > 9000 ->
+                                if (p.ak <= 9021) Pad.M_RIGHT else Pad.M_UP
+                            // LOW '5' east end — vault-out needs UP.
+                            p.al > 340 && p.ak > 8890 ->
                                 Pad.M_RIGHT or Pad.M_UP
-                            else Pad.M_RIGHT
+                            else -> Pad.M_RIGHT
+                        }
                         p.S == 54 -> Pad.M_RIGHT or Pad.M_UP
-                        // chimney legs: hold WITH the flight direction +
-                        // UP — corner taps/M_UP arm the aF grab latch;
-                        // S101 auto-bounce flips av itself.
-                        !p.aZ || p.S in 33..36 || p.S == 92 || p.S == 101 ->
-                            (if (p.ag < 0) Pad.M_LEFT else Pad.M_RIGHT) or
-                                Pad.M_UP
+                        // chimney legs: CORNER TAPS with flight direction
+                        // (M_TAP_L/R = touch cells 0/2) — they arm the aF
+                        // grab latch WITHOUT steering against the kick's
+                        // ballistic ag (sustained M_LEFT/M_RIGHT holds
+                        // decelerated the zigzag — the chain never
+                        // chained to the strip). S101 auto-bounce flips
+                        // av itself; during grab ag==0 → TAP_R (matches
+                        // the proven driver's heldW=false reset).
+                        (!p.aZ && p.ak <= 9080) || p.S in 33..36 ||
+                            p.S == 92 || p.S == 101 ->
+                            if (p.ag < 0) Pad.M_TAP_L else Pad.M_TAP_R
                         // grounded at the wall face: RIGHT|UP — aF arms
                         // (cv&&u|v(M_UP)) so the face contact grabs;
                         // vaults rise toward the face otherwise.
@@ -24068,8 +24276,11 @@ class Slice245Test {
                         // stall-jump is suppressed while a foe is close:
                         // the guard's body stalls ag, and hopping over it
                         // just lands the bot facing away (x9000 S9 death).
+                        // ...and inside the pole gauntlet (x9000–9580):
+                        // hops there must come only from the phase arm.
                         if (p.aZ && p.ag in -256..256 && p.S != 79 &&
-                            foe == null)
+                            foe == null &&
+                            !(p.ak in 9000..9580 && p.al in 400..470))
                             held = held or Pad.M_UP
                         if (p.aZ && p.ak in 6360..6418)
                             held = held or Pad.M_UP
@@ -24080,9 +24291,94 @@ class Slice245Test {
                 // posted-guard kill, fort lip-scan/kick timing.
                 else -> {
                     if (p.S in 33..36 || p.S == 92 || p.S == 101)
-                        held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
-                    if (p.ak in 10580..10635 || p.ak in 10780..10835)
+                        held = (if (p.av && p.ak < 10300) Pad.M_LEFT
+                            else Pad.M_RIGHT) or Pad.M_UP
+                    // face-lip hang after the ax22 east vault (or any
+                    // ledge grab on the massif east face) — mantle UP.
+                    // S62 (mid-climb anim) auto-completes — held UP
+                    // there only burns the edge the top vault needs;
+                    // release it so the first grounded tick edges fresh.
+                    if (p.S in 56..63 && p.ak > 10320)
+                        held = if (p.S == 62) 0 else Pad.M_UP
+                    // slice-279 finale route (rewritten, proven):
+                    // the floor gang is aB=300 elites — the decoded
+                    // intended path is the ax22 DOUBLE-VAULT chain:
+                    //   pedestal top x10010-70 y560 (or the '02' shelf
+                    //   x9870-9900 y590 → hop east onto it)
+                    //   → run-vault east into zone W1 [10292-326,506-539]
+                    //   → 16396 (Z[2]=10 → EAST vault +20/+3328/ah-3840)
+                    //   → zone W2 [10408-42,472-515] → 16396 → arcs to
+                    //   the massif top / ax10-S43@10497 mantle box.
+                    // Wisp trail @10181,488→10360,474→10463,440 marks
+                    // the second vault's arc. The pedestal face at
+                    // x10010 is climbed from the respawn floor by
+                    // dir|UP (aF arm). On the gang floor itself the
+                    // bot retreats west to re-approach — duels there
+                    // are 1vN suicide vs aB=300.
+                    // pedestal-top leg: RUN to the east edge first —
+                    // a vault from x10120+ apexes ~y470 and descends
+                    // through W1's box [10292-326,506-539]; launching
+                    // mid-top lands ~80px short on the floor.
+                    if (p.aZ && p.al in 540..640 &&
+                        p.ak in 9860..10280)
+                        held = if (p.ak > 10090)
+                            Pad.M_RIGHT or Pad.M_UP else Pad.M_RIGHT
+                    // east-face kick leg DISABLED for now — hopping west
+                    // into elite @10178's patrol zone [10128-278] feeds
+                    // it a free strike window; keep the east sprint only.
+                    // massif-face sprint fallback: past the kick zone,
+                    // keep running east — either a missed kick drops the
+                    // bot here, or the gang sprint forces through to the
+                    // massif face.
+                    if (p.aZ && p.al in 645..720 &&
+                        p.ak in 10289..10540)
+                        held = Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                    // airborne beside the massif face: UP must be held
+                    // so the L3a9d latch (cv && u/v(UP)) arms aF — held
+                    // RIGHT alone never arms it (M_TAP_R is a separate
+                    // bit) — then L2298 grabs the wall → S101 cling →
+                    // auto-bounce WEST → W2.
+                    if (!p.aZ && p.al in 500..720 &&
+                        p.ak in 10400..10560)
+                        held = Pad.M_RIGHT or Pad.M_UP
+                    // slice-279 door leg: the posted pair walking the
+                    // massif top binds p.g on contact (interactScan
+                    // g.java:L260-ish, inFront + |Δal| gate) — and the
+                    // door's `g == null` gate (NpcFsm ax10-S16 arm)
+                    // refuses while a victim is held. Two escape routes:
+                    // (a) vault BEFORE the bind — on a standing tick
+                    // (S0) press UP without a direction so the tick
+                    // doesn't step into the bind box, letting postTail's
+                    // `p.cq && pad.v(16398)` gate (g.java:L2042-ish)
+                    // launch S233 over the pair; (b) keep walking —
+                    // the bind drops as the victim falls behind, then
+                    // the door arm below fires once inside the W.
+                    if (p.aZ && p.S !in 56..63 &&
+                        p.al in 400..470 && p.ak in 10495..10555) {
+                        if (p.S == 0) {
+                            held = Pad.M_TAP_R or Pad.M_UP
+                            topUpHeld = false
+                        } else {
+                            held = Pad.M_RIGHT or Pad.M_TAP_R or
+                                (if (topUpHeld) 0 else Pad.M_UP)
+                            topUpHeld = !topUpHeld
+                        }
+                    }
+                    if (p.aZ && p.al in 400..470 && p.ak in 10588..10616) {
+                        // slice-279: pulse INSIDE door1's W [10587-618]
+                        // only — an UP edge outside it just launches a
+                        // vault that carries the player airborne over
+                        // the zone (aZ=false → the arm can never fire).
+                        // Alternating ticks keep a fresh v(16388) edge
+                        // while the S233 squat still holds aZ=true.
+                        doorPulse = (doorPulse + 1) and 1
+                        held = if (doorPulse == 0) Pad.M_UP else 0
+                    } else if (p.ak in 10580..10635)
                         held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+                    // door2 exit (~10805): NO UP here — pressing it inside
+                    // door2's W re-enters the two-way door and ping-pongs
+                    // back to 10602. The generic eastward arm walks the
+                    // player out of the W toward the goal.
                     if (p.aZ && p.ak in 9980..10035)
                         held = held or Pad.M_UP
                     // fort west face: dir|UP while scanning (al>735),
@@ -24111,24 +24407,99 @@ class Slice245Test {
             // x8971 posted guard (aB=300) wore the bot down this way.
             // Move past; engage again once it leaves the block.
             val foeBlocking = foe != null && foe.S == 144
+            // slice-279: the posted aB=300 elite @8850 is NOT fightable —
+            // the respawn checkpoint (ax2@8926) sits inside its
+            // x8690-9010 alert so every death re-agros, and its
+            // S144-recover + back-counter loop wears the meter down
+            // before the bot lands ~5 hits. Flee the elite always:
+            // it can't climb — RIGHT|UP into the chimney face escapes
+            // to strip altitude before the meter runs out. Regular
+            // aB=100 guards stay engaged.
+            // slice-279 cont'd: duel on the tower top drains the meter
+            // (elite strikes out-damage the stagger gains, x1=0 at
+            // ~9769), and pure flee dies to the chase strike at ~9800.
+            // Both are dead ends — keep fleeElite: the survivable route
+            // is the shaft descent (see the route arm comment).
+            // slice-279 cont'd: at the massif-face gate (ak>10440) the
+            // elite MUST die — fleeing just feeds it a strike mid-vault
+            // (22→9 knockdown). Attack anims are i-frames, so the combo
+            // chain itself is the defense: duel here, not flee.
+            val fleeElite = foe != null && foe.ax == 11 && foe.aB > 200 &&
+                p.ak < 10520
+            // slice-279 cont'd: past the channel the finale floor packs
+            // 2-4 ax11s at ~x10465 — engaging ANY of them swings into a
+            // 1vN: the mid-swing lock eats strikes from the rest and the
+            // meter dies every cycle (9 deaths at x10495 S9). Don't duel
+            // a gang: hold RIGHT through the cluster — chase speed
+            // (2048≈8px/t) loses to the run (2560≈10px/t), so fleeing
+            // east outruns the reach before the meter can empty.
+            // slice-279 cont'd: fleeGang only applies on the floor below
+            // (al > 600) where the gang is still a fatal 1vN. On the
+            // massif top the door leg (above) handles the posted pair —
+            // they're never engaged (fleeTop covers it): the door's
+            // `player.g == null` gate fires once any bound victim drops
+            // behind, which a straight east run produces on its own.
+            val fleeGang = foe != null && foe.ax == 11 && p.ak > 10300 &&
+                p.ak < 10520 && p.al > 600
+            // slice-279: on the massif top NEVER engage — the door's
+            // `player.g == null` gate refuses while a bound victim is
+            // held, and any swing → weaken → ar()-bind would set it.
+            // The door is ~70px past the lip — tank the chase and run
+            // through instead of dueling the posted pair.
+            val fleeTop = foe != null && foe.ax == 11 && p.al < 480
+            // Live ax11 bodies within duel range — when the kite has
+            // strung the pack out to one, the strike arm below re-arms
+            // and it becomes a normal duel. While 2+ bodies share the
+            // range the mid-swing lock is fatal, so it stays suppressed.
+            val gangNear = w.npcs.count { it.ax == 11 && it.S != 139 &&
+                kotlin.math.abs(it.ak - p.ak) <= 140 &&
+                kotlin.math.abs(it.al - p.al) < 50 }
+            // slice-279: atkCd persisted across foes — after a kill the
+            // bot walked into the NEXT guard mid-cooldown and ate the
+            // strike. A different nearest foe means a fresh duel: reset
+            // the swing clock. While cooling at melee range, hold facing
+            // only — walking in during the dead window eats strikes.
+            if (foe !== lastFoe) { atkCd = 0; lastFoe = foe }
             if (foe != null && atkCd <= 0 && !mountFrozen && !foeBlocking &&
+                !fleeElite && !fleeTop &&
+                p.S != 37 && p.S != 38 && p.S != 280 && p.S != 164 &&
                 kotlin.math.abs(foe.ak - p.ak) <= 80 &&
                 kotlin.math.abs(foe.al - p.al) < 50) {
                 // face the foe + CONTEXT — a direction-only press turns
                 // av; pure CONTEXT swings toward the last facing and hits
-                // air when the guard passes behind.
+                // air when the guard passes behind. Short cooldown: the
+                // combo chain (67→68→69→112→113→114→115) needs taps every
+                // ~6 ticks to stay in-window — and the g.d() immunity
+                // gates (S∈{67,112-115,183,184} + i.bh 8-tick hit-lock)
+                // mean continuous combo is ALSO the defense: the pack
+                // can't dogpile while the player keeps swinging.
                 held = (if (foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT) or
-                    Pad.M_CONTEXT; atkCd = 30
+                    Pad.M_CONTEXT; atkCd = 6
+            } else if (foe != null && atkCd > 0 && !mountFrozen &&
+                !foeBlocking && !fleeTop &&
+                !fleeElite && p.S != 37 && p.S != 38 && p.S != 280 &&
+                p.S != 164 &&
+                kotlin.math.abs(foe.al - p.al) < 50) {
+                // mid-cooldown inside melee reach: face and wait for the
+                // swing — stepping in range during the dead window is how
+                // the tower guard killed it at x9802. And no hopping:
+                // comboArm needs aZ||standingOn, so any airborne tick
+                // runs enterFall() and the chain — plus its g.d()
+                // immunity — dies with it.
+                held = if (kotlin.math.abs(foe.ak - p.ak) <= 90) {
+                    if (foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
+                } else held
             }
             atkCd--
             w.pad.e(held)
             w.tick(emptyList())
             if (p.S != lastS) {
                 if (trace.size == 80) trace.removeFirst()
-                val d2 = w.npcs.firstOrNull { it.ax == 44 &&
-                    it.ak in 3850..4300 }
+                val d2 = w.npcs.filter { it.ax == 44 }.minByOrNull {
+                    kotlin.math.abs(it.ak - p.ak) }
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}" +
-                    " d=${d2?.S}/$doorS1Ticks")
+                    " d=${d2?.ak}:S${d2?.S}W${d2?.W?.toList()}/$doorS1Ticks" +
+                    " x1=${p.x1}")
                 lastS = p.S
             }
             if (p.ak > maxAk) { maxAk = p.ak; stall = 0 }
@@ -24179,13 +24550,21 @@ class Slice245Test {
         // mechanically proven (chimney zigzag x8940↔x9000 → low-'5'
         // shimmy → UP vault-out a(54,8) → bridge-'5' y270 → drop onto
         // the '02' plateau y420) — bot reached maxAk=9212, minAl=270.
-        // Remaining blocker: the posted ax11 @8850 (aB=300 HP, alert
-        // x8690-9010) guards the chimney mouth and respawn point — it
-        // wins the duel repeatedly (247 deaths). The '02' plateau is
-        // the last proven leg; past it the x9560 tower is uncharted.
-        assertTrue(maxAk > 9100,
-            "capstone must cross the wall lip onto the '02' plateau — " +
-            "maxAk=$maxAk marks=${marks.takeLast(8)}")
+        // Proven frontier (slice 279): the massif-top route is the
+        // paired S16 door-teleport — ax10@(10587,330) links oId 134 →
+        // ax10@(10789,402) Z0 600→601 (L17d9-L1808 proven). The arm
+        // needs the player grounded inside the door's W-box with a
+        // fresh v(16388) edge AND `g == null`; the posted ax11 pair
+        // binds on contact but drops as it falls behind, so a straight
+        // east run reaches the W unbound → doorPulse fires → bh() fades
+        // out (S284) and bi() re-anchors at the far door → ak≈10789.
+        // Past it: y500 terrace east → the x10940-11319 chasm
+        // (ax13 rope @11312,441 / deep pit with patrols) → far shelf
+        // x11320+ → goal ax5@11448,503. WON with deaths=0, maxAk=11576
+        // on the reference run.
+        assertTrue(won,
+            "capstone must complete mission-0 end to end — " +
+            "maxAk=$maxAk deaths=$deaths marks=${marks.takeLast(8)}")
     }
 
 }
@@ -24426,4 +24805,5 @@ class Slice277Test {
         assertEquals(0, s.Z[0], "normal victim — carry arm gate passes")
         Entity.at = null
     }
+
 }
