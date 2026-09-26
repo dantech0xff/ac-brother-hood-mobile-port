@@ -15945,7 +15945,6 @@ class Slice159Test {
         w.playerFsm.tick(w.player, w.pad)
         assertFalse(w.player.gD)
     }
-
 }
 
 class Slice160Test {
@@ -20813,7 +20812,6 @@ class Slice234Test {
         for (e in ax16) assertTrue(e.S == 38 || e.S == 31 || e.S == 32,
             "ax16 aw=${e.aw} spawned S=${e.S}")
     }
-
 }
 
 class Slice235Test {
@@ -23832,7 +23830,11 @@ class Slice245Test {
                 p.S == 89 || p.S == 90 -> {
                     w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
                 }
-                p.S == 164 -> {                      // bound carrier: dismount
+                // bound carrier dismount — only in the finale zone; west
+                // of x10000 the wire-chain rails ride to their own
+                // auto-dive and a DOWN press here fires the rail's
+                // jump-off arm (bw() padHeld(33024)) on the catch tick.
+                p.S == 164 && p.ak > 10000 -> {
                     w.pad.e(33024); w.tick(emptyList()); continue
                 }
                 p.S == 326 -> {                      // rope climb
@@ -23842,13 +23844,25 @@ class Slice245Test {
                     w.pad.e(Pad.M_RIGHT); w.tick(emptyList()); continue
                 }
             }
-            // Active claim script: prompts want CONTEXT to advance;
-            // bound rides want silence so the script lerps clean.
+            // Active claim script: hold the script's own wait-mask —
+            // op107 arms cb[0] with the prompt key (ambush at x6009:
+            // UP then CONTEXT); timeout on op108's poll chains the
+            // fail script (kEh uid 47 → screenL(12)). CONTEXT covers
+            // the dialog-advance prompts; bound rides want silence.
             if (w.kC != null && w.kC!!.claimActive()) {
-                if (p.ak > 11000 || p.S == 164 || p.bM != null) {
+                // silence covers bound rides (S164/bM), the finale chain
+                // (ak>11000), AND the wire corridor's airborne catch
+                // ticks — a claim wait-mask of M_DOWN held while S43
+                // falling into a rail's window fires the rail's own
+                // jump-off arm (bw() padHeld(33024)) and drops the bot.
+                if (p.ak > 11000 || p.S == 164 || p.bM != null ||
+                    (!p.aZ && p.ak in 7400..8300 &&
+                     p.al in 300..700)) {
                     w.pad.e(0); w.tick(emptyList()); continue
                 }
-                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                val waitMask = w.kC!!.cb?.get(0) ?: 0
+                w.pad.e(if (waitMask != 0) waitMask else Pad.M_CONTEXT)
+                w.tick(emptyList()); continue
             }
             val foe = foeNear(w, p)
             var held = Pad.M_RIGHT
@@ -24002,11 +24016,34 @@ class Slice245Test {
                         else -> Pad.M_UP
                     }
                 }
-                // cp4→cp7 open-road runs: RIGHT + combat; UP when stuck.
+                // cp4→cp7 open-road runs: RIGHT + combat; UP when stuck;
+                // hop the x6380-6460 pit gap (the '20' floor strip breaks
+                // there — S62 lip-grab is the fallback but the jump is
+                // cleaner).
+                // x7500-8224 wire chain (proven verbatim): ropes hand him
+                // to the ax40 zipline (S164). Jump-off (M_DOWN) while the
+                // zipline crosses rail2's west end (x7920-7960) — the free
+                // fall lands his box top inside rail2's ry-20..+30 catch
+                // window (ax10-S34 @7903-8227). Riding the zipline further
+                // sags him below the window → x8118 crush death. On rail2
+                // hold RIGHT only — padHeld(16388) attack-offs early, and
+                // the east end auto-dives (Z[1]==1) past both crusher rows
+                // to the x8800 corridor. Airborne in the handoff band holds
+                // 0 — RIGHT drift overshoots the catch.
                 p.ak < 10000 -> {
-                    if (p.aZ && p.ag in -256..256 && p.S != 79)
-                        held = held or Pad.M_UP
-                    if (p.S == 33 || p.S == 92) held = Pad.M_UP
+                    if (p.S == 164) {
+                        held = if (p.ak in 7920..7960 && p.af?.ax == 40)
+                            Pad.M_DOWN else Pad.M_RIGHT
+                    } else if (p.S == 157) held = Pad.M_RIGHT
+                    else if (!p.aZ && p.ak in 7940..8120 &&
+                             p.al in 400..680) held = 0
+                    else {
+                        if (p.aZ && p.ag in -256..256 && p.S != 79)
+                            held = held or Pad.M_UP
+                        if (p.aZ && p.ak in 6360..6418)
+                            held = held or Pad.M_UP
+                        if (p.S == 33 || p.S == 92) held = Pad.M_UP
+                    }
                 }
                 // cp7 tower/finale: shaft-kick chain, S16 door box,
                 // posted-guard kill, fort lip-scan/kick timing.
@@ -24067,16 +24104,17 @@ class Slice245Test {
         println("CAPSTONE won=$won deaths=$deaths maxAk=$maxAk minAl=$minAl t=$t")
         println("CAPSTONE marks=${marks.takeLast(20)}")
         println("CAPSTONE trace=${trace.joinToString(" ")}")
-        // Proven frontier (slice 274): cp2 → corridor drop → rail ride →
-        // pillar → door-A teleport → upper tier → the door gauntlet:
-        // strip top → phase-gated S257 drop on door-2's 2nd S1 tick →
-        // land pos2 (lone S0 slam falls outside the ~6-tick W-bottom
-        // window) → S21/S22 → face-grab x3880 → S36 → S280 '5' grab →
-        // S37 shimmy → mantle x4330 → east corridor run to x6052. The
-        // new frontier is combat vs the x6490 patrol (dies at x6390 in
-        // a respawn loop) — next slice's work.
-        assertTrue(maxAk > 5800,
-            "capstone must cross the door gauntlet and reach the east " +
-            "corridor — maxAk=$maxAk marks=${marks.takeLast(8)}")
+        // Proven frontier (slice 275): the x8118 crusher corridor's only
+        // route is the wire chain — ax40 zipline (S164, ac-bound) →
+        // rail2 ax10-S34 (auto-dive Z[1]==1) → lands the x8800 corridor →
+        // run to the x8990 wall. The rail ride died at the catch for 200+
+        // ticks because the bot pressed M_DOWN every S164 tick ("bound
+        // carrier dismount") — padHeld(33024) fires the rail's own
+        // jump-off arm (bw()) on the catch tick; scoping the dismount to
+        // ak>10000 + silence in the airborne corridor opened the chain.
+        // New frontier: posted ax11 guard at x8930 before the wall.
+        assertTrue(maxAk > 8900,
+            "capstone must cross the wire chain to the x8990 wall — " +
+            "maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
 }
