@@ -10483,12 +10483,13 @@ class Slice89Test {
 
     // Slice 228 — '5'-lip shimmy traversal (g.java:2101 L1502 + L1560,
     // proven): from the S38 hang, `u(16388)` probes the cell above the
-    // head — the '5' lip itself answers aO=5 (never 0), so the S54
-    // vault-out is dead on '5' hangs and the else-chain arms S37 — the
+    // head — on a '5' BAR the lip itself answers aO=5 (never 0), so the
+    // S54 vault-out is dead here and the else-chain arms S37 — the
     // monkey-bar shimmy: facing dir held + facing cell open → `ag=∓1536`
     // step; opposite → `av` flip; anim end → back to S38. '5' cells are
-    // standable tops from above AND shimmy bars from below — the
-    // corridor's trap resolves by climbing along the lip, not onto it.
+    // standable tops from above AND shimmy bars from below. (At a '5'
+    // lip EDGE the probed cell above IS open → S54 fires — the slice-273
+    // dip-channel mantle takes exactly that arm.)
     @Test fun `5 lip hang shimmies along the bar`() {
         val w = world()
         w.stateL(8)
@@ -10519,21 +10520,70 @@ class Slice89Test {
         guard = 0
         while (guard++ < 60 && p.S == 280) w.tick(emptyList())
         assertEquals(38, p.S, "S280 anim end arms the S38 hang")
-        // Shimmy (verbatim else-chain): S38's `!u(facing)` arms S37 —
-        // so hold the OPPOSITE of current facing; S37's flip arm
-        // (`av ? v(8256) : u(4112)` — asymmetric, verbatim) turns the
-        // player to face the held dir, then `u(facing) && c(av)` steps.
+        // Shimmy (verbatim else-chain, g.java L2cb7/L2cdc — the slice-273
+        // fix restored `u(facing)` → S37 after the port had carried the
+        // inverted `!u(facing)`): away-dir input only flips `av`
+        // (`av ? v(8256) : u(4112)` — asymmetric edge/held); the facing
+        // arm then fires the shimmy in the held direction.
         p.av = false                                 // face right
-        w.pad.queuePress(Pad.M_LEFT)
+        w.pad.queuePress(Pad.M_LEFT)                 // away-dir → flip only
         w.tick(emptyList())
-        assertEquals(37, p.S, "non-facing dir held arms the S37 shimmy")
+        assertTrue(p.av, "away key flips the hang to face the held dir")
+        assertEquals(38, p.S, "the flip keeps the S38 hang — no S37")
         val ak0 = p.ak
         guard = 0
-        while (guard++ < 40 && p.S == 37) w.tick(emptyList())
-        assertTrue(p.av, "the flip arm turns the player to face the shimmy dir")
+        while (guard++ < 40 && p.S != 37) {
+            w.pad.e(Pad.M_LEFT); w.tick(emptyList()) // LEFT now faces → S37
+        }
+        assertEquals(37, p.S, "facing dir held arms the S37 shimmy")
+        guard = 0
+        while (guard++ < 40 && p.S == 37) {
+            w.pad.e(Pad.M_LEFT); w.tick(emptyList())
+        }
         assertTrue(p.ak < ak0, "the shimmy carries ak along the lip")
         assertTrue(p.S == 37 || p.S == 38 || p.S == 43,
             "shimmy holds, returns to S38, or drops at the bar's end")
+    }
+
+    // Slice 273 — the S38 '5'-lip EDGE mantle regression. The port had
+    // the shimmy arm inverted (`!u(facing)` → i(37)): UP-only input at a
+    // lip always fed the else-chain, overwriting the
+    // `enterStateMasked(54,8)` the UP arm had just run — '5'-edge
+    // mantles were impossible (the dip-channel crossing was a dead-end).
+    // Verbatim (g.java L2c2d): `u(16388)` probes the cell above — at a
+    // lip edge it reads open → `a(54,8)`.
+    @Test fun `5 lip edge hang mantles via S54 on UP`() {
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        // Dip-gap west lip (x2109 — '5' floor x1580-2120 at cy40): rise
+        // into it → S280 ceiling grab → S38 hang, same setup as the bar
+        // test but at a lip EDGE so the UP probe reads open air above.
+        p.S = 22
+        p.ah = -3000
+        p.ak = 2109
+        p.al = 40 * 20 + 80                          // dip '5' cy40 + 80 (same offset the '5'-grab tests use)
+        var guard = 0
+        while (guard++ < 60) {
+            p.probeCells(w)
+            if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
+            p.al--
+        }
+        w.tick(emptyList())
+        assertTrue(p.S == 280 || p.S == 38,
+            "precondition: the dip lip grab fires — S${p.S}@${p.ak},${p.al}")
+        guard = 0
+        while (guard++ < 60 && p.S == 280) w.tick(emptyList())
+        assertEquals(38, p.S, "S280 anim end arms the S38 hang")
+        // UP-only at the lip edge must mantle — under the inverted arm
+        // the same input fed S37 (away=right edge for av=true) and the
+        // mantle never fired.
+        guard = 0
+        while (guard++ < 40 && p.S == 38) { w.pad.e(Pad.M_UP); w.tick(emptyList()) }
+        assertTrue(p.S == 54 || p.S == 0 || p.S == 62,
+            "UP at the lip edge → S54 mantle chain — S${p.S}")
+        assertNotEquals(37, p.S, "UP-only input must never feed S37")
     }
 
     // Slice 229 — ledge auto-grab + climb-mount chain (g.java:8197
@@ -22319,59 +22369,6 @@ class Slice245Test {
             "either progress or a faithful KO — maxAk=$maxAk deaths=$deaths")
     }
 
-    @Test fun `dump void floor support`() {
-        val w = world(); w.stateL(8); settleIntro(w)
-        for (cx in 132..148) {
-            print((cx * 20).toString() + ":")
-            for (cy in 22..34) {
-                val v = w.collisionCell(cx, cy)
-                print(if (v == 0) "  ." else "%3d".format(v))
-            }
-            println()
-        }
-        w.npcs.filter { it.W[2] > 2680 && it.W[0] < 2920 && it.W[1] > 440 && it.W[1] < 700 }
-            .forEach { println("ax${it.ax} @(${it.ak},${it.al}) S${it.S} W=${it.W.contentToString()}") }
-    }
-
-    @Test fun `dump gate row boxes`() {
-        val w = world()
-        w.stateL(8)
-        settleIntro(w)
-        w.player.setPositionPx(2980, 499)
-        repeat(30) { w.tick(emptyList()) }
-        w.npcs.filter { (it.ax == 44 || it.ax == 72 || it.ax == 78) &&
-            it.ak in 2800..3100 }.forEach {
-            println("ax${it.ax} @(${it.ak},${it.al}) S${it.S} W=${it.W.contentToString()} " +
-                "Z=[${it.Z.take(6).joinToString()}]")
-        }
-    }
-
-    @Test fun `probe void under-floor landing`() {
-        val w = world(); w.stateL(8); settleIntro(w)
-        val p = w.player
-        p.setPositionPx(2840, 560)
-        p.N = p.ak shl 8; p.O = p.al shl 8
-        for (t in 0..40) {
-            w.pad.e(Pad.M_RIGHT); w.tick(emptyList())
-            println("t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} ah=${p.ah} x1=${p.x1} aZ=${p.aZ}")
-        }
-    }
-
-    @Test fun `probe door park at 3801`() {
-        val w = world(); w.stateL(8); settleIntro(w)
-        val p = w.player
-        p.setPositionPx(3801, 839)
-        p.N = p.ak shl 8; p.O = p.al shl 8
-        for (t in 0..30) {
-            w.pad.e(Pad.M_RIGHT or Pad.M_UP); w.tick(emptyList())
-            println("t$t S${p.S}@${p.ak},${p.al} ac=${p.ac?.ax}:${p.ac?.ak},${p.ac?.al} " +
-                "kAn=${w.kAn} kAo=${w.kAo} P=${p.P} ov=" +
-                w.npcs.filter { it.W[0] < p.W[2] && it.W[2] > p.W[0] &&
-                    it.W[1] < p.W[3] && it.W[3] > p.W[1] }
-                    .joinToString("|") { "ax${it.ax}S${it.S}@${it.ak},${it.al}o${it.oId}" })
-        }
-    }
-
     @Test fun `bot runs checkpoint to checkpoint2 through the guard pack`() {
         // Eleventh leg — park on the checkpoint floor (ax2 @2594,485 sits
         // on the high-block top y520) and run east: step down the
@@ -22450,79 +22447,6 @@ class Slice245Test {
         assertTrue(checkpoint,
             "east run must reach x3830 under the overhang — " +
             "maxAk=$maxAk deaths=$deaths")
-    }
-
-    @Test fun `probe east of checkpoint3 cells and entities`() {
-        val w = world()
-        w.stateL(8)
-        settleIntro(w)
-        val sb = StringBuilder()
-        // SCRATCH — rope evolution + face-climb probes.
-        // (a) rope state right after intro settle, then over time — does
-        // bP ever integrate? what does the W box realize as bN grows?
-        val p = w.player
-        val rope = w.npcs.firstOrNull { it.ax == 13 && it.ak == 5487 }
-        fun ropeLine(tag: String) = sb.append("$tag ropeN=${rope?.N} ropeO=${rope?.O} " +
-            "bP=${rope?.bP} bO=${rope?.bO} bN=${rope?.bN} aA=${rope?.aA} " +
-            "aG=${rope?.aG} W=${rope?.W?.toList()} S=${rope?.S} " +
-            "P=${rope?.P} au=${rope?.au} ax=${rope?.ax} bf=${rope?.isBf()} " +
-            "Z=${rope?.Z?.toList()} camX=${w.kO}\n")
-        // SCRATCH — pin down the chimney slot (ax7 uid at ak≈4801): its
-        // realized W box, which face it catches, and where the throw
-        // lands. Also sweep whether the pit player can reach the east
-        // wall top at y500 via zigzag on the wall's two faces.
-        val slot2 = w.npcs.firstOrNull { it.ax == 7 && it.ak in 4750..4900 }
-        sb.append("SLOT2 W=${slot2?.W?.toList()} N=${slot2?.N} O=${slot2?.O} " +
-            "ak=${slot2?.ak} al=${slot2?.al} S=${slot2?.S} az=${slot2?.az} " +
-            "aG=${slot2?.aG} av=${slot2?.av}\n")
-        // Trace the slot throw: park the player right at the mouth box
-        // (4730,632) and watch where it carries them.
-        p.setPositionPx(4730, 632)
-        p.N = p.ak shl 8; p.O = p.al shl 8
-        p.setAnim(43); p.bM = null; p.aA = 0; p.ag = 0; p.ah = 0
-        p.aj = 0; p.ai = 0; p.ac = null; p.standingOn = null
-        var lastS = -1; var sSeq = ""
-        for (t in 1..120) {
-            w.pad.e(0)
-            w.tick(emptyList())
-            if (p.S != lastS || t % 4 == 0) {
-                sSeq += "${p.S}@$t:${p.ak},${p.al}ag${p.ag}ah${p.ah} "; lastS = p.S }
-        }
-        sb.append("SLOTFIRE final=${p.ak},${p.al} S=${p.S} " +
-            "slotS=${slot2?.S} seq=${sSeq.take(700)}\n")
-        // SCRATCH — the S53 perch-zone trigger: park the player inside
-        // its W box (5003-5113, 772-879) with gD=true and a qualifying
-        // grounded S, tick, and see whether it fires i(360) and removes
-        // itself.
-        val zoneE = w.npcs.firstOrNull { it.ax == 10 && it.S == 53 && it.ak in 4900..5200 }
-        sb.append("ZONE_W=${zoneE?.W?.toList()} zoneAu=${zoneE?.au}\n")
-        // also enumerate all S53 zones for the record
-        for (e in w.npcs) if (e.ax == 10 && e.S == 53)
-            sb.append("  S53zone @${e.ak},${e.al} W=${e.W.toList()}\n")
-        // wake the zone's tick by putting the camera on it
-        w.kO = 4900; w.kP = 700
-        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
-        sb.append("afterCam zoneAu=${zoneE?.au}\n")
-        // trace the first 12 ticks of a parked player inside the zone
-        p.setPositionPx(5050, 850)
-        p.N = p.ak shl 8; p.O = p.al shl 8
-        p.setAnim(0); p.bM = null; p.aA = 0; p.ag = 0; p.ah = 0
-        p.aj = 0; p.ai = 0; p.ac = null; p.standingOn = null
-        p.gD = true
-        p.refreshBoxes()
-        if (w.jC == 12) w.stateL(8)   // pit-fail froze the world — resume play
-        sb.append("PRE S=${p.S} ak=${p.ak} al=${p.al} W=${p.W.toList()} jC=${w.jC}\n")
-        var pressed = false
-        for (t in 1..40) {
-            w.pad.e(if (pressed) Pad.M_RIGHT else 0)
-            if (p.S == 360 && !pressed) pressed = true   // forward tap once perched
-            w.tick(emptyList())
-            p.refreshBoxes()
-            val ov = zoneE?.let { Entity.overlapStrict(p.W, it.W) }
-            sb.append("T$t S=${p.S} ak=${p.ak} al=${p.al} W=${p.W.toList()} " +
-                "gD=${p.gD} ov=$ov zoneIn=${zoneE !in w.npcs} jC=${w.jC}\\n")
-        }
-        println("PROBE3\n$sb")
     }
 
     /** `bot drop-kills a pit guard into the S53 perch chain` — the level's
@@ -23607,57 +23531,6 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
-    @Test fun `probe pillar-top drop to the y580 finale road`() {
-        // DBG slice-262: park on the pillar top at the road's east end —
-        // can the player cross the x11360-11500 pit by dropping onto the
-        // y580 floor, and does the director uid115's claim box
-        // (11448-11526 x 503-530) fire mid-fall?
-        val w = world()
-        w.stateL(8)
-        settleIntro(w)
-        val p = w.player
-        p.setPositionPx(10880, 380)         // door platform east edge — run
-        p.N = p.ak shl 8; p.O = p.al shl 8  // onto the rope's upper arc
-        w.kO = 10700; w.kP = 340
-        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
-        val marks = mutableListOf<String>()
-        var t = 0
-        while (t++ < 3000) {
-            if (t <= 60 || t % 40 == 0) {
-                val rp = w.npcs.firstOrNull { it.aw == 93 }
-                marks += "t$t S${p.S}@${p.ak},${p.al} x1=${p.x1} cam=${w.camX},${w.camY} aZ=${p.aZ} " +
-                "rope{S${rp?.S} bN=${rp?.bN} aA=${rp?.aA} bP=${rp?.bP}} " +
-                "bM=${p.bM?.aw} kC=${w.kC?.aw}:${w.kC?.scriptStep} jC=${w.jC}"
-            }
-            if (p.ak > 12131 || w.jC == 15 || w.jC == 12 || w.jC == 13) break
-            var held = Pad.M_RIGHT
-            if (w.kC != null && p.aZ && p.al <= 560) {
-                held = 0                              // cutscene claim: hold on the
-            }                                         // '41' floor till release
-            if (p.S == 33 || p.S == 34 || p.S == 92 || p.S == 101)
-                held = Pad.M_RIGHT or (if (t % 8 < 2) Pad.M_UP else 0)
-            else if (p.aZ && p.ak in 11340..11440 && p.al in 480..560)
-                held = Pad.M_RIGHT or Pad.M_UP       // stair-hop east
-            else if (p.aZ && p.ag in -256..256) held = held or Pad.M_UP
-            if (t % 50 == 0) marks += "x1=${p.x1} foes=${w.npcs.count { it.ax == 11 && it.S != 139 }}"
-            val foe = w.npcs.firstOrNull {
-                it.ax == 11 && it.S != 139 &&
-                    kotlin.math.abs(it.ak - p.ak) < 42 && kotlin.math.abs(it.al - p.al) < 80
-            }
-            if (foe != null) {
-                held = if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
-            }
-            w.pad.e(held)
-            val j0 = w.jC
-            w.tick(emptyList())
-            if (w.jC != j0) marks += "jC $j0->${w.jC} @t$t S${p.S}@${p.ak},${p.al} x1=${p.x1} near=" +
-                w.npcs.filter { kotlin.math.abs(it.ak - p.ak) < 60 && kotlin.math.abs(it.al - p.al) < 60 }
-                    .joinToString(",") { "${it.ax}:${it.aw}@${it.ak},${it.al}S${it.S}" }
-        }
-        println("PILLARDROP ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} marks=$marks")
-        assertTrue(true)
-    }
-
     @Test fun `bot flight drop-lines arm the canyon shrines and refill the meter`() {
         // Slice-267 — the k.aE alert meter (i.java:2548, reset 100/0/-1
         // in D() on every fail-reload) funds ~600t per leg: `g.n()`
@@ -23928,6 +23801,12 @@ class Slice245Test {
                     if (vaultCd <= 0) { w.pad.e(16396); vaultCd = 40 }
                     vaultCd--; w.tick(emptyList()); continue
                 }
+                p.S == 280 || p.S == 38 || p.S == 54 -> {
+                    // '5'-lip hang → mantle (slice-273): the fixed S38 arm
+                    // takes u(16388) → enterStateMasked(54,8); S280/S54
+                    // transition on their own.
+                    w.pad.e(Pad.M_UP); w.tick(emptyList()); continue
+                }
                 p.S == 315 -> {
                     // bound catch hang (L23bb): rides until al>go → S318.
                     // Hold still — the zone parks the player mid-shaft.
@@ -23964,64 +23843,58 @@ class Slice245Test {
             var held = Pad.M_RIGHT
             // ---------------- position-keyed route policy ----------------
             when {
-                // spawn pocket → x1400 wall + channel zigzag: hold RIGHT,
-                // UP while airborne in the channel so kick latch arms.
+                // spawn pocket → x1400 wall + channel crossing: hold RIGHT,
+                // generic unstick; past x1560 the proven slice-273 route
+                // takes over — see the legs below.
                 p.ak < 2500 -> {
                     if (stall > 40 || p.S == 33 || p.S == 34 || p.S == 101 ||
                         p.S == 92) held = held or Pad.M_UP
-                    if (p.ak in 1700..1830 && !p.aZ && p.S != 315 && p.S != 318)
-                        held = held or Pad.M_UP
-                    // channel shaft (pillar face x1740 y540-680 vs wall-B
-                    // x1820 y400-780): kick arcs are fixed ballistic; on
-                    // falls drift INTO the nearest face — west to the
-                    // pillar when ak<1790, east to wall-B otherwise — so a
-                    // missed arc re-grabs a face instead of catching the
-                    // pillar's top lip at (1740,519).
-                    if (p.ak in 1720..1950 && p.al in 300..700)
-                        held = if (!p.aZ && p.ah > 0 && p.ak in 1730..1790 &&
-                                   p.al in 540..680)
-                            Pad.M_LEFT or Pad.M_UP      // grab pillar face
-                        else Pad.M_RIGHT or Pad.M_UP    // drift to wall-B
-                    // stub top (pillar lip x1720-1740 @y519): the west
-                    // mantle lands facing WEST (av) — but M_TAP_R in the
-                    // jump edge flips av=false inside the jump tail
-                    // (g.java:805 arm, proven) → the S233/22 launch goes
-                    // EAST into the wall-B face above the pillar — the
-                    // last staircase leg to the y400 ledge.
-                    if (p.aZ && p.ak in 1700..1760 && p.al in 500..545)
-                        held = Pad.M_UP or Pad.M_TAP_R
-                    // S60/61 hang on the pillar's east lip-edge (the '15'
-                    // ladder-marker top at y519): MANTLE UP (L2421 tail —
-                    // u(16388) → i(62)). The mantle pops the player 10px
-                    // east off the edge and drops it at x~1750 — inside
-                    // the fall LEFT-drift window below, which re-grabs the
-                    // pillar's east face (y540-680) → east kick resumes
-                    // the zigzag a full stage higher than a fresh floor
-                    // jump, letting the kicks top out past the lip.
-                    if ((p.S == 60 || p.S == 61) &&
-                        p.ak in 1700..1800 && p.al in 500..545)
-                        held = Pad.M_UP
-                    // under-shelf pocket (x1560-1820 below the shelf
-                    // y580-660): closed dead-end at floor level. Escape =
-                    // single-wall kick staircase up the shelf-block's east
-                    // face x1580 (solid y580-800): LEFT un-pins/turns the
-                    // run (l() is live during a pinned S12 — g.java
-                    // L16c0→L17c9), UP edge hops, LEFT-drift re-grabs the
-                    // face on falls; kicks arc east-up ~200px then falls
-                    // back west. Repeat to the shelf top y580.
-                    else if (p.ak in 1560..1830 && p.al > 690) {
+                    if (p.ak < 1560) {
+                        // spawn→x1400→corridor legs (unchanged): kick-latch
+                        // arms + pinned-run unstick; aerial chains handled
+                        // by the state keys above.
+                        if (p.aZ && p.ag in -256..256 && p.S != 79)
+                            held = held or Pad.M_UP
+                    } else {
+                        // CHANNEL CROSSING (slice-273 — proven end-to-end):
+                        // the '5' floor strip x1580-2120 is ONE continuous
+                        // surface — pocket floor, shaft floor and valley
+                        // floor share it. Route: drop through it at
+                        // x1740-1820 → chamber (under wall-B) → run east →
+                        // dip kick UP|LEFT → '5' west-lip hang (S280) →
+                        // S38 → u(UP) → S54 mantle → valley floor → run
+                        // west → UP|LEFT hop into ax22 zone @2064 → chain
+                        // vaults @1975→@2104 → wall-C lip → S203→UP→S62 →
+                        // wall-C top → east-lip hop → plateau face → cp2.
                         held = when {
-                            p.aZ -> Pad.M_LEFT or Pad.M_UP
-                            p.ak > 1700 -> Pad.M_RIGHT or Pad.M_UP  // drop → wall-B face
-                            p.ah > 0 -> Pad.M_LEFT or Pad.M_UP      // fall → x1580 face
-                            else -> Pad.M_UP
+                            // shaft floor: '5' drop-through to the
+                            // chamber — also dodges the shaft-floor
+                            // guard's first swing.
+                            p.aZ && p.al in 795..805 && p.ak in 1740..1900 ->
+                                Pad.M_DOWN
+                            // chamber floor (y959): east to the dip, then
+                            // UP|LEFT hop arcs west-up onto the '5' gap's
+                            // west lip → S280 hang.
+                            p.aZ && p.al > 900 ->
+                                if (p.ak < 2140) Pad.M_RIGHT
+                                else Pad.M_UP or Pad.M_LEFT
+                            // valley floor (y799, x1920-2120 — wall-B's
+                            // east face to the dip gap): run west to
+                            // ~x2075, then UP|LEFT hop — the arc tops
+                            // ~y735 inside ax22 zone @2064 → S65 chain.
+                            p.aZ && p.al in 795..805 && p.ak > 2075 ->
+                                Pad.M_LEFT
+                            p.aZ && p.al in 795..805 ->
+                                Pad.M_UP or Pad.M_LEFT
+                            // wall-C top (y479): east hop at the lip —
+                            // clears the '2'-ledge door line and grabs
+                            // the plateau's west face top (y520).
+                            p.aZ && p.al in 460..490 && p.ak in 2300..2360 ->
+                                Pad.M_UP or Pad.M_RIGHT
+                            else -> Pad.M_RIGHT
                         }
+                        jumpCd--
                     }
-                    if (p.ak in 1690..1740 && p.al in 500..545 &&
-                        (p.S == 0 || p.S == 12) && jumpCd <= 0) {
-                        held = held or 16398 or Pad.M_RIGHT; jumpCd = 30
-                    }
-                    jumpCd--
                 }
                 // cp1 under-route: drop off the '02' walkway below the
                 // x3040 overhang (LEFT|DOWN to flip under the west edge),
@@ -24113,17 +23986,12 @@ class Slice245Test {
         println("CAPSTONE won=$won deaths=$deaths maxAk=$maxAk minAl=$minAl t=$t")
         println("CAPSTONE marks=${marks.takeLast(20)}")
         println("CAPSTONE trace=${trace.joinToString(" ")}")
-        // Proven frontier (slice 270): corridor → ax7 eject → shelf →
-        // pocket → wall-B zigzag tops at the pillar lip (1740,519).
-        // OPEN BLOCKER — pillar lip y519 → wall-B ledge y400 is a 119px
-        // gap with no proven mechanism: mantle-off-lip falls at ak=1750
-        // (box west edge in open col87 — dodges both lip and grab) and
-        // kick arcs ending at ak≤1748 snap to the lip deterministically
-        // (ledgeLipGrab scans the ADJACENT column at hand-row 26 before
-        // the L1d4 '15'-contact band opens at box-top 520-540). Raise the
-        // assert back to >2500 when the crossing mechanism is proven.
-        assertTrue(maxAk > 1790,
-            "capstone must reach the wall-B zigzag past the pillar — " +
+        // Proven frontier (slice 273): corridor → shaft → chamber → dip
+        // → '5'-lip mantle (needs the fixed S38 arm) → valley floor →
+        // ax22 chain @2064→@1975→@2104 → wall-C lip → wall-C top →
+        // plateau-face hop → cp2 at x2594. Assert locks the crossing.
+        assertTrue(maxAk > 2600,
+            "capstone must cross the channel to checkpoint-2 — " +
             "maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
 

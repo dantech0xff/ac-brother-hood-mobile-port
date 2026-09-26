@@ -853,9 +853,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                         p.al = p.W[3] + 10
                         p.setAnim(43)
                     }
-                } else if (if (p.av) !pad.u(Pad.M_LEFT) else !pad.u(Pad.M_RIGHT)) {
+                } else if (if (p.av) pad.u(Pad.M_LEFT) else pad.u(Pad.M_RIGHT)) {
+                    // L2cb7 (proven): the facing-direction key held → i(37)
+                    // climb — NOT the negated arm the port first carried.
                     p.setAnim(37)
-                } else if (if (p.av) pad.u(Pad.M_LEFT) else pad.v(Pad.M_RIGHT)) {
+                } else if (if (p.av) pad.v(Pad.M_RIGHT) else pad.u(Pad.M_LEFT)) {
+                    // L2cdc (proven): away-key (v RIGHT if av, else u LEFT)
+                    // turns the hang around.
                     p.av = !p.av
                 }
             }
