@@ -341,6 +341,10 @@ class Level0WorldTest {
 
     @Test fun `hold-right runs the player forward`() {
         val w = world()
+        // Start past the spawn-intro ax5 claim zone [49,863,116,941] —
+        // now that the player carries its record uid (findByAw), the
+        // first tap binds the claim and its script hijacks the run.
+        w.player.setPositionPx(300, 940); w.player.refreshBoxes()
         val x0 = w.player.ak
         val q = InputQueue()
         // MR cell (cell5) -> mask 64 -> u(8256) held RIGHT (k.java:489)
@@ -6308,10 +6312,17 @@ class Slice56Test {
     }
 
     @Test fun `S6 drop line anim-9 past ap and on bc hit (L171)`() {
+        // L171 (i.java:14062-14078, proven): `al > ap → goto L173` SKIPS
+        // the i(9) — the wisp keeps rising while above its target line
+        // and dies into the S9 impact anim only once `al <= ap`. (The
+        // arm reads inverted at first glance: `al > ap → continue`.)
         val w = world()
-        val e = ax24(w, 6, 100, 100); e.ap = 50   // al(100) > ap(50) → i(9)
+        val e = ax24(w, 6, 100, 100); e.ap = 50   // al(100) > ap(50) → alive
         w.npcFsm.tickAx24(e, w, w.player)
-        assertEquals(9, e.S)
+        assertEquals(6, e.S, "al>ap keeps the drop line flying")
+        e.al = 50; e.setPositionPx(100, 50); e.ap = 50   // al<=ap → i(9)
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertEquals(9, e.S, "al<=ap dies into the S9 impact anim")
     }
 
     @Test fun `bc sweeps ax54 victim for kill + countKill (L26 arm)`() {
@@ -12924,6 +12935,10 @@ class Slice127Test {
     @Test fun `entBq sets on crate landing and clears on grounded state`() {
         val w = world()
         val p = w.player
+        // Move past the spawn-intro ax5 claim zone [49,863,116,941] —
+        // its script targets the player uid (findByAw) and hijacks the
+        // S when the UP press binds it, so the vault arm never runs.
+        p.setPositionPx(300, 940); p.refreshBoxes()
         val crate = Entity(51, null).apply { ak = p.ak; al = p.al }
         p.standingOn = crate
         p.setAnim(0)
@@ -17152,12 +17167,16 @@ class Slice180Test {
         w.kQ = 230                                        // bh3 camera init
         val p = w.player; p.setAnim(0); p.ag = -2048; p.ah = 0
         val pad = Pad()
+        // input arm (iBi=0 && gE=0): z3 tail decays ah 768/tick toward
+        // kY(-1792), z2 tail decays ag the same way.
         w.playerFsm.tick(p, pad)
-        assertEquals(w.kY, p.ah, "no-input glide = kY descent")
+        assertEquals(-768, p.ah, "z3 tail: ah -= 768 toward kY")
         assertEquals(-1280, p.ag, "ag decays 768 toward 0 (-2048+768)")
         w.playerFsm.tick(p, pad)
+        assertEquals(-1536, p.ah)
         assertEquals(-512, p.ag)
         w.playerFsm.tick(p, pad)
+        assertEquals(w.kY, p.ah, "glide settles at kY descent")
         assertEquals(0, p.ag, "bank settles to 0")
     }
 
@@ -17166,7 +17185,8 @@ class Slice180Test {
         val w = world(aj = 1)
         w.stateL(8)
         w.kQ = 230                                        // bh3 camera init
-        w.iBi = true                                      // seat latch (i.java:15216/9571) — steering arm
+        // input arm runs when !iBi && !gE (g.java:14393-14396) — iBi
+        // stays false: the climb/grab latches own the scripted arm.
         val p = w.player; p.setAnim(0); p.ag = 0; p.ah = 0
         val pad = Pad()
         pad.held = 4112                                   // u(4112) left
@@ -17242,7 +17262,7 @@ class Slice180Test {
             "iBB consumes the waypoint target")
         // homing arm: aq/ar set → ak/al step toward them at ±10.
         val al0 = p.al
-        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false; w.iBi = true
+        p.aq = p.ak + 25; p.ar = p.al - 5; w.iBB = false
         w.playerFsm.tick(p, Pad())
         assertEquals(p.aq - 15, p.ak, "ak steps +10 toward aq")
         // verbatim: ar/al both += kX(-7), then ar<al → al-=10, then
@@ -17256,7 +17276,8 @@ class Slice180Test {
         val w = world(aj = 1)
         w.stateL(8)
         w.kQ = 230
-        w.iBi = true                                 // seat latch — flap lives in bi&&!E
+        // input arm (iBi=0 && gE=0): the flap lives in the aC()+input
+        // arm — kAI cooldown elapsed → flap(p, false).
         val p = w.player; p.setAnim(4); w.kAI = 11   // cooldown elapsed
         p.ah = w.kY                                  // z4 glide condition
         w.kBB = 1                                    // !bB==0&&bC==0 → skip
@@ -18858,21 +18879,24 @@ class Slice195Test {
         assertEquals(43, p.S, "a(0) masked fling → S43")
     }
 
-    @Test fun `S82 corpse sleeps the body on anim end`() {
+    @Test fun `S82 bare goto leaves the rope-hang state alone`() {
         val w = Slice128Test.MarkerWorld(cell = 0)
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 82
         fsm.tick(p, Pad())
-        assertTrue(p.P and 64 != 0, "r() → P|=64 — L2989→L2de0")
+        // g.java:1430 → L2989 → L353d — bare shared tail, no arm
+        // (`r() → P|=64` belongs to case 110's L2de0, not this family)
+        assertEquals(0, p.P and 64, "no P|=64 — L2989 is bare")
         assertEquals(82, p.S)
     }
 
-    @Test fun `S326 shares the corpse-sleep arm`() {
+    @Test fun `S326 shares the bare-goto arm`() {
         val w = Slice128Test.MarkerWorld(cell = 0)
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 326
         fsm.tick(p, Pad())
-        assertTrue(p.P and 64 != 0, "r() → P|=64")
+        assertEquals(0, p.P and 64, "no P|=64 — L2989 is bare")
+        assertEquals(326, p.S)
     }
 
     @Test fun `S91 zeroes velocity and settles to idle`() {
@@ -22652,6 +22676,10 @@ class Slice245Test {
             // the player mid-air (i.java:20011, proven). M_CONTEXT's
             // bit-32 overlaps the prompt mask — tap it like a player.
             if (w.kC != null && w.kC!!.claimActive()) {
+                if (t in 25..400)
+                    marks += "claim t$t camY=${w.camY} kO=${w.kO} kP=${w.kP} " +
+                        "kZ=${w.kZ} kAa=${w.kAa} step=${w.kC?.scriptStep} " +
+                        "S${p.S}@${p.ak},${p.al} x1=${p.x1} au=${p.au}"
                 w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
             }
             held = when {
@@ -22667,6 +22695,7 @@ class Slice245Test {
                 marks += "t$t S${p.S}@${p.ak},${p.al} av=${p.av} ag=${p.ag} ah=${p.ah} aj=${p.aj} " +
                     "aZ=${p.aZ} aO=${p.aO} aR=${p.aR} aT=${p.aT} aX=${p.aX} co=${p.co} W1=${p.W[1]} " +
                     "pGA=${p.ga?.ax} pAA=${p.aA} pBa=${p.ba} pP=${p.P} pT=${p.T} pU=${p.U} " +
+                    "camY=${w.camY} kC=${w.kC?.aw} x1=${p.x1} au=${p.au} i=${p.i} " +
                     "pAC=${p.ac?.ax}/${p.ac?.S}@${p.ac?.ak},${p.ac?.al} " +
                     "rAA=${rope?.aA} rBM=${rope?.bM?.ax} rBN=${rope?.bN} pBM=${p.bM?.ax} " +
                     "pBMisRope=${p.bM === rope} pBMbn=${p.bM?.bN} nAx13=${w.npcs.count { it.ax == 13 }}"
@@ -22833,6 +22862,612 @@ class Slice245Test {
             "maxAk=$maxAk deaths=$deaths")
     }
 
+    @Test fun `bot runs checkpoint6 toward checkpoint7 past the fence roof`() {
+        // Sixteenth leg — park on the '05' roof band (x8780,y265 — the
+        // roofline the prior leg reached at minAl=325 near x8650) and run
+        // east ABOVE the x9000 fence structure: '05' spans x8760-9320 at
+        // y260-280, passing ~180px over the wall top ('02'@y440); the
+        // ax44 row (x9026-9567) bars the low band below. Soldiers
+        // uid534 (9014,258) + uid515/582 (9723-9753 @y355) patrol the
+        // roof itself; cam bounds + destructibles below. Goal:
+        // checkpoint7 ax2 uid426 (10016,679).
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(8780, 265)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 9100; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var checkpoint = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(8780, 265)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 10010) { checkpoint = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 4) && it.S != 139 &&
+                    it.ak - p.ak in -20..90 &&
+                    kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
+            val stuck = p.aZ && p.ag in -256..256
+            if (stuck) held = held or Pad.M_UP
+            // S33 face-climb needs UP held — M_RIGHT alone slides down
+            if (p.S == 33 || p.S == 92) held = Pad.M_UP
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 3000 && t % 50 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "foe=${foe?.let { "ax${it.ax}@${it.ak},${it.al}S${it.S}" }}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("CP67 checkpoint=$checkpoint deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(checkpoint,
+            "fence-roof run must reach checkpoint7 x10010 — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
+    @Test fun `bot runs checkpoint7 to the win fuse through the tower`() {
+        // Seventeenth leg — the level-0 end-game. cp7 (10016,679) sits at
+        // the bottom of a 100px wall-kick well (pillar x9920-9940 west /
+        // wall x10040-10120 east, lip y560). Route: grounded hop into the
+        // east face arms S33 → the shaft-kick chain (dirHeld on the new
+        // facing + M_UP per S33/36/92/101) climbs the well onto the slab
+        // → east run onto the tower west column top (y439) → kill the
+        // posted soldier uid571 (it binds `g` and faithfully blocks the
+        // door) → stand inside ax10-S16 door uid87's box and press UP →
+        // fade-teleport to uid134 → drop to the low road (y780) → east
+        // past the 3-soldier pack uid89/90/92 → the ax42 win fuse at
+        // x11410. Soldier packs uid547/550/551/555 (10178-10470 @y654-662)
+        // patrol the slab; ax10 zones uid572 S43 (10497), uid88 S33
+        // (10915), uid578 S53 (11011), heavy guard uid45 (10931,464),
+        // ax13 rope uid93 (11312,441 aG=4), ax5 director uid115
+        // (11448,503) sit on the path.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10016, 715)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 10000; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var goal = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(10016, 715)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 11400 || w.jC == 15 || w.jC == 13) { goal = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val stuck = p.aZ && p.ag in -256..256
+            // Suppress stuck-UP inside the S16 door boxes — standing in
+            // one after a teleport would re-trigger the pair back.
+            if (stuck && p.S != 79 && p.ak !in 10580..10635 &&
+                p.ak !in 10780..10835) held = held or Pad.M_UP
+            // Hop into the shaft's east face — S33 needs an airborne
+            // wall hit, grounded runs just bounce back west.
+            if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
+            // S33/36/92/101 shaft-kick: hold the facing direction —
+            // after the bounce flips av the next wall is on the new
+            // facing side; dirHeld arms the grab, M_UP the kick.
+            if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
+                held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+            // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
+            // it and press UP → teleport east. Drop M_RIGHT so the run
+            // actually settles inside the box (aZ) before the edge.
+            if (p.ak in 10530..10620 && p.al in 380..455)
+                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // The door arm also needs `g == null` — the column-top
+            // soldier uid571 binds the interact target, so slash it
+            // while bound until the lock clears.
+            if (p.g != null && p.aZ)
+                held = held or Pad.M_CONTEXT
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (t < 3000 && t % 50 == 0)
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "aO=${p.aO} aR=${p.aR}"
+            else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+        }
+        println("CP7G goal=$goal deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks")
+        assertTrue(goal,
+            "checkpoint7→fuse run must reach x11410 through the tower " +
+            "(kick well, door 87→134, low road) — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
+    @Test fun `bot fights through the finale pack to mission complete`() {
+        // Eighteenth leg — the level-0 finale, parked at cp7 exactly like
+        // the fuse leg but continuing east: kick well → tower → door
+        // 87→134 → low road → the road rises from y780 to the ~y598 tier
+        // where an 8-soldier ax11 pack stands at ~40px spacing: uid287
+        // (11761,600), 290 (11819,602), 288 (11859,601), 292 (11936,595),
+        // 293 (12007,598), 294 (12065,598), 296 (12159,598), 297
+        // (12241,599). The mission-complete trigger ax5 uid252 (12131,221,
+        // box 430×590) covers the whole area — walking it fires script 116
+        // → `screenL(15)`. The bot slashes through the pack (`M_CONTEXT`
+        // while `g` is bound), resumes east between kills.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10016, 715)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 10000; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0; var goal = false
+        var maxAk = p.ak; var minAl = p.al
+        val marks = mutableListOf<String>()
+        while (t++ < 40000) {
+            if ((t < 3000 && t % 20 == 0) ||
+                (t < 3000 && p.al >= 600 && p.ak in 11000..11600) ||
+                (t < 3000 && p.ak in 11150..12150)) {
+                val rp = w.npcs.firstOrNull { it.aw == 93 }
+                marks += "t$t S${p.S}@${p.ak},${p.al} ag=${p.ag} aZ=${p.aZ} " +
+                    "W=${p.W[0]}-${p.W[2]}x${p.W[1]}-${p.W[3]} " +
+                    "g=${p.g?.aw} bM=${p.bM?.aw} " +
+                    "rope{S${rp?.S} aA=${rp?.aA} bM=${rp?.bM?.aw} bN=${rp?.bN} " +
+                    "au=${rp?.au}} kC=${w.kC?.aw}:${w.kC?.scriptStep} " +
+                    "jC=${w.jC}"
+            } else if (t % 800 == 0) marks += "t$t S${p.S}@${p.ak},${p.al}"
+            if (p.ak > 12131 || w.jC == 15 || w.jC == 13) { goal = true; break }
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    w.pad.e(327712); w.tick(emptyList())
+                    w.pad.e(327712); w.tick(emptyList())
+                    deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    w.player.setPositionPx(10016, 715)
+                    w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
+                    if (deaths > 8) break; continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                p.S == 89 || p.S == 90 -> {
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                }
+                p.S == 315 || p.S == 318 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+                // S164: the script-250 ride pose persists after the claim
+                // releases — the player is left mounted on the parked
+                // carrier at the road's end; jump-off is padHeld 33024
+                // (NpcFsm.kt:10505) then walk the last ~10px east.
+                p.S == 164 -> {
+                    w.pad.e(33024); w.tick(emptyList()); continue
+                }
+            }
+            if (p.ak > 12131 || w.jC == 15 || w.jC == 13) { goal = true; break }
+            if (p.S == 65) {
+                w.pad.e(16396); w.tick(emptyList()); continue
+            }
+            var held = Pad.M_RIGHT
+            val stuck = p.aZ && p.ag in -256..256
+            // Suppress stuck-UP inside the S16 door boxes — standing in
+            // one after a teleport would re-trigger the pair back.
+            if (stuck && p.S != 79 && p.ak !in 10580..10635 &&
+                p.ak !in 10780..10835) held = held or Pad.M_UP
+            // Hop into the shaft's east face — S33 needs an airborne
+            // wall hit, grounded runs just bounce back west.
+            if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
+            // S33/36/92/101 shaft-kick: hold the facing direction —
+            // after the bounce flips av the next wall is on the new
+            // facing side; dirHeld arms the grab, M_UP the kick.
+            if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
+                held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+            // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
+            // it and press UP → teleport east. Drop M_RIGHT so the run
+            // actually settles inside the box (aZ) before the edge.
+            if (p.ak in 10530..10620 && p.al in 380..455)
+                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // Finale-shaft S33 on the fort's west face: the into-wall
+            // dir arm is the LIP SCAN (dirKey && ah<0 → ct=true + scan —
+            // a no-op on the flat '20' face), not the kick — the kick
+            // only fires from the else arm (dirKey false → aR/aS probe
+            // → S34 → wallJumpKick on u(16388) UP). Hold dir|UP while
+            // al>735 (scanning, rising); at al<=735 drop the dir so the
+            // else arm fires the kick at ~y733 — the S92→S36 west arc
+            // then falls through the aG4 catch box x11308-11316×y681-729.
+            // (Kicking at the ~y691 apex arcs the S36 ~30px too high —
+            // W y609-663 clears the box's y681-729 → miss.)
+            if (p.S == 33 && p.ak in 11285..11340)
+                held = if (p.al > 735)
+                    (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                else Pad.M_UP
+            // The ax13 aG4 rope (uid93, catch box x11308-11316×y681-
+            // 729) is the intended channel crossing: run east on the
+            // floor into the fort's west face → z() rebound → S33 →
+            // S34 wall-kick (UP held) → S92 → S36 — a grabbable state
+            // through the box → latch → retract → the uid115 claim
+            // binds and script 250 walks the player to the '41' road.
+            // The S12 free-run CANNOT jump (g.java postTail gate —
+            // `cq` never re-arms in S12), so no UP is sent here.
+            if (p.aZ && p.al >= 595 && p.ak in 11100..11330 && p.bM == null)
+                held = Pad.M_RIGHT
+            // Each soldier binds g — slash through the pack; also clears
+            // uid571 on the column top blocking the door's `g==null`.
+            if (p.g != null && p.aZ)
+                held = held or Pad.M_CONTEXT
+            // Stay bound on the rope — the aG4 auto-retract + the
+            // uid115 claim ARE the crossing (releaseRope is automatic,
+            // not input-driven, so no bail input exists). The claim's
+            // L108 suspension freezes the ax13 mid-ride while script
+            // 250 lerps the player onto the fort top and east to the
+            // '41' road; send no pad so the cutscene runs clean.
+            if (w.kC != null && w.kC!!.aw == 115) {
+                w.pad.e(0); w.tick(emptyList()); continue
+            }
+            if (w.kC != null && w.kC!!.claimActive()) {
+                w.pad.e(0); w.tick(emptyList()); continue
+            }
+            w.pad.e(held)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+        }
+        println("FIN goal=$goal deaths=$deaths maxAk=$maxAk " +
+            "minAl=$minAl marks=$marks S=${p.S} ak=${p.ak} al=${p.al}")
+        assertTrue(goal,
+            "cp7→finale run must reach mission-complete x12131 — " +
+            "maxAk=$maxAk deaths=$deaths")
+    }
+
+    @Test fun `bot drives mission-complete stats into mission 1`() {
+        // Nineteenth leg — continues past the FIN win: the jC==15 stats
+        // screen (M()) confirm arm (`pad.v(458784)` → persist →
+        // `pad.v(327712)` → `kAj++` → `stateL(30)`, Level0World.kt:2476-
+        // 2497) → af() browse (jC=30) confirm (`pad.v(65568)` →
+        // `stateL(9)`, :3680-3684) → the G() loader (jC=9: `loadPackI(1)`
+        // at jG==3, `spawnEntities()` at jG==164, `pad.w(65568)` release
+        // past it → `stateL(8)`, :3564-3579) → mission-1 gameplay —
+        // `kBh[1]==3` = the flying canyon (ax25 player record at
+        // (581,11963), 225 entities). Proves the I(aj) pack swap +
+        // mission-switch wiring end-to-end through real input.
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10016, 715)
+        p.N = p.ak shl 8; p.O = p.al shl 8
+        w.kO = 10000; w.kP = 700
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        if (w.jC == 12) w.stateL(8)
+        var t = 0; var deaths = 0
+        var maxAk = p.ak
+        val marks = mutableListOf<String>()
+        var phase = 0           // 0=drive to win, 1=stats→af, 2=af→load, 3=load→play
+        while (t++ < 60000 && phase < 3) {
+            if (t % 50 == 0 || (phase == 0 && p.ak in 11150..12150))
+                marks += "t$t ph$phase S${p.S}@${p.ak},${p.al} jC=${w.jC} " +
+                    "jG=${w.jG} kAj=${w.kAj}"
+            when (phase) {
+                0 -> {
+                    if (w.jC == 15 || w.jC == 13) { phase = 1; continue }
+                    when {
+                        w.jC == 12 -> {
+                            w.pad.e(327712); w.tick(emptyList())
+                            w.pad.e(327712); w.tick(emptyList())
+                            deaths++
+                            w.player.setPositionPx(10016, 715)
+                            w.player.N = w.player.ak shl 8
+                            w.player.O = w.player.al shl 8
+                            if (deaths > 8) break; continue
+                        }
+                        w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                        p.S == 89 || p.S == 90 -> {
+                            w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
+                        }
+                        p.S == 315 || p.S == 318 || p.S == 164 -> {
+                            w.pad.e(33024); w.tick(emptyList()); continue
+                        }
+                    }
+                    if (p.S == 65) { w.pad.e(16396); w.tick(emptyList()); continue }
+                    var held = Pad.M_RIGHT
+                    val stuck = p.aZ && p.ag in -256..256
+                    if (stuck && p.S != 79 && p.ak !in 10580..10635 &&
+                        p.ak !in 10780..10835) held = held or Pad.M_UP
+                    if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
+                    if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
+                        held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                    if (p.ak in 10530..10620 && p.al in 380..455)
+                        held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+                    if (p.S == 33 && p.ak in 11285..11340)
+                        held = if (p.al > 735)
+                            (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
+                        else Pad.M_UP
+                    if (p.aZ && p.al >= 595 && p.ak in 11100..11330 && p.bM == null)
+                        held = Pad.M_RIGHT
+                    if (p.g != null && p.aZ)
+                        held = held or Pad.M_CONTEXT
+                    if (w.kC != null && w.kC!!.claimActive()) {
+                        w.pad.e(0); w.tick(emptyList()); continue
+                    }
+                    w.pad.e(held); w.tick(emptyList())
+                    if (p.ak > maxAk) maxAk = p.ak
+                }
+                1 -> {   // stats screen — two confirms: reveal-skip then advance
+                    if (w.jC == 30 || w.jC == 2) { phase = 2; continue }
+                    w.pad.e(327712); w.tick(emptyList())
+                }
+                2 -> {   // af() browse — confirm enters the G() loader
+                    if (w.jC == 9) { phase = 3; continue }
+                    w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
+                }
+            }
+        }
+        // jC==9 loader: tick until past jG==164 then release-confirm → l(8)
+        while (t++ < 60000 && w.jC == 9) {
+            marks += "t$t load jC=${w.jC} jG=${w.jG} kAj=${w.kAj} " +
+                "loadedAj=${w.loadedAj} npcs=${w.npcs.size}"
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        for (i in 0 until 30) w.tick(emptyList())
+        val l1 = w.npcs.any { it.ax == 25 } || w.npcs.any { it.aw == 121 }
+        println("MSW jC=${w.jC} kAj=${w.kAj} loadedAj=${w.loadedAj} " +
+            "bh3=${w.bh3} npcs=${w.npcs.size} l1=$l1 " +
+            "p=${p.ak},${p.al} S=${p.S} marks=$marks")
+        assertTrue(w.jC == 8 && w.kAj == 1 && w.loadedAj == 1 && l1,
+            "mission-complete → stats → af → load must land in mission-1 " +
+            "play (jC=8, kAj=1, pack swapped, mission-1 records live) — " +
+            "got jC=${w.jC} kAj=${w.kAj} loadedAj=${w.loadedAj} " +
+            "npcs=${w.npcs.size} l1=$l1 marks=$marks")
+    }
+
+    @Test fun `bot climbs the mission-1 shaft until the alert stall`() {
+        // Twentieth leg — mission 1 (kBh[1]==3, bh3 flying): the ax25
+        // glider record IS the player slot (k.java:4647). `g.n()`'s
+        // glide arm (PlayerFsm.kt:2400+) holds S0; `pad.u(16388)` climbs
+        // (ah -= 768 to -2048+kY while kQ>117), `pad.u(33024)` dives
+        // (ah += 768 to 2048+kY while kQ<230), LEFT/RIGHT bank ag±768.
+        // `canyonCollide` (Entity.kt:1247): cells >=10 extrude the box,
+        // cell 21 kills (`iBe` dead-drag → `stateL(12)`). The bot banks
+        // left/right around wrapped wall columns while holding climb;
+        // `k.aE` drains ~0.14/tick while `k.aH<0` (Level0World.kt:2383-2395)
+        // — empty → stall S24 → x1=0 → S2 → l(12) = the designed fail.
+        val w = world(aj = 1)
+        // Faithful entry — the G() loader arms camResetC()'s bh3 init
+        // (kQ=230, kX=-7, dT, dR=-1, dS=-2) at `pad.w(65568)` past jG=164;
+        // entering via stateL(8) directly leaves kQ=0 (climb gate dead).
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        var t = 0; var deaths = 0; var respawnAl = -1
+        var minAl = p.al; var maxAl = p.al
+        var snapFired = false
+        val marks = mutableListOf<String>()
+        while (t++ < 12000) {
+            when {
+                w.jC == 15 -> break               // won
+                w.jC == 12 || w.jC == 13 -> {
+                    // designed stall → fail screen → context press →
+                    // reload() → a() → C() bh3 arm: respawn at the record
+                    // spawn (no checkpoint can ever fire here — see the
+                    // verdict below) and snap camY = p.al-230.
+                    deaths++
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    if (respawnAl == -1) respawnAl = p.al
+                    continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                // `i.bi || g.E` = scripted arm owns the flight (wind/
+                // countdown latch — climb-sequence or grab-QTE). Idle-tick
+                // those ticks; live input runs otherwise.
+                w.iBi || Entity.gE -> {
+                    if (t % 100 == 0)
+                        marks += "t$t lock S${p.S}@${p.ak},${p.al} " +
+                            "v=${p.ag},${p.ah} kAE=${w.kAE}"
+                    w.tick(emptyList()); continue
+                }
+            }
+            // The flight is a vertical shaft: scroll `al -= kX` carries
+            // the glider, LEFT/RIGHT banks `ag±768` dodge wall columns
+            // (cells >=10 extrude, 21 kills). canyonCollide wraps y at
+            // %260 — sample the wrapped row a screen ahead, ±3 cols;
+            // bank toward the side with more open cells, drift toward
+            // the perch band x~295 when walls are even.
+            val wrapRow = ((p.al - 90) % 260 + 260) % 260 / 20
+            var left = 0; var right = 0
+            val c0 = p.ak / 20
+            for (dx in -3..3) {
+                val cell = p.e(w, c0 + dx, wrapRow)
+                if (cell < 10) { if (dx < 0) left++ else if (dx > 0) right++ }
+            }
+            // default climb (u(16388) → ah-768 floor -2048+kY while
+            // kQ>117) — the shaft is climbed at ~7px/t; the designed
+            // timer is the `k.aE` alert meter draining while `k.aH<0`
+            // (~700t ≈ 43s of flight budget; the mid-shaft perch zone
+            // (295,6959) is the leg destination).
+            // Climb is a held-mask, not an exclusive choice — steer bits
+            // OR into it so the glider banks WITHOUT losing the climb
+            // (k.java l(x,30) clamp keeps camY rising at ~kX/2 while
+            // the glider outclimbs the frame).
+            var held = 16388
+            var steer = 0
+            if (p.ak > 335) steer = Pad.M_LEFT           // drift toward perch x295
+            else if (p.ak < 255) steer = Pad.M_RIGHT
+            if (right < left) steer = Pad.M_LEFT
+            else if (left < right) steer = Pad.M_RIGHT
+            held = held or steer
+            w.pad.e(held); w.tick(emptyList())
+            if (w.checkpointSnap != null) snapFired = true
+            if (p.al < minAl) minAl = p.al
+            if (p.al > maxAl) maxAl = p.al
+            if (t % 100 == 0 || (p.al <= 8360 && p.al >= 8190)) {
+                val cp = w.npcs.firstOrNull { it.ax == 2 && it.al == 8360 }
+                marks += "t$t S${p.S}@${p.ak},${p.al}%${(p.al % 260 + 260) % 260} " +
+                    "v=${p.ag},${p.ah} h=$held kAE=${w.kAE} kAk=${w.kAk} " +
+                    "kX=${w.kX} iAJ=${w.iAJ} jC=${w.jC} x1=${p.x1} " +
+                    "cp=${cp?.au},${cp?.ay},${cp?.P},${cp?.al} cam=${w.camY}"
+            }
+        }
+        println("FLY jC=${w.jC} deaths=$deaths snap=$snapFired " +
+            "respawnAl=$respawnAl al=$minAl-$maxAl iBe=${w.iBe} marks=$marks")
+        // Verdict (proven, k.java:1851-1875 C() + k.java:6890-6960 D()):
+        // cp1 (418,8360) CANNOT fire on level-1. `aY()` only ticks while
+        // `au<2` → camY ∈ (8000,8480), but every respawn runs `a()` →
+        // `C()` → bh3 arm `cB=P=aS.al-230` (≈11733) and re-arms `X=-7`;
+        // the drift (`camB+=kX`, `P+=l(cB-P,30)` ≈ kX/2 ≈ -3.5/t, -2/t
+        // after the single `i.aJ`-gated halving at aE≤25) grinds only
+        // ~2000px before the `k.aE` stall caps the leg (~600t: aE=100
+        // drains 1/6t while k.aH=-1, never armed by the absent ax21).
+        // camY bottoms out ~9600 — the cp1 window stays 1500px away.
+        // The conveyor that could jump the camera (`k.dU` world-shift)
+        // is ax21-gated (`i.bD()` arms `k.aR` only at aS.al<260) — dead
+        // here; `i.bW` phase-checkpoints are likewise ax21-only.
+        assertTrue(deaths >= 2 && minAl < 8360 && !snapFired,
+            "canyon legs: player out-climbs the drift camera (past " +
+            "cp1's al=8360 band) while the camera resets to " +
+            "p.al-230≈11733 every respawn — cp1's au window (camY " +
+            "8000-8480) is unreachable in a ~600t k.aE leg, so the " +
+            "checkpoint stays unfired — snap=$snapFired deaths=$deaths " +
+            "minAl=$minAl respawnAl=$respawnAl marks=$marks")
+    }
+
+    @Test fun `mission-1 top claim-QTE zone binds script-1 and wins`() {
+        // Slice-266 win-chain verdict — level-1 CAN be completed, via a
+        // scripted QTE at the canyon TOP, not by surviving the climb.
+        // ax10-uid7 (S31, record f14=8) sits at (456,481) with
+        // W=[456,481,764,705]; Z[3]=rf(14)=8 = the done-sentinel script
+        // uid (NpcFsm.kt:1125-1127 `Z={r8[4],r8[11],r8[13],r8[14],
+        // r8[15]}`). Player overlap arms the lane sequence
+        // (Z[1]=2 → nibble pack {0,0,0,2} → single live lane, CS[2]=
+        // 16388 UP); the matching press at j>3 sets `aA=Z[3]=8`
+        // (NpcFsm.kt:1931), the draw side (aU(), NpcFsm.kt:10524-10525)
+        // latches `nl=1` on bh3, and the consumed arm binds
+        // `k.s(8)` = script index 1 = `scripts.bin` s1 (uid8):
+        // a 62-step type-2 block that walks uid1 (the ax25 record = the
+        // player) through op21 waypoints 511→-60 with a type-1 camera
+        // block, ending `op37[1]` → `screenL(15)` (Entity.kt:2308).
+        val w = world(aj = 1)
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        // Teleport into the S31 zone box — the claim mechanics under
+        // test (the ~600t leg verdict on REACHING it lives in the shaft
+        // bot above).
+        p.ak = 600; p.N = 600 shl 8
+        p.al = 540; p.O = 540 shl 8
+        p.ah = 0; p.ag = 0
+        val marks = mutableListOf<String>()
+        var zref: com.acrebuild.core.Entity? = null
+        var won = false; var bound = false; var t = 0
+        while (t++ < 300) {
+            // `missionWon` (not jC==15): stateL(15) immediately
+            // redirects to i=22 (medal screen) or i=10 (level select)
+            // when stamps/next-mission conditions hold — the flag is
+            // set on the iArg==15 entry itself.
+            if (w.missionWon) { won = true; break }
+            // Camera follows the player: au = offscreen score
+            // (|ak-(kO+200)|/400 + |al-(kP+120)|/120) — pinning to the
+            // player keeps au≈0 AND lets the et stamp ring roll the
+            // way it does in real flight (walls follow camY).
+            w.kP = p.al - 120; w.kO = p.ak - 200
+            // Lane prompt CS[2]=16388 (UP) — press every tick; the live
+            // lane consumes one edge, later presses are no-ops.
+            w.pad.e(16388); w.tick(emptyList()); w.pad.releaseFlush()
+            // Hold the player in the cy26-28 air pocket (x520-640, below
+            // the cy20-25 stamped-wall band). The chain under test is
+            // zone→script-1→op37[1]→screenL(15); the ~70-step waypoint
+            // ride crosses a 21-stamped band whose wrap stamps churn
+            // with the ring — pinning keeps the player alive while the
+            // script's key counter climbs to key62. (The ride path
+            // itself stays `inferred`.)
+            p.ak = 560; p.N = 560 shl 8
+            p.al = 560; p.O = 560 shl 8
+            p.ah = 0; p.ag = 0
+            val z = w.npcs.firstOrNull { it.ax == 10 && it.S == 31 }
+            if (z != null && z.claimActive()) bound = true
+            if (t % 25 == 0 || (z?.claimActive() == true && t % 8 == 0)) {
+                marks += "t$t jC=${w.jC} S=${p.S}@${p.ak},${p.al} " +
+                    "z(aB=${z?.aB},m=${z?.m},aA=${z?.aA},nl=${z?.nl}," +
+                    "claim=${z?.claimActive()},step=${z?.scriptStep})"
+            }
+            if (z != null && zref == null) zref = z
+        }
+        println("WINTOP won=$won bound=$bound marks=$marks")
+        // Verdict (proven — NpcFsm.kt:1826-1947 S31 arm + i.java:2205
+        // record fields + scripts.bin s1-key62): the zone arms its lane
+        // QTE on overlap, the UP press resolves it, `aA=8` binds
+        // script-1 via `k.s(8)` = `kEh.indexOf(8)` = 1 (the port fixed
+        // `w.kS` — the Entity stub that always returns -1 — to
+        // `w.kSIndex`), and the 62-step scripted ascent consumes the
+        // blk1 key62 `op37[1]` → `screenL(15)` → `missionWon`.
+        // Faithful detail: `i.be` is the cell-21 death-slide latch
+        // (static, set by `canyonCollide`'s aT/aU==21 arm at
+        // Entity.kt:1278-1281 and the S10 out-of-band kill at
+        // NpcFsm.kt:1316) — ANY cell-21 death in the canyon removes
+        // every S31 zone via `be → k.c(this)` (i.java:12350).
+        // Reaching (456,481) by play is the unfixed part — see the
+        // shaft bot's ~600t-leg verdict.
+        assertTrue(won,
+            "top-zone win chain: overlap → lane QTE → aA=8 → " +
+            "bindScript(k.s(8)) → script-1 ascent → screenL(15) — " +
+            "bound=$bound marks=$marks")
+    }
+
     @Test fun `bot runs door-exit to checkpoint3 through the gate row`() {
         // Twelfth leg — the ax10-S16 door deposits the player on the upper
         // tier (~3812,559 over the y580 step). East is blocked by the
@@ -22918,6 +23553,199 @@ class Slice245Test {
         assertTrue(checkpoint,
             "east run must reach x4640 past the gate row — " +
             "maxAk=$maxAk deaths=$deaths")
+    }
+
+    @Test fun `probe pillar-top drop to the y580 finale road`() {
+        // DBG slice-262: park on the pillar top at the road's east end —
+        // can the player cross the x11360-11500 pit by dropping onto the
+        // y580 floor, and does the director uid115's claim box
+        // (11448-11526 x 503-530) fire mid-fall?
+        val w = world()
+        w.stateL(8)
+        settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10880, 380)         // door platform east edge — run
+        p.N = p.ak shl 8; p.O = p.al shl 8  // onto the rope's upper arc
+        w.kO = 10700; w.kP = 340
+        for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
+        val marks = mutableListOf<String>()
+        var t = 0
+        while (t++ < 3000) {
+            if (t <= 60 || t % 40 == 0) {
+                val rp = w.npcs.firstOrNull { it.aw == 93 }
+                marks += "t$t S${p.S}@${p.ak},${p.al} x1=${p.x1} cam=${w.camX},${w.camY} aZ=${p.aZ} " +
+                "rope{S${rp?.S} bN=${rp?.bN} aA=${rp?.aA} bP=${rp?.bP}} " +
+                "bM=${p.bM?.aw} kC=${w.kC?.aw}:${w.kC?.scriptStep} jC=${w.jC}"
+            }
+            if (p.ak > 12131 || w.jC == 15 || w.jC == 12 || w.jC == 13) break
+            var held = Pad.M_RIGHT
+            if (w.kC != null && p.aZ && p.al <= 560) {
+                held = 0                              // cutscene claim: hold on the
+            }                                         // '41' floor till release
+            if (p.S == 33 || p.S == 34 || p.S == 92 || p.S == 101)
+                held = Pad.M_RIGHT or (if (t % 8 < 2) Pad.M_UP else 0)
+            else if (p.aZ && p.ak in 11340..11440 && p.al in 480..560)
+                held = Pad.M_RIGHT or Pad.M_UP       // stair-hop east
+            else if (p.aZ && p.ag in -256..256) held = held or Pad.M_UP
+            if (t % 50 == 0) marks += "x1=${p.x1} foes=${w.npcs.count { it.ax == 11 && it.S != 139 }}"
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.S != 139 &&
+                    kotlin.math.abs(it.ak - p.ak) < 42 && kotlin.math.abs(it.al - p.al) < 80
+            }
+            if (foe != null) {
+                held = if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
+            }
+            w.pad.e(held)
+            val j0 = w.jC
+            w.tick(emptyList())
+            if (w.jC != j0) marks += "jC $j0->${w.jC} @t$t S${p.S}@${p.ak},${p.al} x1=${p.x1} near=" +
+                w.npcs.filter { kotlin.math.abs(it.ak - p.ak) < 60 && kotlin.math.abs(it.al - p.al) < 60 }
+                    .joinToString(",") { "${it.ax}:${it.aw}@${it.ak},${it.al}S${it.S}" }
+        }
+        println("PILLARDROP ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} marks=$marks")
+        assertTrue(true)
+    }
+
+    @Test fun `bot flight drop-lines arm the canyon shrines and refill the meter`() {
+        // Slice-267 — the k.aE alert meter (i.java:2548, reset 100/0/-1
+        // in D() on every fail-reload) funds ~600t per leg: `g.n()`
+        // drains aE-1 per 6 ticks while k.aH<0 (g.java:5851-5856 —
+        // aH<0 → aG--; aG==0 → aG=6, aE--), and S24 stall → x1=0 →
+        // l(12) on empty (g.java:5861-5871). Checkpoint bands CANNOT
+        // segment the ascent: `aY()` ticks only under `au<2` and the
+        // fixed-speed drift camera bottoms ~1500px above the cp1
+        // window in one leg (proven: the shaft run's minCamY≈9988 vs
+        // the required [8000,8480]). The REAL refill mechanism is the
+        // shrine chain: free-glide auto-emits ax24-S6 drop-lines via
+        // `e(false)`/`flap(p,false)` (g.java:6330-6355 + PlayerFsm —
+        // k.aI≥10 gate, ~100px drop, af==aS); the drop-line's `bc()`
+        // sweep converts overlapped ax24-S19 lay-children to S20
+        // shrines (i.java L171/L181 + bc case-24, NpcFsm.kt:6945), and
+        // the S20 arm on player overlap pays `k.aF=min(aB,100-aE)`
+        // (+3/t into aE), `e=30` wall-immunity, `k.X=kAJ` conveyor
+        // restore, `sfx(25)`, and aS.i(21). Level-1 carries 6×S19
+        // along the corridor (x∈{222,397,413,454,475,599}) — the
+        // designed leg loop is fly → drop-line arms the shrine → fly
+        // through it → refill.
+        val w = world(aj = 1)
+        w.stateL(9)
+        while (w.jC == 9) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        var t = 0; var deaths = 0
+        var s6Emitted = 0; var shrinesArmed = 0; var shrineFired = false
+        var kAFMax = 0; var iEMax = 0; var pS21 = false
+        var minAl = Int.MAX_VALUE
+        val seen = mutableSetOf<Int>()
+        val marks = mutableListOf<String>()
+        // Phase A — real flight from spawn (~400t): proves the k.aI≥10
+        // auto-emitter produces drop-lines on the actual climb path.
+        while (t++ < 400) {
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    deaths++
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    continue
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                w.iBi || Entity.gE -> { w.tick(emptyList()); continue }
+            }
+            w.pad.e(16388); w.tick(emptyList())
+            if (p.al < minAl) minAl = p.al
+            for (n in w.npcs) {
+                if (n.ax == 24 && n.S == 6 &&
+                    seen.add(System.identityHashCode(n))) {
+                    s6Emitted++
+                    if (s6Emitted <= 4) marks += "S6@t$t p=${p.ak},${p.al} w=${n.ak},${n.al}"
+                }
+            }
+        }
+        marks += "PHASEA s6=$s6Emitted al=${p.al} minAl=$minAl kAE=${w.kAE}"
+        // Phase B — probe: hover the player under the S19 at (397,8437)
+        // (its lay box is -15,-81,39,93 on the anchor); the drop-lines
+        // rise ~180px and must sweep it into S20. The probe then snaps
+        // the camera to the shrine (au<2 else the entity parks) and
+        // pins the player inside its box (-21,-80,42,92) so L181's
+        // overlap arm fires — the canyon's leftward airflow otherwise
+        // drags the probe off-column before the slow climb can cover
+        // the ~50px gap (a real pilot steers through it).
+        p.ak = 397; p.N = 397 shl 8
+        p.al = 8540; p.O = 8540 shl 8
+        p.ah = 0; p.ag = 0; p.setAnim(4)
+        var probe = 0
+        while (probe++ < 900 && w.jC == 8) {
+            // Hover under the S19 so the rising drop-line sweep can
+            // reach it; once a shrine arms, fly into its box — L181
+            // fires on player↔shrine overlap.
+            var mask = 0
+            if (p.ak < 405) mask = mask or 8256           // M_RIGHT
+            if (p.al > 8500) mask = mask or 16388         // M_UP
+            w.pad.e(mask)
+            w.tick(emptyList())
+            for (n in w.npcs) {
+                if (n.ax == 24 && n.S == 6 &&
+                    seen.add(System.identityHashCode(n))) {
+                    s6Emitted++
+                    if (s6Emitted <= 4) marks += "S6@probe$probe p=${p.ak},${p.al} w=${n.ak},${n.al}"
+                }
+                if (n.ax == 24 && n.S == 20) {
+                    if (seen.add(10000 + n.aw)) {
+                        shrinesArmed++
+                        marks += "SHRINE@probe$probe uid${n.aw}@${n.ak},${n.al} p=${p.ak},${p.al}"
+                        // Snap the camera to the shrine (via the k.O/k.P
+                        // projections): au recompute parks the entity
+                        // while the cam is far away.
+                        w.kO = n.ak - 200; w.kP = n.al - 230
+                    }
+                    if (!shrineFired) {
+                        // Pin the player inside the shrine box
+                        // (-21,-80,42,92) until L181's overlap arm fires.
+                        p.ak = n.ak; p.N = n.ak shl 8
+                        p.al = n.al - 40; p.O = p.al shl 8
+                        p.ah = 0; p.ag = 0
+                        p.refreshBoxes()
+                    }
+                }
+            }
+            if (w.kAF > kAFMax) kAFMax = w.kAF
+            if (w.iE > iEMax) iEMax = w.iE
+            if (p.S == 21) { pS21 = true; shrineFired = true }
+            if (w.kAF > 0) shrineFired = true
+            if (probe % 100 == 0)
+                marks += "pb$probe S${p.S}@${p.ak},${p.al} kAE=${w.kAE} " +
+                    "kAF=${w.kAF} iE=${w.iE} s6=$s6Emitted sh=$shrinesArmed"
+            if (probe <= 60) {
+                val s6 = w.npcs.firstOrNull { it.ax == 24 && it.S == 6 }
+                val s19 = w.npcs.firstOrNull { it.ax == 24 && it.S == 19 }
+                if (s6 != null && probe % 5 == 0)
+                    marks += "DL$probe w=${s6.ak},${s6.al} X=${s6.X?.contentToString()} " +
+                        "ap=${s6.ap} s19W=${s19?.W?.contentToString()} p=${p.ak},${p.al}"
+            }
+            if (shrineFired && probe > 60) break
+        }
+        println("SHRINES s6=$s6Emitted armed=$shrinesArmed fired=$shrineFired " +
+            "kAFMax=$kAFMax iEMax=$iEMax pS21=$pS21 minAl=$minAl " +
+            "deaths=$deaths marks=$marks")
+        // Verdict (proven — flap() + bc() case-24 + L181): the player's
+        // own drop-lines convert the S19 columns into S20 shrines, and
+        // flying through one charges the k.aF refill pool (+iE=30
+        // wall-immunity + S21) — the canyon's real meter economy.
+        assertTrue(s6Emitted >= 1,
+            "free-glide must auto-emit ax24-S6 drop-lines (k.aI>=10 " +
+            "gate) — s6=$s6Emitted marks=$marks")
+        assertTrue(shrinesArmed >= 1,
+            "a drop-line sweep must convert an ax24-S19 into the S20 " +
+            "shrine — armed=$shrinesArmed s6=$s6Emitted marks=$marks")
+        assertTrue(shrineFired,
+            "flying through the armed S20 shrine must fire L181 " +
+            "(k.aF refill + iE + S21) — fired=$shrineFired " +
+            "kAFMax=$kAFMax iEMax=$iEMax marks=$marks")
     }
 
 }

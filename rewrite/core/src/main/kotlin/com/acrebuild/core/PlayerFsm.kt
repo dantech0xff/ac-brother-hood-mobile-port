@@ -274,11 +274,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
                 return
             }
-            // g.java L2989→L2de0 (proven) — S82-85/S326 corpse-sleep:
-            // `r() → P|=64` (the L2989 label is empty and falls through
-            // to L2de0's arm).
+            // g.java:1430-1433/:1674 → L2989 → L353d (proven) — S82-85/
+            // S326 rope-hang family: L2989 is a BARE label straight into
+            // the shared post-dispatch tail — no arm at all. The
+            // `r() → P|=64` arm is case 110's L2de0 (g.java:6570), not
+            // this family — the earlier attribution was wrong.
             82, 83, 84, 85, 326 -> {
-                if (p.animFinished()) p.P = p.P or 64
             }
             // g.java L30a9 (proven) — S91 settle: zero all four velocity
             // fields; `r() → i(0)`; early `return`.
@@ -2399,7 +2400,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         when (p.S) {
             0, 4, 5, 17, 18 -> {
                 if (p.S == 0 && p.animFinished()) p.T = (p.clip?.frameCount(0) ?: 0) - 2
-                if (!world.iBi || Entity.gE) {
+                // L437 gate (g.java:14393-14396, proven): `i.bi || g.E →
+                // scripted arm` (wind `ah = kY*iAI` while the countdown
+                // `i.b(r3)` owns the sim); else `aC()` + input. `i.bi` is
+                // the "sequence owns player" latch (S10 climb / ax64 grab)
+                // — scripted runs only while it or `g.E` is set.
+                if (world.iBi || Entity.gE) {
                     if (world.kQ >= 230) {
                         z3 = false
                         p.ah = if (world.iAH) world.kY * world.iAI else world.kY
