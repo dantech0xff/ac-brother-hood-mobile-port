@@ -24038,7 +24038,11 @@ class Slice245Test {
                     else if (!p.aZ && p.ak in 7940..8120 &&
                              p.al in 400..680) held = 0
                     else {
-                        if (p.aZ && p.ag in -256..256 && p.S != 79)
+                        // stall-jump is suppressed while a foe is close:
+                        // the guard's body stalls ag, and hopping over it
+                        // just lands the bot facing away (x9000 S9 death).
+                        if (p.aZ && p.ag in -256..256 && p.S != 79 &&
+                            foe == null)
                             held = held or Pad.M_UP
                         if (p.aZ && p.ak in 6360..6418)
                             held = held or Pad.M_UP
@@ -24068,7 +24072,11 @@ class Slice245Test {
             if (foe != null && atkCd <= 0 &&
                 kotlin.math.abs(foe.ak - p.ak) <= 80 &&
                 kotlin.math.abs(foe.al - p.al) < 50) {
-                held = held or Pad.M_CONTEXT; atkCd = 30
+                // face the foe + CONTEXT — a direction-only press turns
+                // av; pure CONTEXT swings toward the last facing and hits
+                // air when the guard passes behind.
+                held = (if (foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT) or
+                    Pad.M_CONTEXT; atkCd = 30
             }
             atkCd--
             w.pad.e(held)
@@ -24095,6 +24103,9 @@ class Slice245Test {
                     "kC=${w.kC?.ax}/${w.kC?.claimActive()} " +
                     "ag=${p.ag} ah=${p.ah} W=${p.W.toList()} " +
                     "aV=${p.aV} aW=${p.aW} aO=${p.aO} aQ=${p.aQ} aR=${p.aR} " +
+                    "at=${Entity.at?.ax}@${Entity.at?.ak} " +
+                    "aN=${w.lockTarget?.ax}@${w.lockTarget?.ak},S${w.lockTarget?.S} " +
+                    "g=${p.g?.ax}@${p.g?.ak} " +
                     "ac=${p.ac?.ax}@${p.ac?.ak},${p.ac?.al} " +
                     "near=${wob.take(5).map { "ax${it.ax}@${it.ak}/${it.al}S${it.S}" }}"
                 dir = if (dir == Pad.M_RIGHT) Pad.M_LEFT else Pad.M_RIGHT
@@ -24104,6 +24115,16 @@ class Slice245Test {
         println("CAPSTONE won=$won deaths=$deaths maxAk=$maxAk minAl=$minAl t=$t")
         println("CAPSTONE marks=${marks.takeLast(20)}")
         println("CAPSTONE trace=${trace.joinToString(" ")}")
+        // Proven frontier (slice 276): posted ax11 @8850 duel is solved —
+        // face-the-foe CONTEXT swings + stall-jump suppression dropped
+        // deaths 301→2 and the bot now survives at the x8990 wall. The
+        // new blocker is the weakened-guard grab: the weaken claim sets
+        // Z[19]=1 → g.g binds → S277 mount orbit — whose ax11 arm sets a
+        // constant (cy-frozen) drag that never reaches W-overlap, so the
+        // victim's aA carry arm (overlap → S297 → CONTEXT → S298 throw,
+        // i.java:36480/17063) never fires. Next: prove whether the
+        // original binds weakened victims to g.g, and the S297 carry
+        // entry's real gate.
         // Proven frontier (slice 275): the x8118 crusher corridor's only
         // route is the wire chain — ax40 zipline (S164, ac-bound) →
         // rail2 ax10-S34 (auto-dive Z[1]==1) → lands the x8800 corridor →
@@ -24117,4 +24138,5 @@ class Slice245Test {
             "capstone must cross the wire chain to the x8990 wall — " +
             "maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
+
 }
