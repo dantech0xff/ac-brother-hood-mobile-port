@@ -934,14 +934,17 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // 278-281/285/288-290/314/316 family all fall into the shared
             // postTail chain (ab/aR/aO bookkeeping) — no dedicated arm.
             297 -> { }
-            311, 312 -> {                     // L1889
-                p.collideSides(world, true)
-                if (p.animFinished()) {
-                    val mount = Entity.at
-                    if (mount == null || mount.Z[0] != 4 || p.cE > 0) {
-                        p.lungeTick(world)
-                    } else p.mountOrbitTick(world, pad)
-                }
+            311, 312 -> {                     // L346f (g.java:7456)
+                // Verbatim: `a(1)` flings airborne (S43 +10al, ah=1,
+                // aj=1536); the `r() → ah=0; ag=0; l()` tail is
+                // proven-dead — the fresh S43 anim is never finished
+                // on the same tick, and `g.l()` (g.java:11599, the
+                // climb/ledge helper) is unported anyway.
+                // slice-277 fix: replaces a slice-28 guess that resumed
+                // lungeTick here — it auto-mounted any bound mountable
+                // after a grab-release, a mount the original never had.
+                p.enterFall(1, world)
+                if (p.animFinished()) { p.ah = 0; p.ag = 0 /* l() dead */ }
             }
             199 -> case199(p, pad)
             5 -> landArm(p, pad)              // L464
@@ -2355,9 +2358,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.g = null                                              // L228 boundary
             if (p.S == 268) { p.g = e; continue }                   // L231
             if (npcKind) {
-                // L250: !i(e) && aA∈{0,2} → skip; otherwise binds via
-                // the facing/dist path already passed
-                if (!p.interactEligible(e) && (e.aA == 0 || e.aA == 2)) continue
+                // L547 (g.java:13487, proven): the aA gate covers only
+                // {11,17,23,73} — an idle/attack-engaged victim without
+                // the i() offer skips; ax9/29 fall to L56a directly.
+                if ((e.ax == 11 || e.ax == 17 || e.ax == 23 || e.ax == 73) &&
+                    !p.interactEligible(e) && (e.aA == 0 || e.aA == 2)) continue
+                // L56a (g.java:13500, proven): the offer bypasses |Δal|;
+                // otherwise the victim must sit within ±20px vertically.
+                if (!p.interactEligible(e) && Math.abs(p.al - e.al) > 20) continue
                 if (p.g == null) p.g = e                            // L260
                 if (p.ci == null) p.ci = e                          // L275
             } else {
