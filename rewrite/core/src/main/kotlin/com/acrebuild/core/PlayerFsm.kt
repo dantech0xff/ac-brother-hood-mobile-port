@@ -2380,10 +2380,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             return
         }
         // `i.bh--` (n():5615) runs in tick() for both modes — not repeated.
+        // L14-L17 meter drain (g.java:5851-5856, proven): kAG counts the
+        // ticks between kAE points (drains ~1/6t whenever kAH<0).
         if (world.kAH < 0) world.kAG--
         if (world.kAG <= 0) { world.kAG = 6; world.kAE-- }
+        // L23-L38 (g.java:6317-6333, proven): low-meter conveyor halving —
+        // source gates BOTH `aE>25` and `aE>=25` to skip, so the arm fires
+        // only at aE<25 (this was `<=` — off-by-one fixed).
         if (world.kAE < 0) world.kAE = 0
-        else if (world.kAE <= 25 && world.kAF == 0 && world.kAH < 0 && (world.iAJ == 0 || world.kW != 0)) {
+        else if (world.kAE < 25 && world.kAF == 0 && world.kAH < 0 && (world.iAJ == 0 || world.kW != 0)) {
             if (world.kW != 0) { world.iAJ = world.kW; world.kW = 0 } else world.iAJ = world.kX
             world.kX = world.iAJ shr 1
         }

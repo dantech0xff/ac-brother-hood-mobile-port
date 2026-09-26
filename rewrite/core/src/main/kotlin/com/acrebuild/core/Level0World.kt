@@ -637,10 +637,15 @@ class Level0World(
             // earlier ax25 clip16 slot on mission switch).
             player.clip = clips[0]
         }
-        player.setAnim(0)
+        // k.java:5990-6017 (proven, d(z2) respawn): the ax0/ax25 record
+        // skips the bf[] image restore (L78) — `aS` is always a FRESH
+        // `new i(r0)`, so its S is the record's own f[5] (0 grounded,
+        // 4 for the ax25 flyer). S0 here latched z4=false and killed the
+        // auto-flap (`p.S != 0` gate, PlayerFsm.kt:2424) — refills died.
+        val rec = level.playerRecord()
+        player.setAnim(if (rec != null && rec.size > 5) rec[5] else 0)
         player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
         run {
-            val rec = level.playerRecord()
             // The original's record-spawn makes `k.aS` the entity built
             // from the ax0/ax25 record (k.java:17204-17223, proven) — the
             // shared init's `aw = r8[1]` gives the player the record's
@@ -708,6 +713,7 @@ class Level0World(
         kAi = false                                 // k.ai = false
         kAZ = false                                 // k.aZ = false
         iW = false; iE = 0                          // i.w/i.e (i.java:7166/7252)
+        iBe = false                                 // i.be=false (i.java:2566, D())
         camAf = 0; camAg = 0                        // k.af = k.ag = 0
         kAE = 100; kAF = 0; kAH = -1                // k.aE/aF/aH
         kN()                                        // k.n(-1) — wall release
@@ -4704,9 +4710,25 @@ class Level0World(
             kDg++; kAp[2]++
         }
 
-        player.collideSides(this, true)
-        playerFsm.tick(player, pad)
-        player.integrate()
+        // `i.I()` claim-suspension gate (i.java:15165 fallback La5→L108,
+        // proven): while `k.C` holds a LIVE claim script (`k.C.ab()`) — or
+        // a u9 dialog suspends — every entity without `P|512` except the
+        // claimer and ax8/ax24 returns before physics and the ax
+        // dispatch. The player ticks via `aS.I()` under the same gate, so
+        // during a bound ride (e.g. the mission-1 win claim) his `g.n()`
+        // — and therefore `i.B()`'s deadly-band probes — never runs;
+        // `aa()` drives `ak`/`al` directly. `s()` (advanceAnim) stays
+        // outside: suspended entities still advance anims (the L34-L81
+        // arm runs before the gate).
+        val claimSuspended = (kC?.claimAb() == true ||
+            (jC == 21 && dlgU == 9)) &&
+            (player.P and 512) == 0 && kC !== player &&
+            player.ax != 8 && player.ax != 24
+        if (!claimSuspended) {
+            player.collideSides(this, true)
+            playerFsm.tick(player, pad)
+            player.integrate()
+        }
         player.advanceAnim()
 
         // `k.I()` player-link tail (k.java:8798-8810 L2df-L32a,
