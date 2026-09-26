@@ -20453,7 +20453,11 @@ class Slice214Test {
         keepLive(e)
         assertTrue(e.P and 512 != 0, "ax22 is P|512 exempt")
         val p = w.player
-        p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        // S=43 (airborne) — the capture arm's `g.b(S)` gate (i.java:10185)
+        // rejects grounded S=0; suspension freezes S, so pin a capturable
+        // state the way a falling player would arrive.
+        p.setPositionPx(e.ak, e.al); p.S = 43; p.ah = 0; p.ag = 0
+        p.refreshBoxes()   // suspended player skips t() — stage W here
         suspendWorld(w)
         var captured = false
         repeat(40) {
@@ -23747,5 +23751,72 @@ class Slice245Test {
             "(k.aF refill + iE + S21) — fired=$shrineFired " +
             "kAFMax=$kAFMax iEMax=$iEMax marks=$marks")
     }
+
+    @Test fun `canyon gap leg starves before the camera reaches the shrine window`() {
+        // Slice-268 verdict (proven — source + arithmetic + this probe):
+        // the bh3 fuel economy is camera-paced. `ah` relaxes to
+        // kY=-1792 (-7px/t) unconditionally (g.java:6290-6297 settle);
+        // the camera is a fixed metronome — `cB += kX` (-7) then
+        // `camY += l(camB-camY,30)` and the L142 snap → camY -= 3.5/t.
+        // Shrines tick only while au<=1 — i.e. camY within ~[al-240,
+        // al+120] — so a shrine's tick window opens leg_px/3.5 ticks
+        // after the previous regardless of player speed: fuel cost =
+        // leg_px/21. The 6016→2925 gap is 3091px ≈ ~147 fuel > the
+        // 100 tank — this probe proves the empirical bound: parked
+        // inside the 2925 box, the tank dies while the camera is still
+        // ~1245px short of the window.
+        val w = world(aj = 1)
+        w.stateL(9)
+        var boot = 0
+        while (w.jC == 9 && boot++ < 400) {
+            if (w.jG > 164) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+            w.tick(emptyList())
+        }
+        val p = w.player
+        val shr = w.npcs.first { it.ax == 24 && it.aw == 106 }   // (475,2925)
+        // Recreate the respawn state: player inside the 6016 box, fresh
+        // tank, camera snapped (k.C() — `camB=camY=al-230` verified).
+        p.ak = 223; p.al = 6007; p.setAnim(4); p.ah = 0; p.ag = 0
+        w.kP = 6007 - 230; w.kO = 0; w.kAE = 100; w.kAF = 0
+        var t = 0; var arrived = false; var deadCamY = -1; var deadAe = -1
+        while (t++ < 40000) {
+            var mask = 0
+            when {
+                w.jC == 12 || w.jC == 13 -> {
+                    deadCamY = w.kP; deadAe = w.kAE; break
+                }
+                w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                w.iBi || Entity.gE -> { w.tick(emptyList()); continue }
+            }
+            val inBox = Entity.overlapStrict(p.W, shr.W)
+            if (!inBox && p.al > shr.al - 60) {
+                if (w.kAE > 0) mask = mask or 16388            // sprint UP
+            } else {
+                if (p.al > shr.al + 10) mask = mask or 33024   // park on row
+                else if (p.al < shr.al - 40) mask = mask or 16388
+                arrived = true
+            }
+            if (p.ak < shr.ak - 8) mask = mask or 8256
+            else if (p.ak > shr.ak + 8) mask = mask or 4112
+            w.pad.e(mask); w.tick(emptyList())
+            if (t > 30000) break
+        }
+        // The faithful bound: the starve (jC==12) fires while the camera
+        // is still well short of the shrine's tick window — i.e. the leg
+        // cannot be crossed on a single tank under the verbatim model.
+        assertTrue(arrived,
+            "bot must reach the 2925 shrine box — p=${p.ak},${p.al}")
+        assertTrue(deadCamY > 0,
+            "the starve (S24→jC12) must fire — t=$t p=${p.ak},${p.al}")
+        // window opens at camY ~ al+120±240 → camY <= ~3165; assert the
+        // camera was still materially above it when the tank emptied.
+        assertTrue(deadCamY > shr.al + 400,
+            "camera must still be short of the 2925 tick window when the " +
+            "tank dies — deadCamY=$deadCamY shrAl=${shr.al} (the verbatim " +
+            "economy is camera-paced; a leg can't be outrun)")
+    }
+
+
+
 
 }

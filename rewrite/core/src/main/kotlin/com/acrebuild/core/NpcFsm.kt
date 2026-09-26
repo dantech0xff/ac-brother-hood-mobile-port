@@ -7121,7 +7121,12 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
                 w.kAF = if (e.aB >= r03) r03 else e.aB
                 w.iBh = 0                                  // bh = 0 (i.bh)
                 w.iE = 30                                  // i.e = 30 (i.java:39329)
-                if (w.kAJ != 0) { w.kX = w.kAJ; w.kAJ = 0 }
+                // i.java:39330-39335 (proven): `k.X = i.aJ; i.aJ = 0`
+                // — the halving STASH (`i.aJ = k.X; k.X = aJ>>1`,
+                // g.java:6321-6333), not the k.aJ fuse phase. Each
+                // refill un-halves the conveyor and re-arms the stall
+                // halving — the chain-sustaining mechanism.
+                if (w.iAJ != 0) { w.kX = w.iAJ; w.iAJ = 0 }
                 w.sfx(25)
             }
         }
