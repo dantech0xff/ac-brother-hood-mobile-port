@@ -24069,7 +24069,15 @@ class Slice245Test {
             // Attack gate (slice-274): CONTEXT only when the foe is
             // actually reachable — the 160px foeNear scan otherwise baits
             // air-swing loops at unreachable patrols on the tier below.
-            if (foe != null && atkCd <= 0 &&
+            // slice-277: never CONTEXT while a WEAKENED mountable victim
+            // is bound — ar() L3702 hijacks the press into c(g.g) and the
+            // resulting S277 mount is a faithful soft-lock: the carry arm
+            // needs Z[0]==0 (i.java:36405) so a weakened Z[0]==2 victim
+            // can never release. Walk past instead — the weakened victim
+            // stays passive and unbinds once out of LOS/level.
+            val mountFrozen = p.g != null && p.g!!.ax == 11 &&
+                p.g!!.Z[0] == 2 && p.g!!.Z[19] == 1
+            if (foe != null && atkCd <= 0 && !mountFrozen &&
                 kotlin.math.abs(foe.ak - p.ak) <= 80 &&
                 kotlin.math.abs(foe.al - p.al) < 50) {
                 // face the foe + CONTEXT — a direction-only press turns
@@ -24115,16 +24123,16 @@ class Slice245Test {
         println("CAPSTONE won=$won deaths=$deaths maxAk=$maxAk minAl=$minAl t=$t")
         println("CAPSTONE marks=${marks.takeLast(20)}")
         println("CAPSTONE trace=${trace.joinToString(" ")}")
-        // Proven frontier (slice 276): posted ax11 @8850 duel is solved —
-        // face-the-foe CONTEXT swings + stall-jump suppression dropped
-        // deaths 301→2 and the bot now survives at the x8990 wall. The
-        // new blocker is the weakened-guard grab: the weaken claim sets
-        // Z[19]=1 → g.g binds → S277 mount orbit — whose ax11 arm sets a
-        // constant (cy-frozen) drag that never reaches W-overlap, so the
-        // victim's aA carry arm (overlap → S297 → CONTEXT → S298 throw,
-        // i.java:36480/17063) never fires. Next: prove whether the
-        // original binds weakened victims to g.g, and the S297 carry
-        // entry's real gate.
+        // Proven frontier (slice 277): the weakened-victim mount is a
+        // FAITHFUL soft-lock, not a port bug — az() auto-binds g.g on
+        // aA∉{0,2}+|Δal|≤20+LOS (g.java:13469-13505), ar() L3702 mounts on
+        // CONTEXT → c(g.g) → as() → i(277), and the ax11 orbit arm
+        // (g.java:10846) applies a constant cy-frozen drag with no input
+        // arm; every release is gated off a weakened victim (carry needs
+        // Z[0]==0, i.java:36405; P() needs aB≤0; the rest unreachable once
+        // floor-pinned). The bot now suppresses CONTEXT while a weakened
+        // mountable is bound (mountFrozen) and walks past — the weakened
+        // guard stays passive and unbinds out of LOS/level.
         // Proven frontier (slice 275): the x8118 crusher corridor's only
         // route is the wire chain — ax40 zipline (S164, ac-bound) →
         // rail2 ax10-S34 (auto-dive Z[1]==1) → lands the x8800 corridor →
@@ -24139,4 +24147,139 @@ class Slice245Test {
             "maxAk=$maxAk marks=${marks.takeLast(8)}")
     }
 
+}
+
+// ---- Slice 277: weakened-victim mount = faithful soft-lock ---------------
+//
+// Verdict: the soft-lock IS faithful — but the capstone's trigger was a
+// port bug. Two entries mount a bound ax11 victim:
+//  1. `ar()` L3702 + mountEntry (g.java:3474): CONTEXT with `g.g`
+//     ax11+Z19==1+alive → `c(g.g)` lunge → `as()` → `i(277)` — verbatim;
+//     the original soft-locks identically on a deliberate mount press.
+//  2. **PORT BUG (fixed)**: slice-28 guessed S311/312's arm as
+//     `lungeTick or mountOrbitTick` — after an NPC grab-release the
+//     lunge resumed and auto-mounted `p.g` with NO input. The real arm
+//     (L346f, g.java:7456) is `a(1)` enterFall + a proven-dead
+//     `r()→l()` tail — the original drops the player.
+// The frozen mount itself is verbatim once entered:
+//  - `g.i(i)` offer (g.java:12731-12787) has NO Z[0] gate — a weakened
+//    (Z[0]==2) mountable (Z[19]==1) ax11 offers/binds identically
+//    (`az()` L56a: `i(e) || (aA∉{0,2} && |Δal|≤20)` + LOS `e(i)`).
+//  - `au()` ax11 orbit (g.java:10800-10870) drags the PLAYER down at a
+//    frozen `cy` — no input arm; every release (P() aB≤0, h>440,
+//    |Δal|≥60, carry `aA|=8` needing victim Z[0]==0 i.java:36405,
+//    aI() W-overlap, S303/295 anim-end, i.at) is unreachable.
+//  The capstone bot's policy stands: never CONTEXT while a weakened
+//  mountable is bound — the weakened victim stays passive and unbinds.
+class Slice277Test {
+
+    private fun soldierAt(w: Level0World, x: Int, y: Int): Entity {
+        val e = Entity(11, w.clips[7])
+        e.aB = 50; e.aA = 1
+        e.setPositionPx(x, y); e.refreshBoxes()
+        w.npcs.add(0, e)
+        return e
+    }
+
+    @Test fun `az() auto-binds a weakened aA=1 mountable victim on proximity`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes(); p.S = 0
+        p.gJ = 0                                          // no offer arm
+        val s = soldierAt(w, 320, 150)
+        s.Z[0] = 2; s.Z[19] = 1                           // weakened + mountable
+        w.playerFsm.interactScan(p)
+        assertSame(s, p.g, "aA=1 + |Δal|=0 + LOS → L56a binds (proven)")
+    }
+
+    @Test fun `L56a non-offer bind is gated by a 20px vertical band`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.av = false; p.refreshBoxes(); p.S = 0
+        p.gJ = 0                                          // offer dead
+        val far = soldierAt(w, 320, 190)                  // |Δal| = 40
+        far.Z[0] = 2; far.Z[19] = 1
+        w.playerFsm.interactScan(p)
+        assertNull(p.g, "aA=1 but |Δal|=40 → L56a skips (gate restored)")
+        p.g = null
+        w.npcs.remove(far)
+        val near = soldierAt(w, 320, 165)                 // |Δal| = 15
+        near.Z[0] = 2; near.Z[19] = 1
+        w.playerFsm.interactScan(p)
+        assertSame(near, p.g, "|Δal|=15 ≤ 20 → binds")
+    }
+
+    @Test fun `CONTEXT mounts the bound weakened victim — c(g) lunge`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 0; p.av = false
+        val s = soldierAt(w, 320, 150)
+        s.Z[0] = 2; s.Z[19] = 1; s.aB = 40                // weakened, alive
+        p.g = s; Entity.at = null; p.gJ = 4
+        val pad = Pad()
+        pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
+        w.playerFsm.mountEntry(p, pad)
+        assertSame(s, p.F, "ar() L3702 — c(g) lunged onto the weakened victim")
+        assertTrue(w.cm == 1)
+    }
+
+    @Test fun `S277 orbit applies the frozen-cy down-drag and never releases`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val s = soldierAt(w, 354, 150)                    // +54px east, same level
+        s.Z[0] = 2; s.Z[19] = 1; s.aB = 40
+        p.g = s; Entity.at = null
+        p.cF = 5120; p.cy = 128                           // atan2(0,-54) = 128
+        repeat(400) {
+            p.mountOrbitTick(w, Pad())
+            assertEquals(0, p.ag, "ag = -(cF>>8)·sin(128) = 0")
+            assertEquals(5120, p.ah, "ah = 20·sin(-64) = +20px/tick down-drag")
+            assertEquals(128, p.cy, "cy never recomputed — frozen at bind")
+            w.playerFsm.interactScan(p)                   // release-gate sweep
+            assertSame(s, p.g, "no release arm reachable — g stays bound")
+        }
+        assertEquals(277, p.S, "S277 has no input arm — mount never dismounts")
+        assertTrue(s.aB > 0, "orbit never damages the victim — P() can't fire")
+        assertEquals(0, p.aA and 8, "carry arm needs victim Z[0]==0 — dead at 2")
+        Entity.at = null
+    }
+
+    @Test fun `S312 grab-release drops airborne — never mounts (L346f)`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 312
+        val s = soldierAt(w, 354, 150)
+        s.Z[0] = 2; s.Z[19] = 1; s.aB = 40
+        p.g = s; Entity.at = null                    // bound mountable
+        // L346f (g.java:7456): `a(1)` enterFall — the slice-28 arm that
+        // resumed lungeTick here mounted `p.g` with no input at all;
+        // the original drops the player.
+        for (i in 0..40) w.tick(emptyList())
+        assertTrue(p.S != 277 && p.S != 293, "no auto-mount after grab-release")
+        assertTrue(p.S == 43 || p.S == 5 || p.S == 16 || p.S == 0,
+            "S312 → a(1) fall chain (S=${p.S})")
+        Entity.at = null
+    }
+
+    @Test fun `contrast — a Z0==0 victim mounts but the carry arm can fire`() {
+        val w = world()
+        w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 277
+        val s = soldierAt(w, 354, 150)
+        s.Z[0] = 0; s.Z[19] = 1; s.aB = 100               // normal mountable
+        p.g = s; Entity.at = null
+        p.cF = 5120; p.cy = 128
+        p.mountOrbitTick(w, Pad())
+        // i.java:36405 — the aA|=8 carry arm's Z[0]==0 gate PASSES here:
+        // the release path exists for normal victims (weak = 2 = dead).
+        assertEquals(0, s.Z[0], "normal victim — carry arm gate passes")
+        Entity.at = null
+    }
 }
