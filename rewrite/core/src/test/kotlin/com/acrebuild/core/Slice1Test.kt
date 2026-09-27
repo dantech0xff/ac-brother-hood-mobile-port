@@ -183,6 +183,7 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
             6 to Clip.load(asset("clips/clip6/clip.acpk")),     // ax10 zones (bi[10]=6, zero-pixel)
             28 to Clip.load(asset("clips/clip28/clip.acpk")),   // ax51 crates (bi[51]=28)
             44 to Clip.load(asset("clips/clip44/clip.acpk")),   // ax31 (bi[31]=44)
+            13 to Clip.load(asset("clips/clip13/clip.acpk")),   // ax21 director + ax48 child (bi=13)
         )
         if (aj == 0) {
             clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
@@ -584,7 +585,7 @@ class Level0WorldTest {
             "S216 victim should sit in S85 with the launch eaten by g() (S=${s.S}, ag=${s.ag})")
     }
 
-    @Test fun `npc strike on a metered player pays meter and staggers the player`() {
+        @Test fun `npc strike on a metered player pays meter and staggers the player`() {
         val w = world()
         // pick a soldier whose strike-adjacent position passes i.c()'s
         // wall guard (open-air spots legitimately block the drain)
@@ -25638,3 +25639,162 @@ class Slice282Test {
     }
 
 }
+
+class Slice288Test {
+    /**
+     * Mission-4 (pack-10, bh3 flying canyon — second vertical ESCAPE)
+     * capstone bot. Same machinery as mission-1 (ax25 flyer, conveyor leash,
+     * ax24-S19 shrines, ax10-S10 perch gates, ax10-S31 claim-QTE), different
+     * geometry: FOUR QTE gates (aw326/330/332 mid-shaft → gate scripts
+     * 325/329/331; aw338 top → aA=337) instead of one.
+     *
+     * Route (bottom→top, y decreasing):
+     *   perch aw328 W[285,10246,603,10296] → cp 10137 → shrine (476,9560)
+     *   → gate aw326 (y8842, lane M_TAP_L=2) → gate aw330 (y8389, lane
+     *   M_TAP_R=8) → gate aw332 (y8031, lane M_TAP_L=2) → cp 7894
+     *   → shrine (553,6199) → cp 5146 → shrine (241,4281)
+     *   → perch aw324 W[99,3804,410,3859] → top claim aw338 (y2384,
+     *   lane M_UP=16388, aA=337) → top arena ~(583,1350).
+     *
+     * Lane decode (proven, Entity.kt:3354 CS + NpcFsm.kt:1828-1918): the
+     * zone's armed lane type is `Z[1] shr ((3-r9)<<2) and 15`; for these
+     * single-lane records Z[1] itself is the lane type → press CS[Z[1]&15].
+     */
+    private val m4Cs = intArrayOf(1, 2, 16388, 8, 4112, 65568, 8256, 128, 33024, 512)
+
+    @Test
+    fun `capstone mission-4 full-shaft climb to claim-QTE win`() {
+        val w = world(aj = 4)
+        settleIntro(w)
+        val p = w.player
+        val route = listOf(
+            Triple(444, 10270, "perch"),
+            Triple(476, 9560, "shrine1"),
+            Triple(417, 8900, "gate"),
+            Triple(514, 8450, "gate"),
+            Triple(472, 8090, "gate"),
+            Triple(553, 6199, "shrine2"),
+            Triple(241, 4281, "shrine3"),
+            Triple(255, 3850, "perch"),
+            Triple(594, 2450, "claim"),
+            Triple(583, 1350, "top"),
+        )
+        var leg = 0; var t = 0; var won = false
+        var prevCamY = w.kP; var stallT = 0; var prevS = p.S
+        var minAl = p.al
+        while (t++ < 120000) {
+            when {
+                w.missionWon -> { won = true; break }
+                w.jC == 12 || w.jC == 13 -> {
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    continue
+                }
+                w.jC == 21 -> {
+                    if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }
+                    w.tick(emptyList()); continue
+                }
+                w.jC != 8 -> {
+                    if (w.jG >= 10 && t % 40 == 0) w.pad.e(Pad.M_CYCLE)
+                    w.tick(emptyList()); continue
+                }
+                Entity.gE && leg < route.size - 1 -> {
+                    // S31 QTE: press the armed zone's lane (CS[pv] press
+                    // edge — aB counts the window, a miss = lane timeout).
+                    // Pick the zone the player is INSIDE — a stale armed
+                    // zone elsewhere in the list would steal the press.
+                    val gz = w.npcs.firstOrNull {
+                        it.ax == 10 && it.S == 31 && it.aB > 0 &&
+                            it.W[0] <= p.W[2] && it.W[2] >= p.W[0] &&
+                            it.W[1] <= p.W[3] && it.W[3] >= p.W[1]
+                    }
+                    if (gz != null) { w.pad.e(m4Cs[gz.Z[1] and 15]); w.pad.releaseFlush() }
+                    w.tick(emptyList()); continue
+                }
+            }
+            val (tx, ty, tag) = if (leg < route.size) route[leg] else route.last()
+            var held = 0
+            val z31 = w.npcs.filter { it.ax == 10 && it.S == 31 }
+                .minByOrNull { Math.abs(it.al - p.al) }
+            if (tag == "claim" || tag == "gate" ||
+                (z31 != null && z31.aB > 0 &&
+                    p.al in z31.W[1] - 40..z31.W[3] + 40)) {
+                // any armed S31 zone in reach → press its lane once
+                if (z31 != null && z31.aB > 0) {
+                    held = m4Cs[z31.Z[1] and 15]
+                } else if (z31 != null) {
+                    // steer into the zone's W band so `aV()` can arm it
+                    val zc = (z31.W[1] + z31.W[3]) / 2
+                    val xc = (z31.W[0] + z31.W[2]) / 2
+                    if (p.al > zc + 20) held = Pad.M_UP
+                    else if (p.al < zc - 20) held = Pad.M_DOWN
+                    if (p.ak < xc - 15) held = held or Pad.M_RIGHT
+                    else if (p.ak > xc + 15) held = held or Pad.M_LEFT
+                } else {
+                    if (p.al < w.kP + 130) held = Pad.M_DOWN
+                    else if (p.al > w.kP + 230) held = Pad.M_UP
+                }
+            }
+            else if (tag == "perch") {
+                val zn = w.npcs.filter { it.ax == 10 && it.S == 10 }
+                    .minByOrNull { Math.abs(it.al - ty) }
+                if (zn != null) {
+                    val cx = (zn.W[0] + zn.W[2]) / 2
+                    if (p.ak < cx - 10) held = held or Pad.M_RIGHT
+                    else if (p.ak > cx + 10) held = held or Pad.M_LEFT
+                    val q = p.al - w.kP
+                    if (!w.iBB) {
+                        val hover = minOf(zn.W[3] + 80, w.kP + 195)
+                        if (p.al > hover + 8 && q > 125) held = Pad.M_UP
+                        else if (p.al < hover - 15) held = Pad.M_DOWN
+                        val dy = p.W[1] - zn.W[3]
+                        if (dy > zn.Z[1] && dy < zn.Z[0]) held = held or 1
+                    }
+                }
+            }
+            else {
+                if (stallT > 30 || p.al in ty - 60..ty + 80) {
+                    if (p.al > ty) held = Pad.M_UP
+                    else if (p.al < ty - 10) held = Pad.M_DOWN else held = 0
+                }
+                else if (p.al > w.kP + 200) held = Pad.M_UP
+                else if (p.al < w.kP + 140) held = Pad.M_DOWN else held = 0
+            }
+            // arena wall duel: puffs only damage a wall they overlap, so
+            // steer the player's lane onto the live wall's x-band.
+            val wallT = w.npcs.firstOrNull {
+                (it.aw == 11 || it.aw == 15 || it.aw == 16 ||
+                    it.aw == 17 || it.aw == 154) &&
+                    it.aB > 0 && (it.l and 1) != 0
+            }
+            val txEff = if (wallT != null) (wallT.W[0] + wallT.W[2]) / 2 else tx
+            if (tag != "claim" && tag != "gate" &&
+                p.ak < txEff - 12) held = held or Pad.M_RIGHT
+            else if (tag != "claim" && tag != "gate" &&
+                p.ak > txEff + 12) held = held or Pad.M_LEFT
+            val preAF = w.kAF
+            prevS = p.S
+            w.pad.e(held); w.tick(emptyList())
+            if (w.kP == prevCamY) stallT++ else stallT = 0; prevCamY = w.kP
+            if (p.al < minAl) minAl = p.al
+            val justFired = (prevS != 21 && p.S == 21 && w.jC == 8) ||
+                (preAF == 0 && w.kAF > 0 && w.jC == 8)
+            if (leg < route.size && !tag.startsWith("shrine") &&
+                p.al < ty - 60) leg++
+            if (leg < route.size && tag.startsWith("shrine") && justFired) leg++
+            if (leg < route.size && tag.startsWith("shrine") &&
+                p.al < ty - 400) leg++
+        }
+        val dir = w.npcs.firstOrNull { it.ax == 21 }
+        println("M4CAP won=$won t=$t leg=$leg minAl=$minAl p@(${p.ak},${p.al}) " +
+            "dirAA=${dir?.aA} dirl=${dir?.l} jC=${w.jC} kP=${w.kP}")
+        assertTrue(won,
+            "mission-4 capstone should reach missionWon; " +
+                "got leg=$leg p@(${p.ak},${p.al}) S${p.S} jC=${w.jC} kP=${w.kP} " +
+                "kX=${w.kX} iBe=${w.iBe} iBB=${w.iBB} aE=${p.aE} kAH=${w.kAH}")
+    }
+}
+

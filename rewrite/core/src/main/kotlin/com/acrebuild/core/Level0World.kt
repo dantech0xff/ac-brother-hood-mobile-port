@@ -213,8 +213,12 @@ class Level0World(
     // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
     // {uid,x,y,param-d,c,f,g} in f[1..7]; ax54/ax30 runners resolve their
     // Z[1..4] uid chain into entity-shifted copies (aw(), uid base 10000).
-    // Declared before init{} — spawnEntities() calls waypointPool.clear().
+    // Declared before init{} — spawnEntities() calls waypointPool.clear()
+    // and waypoints.reset().
     val waypointPool = Waypoint.Pool()
+    override val waypoints = WaypointPool()    // c.m/l/j — declared before
+    // init{} (spawnEntities resets it); the single `c` pool's second half —
+    // the runners use waypointPool, the director/pursuers use this one.
 
     // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
     // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
@@ -702,6 +706,8 @@ class Level0World(
         grabHolder = null; player.gb = null         // g.h=null; g.b=null (:2486-2489)
         marker = null; markerTag = -1
         waypointPool.clear()
+        waypoints.reset()   // c.a() (i.java:2567, proven) — same `c` pool
+                            // the director/pursuers read; reset on reload
         projectilePool = null
         kAY.fill(null)                            // k.aY (i.java:2541)
         // i.D() tail — the modeled statics that must not survive a reload:
@@ -755,7 +761,10 @@ class Level0World(
 
         for ((i, f) in level.entities.withIndex()) {
             if (f.isEmpty()) continue
-            if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
+            if (f[0] == 55) { waypointPool.load(f.toList()); waypoints.add(f); continue }  // k.java:6049
+            // `c.a(short[])` (k.java:6049, proven): ax55 records feed ONE `c`
+            // pool in the original — the port split it into waypointPool
+            // (runners) + waypoints (director/pursuers); both must load.
             // the 0/25 player-slot record becomes `aS`, not a bb[] npc
             // (inferred — `k.aS` is built from it, not spawned twice).
             if (f[0] == 0 || f[0] == 25) continue
@@ -994,7 +1003,6 @@ class Level0World(
     override var iCC = 0                       // i.cC — waypoint phase
     override var iCD = -1                      // i.cD — active phase
     override var iCE = -1                      // i.cE — f(int) gate
-    override val waypoints = WaypointPool()    // c.m/l/j
     override var dirWp: WaypointNode? = null   // i.cB
     override var kB: Entity? = null            // k.B — arena boundary
     override var kAi = false                   // k.ai — director active
@@ -4582,6 +4590,11 @@ class Level0World(
 
     // -- sim --------------------------------------------------------------
 
+    private fun claimSuspendsPlayer(): Boolean =
+        (kC?.claimAb() == true || (jC == 21 && dlgU == 9)) &&
+            (player.P and 512) == 0 && kC !== player &&
+            player.ax != 8 && player.ax != 24
+
     fun tick(events: List<InputQueue.Event>) {
         consume(events)
         // k.H/k.I live for one frame (k.java:1874-77 — `H=ch;I=ci;ch=-1;
@@ -4738,10 +4751,7 @@ class Level0World(
         // `aa()` drives `ak`/`al` directly. `s()` (advanceAnim) stays
         // outside: suspended entities still advance anims (the L34-L81
         // arm runs before the gate).
-        val claimSuspended = (kC?.claimAb() == true ||
-            (jC == 21 && dlgU == 9)) &&
-            (player.P and 512) == 0 && kC !== player &&
-            player.ax != 8 && player.ax != 24
+        val claimSuspended = claimSuspendsPlayer()
         if (!claimSuspended) {
             player.collideSides(this, true)
             playerFsm.tick(player, pad)
@@ -4880,15 +4890,15 @@ class Level0World(
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
         // below camera bottom (B(), i.java:1386-1389, proven):
-        // `if (!v()) { if (al > k.P + 240) l(12) }` — the check lives in
-        // `B()` inside `aB()` inside the PLAYER tick (g.java:5837), so it
-        // cannot fire while the player is claim-suspended — the script
-        // pans the camera away on its own timeline (e.g. mission-3
-        // script 692's op11 pan 650→400 while the player rides the lift
-        // up out of the pit) without the below-view check ever arming.
-        // The world-tick equivalent must share the suspension gate; the
-        // `v()` in-play predicate still applies the rest of the time.
-        else if (!claimSuspended && !player.inPlayV(this) &&
+        // `if (!v()) { if (al > k.P + 240) l(12) }` — in the original this
+        // sits inside n(), the player's own tick, so it runs BEFORE any
+        // entity's claim ops and can never see the post-op camera pan: a
+        // script that binds a hold on the player while snapping the camera
+        // away (mission-4 script 41's op11 snap + op21 hold) skips it.
+        // The equivalent here is a LIVE re-check (not the tick-top local):
+        // on the bind tick the claim is already bound by the time the pan
+        // lands, so the gate is closed.
+        else if (!claimSuspendsPlayer() && !player.inPlayV(this) &&
                  player.al > camY + VIEW_H) stateL(12)
 
         // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
