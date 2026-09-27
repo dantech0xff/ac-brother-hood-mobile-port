@@ -1561,13 +1561,18 @@ class Level0World(
     override var kAZ = false                   // k.aZ (:252) — save byte 68 flag
     override var kBQ = false                   // k.bQ (:140) — map dirty flag
     override fun audioTrackPlay(n: Int) { z(n) } // e.a(n,false) → private z()
-    /** `k.b(8,level,row,span)` (k.java:350, proven) — checkpoint-map
-     *  marker; `row==-1 → false`, else `kU=slot` and the map region is
-     *  marked complete (the `w` count is consumed by the map screen —
-     *  stubbed there; `inferred` bookkeeping, proven signature). */
+    /** `k.b(8,level,row,span)` (k.java:349-360, proven) — checkpoint-map
+     *  marker; `row==-1 → false`, else it writes k.u (the lowercase map-
+     *  region slot — a write-only bookkeeping latch in the original,
+     *  consumed nowhere) and marks the region's `w` map cells complete
+     *  (stubbed). PROVEN NOT `k.U`: the camera's bottom bound `U` is a
+     *  different field armed only by ax37 triggers (i.java:7152) — an
+     *  earlier rev aliased them, so every S21 checkpoint zone poisoned
+     *  `boundMaxY` and the camera rocketed to a fake kill ceiling. */
+    var kMapSlot = 0                           // k.u — map-region slot
     override fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean {
         if (row == -1) return false
-        kU = slot; kBQ = true
+        kMapSlot = slot; kBQ = true
         return true
     }
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
@@ -4874,13 +4879,17 @@ class Level0World(
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
-        // below camera bottom: i.java:4137-4145 (proven) —
-        // `if (!v()) { if (al > k.P + 240) l(12) }` — the fail is gated by
-        // the `i.v()` in-play predicate: while the player's box intersects
-        // `k.ac` (the camera view) the check is skipped, so claim scripts
-        // that dip the player below the view edge (e.g. script 104's gap
-        // descent at the x5500 wall) do not kill the run mid-cutscene.
-        else if (!player.inPlayV(this) && player.al > camY + VIEW_H) stateL(12)
+        // below camera bottom (B(), i.java:1386-1389, proven):
+        // `if (!v()) { if (al > k.P + 240) l(12) }` — the check lives in
+        // `B()` inside `aB()` inside the PLAYER tick (g.java:5837), so it
+        // cannot fire while the player is claim-suspended — the script
+        // pans the camera away on its own timeline (e.g. mission-3
+        // script 692's op11 pan 650→400 while the player rides the lift
+        // up out of the pit) without the below-view check ever arming.
+        // The world-tick equivalent must share the suspension gate; the
+        // `v()` in-play predicate still applies the rest of the time.
+        else if (!claimSuspended && !player.inPlayV(this) &&
+                 player.al > camY + VIEW_H) stateL(12)
 
         // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
         // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`

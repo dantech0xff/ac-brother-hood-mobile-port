@@ -25425,6 +25425,60 @@ class Slice282Test {
             if (w.jC != 8) break
         }
         assertTrue(legReached,
-            "legD cp272->cp274: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+            "legD carrier ride -> tower landing: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
+
+    @Test fun mission3CapstoneLegE() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legE — the wall door-teleport. The carrier drops the player on
+        // the tower top (x8180-8440 surface y740); east of it a 200px
+        // pillar (x8440-8540, y540-740) blocks the rooftop. The designed
+        // crossing is the ax10-S16 door pair: aw898 box x8384-8421 ×
+        // y655-740 at the pillar's west face → oId=899 → aw899 @(8546,652)
+        // east of the pillar, then cp667 @(8557,690) fires right at the
+        // landing. Start checkpoint-style on the tower top (leg D's end).
+        p.setPositionPx(8260, 739); p.ak = 8260; p.al = 739; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 8060; w.kP = 740
+        var legReached = false; var maxAk = 0
+        for (t in 0..4000) {
+            var mask = Pad.M_RIGHT
+            // door trigger needs UP held while overlapping (x8384-8421)
+            // and grounded — hold it only inside the box so UP can't arm
+            // a wall-grab on the pillar face first.
+            if (p.ak >= 8380 && p.ak < 8600 && p.ac == null) mask = Pad.M_RIGHT + Pad.M_UP
+            // ax22 capture pins S65; Z[2]=1 → padHeld(16396)=UP∣TAP-R
+            // vaults out east (+3328,-3840 → S19 arc).
+            if (p.S == 65) mask = Pad.M_UP
+            // past the zipline drop keep UP held so vault arcs stay
+            // high — the y840 corridor is a designed below-camera pit.
+            if (p.ak >= 10100) mask = Pad.M_RIGHT + Pad.M_UP
+            // script-692's lift ride ends in a FIRE QTE (op107 mask
+            // 0x20→65568 at key=122, op108 decide at 132 — miss →
+            // fail-branch script 25 → l(12)). Press context on the
+            // rooftop approach.
+            if (p.al < 700 && p.ak >= 10600) mask = Pad.M_CONTEXT
+            w.pad.e(mask)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            val cp = w.checkpoints.firstOrNull { it.aw == 273 }
+            if (cp != null && cp.consumed && p.ak >= 10800 && p.aZ) {
+                legReached = true; break
+            }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legE tower->door->script692 lift->cp273: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
     }
 }
