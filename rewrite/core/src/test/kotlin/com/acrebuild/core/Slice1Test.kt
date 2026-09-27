@@ -25181,3 +25181,123 @@ class Slice281Test {
     }
 }
 
+
+
+class Slice282Test {
+    /** Slice 282 — mission-3 capstone bot legs on `world(aj = 3)`
+     *  (spawn (21,699) -> win ax42 @(13628,1045); 8 checkpoints:
+     *  cp157@(2229,647) cp158@(3207,396) cp159@(3709,503)
+     *  cp281@(3897,295) cp272@(5360,795) cp274@(7552,224)
+     *  cp667@(8557,690) cp273@(10873,575)). Same capstone pattern as
+     *  slices 279/280/281 — real input only, no state pinning.
+     *
+     *  Leg A: spawn (21,699) -> run east -> cp1 aw157@(2229,647).
+     *  ax11 guards patrol the route; the bot strikes any live ax11 in
+     *  melee range (65568 = the attack button edge). */
+
+    @Test fun mission3CapstoneLegA() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        var legReached = false; var maxAk = 0
+        for (t in 0..3600) {
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                297, 89, 90 -> mask = Pad.M_CONTEXT
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211 -> mask = Pad.M_UP
+                258, 260, 262 -> mask = Pad.M_DOWN
+                259, 261, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+                235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
+                else -> if (!p.aZ) mask =
+                    if (p.ak >= 1415) Pad.M_RIGHT else Pad.M_RIGHT + Pad.M_UP
+            }
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+            // x1400 wall: grounded approach holds UP — the auto-vault
+            // (S21 squat -> S36/43) needs the UP edge to fire the kick
+            if (p.aZ && p.ak in 1300..1470) mask = Pad.M_RIGHT + Pad.M_UP
+            // x1400 wall hangs: hold RIGHT toward the face — UP fires a
+            // kick that throws the player OVER the wall to the east face,
+            // where the chain bounces it back west (verified live)
+            if (p.ak in 1330..1500 && (p.S == 101 || p.S == 62 || p.S == 60 || p.S == 61))
+                mask = Pad.M_RIGHT
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 2229) { legReached = true; break }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legA reached cp1 aw157: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
+
+    /** Leg B — the mass A -> mass B crossing (x4240-4360 gap). The
+     *  aw849 ax37 scroll bound [4246,344,4383,893] clamps walking east
+     *  inside its y-band (verified: the walk stalls ~x4210 with ag
+     *  zeroed by i.f scrollWallClamp), so the designed route crosses
+     *  ABOVE it via the west tower top: east off the tower lip ->
+     *  S164 vault -> S157 bound launch (ag 8192, ~32px/t) -> arc east
+     *  -> mass B top @(4519,279). Entered at the tower top — the
+     *  rail -> massA -> duel -> tower ascent chain is the preceding
+     *  leg's frontier. */
+    @Test fun mission3CapstoneLegB() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(3980, 160); p.ak = 3980; p.al = 160; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 4080; w.kP = 700
+        var legReached = false; var maxAk = 0
+        for (t in 0..3600) {
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                297, 89, 90 -> mask = Pad.M_CONTEXT
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211 -> mask = Pad.M_UP
+                258, 260, 262 -> mask = Pad.M_DOWN
+                259, 261, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+                235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
+                else -> if (!p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
+            }
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null && mask == Pad.M_RIGHT) mask = Pad.M_CONTEXT
+            if (p.aZ && p.al >= 650 && p.ak >= 3060 && p.ak < 3350)
+                mask = Pad.M_RIGHT + Pad.M_UP
+            if (p.al in 580..650 && p.ak in 3860..4080)
+                mask = Pad.M_RIGHT + Pad.M_UP
+            if (p.aZ && p.al in 480..520 && p.ak in 4040..4230)
+                mask = Pad.M_RIGHT
+            if (p.aZ && p.ak >= 4230 && p.al in 440..560)
+                mask = Pad.M_RIGHT + Pad.M_UP
+            if (!p.aZ && p.al in 300..900 && p.ak in 4240..4390)
+                mask = Pad.M_RIGHT + Pad.M_UP
+            val foe2 = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 90 && Math.abs(it.al - p.al) < 60
+            }
+            if (foe2 != null) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 4400 && p.aZ) { legReached = true; break }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legB crossed massA->massB gap via tower arc: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
+}
