@@ -25525,4 +25525,48 @@ class Slice282Test {
         assertTrue(legReached,
             "legF street-gauntlet->x11800 wall->y820 shelf: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
     }
+
+    @Test fun mission3CapstoneLegG() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legG — the lift stair + zipline crossing. From the x12000 wall
+        // top (y679 — leg F's climb ends here, NOT on the y840 corridor:
+        // the ax44 crusher doors aw881-892 sit at y843-844 and spawning on
+        // the corridor floor gets crushed -> S50 -> x1=0 KO, Entity.kt:929).
+        // The designed crossing rides three ax66 lifts up the west face —
+        // aw597@(12117,644) -> aw598@(12315,604) — into ax22 capture
+        // aw835@(12383,544) which launches up to the ax40 zipline at y440,
+        // landing on the east mass top ~y540-660 at x13080+.
+        p.setPositionPx(12000, 679); p.ak = 12000; p.al = 679; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 11800; w.kP = 560
+        var legReached = false; var maxAk = 0
+        for (t in 0..6000) {
+            var mask = Pad.M_RIGHT + Pad.M_UP
+            // pinned capture S65: Z[2]=1 -> padHeld(16396)=UP|TAP-R vaults out.
+            if (p.S == 65) mask = Pad.M_UP
+            // on the zipline (airborne ride) keep RIGHT held — no UP,
+            // so dismount arcs stay forward not upward.
+            if (p.al < 500 && p.ak >= 12600) mask = Pad.M_RIGHT
+            w.pad.e(mask)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 13080 && p.al <= 700 && p.aZ) {
+                legReached = true; break
+            }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legG lift-stair->capture->zipline->east mass: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
 }
