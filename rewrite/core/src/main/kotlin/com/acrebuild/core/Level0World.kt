@@ -2302,11 +2302,24 @@ class Level0World(
                 else -> goalTicker = false
             }
         } else goalTicker = false
-        val c = kC                                                     // L161-L167
-        if (c != null && c.cd[2] && c.cd[1] && c.claimActive()) {
-            c.runClaimScript(this)
+        // L161-L4cf (verbatim gating): the whole block — claimer
+        // fast-forward AND the bh3 `cA=O; cB=P` target snap — sits inside
+        // `k.C != 0 && cd[2] && cd[1]` (k.java:8954-8997 L49b-L4cf).
+        // The snap exists so an early-returning D() doesn't leave stale
+        // targets while the claimer fast-forwards; running it every tick
+        // halves the conveyor to ~3px/t (observed camB~=-2.5/t) — a
+        // fidelity bug that starves the canyon fuel economy.
+        val c = kC
+        if (c != null && c.cd[2] && c.cd[1]) {
+            var cc = kC                                                // L4b7
+            while (cc != null && cc.claimActive()) {
+                cc.runClaimScript(this)
+                cc = kC                                                // re-read global (verbatim)
+            }
+            if (Entity.MISSION_BH[kAj] == 3) {                         // L4cf
+                camA = camX; camB = camY
+            }
         }
-        if (Entity.MISSION_BH[kAj] == 3) { camA = camX; camB = camY }  // L172
     }
 
     /** L157's `z[9]` milestone blit active this tick → `drawFrame(9,38)`. */

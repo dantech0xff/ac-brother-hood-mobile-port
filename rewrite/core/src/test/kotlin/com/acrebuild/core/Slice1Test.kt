@@ -23340,24 +23340,21 @@ class Slice245Test {
         }
         println("FLY jC=${w.jC} deaths=$deaths snap=$snapFired " +
             "respawnAl=$respawnAl al=$minAl-$maxAl iBe=${w.iBe} marks=$marks")
-        // Verdict (proven, k.java:1851-1875 C() + k.java:6890-6960 D()):
-        // cp1 (418,8360) CANNOT fire on level-1. `aY()` only ticks while
-        // `au<2` → camY ∈ (8000,8480), but every respawn runs `a()` →
-        // `C()` → bh3 arm `cB=P=aS.al-230` (≈11733) and re-arms `X=-7`;
-        // the drift (`camB+=kX`, `P+=l(cB-P,30)` ≈ kX/2 ≈ -3.5/t, -2/t
-        // after the single `i.aJ`-gated halving at aE≤25) grinds only
-        // ~2000px before the `k.aE` stall caps the leg (~600t: aE=100
-        // drains 1/6t while k.aH=-1, never armed by the absent ax21).
-        // camY bottoms out ~9600 — the cp1 window stays 1500px away.
-        // The conveyor that could jump the camera (`k.dU` world-shift)
-        // is ax21-gated (`i.bD()` arms `k.aR` only at aS.al<260) — dead
-        // here; `i.bW` phase-checkpoints are likewise ax21-only.
-        assertTrue(deaths >= 2 && minAl < 8360 && !snapFired,
-            "canyon legs: player out-climbs the drift camera (past " +
-            "cp1's al=8360 band) while the camera resets to " +
-            "p.al-230≈11733 every respawn — cp1's au window (camY " +
-            "8000-8480) is unreachable in a ~600t k.aE leg, so the " +
-            "checkpoint stays unfired — snap=$snapFired deaths=$deaths " +
+        // Verdict (proven, k.java:1851-1875 C() + k.java:8954-8997 L49b-L4cf):
+        // cp1 (418,8360) DOES fire under the verbatim claim gate — while
+        // `k.C == 0` the `cA=O; cB=P` target snap does NOT run, so `camB`
+        // keeps the conveyor target and camY tracks ~7px/t (the older
+        // port ran the snap every tick and halved the conveyor to ~3px/t,
+        // starving the leg ~1500px short of the window — fidelity bug).
+        // With the gate the au window (camY 8000-8480) is reached inside
+        // the fuel budget, `aY()` writes the checkpoint, and the next
+        // respawn lands AT cp1 (respawnAl == 8360). Fuel stalls still
+        // kill a naive-climb bot — deaths stay in the design.
+        assertTrue(snapFired && minAl < 8360 && respawnAl == 8360,
+            "canyon legs: the fixed conveyor keeps ~7px/t so camY reaches " +
+            "cp1's au window (8000-8480) before the k.aE cap — the " +
+            "checkpoint fires (snap) and respawns land at cp1 (8360) — " +
+            "snap=$snapFired deaths=$deaths " +
             "minAl=$minAl respawnAl=$respawnAl marks=$marks")
     }
 
@@ -24806,4 +24803,174 @@ class Slice277Test {
         Entity.at = null
     }
 
+}
+// Slice 280 — mission-1 (bh3 flying canyon) capstone: ride the conveyor
+// camera bottom band up the whole shaft to the claim zone, letting the
+// ax54/56 waypoint-runner chain's `k.aH = 80` grace (NpcFsm.kt:4016,
+// i.java:51154-51156 proven) freeze the `k.aE` drain.
+//
+// Fuel economy (all proven this slice):
+// - `k.aE` tank 100 drains 1/6t while `k.aH < 0` (g.java:5851-5856,
+//   PlayerFsm.kt:2409-2410); `aE<=0 && aH<0` → stall S24 → l(12).
+// - `k.aH` is a grace countdown, not a latch: waypoint runners arm 80
+//   per hop (i.java:51154); while `aH>=0` the drain is frozen and the
+//   arm counts down in c() (k.java:15174-15194); crossing to -1 sets
+//   `aE=-1` (poison) but clamps to 0 → `aE<=0 && aH<0` never becomes
+//   true (aH is 0, not <0) → the player flies on an empty tank in the
+//   pinned-zero state — an original-game quirk kept verbatim.
+// - `k.aE <= 0` skips the whole bh3 c() arm (k.java:15172 L3a3), so
+//   the refill arm is starved while pinned — fuel is simply over.
+// - Below 25 the conveyor halves: `i.aJ = k.X; k.X = aJ>>1`
+//   (g.java:13963-13979); the ax24-S20 shrine fire restores
+//   `k.X = i.aJ` (NpcFsm.kt:7129, i.java:39330-39335 proven).
+// - `projSweepBc` (NpcFsm.kt:6919+) has NO `au` filter — the player's
+//   flap-emitted ax24-S6 drop-lines convert S19→S20 shrines at any
+//   camera distance, and kill ax54/56/30 runners on contact.
+// - Camera: `kP` IS `camY` (view top). Player dies when
+//   `al > kP + 240` (below the camera bottom, Entity.kt:1282); there
+//   is no top band — out-climbing is free. bh3 entities tick while
+//   `au < 2` (Level0World.kt:4756) — a shrine's fire window is
+//   `kP ∈ [al-240, al+120]` ≈ 103 ticks at the -7 conveyor.
+//
+// So the shaft is camera-paced, not tank-paced: ride `al ≈ kP+170`
+// the whole way — the bird band keeps re-arming grace, grace expiry
+// pins the tank at 0 (free flight), and each shrine fires as its
+// window passes. Then the top claim zone ax10-S31 (456,481) binds
+// the win script (slice-266 proven chain).
+
+class Slice280Test {
+    /**
+     * Mission-1 (flying canyon / bh3) capstone bot — rides the full shaft:
+     * five ax24 shrine refills, the ax10-S10 wall-perch climb gate, then the
+     * S31 claim-QTE at the top. Everything below is real-input bot code —
+     * no state pinning.
+     *
+     * Route: the mid channel is the only continuous lane (the col-24..35
+     * divider is unbroken rows ~200-498, so the right channel is
+     * unreachable; verified on pack-7 entry-001 et layer). The perch box
+     * [295,521]x[6959,7019] spans the whole narrowed channel at the
+     * rows-347-358 choke — every flyer crossing overlaps it, so the
+     * S10 bind+climb is a MANDATORY gate, not a shortcut.
+     */
+    @Test
+    fun `capstone mission-1 full-shaft climb to claim-QTE win`() {
+        val w = world(aj = 1)
+        settleIntro(w)
+        val p = w.player
+        val route = listOf(
+            Triple(433, 9840, "shrine1"),
+            Triple(397, 8440, "shrine2"),
+            // S10 perch zone W=[295,6959,521,7019], Z={180,50,0,90,30,...}
+            // (NpcFsm.kt:1279-1361): hover the head in-band
+            // `dy = W[1]-zone.W[3] ∈ (Z[1],Z[0])` and press mask-1 → `iBB`
+            // binds → `iBi` latches the flight arm into its scripted branch
+            // (PlayerFsm.kt:2437 — `ah = kY`, the conveyor owns the sim) and
+            // the sequence drags the player through the box. The iBF hang
+            // oscillator (Entity.kt:4660) allows the overlap only while
+            // iBF ∈ [Z2,Z3]=[0,90] — L4b2 resets iBF=100/iBE=Z[4]=30 once
+            // the zone ticks, so binding close (dy<~90) keeps the ~36-tick
+            // budget ahead of the ~10-tick scripted crossing. The zone
+            // self-removes on `dy<0` once the feet clear its top (L573).
+            Triple(295, 7100, "perch"),
+            Triple(222, 6020, "shrine3"),
+            Triple(475, 2928, "shrine4"),
+            Triple(599, 1555, "shrine5"),
+            Triple(560, 590, "claim"),
+        )
+        var leg = 0; var t = 0; var won = false; var prevS = p.S; var prevAE = w.kAE
+        var prevCamY = w.kP; var stallT = 0
+        while (t++ < 60000) {
+            when {
+                // `stateL(15)` re-enters as i=22 (medals) the same tick when
+                // any medal stamps — missionWon is the win latch
+                // (Level0World.kt:2432, stateL(15|31|13)).
+                w.missionWon -> { won = true; break }
+                w.jC == 12 || w.jC == 13 -> {
+                    // mission-fail → restart prompt → respawn at checkpoint
+                    var guard = 0
+                    while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                        w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                        w.tick(emptyList())
+                    }
+                    continue
+                }
+                w.jC == 21 -> { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; w.tick(emptyList()); continue }
+                w.jC != 8 -> { if (w.jG >= 10 && t % 40 == 0) w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
+                Entity.gE && leg < route.size - 1 -> { w.tick(emptyList()); continue }
+            }
+            val (tx, ty, tag) = if (leg < route.size) route[leg] else route.last()
+            val zn = w.npcs.filter { it.ax == 10 && it.S == 10 }
+                .minByOrNull { Math.abs(it.al - ty) }
+            var held = 0
+            if (tag == "claim") {
+                // claim-QTE (i.java:33500+): overlap arms the lane
+                // (X=[0,0,0,2] → pv=2 → CS[2]=16388=M_UP) → ONE M_UP edge →
+                // aA=Z[3]=8 → bindScript(8) → win. Strays / aB>=20 consume
+                // WITHOUT aA → press only when armed (aB>0). Hover the
+                // leash band [camY+117,camY+230] so the zone ticks.
+                val z31 = w.npcs.firstOrNull { it.ax == 10 && it.S == 31 }
+                if (z31 != null && z31.aB > 0 && z31.aA != 8 && (held and Pad.M_UP) == 0) {
+                    held = Pad.M_UP            // fresh edge — pad.v(16388)
+                } else {
+                    if (p.al < w.kP + 130) held = Pad.M_DOWN
+                    else if (p.al > w.kP + 230) held = Pad.M_UP
+                }
+            }
+            else if (tag == "perch") {
+                if (zn != null) {
+                    // steer into the box's x-center — the channel narrows
+                    // to cols 18-23 inside the box x-range anyway.
+                    val cx = (zn.W[0] + zn.W[2]) / 2
+                    if (p.ak < cx - 10) held = held or Pad.M_RIGHT
+                    else if (p.ak > cx + 10) held = held or Pad.M_LEFT
+                    // q = p.al - camY is the flight leash: UP-climb needs
+                    // q>117; q>=230 velocity-clamps to the conveyor (kQ
+                    // arm, Level0World.kt:2244). All hovering rides the
+                    // leash, never an absolute altitude.
+                    val q = p.al - w.kP
+                    if (!w.iBB) {
+                        // unbound — hover head ~dy 55-90 (just below the
+                        // box, still inside the catch band dy∈(50,180))
+                        // and press 1 → bind → scripted crossing. Bound:
+                        // hands off — `iBi` makes pad input dead.
+                        val hover = minOf(zn.W[3] + 80, w.kP + 195)
+                        if (p.al > hover + 8 && q > 125) held = Pad.M_UP
+                        else if (p.al < hover - 15) held = Pad.M_DOWN
+                        val dy = p.W[1] - zn.W[3]
+                        if (dy > zn.Z[1] && dy < zn.Z[0]) held = held or 1
+                    }
+                }
+            }
+            else {
+                // Shrine leg. Conveyor running → RIDE the leash band: the
+                // box sweeps onto the player inside the au<2 window and the
+                // S20 arm fires. Conveyor stalled (shaft-bottom clamp) → the
+                // world is frozen so the box never approaches — climb/hover
+                // absolute. UP-climbing with the conveyor running outruns
+                // the camera → shrine off-screen → no fire → fuel-out.
+                if (stallT > 30 || p.al in ty - 60..ty + 80) {
+                    if (p.al > ty) held = Pad.M_UP
+                    else if (p.al < ty - 10) held = Pad.M_DOWN else held = 0
+                }
+                else if (p.al > w.kP + 200) held = Pad.M_UP
+                else if (p.al < w.kP + 140) held = Pad.M_DOWN else held = 0
+                // shrine legs advance on FIRE, not position — handled below
+            }
+            if (p.ak < tx - 12) held = held or Pad.M_RIGHT else if (p.ak > tx + 12) held = held or Pad.M_LEFT
+            val preAF = w.kAF
+            prevS = p.S; prevAE = w.kAE
+            w.pad.e(held); w.tick(emptyList())
+            if (w.kP == prevCamY) stallT++ else stallT = 0; prevCamY = w.kP
+            // shrine fire = S20 arm overlap → p.setAnim(21) + kAF trickle.
+            // With a full tank kAF stays 0, so detect the S21 heal-anim edge
+            // (or kAF edge for partial tanks).
+            val justFired = (prevS != 21 && p.S == 21 && w.jC == 8) ||
+                (preAF == 0 && w.kAF > 0 && w.jC == 8)
+            if (leg < route.size && p.al < ty - 60 && !tag.startsWith("shrine")) leg++
+            if (leg < route.size && tag.startsWith("shrine") && justFired) leg++
+            // safety: if a shrine never fires but we're far past it, advance
+            if (leg < route.size && tag.startsWith("shrine") && p.al < ty - 400) leg++
+        }
+        assertTrue(won)
+    }
 }
