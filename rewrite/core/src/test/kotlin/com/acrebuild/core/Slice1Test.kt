@@ -25481,4 +25481,48 @@ class Slice282Test {
         assertTrue(legReached,
             "legE tower->door->script692 lift->cp273: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
     }
+
+    @Test fun mission3CapstoneLegF() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legF — the street gauntlet + first wall. From leg E's end
+        // (10969,839) the y840 street runs solid east across the sealed
+        // door-gauntlet corridor (x11080-11779 — the y1197 sub-route is
+        // capped by oneway cells at both ends, not the designed path).
+        // Two ax11s patrol the street (aw833@11297, aw834@11492, range
+        // ±160). The street dead-ends at the wall mass x11800-12000:
+        // west face y760-840 rising to the y680 top at x12000 — the wisp
+        // trail (aw501@11865,717 → aw785@12101,582) marks the climb.
+        // Target: the y820 shelf east of the crest (x12100+).
+        p.setPositionPx(10969, 839); p.ak = 10969; p.al = 839; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 10769; w.kP = 720
+        var legReached = false; var maxAk = 0
+        for (t in 0..4000) {
+            var mask = Pad.M_RIGHT
+            // hold UP approaching the x11800 wall face so the vault/
+            // climb arms on contact (wall run + lip grab).
+            if (p.ak >= 11600) mask = Pad.M_RIGHT + Pad.M_UP
+            // guards engage on the street — attack when one is in front.
+            w.pad.e(mask)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 12100 && p.al <= 830 && p.aZ) {
+                legReached = true; break
+            }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legF street-gauntlet->x11800 wall->y820 shelf: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
 }
