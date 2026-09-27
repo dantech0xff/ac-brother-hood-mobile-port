@@ -265,8 +265,10 @@ class NpcFsm(val world: LevelCellSource) {
             e.ax != 50 && e.ax != 73) { defaultArm(e, player); return }
         // L70-L78 (i.java:4886-4898, proven): the fixed-point integrator
         // runs at the TOP of I() for every entity — under `aH` slow-mo it
-        // swaps to the aI-divided variant (L72→L75, i.java:6370-6384).
-        e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
+        // swaps to the aI-divided variant (L72→L75, i.java:6370-6384). The
+        // dispatch head already ran it for `I()`-entered entities; this
+        // fallback covers direct arm calls.
+        if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
         e.collideSides(world, true)
         // `I()` head (i.java:4024, proven): aB<=0 on any live state →
         // i(0) death entry. Without this an S85/SC hurt soldier recovered
@@ -2544,7 +2546,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // L131/L143 — player boards/attacks onto the crate
                 if (p.ga !== e && e.S != 13 &&
                     Entity.overlapI(p.W, e.W) &&
-                    (w.playerAttacking() || p.S == 236 || p.S == 239)) {
+                    (p.gB() || p.S == 236 || p.S == 239)) {             // g.b(k.aS.S)
                     if (r8 != null && r8.ax == 66 && r8.S == 16) {
                         p.flingAirborne(p.ah, w); p.ga = null       // L143
                     }
@@ -2626,7 +2628,7 @@ class NpcFsm(val world: LevelCellSource) {
             //    anim-done → i(18) + release) ------------------------
             19, 20, 21, 22 -> {
                 if (p.ga !== e) {                                   // L254
-                    if (w.playerAttacking() &&
+                    if (p.gB() &&                                     // g.b(k.aS.S)
                         Entity.overlapI(p.W, e.W)) {
                         p.setAnim(if (p.S == 264) 262 else 260)     // L260
                         p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0      // L261
@@ -6705,10 +6707,11 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
             e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }
         }
     }
-    e.integrate()                                              // L148 b(true)
-    // b(true) runs bF() every tick on flying levels — bh[k.aj]==3
-    // (i.java:4906, proven): waypoint coords = ak / al-kP.
-    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    if (!e.integratedThisTick) {
+        e.integrate()
+        if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    }
+    e.syncAd(w)                                                // L148 b(true)
 }
 
 /** ax24 init (L75/L84 arms of `i(short[])`, i.java:2837, proven) —
@@ -6887,8 +6890,10 @@ fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
         }
         else -> {}                                          // L159 default
     }
-    e.integrate()
-    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)   // bF() tail
+    if (!e.integratedThisTick) {
+        e.integrate()
+        if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    }
 }
 
 // ============================================================ ax24 = ba()
@@ -7164,7 +7169,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
         }
         else -> {}                                       // L206 inert
     }
-    e.integrate()
+    if (!e.integratedThisTick) e.integrate()
 }
 
 // ==================================================================// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)

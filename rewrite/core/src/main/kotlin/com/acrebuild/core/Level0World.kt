@@ -4938,6 +4938,15 @@ class Level0World(
         // `i.cu` world-freeze (i.java:15264 L109, proven): while the ax10
         // S55 claim zone holds it, every non-ax10 entity skips `I()`.
         if (Entity.icu && n.ax != 10) return
+        // `I()` head integrator (i.java:3886-3918, proven): every entity
+        // that reaches the dispatch integrates its velocity here — the
+        // `aH` slow-mo driver divides by `aI` (ax10 on `bh[k.aj]==3`
+        // missions always integrates at full rate); `bh[k.aj]==3` then
+        // snapshots `bY/bZ` via `bF()` before the arm dispatch.
+        n.integratedThisTick = false
+        n.integrate(if (!iAH || (Entity.MISSION_BH[kAj] == 3 && n.ax == 10)) 1 else maxOf(1, iAI))
+        n.integratedThisTick = true
+        if (Entity.MISSION_BH[kAj] == 3) n.posToWaypoint(this)
         var claimed = true
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)
