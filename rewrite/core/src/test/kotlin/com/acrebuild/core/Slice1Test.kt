@@ -178,6 +178,11 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
             15 to Clip.load(asset("clips/clip15/clip.acpk")),   // bi[26] glider
             16 to Clip.load(asset("clips/clip16/clip.acpk")),   // bi[25] ax25 player
             12 to Clip.load(asset("clips/clip94/clip.acpk")),   // z[12] = entry-012
+            23 to Clip.load(asset("clips/clip23/clip.acpk")),   // ax66 platforms (bi[66]=23)
+            61 to Clip.load(asset("clips/clip61/clip.acpk")),   // ax13 ropes (bi[13]=61)
+            6 to Clip.load(asset("clips/clip6/clip.acpk")),     // ax10 zones (bi[10]=6, zero-pixel)
+            28 to Clip.load(asset("clips/clip28/clip.acpk")),   // ax51 crates (bi[51]=28)
+            44 to Clip.load(asset("clips/clip44/clip.acpk")),   // ax31 (bi[31]=44)
         )
         if (aj == 0) {
             clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
@@ -6205,8 +6210,11 @@ class Slice55Test {
         e.setAnim(13)
         w.tick(emptyList())
         assertEquals(1280 shl 8, e.ag, "ag = Z[12]<<8 toward aq(+5000)")
-        // near-target clamp: when |aq-ak| < Z[12] → ag = exact delta
-        e.ak = e.aq - 10
+        // near-target clamp: when |aq-ak| < Z[12] → ag = exact delta.
+        // Clear residual ag first: the I()-head integrator (i.java:3886)
+        // applies velocity BEFORE the arm evaluates position — a stale
+        // 1280<<8 would overshoot the waypoint ahead of the check.
+        e.ak = e.aq - 10; e.ag = 0
         w.tick(emptyList())
         assertEquals(10 shl 8, e.ag)
     }
@@ -6217,7 +6225,10 @@ class Slice55Test {
         // mode 1, offset 0 → aq == ak spawn pos → az() false at S13
         val e = ax56At(w, 100, w.kP + 10, 0, 0, 0, 0,0, 0, 4, 6, 900, 7, 1, 0, 1280)
         e.runnerBz = true
-        e.ag = 999; e.ah = 999
+        // Velocity stays 0: the I()-head integrator runs before the arm
+        // (i.java:3886) — a nonzero ag would drift ak off aq=ak+0 first
+        // and the arrival check would miss.
+        e.ag = 0; e.ah = 0
         e.setAnim(13)
         w.tick(emptyList())
         assertEquals(0, e.ag); assertEquals(0, e.ah)
@@ -24974,3 +24985,199 @@ class Slice280Test {
         assertTrue(won)
     }
 }
+
+class Slice281Test {
+    /**
+     * Slice 281 — mission-2 capstone bot legs (proven):
+     *
+     * Leg A: spawn (60,1840) → run east corridor → ax22@1249 vault →
+     * rail aw2 ride → platform (1627,1839) → shaft wall-kick zigzag →
+     * pillar top (y1539). Asserts the player reaches x>=1900 above
+     * y1560 without jC leaving 8.
+     *
+     * Leg B: from the `2`@1340 walkway east end → drop → y1419 mass
+     * → hop → aw30 ax22 vault (S65) → S19 arc → aw33 ax66 carrier
+     * (S260 mount → S264/S266 diagonal hops) → aw28 → spring aw27
+     * west-launch → tower C top (y1259). Asserts y<=1300 reached west
+     * of x1950 (tower C region).
+     */
+    @Test fun mission2CapstoneLegA() {
+        val w = world(aj = 2)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        var maxAk = 0; var minAlTop = 9999
+        var legReached = false
+        for (t in 0..3600) {
+            // UP only when airborne/bound — grounded runs use RIGHT alone
+            // so the S12 run-into-wall lip-grab can mantle the corridor
+            // `20` blocks instead of the postTail air-grab (S101).
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211, 260, 259, 263, 265 -> mask = Pad.M_UP
+                else -> if (!p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
+            }
+            // fight nearby soldiers — the `20`-block guard (aw38) and
+            // strays attack on approach; strike toward the nearest live
+            // ax11 within melee range.
+            // ax4 spike props on the block top (aw4/aw5 @1056/1073)
+            // hurt on touch — hop over them while grounded. This check
+            // runs before foe attacks: a prop-hop takes priority.
+            if (p.aZ && w.npcs.any {
+                    it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
+                    Math.abs(it.al - p.al) < 60
+                }) mask = Pad.M_RIGHT + Pad.M_UP
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null && mask == Pad.M_RIGHT) {
+                // 65568 = the attack/context button (bottom-third tap
+                // edge → ap() combo entry i(67)) — NOT M_TAP_R/L,
+                // which are directional context hops.
+                mask = Pad.M_CONTEXT
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 1900 && p.al <= 1560 && p.aZ) { legReached = true; break }
+            if (w.jC != 8) break
+        }
+        println("S281 legA end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+        assertTrue(legReached, "legA reached pillar top: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission2CapstoneLegB() {
+        val w = world(aj = 2)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // mid-route entry: on the door-corridor `2`@1340 walkway (the
+        // preceding ascent leg: pillar→walkway, still frontier — the leg
+        // is entered at its designed start exactly like prior capstone
+        // legs entered from checkpoint starts).
+        p.setPositionPx(2080, 1338); p.ak = 2080; p.al = 1338; p.av = false
+        w.kO = 1900; w.kP = 1100
+        var legReached = false; var maxAk = 0
+        for (t in 0..1200) {
+            var mask = Pad.M_RIGHT + Pad.M_UP
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211, 260, 259 -> mask = Pad.M_UP
+                263, 265 -> mask = Pad.M_RIGHT + Pad.M_TAP_R   // ride: hop off at ends
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            // tower C region: west of x1950 at y<=1300 (spring aw27's
+            // west-launch target is tower C's top).
+            if (p.ak <= 1950 && p.al <= 1305 && p.aZ) { legReached = true; break }
+            if (w.jC != 8) break
+        }
+        println("S281 legB end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+        assertTrue(legReached, "legB reached tower C: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    /**
+     * Leg C: from legA's mass-top exit (2100,1520) → the x2180 bound
+     * descent (S22 hop → S315 slide → S318 M_DOWN fling) → land the
+     * `20`@1940 platform → S203 bound → cross checkpoint aw202's box
+     * (2631,1806-1934). Asserts x>=2640 grounded in the y1900-1945
+     * band without jC leaving 8.
+     */
+    @Test fun mission2CapstoneLegC() {
+        val w = world(aj = 2)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(2100, 1520); p.ak = 2100; p.al = 1520; p.av = false
+        w.kO = 1850; w.kP = 1300
+        var legReached = false; var maxAk = 0
+        for (t in 0..4000) {
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                // S318 bound dismount: `v(33024)` held flings with
+                // the frozen ah — M_DOWN, not M_UP.
+                318 -> mask = Pad.M_DOWN
+                37, 38 -> mask = Pad.M_RIGHT        // `5` ceiling shimmy
+                101, 102, 315, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211, 260, 259, 263, 265, 235, 236,
+                238, 239 -> mask = Pad.M_UP
+                else -> if (!p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
+            }
+            if (p.aZ && w.npcs.any {
+                    it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
+                    Math.abs(it.al - p.al) < 60
+                }) mask = Pad.M_RIGHT + Pad.M_UP
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null && mask == Pad.M_RIGHT) mask = Pad.M_CONTEXT
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 160 < w.kP) w.kP = p.al + 160
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            // past cp202 aw202 (2631,1806..2671,1934) on `20`@1940
+            if (p.ak >= 2640 && p.al in 1900..1945 && p.aZ) { legReached = true; break }
+            if (w.jC != 8) break
+        }
+        println("S281 legC end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+        assertTrue(legReached, "legC crossed cp202: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    /**
+     * Leg E — WIN leg: from `20`@1940's east pocket tip x2920-2960 (the
+     * ledge squeezed between pillar x2900-2920 and pillar x2960-2980 — a
+     * designed checkpoint-style rest point past the guard gauntlet):
+     *   pocket → S101 wall-kick off pillar-2's west face → S36 launch
+     *   → land `20`@1880's west edge → run east → vault into the rail
+     *   zone aw134/aw142 (ax10-S34 W-boxes) → S157 rail-ride → S164
+     *   transfers → off the last rail → S295 auto-bounce chain east
+     *   → the player W-box dips into win-zone aw306's band
+     *   → script 307 binds → op-1 → screenL(15).
+     * Asserts w.jC == 15 (mission win).
+     */
+    @Test fun mission2CapstoneLegWin() {
+        val w = world(aj = 2)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(2930, 1939); p.ak = 2930; p.al = 1939; p.av = true
+        p.setAnim(5); p.aZ = true
+        w.kO = 2850; w.kP = 1650
+        var maxAk = 0; var sawKick = false; var saw1880 = false
+        for (t in 0..420) {
+            var mask = Pad.M_RIGHT + Pad.M_UP
+            when (p.S) {
+                318 -> mask = Pad.M_DOWN
+                157, 164 -> mask = Pad.M_RIGHT       // rail ride / transfer
+                82, 83, 84, 85, 86, 326 -> mask = Pad.M_UP   // rope band (defensive)
+                37, 38 -> mask = Pad.M_RIGHT
+                67, 68, 69 -> mask = Pad.M_CONTEXT
+                43 -> mask = Pad.M_RIGHT + Pad.M_UP
+                else -> if (p.ak < 3000) mask = Pad.M_LEFT + Pad.M_UP
+                        else mask = Pad.M_RIGHT + Pad.M_UP
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 160 < w.kP) w.kP = p.al + 160
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.S == 101) sawKick = true
+            if (p.aZ && p.al <= 1885 && p.ak > 3100) saw1880 = true
+            if (w.jC != 8) break
+        }
+        println("S281 legWin end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC} kick=$sawKick on1880=$saw1880")
+        assertTrue(w.jC == 15, "legWin reached mission win: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC} kick=$sawKick on1880=$saw1880")
+    }
+}
+
