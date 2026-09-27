@@ -1869,8 +1869,13 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 if (e.nl != 0) return                                  // L737
+                // L73f gate (i.java:12414-12419, proven): `aH==true →
+                // L233` (re-fires only while `k.am==false`), else
+                // L234 `b(2); k.o()` — one-shot: after firing, aH&&am
+                // skips. `!aH || !am`, NOT `aH || !am` — an inverted
+                // `iAH` would re-timewarp every tick and decay kX→0.
                 if (w.missionBh() == 3 &&
-                    (w.iAH || !w.kAm)) {                               // L73f
+                    (!w.iAH || !w.kAm)) {                              // L73f
                     e.timewarp(w, 2); e.lockInput(w)                   // L756
                 }
                 if (e.aB == 0) {                                       // L75d
@@ -4040,7 +4045,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
         // ---- L84-L135: dual-respawn + waypoint travel ----------------------
         3 -> {
             for (r93 in 0 until 2) {
-                val r05 = w.findByAw(e.Z[93 + 13]) ?: continue
+                val r05 = w.findByAw(e.Z[r93 + 13]) ?: continue
                 // L92 gate: P&16 set → respawn needs S10 && !v() && cC!=6
                 val gate = (r05.P and 16) == 0 ||
                     (r05.S == 10 && !r05.inPlayV(w) && w.iCC != 6)
@@ -4080,7 +4085,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                     }
                 } else {
                     for (r94 in 0 until 2) {
-                        val r08 = w.findByAw(e.Z[94 + 13]) ?: continue
+                        val r08 = w.findByAw(e.Z[r94 + 13]) ?: continue
                         if (r08.S == 10) {
                             r08.P = r08.P and -17
                             r08.P = r08.P and -33
@@ -4164,12 +4169,18 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                     e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
                     e.aC = w.dirWp!!.e; e.j = w.dirWp!!.d
                 }
-                // L222 — monitor the Z[3] pursuer
+                // L222-L226 (i.java:18366-18370, proven): the chase pauses
+                // only while the Z[3] pursuer holds S22 — the pv3 charge
+                // pose (Entity `respawnAttack` L57 arm) — because the L237
+                // watcher's `S==22 → S23 + k=true` release needs the pause
+                // to resolve before the chase advances the script. `r015`
+                // null (removed) OR `S != 22` (any other anim) → `d(false)`
+                // runs. The decompiler's `S!=22` fall-through into the L197
+                // cascade is a dropped edge — L197 → L214 → L222 → L225 →
+                // L197 loops the router inside one tick, impossible in a
+                // shipped game; the live reading is `S!=22 → L226` (`d(false)`).
                 val r015 = w.findByAw(e.Z[3])
-                if (r015 == null) directorChase(e, false)
-                // inferred: L225's `S!=22` fall-through lands on L237 (the
-                // physically-following L197 chain would re-run the router
-                // forever — a decompiler drop)
+                if (r015 == null || r015.S != 22) directorChase(e, false)
             }
         }
         // ---- L227-L235: finale ----------------------------------------------
@@ -6970,7 +6981,7 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
             }
             32 -> {
                 if ((r0.l and 1) == 0) continue
-                if (r0.S in 21..27 && !w.iCF) break          // cF gate → abort sweep
+                if (r0.S in 21..27 && !w.cFFlag) break         // L87 cF gate → abort sweep
                 if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
                 if (r0.aB > 0) {
                     r0.aB -= Entity.WEAPON_K[w.weaponSlot]
