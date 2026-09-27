@@ -7614,8 +7614,10 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
                     return
                 }
             }
-            // L29 — player attack cuts the bind → i(7)
-            if (w.playerAttacking() && p.ga === e) {
+            // L29 — `!g.g() || g.a != this` ride arm; else (player dead
+            // while bound) `g.a=null; i(7)` — g.g() = `x[1]<=0` death check
+            // (g.java:4431, proven), NOT an attack.
+            if (p.x1 <= 0 && p.ga === e) {
                 p.ga = null
                 e.setAnim(7)
                 return

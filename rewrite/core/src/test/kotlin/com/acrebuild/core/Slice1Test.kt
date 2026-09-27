@@ -25300,4 +25300,131 @@ class Slice282Test {
         assertTrue(legReached,
             "legB crossed massA->massB gap via tower arc: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
     }
+
+    @Test fun mission3CapstoneLegC() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(4400, 279); p.ak = 4400; p.al = 279; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 4620; w.kP = 800
+        var legReached = false; var maxAk = 0
+        for (t in 0..3600) {
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                297, 89, 90 -> mask = Pad.M_CONTEXT
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211 -> mask = Pad.M_UP
+                258, 260, 262 -> mask = Pad.M_DOWN
+                259, 261, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+                235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
+                else -> if (!p.aZ) mask =
+                    if (p.ak >= 4520) Pad.M_RIGHT else Pad.M_RIGHT + Pad.M_UP
+            }
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+            // massB east-face grab: release DOWN into the aw70 catch zone
+            // (4548-4583 x 283-370) directly below — UP kicks back west
+            if (p.S == 101 && p.ak >= 4530) mask = Pad.M_DOWN
+            if (p.S == 28 || p.S == 29) mask = Pad.M_DOWN
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 5310 && p.aZ) { legReached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legC massB->cp272: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
+
+    @Test fun mission3CapstoneLegD() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // leg starts at the carrier-zone boarding position (the designed
+        // entry — mid-route legs may start at checkpoint-style spots):
+        // standing at street level inside zone aw674's box → eventBind →
+        // script 693. Skipping the 5476-6300 street walk avoids the two
+        // unavoidable civ au<2 panic hits (range-free T==3 flails).
+        p.setPositionPx(6520, 939); p.ak = 6520; p.al = 939; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 6320; w.kP = 940
+        // legD — the carrier-QTE crossing, verified end-to-end:
+        // zone aw674-S8 @(6548,802) → script 693 boards carrier aw594
+        // (UP prompt+QTE) → bound ride east at 150% through the civ
+        // gauntlet (~2 range-free panic hits) → zone aw847-S8 → script
+        // 848 continues the ride (TAP-R QTE) → zone aw672 → script 671
+        // parks the carrier and releases the player at the tower base
+        // (~8230,790). Assert: lands aZ east of 7480.
+        var legReached = false; var maxAk = 0
+        for (t in 0..3600) {
+            var mask = Pad.M_RIGHT
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_R
+                228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
+                297, 89, 90 -> mask = Pad.M_CONTEXT
+                101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
+                164, 52, 280, 209, 211 -> mask = Pad.M_UP
+                258, 260, 262 -> mask = Pad.M_DOWN
+                259, 261, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+                235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
+                else -> if (!p.aZ) mask =
+                    if (p.ak >= 4520 && p.ak < 6400 || p.ak >= 6760) Pad.M_RIGHT
+                    else Pad.M_RIGHT + Pad.M_UP
+            }
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+            if (p.S == 101 && p.ak >= 4530) mask = Pad.M_DOWN
+            if (p.S == 28 || p.S == 29) mask = Pad.M_DOWN
+            if (p.S == 295 || p.S == 157) {
+                // carrier-QTE ride chain (op107 prompt + op108 branch):
+                // 693 prompts UP (mask 4→16388); 848/671 prompt TAP-R
+                // (mask 8). Held the wrong button → fail script (teleport
+                // mid-pit + setAnim50). Between scripts (ga bound, no
+                // claim) hold RIGHT for the 150% bound-ride speed.
+                val scr = w.kC
+                mask = when {
+                    scr != null && scr.ax == 5 && scr.aG == 693 -> Pad.M_UP
+                    scr != null && scr.ax == 5 -> Pad.M_TAP_R
+                    p.ga != null -> Pad.M_RIGHT
+                    else -> Pad.M_UP
+                }
+            }
+            w.pad.e(mask)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 7480 && p.aZ) { legReached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(legReached,
+            "legD cp272->cp274: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
+    }
 }

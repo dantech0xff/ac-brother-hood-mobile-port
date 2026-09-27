@@ -1995,7 +1995,7 @@ class Level0World(
                 camX = camA; camY = camB; camCC = 0; camCD = 0
                 kU = 0; kSBound = 0; kT = 0; kR = 0                 // snap clears walls
             } else if (ae != null) {
-            if (ae.ax == 43 && ae.S != 1) {                         // L339: speed-follow
+            if (ae.ax == 43 && (ae.S == 1 || ae.S == 4)) {          // L339: speed-follow
                 camX += camCC / r6
                 camCD = lerpStep(camB - camY, 28)
                 camY += camCD / r6
