@@ -10558,6 +10558,11 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
             if (pr != null) {
                 pr.a = colW - 10 + i * colW
                 pr.b = 160
+                // i.java:32740 `bA[].b(j.f)` — the draw arm advances
+                // each armed prompt's anim by the frame delta (62ms per
+                // fixed tick here); without it `stopped()` never latches
+                // and the claim-completion `nl=1` path is unreachable.
+                pr.anim.tick(62)
                 w.drawFxPrompt(i + off)
             }
             i++

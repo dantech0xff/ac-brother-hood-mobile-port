@@ -25569,4 +25569,72 @@ class Slice282Test {
         assertTrue(legReached,
             "legG lift-stair->capture->zipline->east mass: got S" + p.S + " @(" + p.ak + "," + p.al + ") maxAk=" + maxAk + " jC=" + w.jC)
     }
+
+    @Test fun mission3CapstoneLegH() {
+        val w = world(aj = 3)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legH — the finale descent. legG's zipline lands the east mass top
+        // ~x13080 y540-660; walking east crosses aw132's claim box (x13136-
+        // 13174) and binds descent claim 927, which rides the player to the
+        // gap and drops them on the west mass top y820. From there the
+        // proven chain (mission3SpringLaunchProbe trace): west off the mass
+        // edge → ax22 aw910 captures @(12944,902) → 16390 (UP+TAP_L) vaults
+        // west → ax10-S17 beam aw912 pins S297 @(12800,899) → '8' east leap
+        // → recaptured by aw910 → second west vault → lands the pillar top
+        // (12748,1078) → S257/S29/S28 carrier rides down the pillar (DOWN
+        // pulses) → releases to the pit ledge (12720,1299) → walk east →
+        // '8' grounded jump at ~x12790 → lands ax46 aw409's pad
+        // (x12861-914,1326) → spring launch (ag=12800, ah=-20480) → embeds
+        // in the lip's west face (13338,1299) → S79/S81 creep east with
+        // M_CONTEXT → S277 mount → S317 ride east → screenL(15) WIN.
+        p.setPositionPx(13090, 545); p.ak = 13090; p.al = 545; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 12800; w.kP = 420
+        for (e in w.npcs) if (e.aw == 925 || e.aw == 924 || e.aw == 606 ||
+            e.aw == 409 || e.aw == 613 || e.aw == 620 || e.aw == 910 ||
+            e.aw == 912 || e.aw == 263 || e.aw == 780) keepLive(e)
+        var east = false
+        var fired = false
+        for (t in 0..6000) {
+            var mask = if (east) Pad.M_RIGHT else Pad.M_LEFT
+            // Claim-top walk: east through aw132's box → descent claim 927.
+            if (p.aZ && p.al in 500..660 && p.ak in 13060..13175)
+                mask = Pad.M_RIGHT
+            // Pit ledge → east jump to aw409's pad.
+            if (east && p.aZ && p.al in 1290..1320 && p.ak in 12780..12800)
+                mask = 8
+            val guard = w.npcs.firstOrNull { it.aw == 606 }
+            val g606 = guard != null && !guard.deadRelease() && guard.al in 780..860 &&
+                kotlin.math.abs(guard.ak - p.ak) <= 44
+            if (g606 && t % 6 == 0) mask = Pad.M_CONTEXT
+            if (p.S == 65) mask = 16390                    // aw910 west vault
+            if (p.S == 297) { mask = 8; east = true }      // beam east leap
+            if (p.S == 29) mask = Pad.M_DOWN               // carrier descend
+            if (p.S == 28) mask = if (t % 4 == 0) Pad.M_DOWN else 0
+            if (p.S == 60 || p.S == 61) mask = Pad.M_DOWN  // ledge hang → drop
+            if (p.S in 257..259) mask = Pad.M_DOWN         // carrier hold
+            if (p.S == 79) mask = Pad.M_RIGHT or Pad.M_CONTEXT // lip embed creep
+            if (p.S == 274 || p.S == 277 || p.S == 317 ||
+                (p.ak in 13339..13555 && p.al in 1099..1272))
+                mask = if (!fired) { fired = true; Pad.M_CONTEXT } else 0
+            if (w.jC == 21) mask = Pad.M_CONTEXT
+            w.pad.e(mask)
+            w.tick(emptyList())
+            if (w.jC == 15 || w.jC == 13) break
+            if (w.jC == 12) {
+                var guard2 = 0
+                while (w.jC != 8 && w.jC != 15 && guard2++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertEquals(15, w.jC,
+            "legH finale descent chain should reach mission-complete; " +
+                "got jc=${w.jC} p@(${p.ak},${p.al}) S${p.S} x1=${p.x1}")
+    }
+
 }
