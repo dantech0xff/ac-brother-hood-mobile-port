@@ -1594,33 +1594,33 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // `l()` head (g.java:11608-11617, proven): `cp=1; cq=1; z=1`
         // every tick the grounded family runs.
         p.cp = true; p.cq = true; p.z = true
-        if (p.aO <= 12 || p.aR <= 12) {
-            if (p.S == 79) {
-                p.ag = 0; p.ah = 0
-            }
-            if (p.S == 11) p.ag = (p.ag shl 1) / 3
-            // L691-692 (proven): down-held at a ledge → a(257,8) vault-drop;
-            // L2886 (proven): down-edge into a wall → am() climb-up S63
-            if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
-            if (ledgeDrop257(p, pad)) return
-            // The I==1 sword arm of `ap()` moved to postTail with the rest
-            // of the equip/context dispatcher (L2057 arm, g.java:3817).
-            if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
-            if (!l(p, pad)) {
-                p.cq = false; p.z = false      // `cq=0; z=0` airborne arm
-                p.enterFall(0, world)
-            }
-            // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
-            // checks `cp && ct` (edge ledge-grab ak()||al()), `cu`
-            // (down-edge pop + drop held), `cv` (dir press → aF=1), and
-            // `cw` (aO==5 → i(280) one-way hang) — but e()'s head clears
-            // all five flags every tick (g.java:617-623) and case 0 sets
-            // none of them, so all four arms read false and can never
-            // fire in the original. `al()` and `i.H()` are ported on
-            // Entity for their live call sites.
-        } else {
-            p.setAnim(79)
+        // L682-687 (proven, g.java:2851-2855): `aO>12 && aR>12` only re-sets
+        // the crouch anim — it does NOT gate the tail; `l()` (locomotion)
+        // runs every tick, so S79 still walks/drops off edges.
+        if (p.aO > 12 && p.aR > 12) p.setAnim(79)
+        if (p.S == 79) {
+            p.ag = 0; p.ah = 0
         }
+        if (p.S == 11) p.ag = (p.ag shl 1) / 3
+        // L691-692 (proven): down-held at a ledge → a(257,8) vault-drop;
+        // L2886 (proven): down-edge into a wall → am() climb-up S63
+        if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
+        if (ledgeDrop257(p, pad)) return
+        // The I==1 sword arm of `ap()` moved to postTail with the rest
+        // of the equip/context dispatcher (L2057 arm, g.java:3817).
+        if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
+        if (!l(p, pad)) {
+            p.cq = false; p.z = false      // `cq=0; z=0` airborne arm
+            p.enterFall(0, world)
+        }
+        // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
+        // checks `cp && ct` (edge ledge-grab ak()||al()), `cu`
+        // (down-edge pop + drop held), `cv` (dir press → aF=1), and
+        // `cw` (aO==5 → i(280) one-way hang) — but e()'s head clears
+        // all five flags every tick (g.java:617-623) and case 0 sets
+        // none of them, so all four arms read false and can never
+        // fire in the original. `al()` and `i.H()` are ported on
+        // Entity for their live call sites.
     }
 
     /**
