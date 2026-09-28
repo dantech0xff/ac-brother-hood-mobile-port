@@ -184,6 +184,9 @@ private fun world(charmap: ByteArray? = null, aj: Int = 0):
             28 to Clip.load(asset("clips/clip28/clip.acpk")),   // ax51 crates (bi[51]=28)
             44 to Clip.load(asset("clips/clip44/clip.acpk")),   // ax31 (bi[31]=44)
             13 to Clip.load(asset("clips/clip13/clip.acpk")),   // ax21 director + ax48 child (bi=13)
+            52 to Clip.load(asset("clips/clip52/clip.acpk")),   // ax29 boss (bi[29]=52)
+            30 to Clip.load(asset("clips/clip30/clip.acpk")),   // ax41 knockable (bi[41]=30)
+            71 to Clip.load(asset("clips/clip71/clip.acpk")),   // ax61 multi-tool (bi[61]=71)
         )
         if (aj == 0) {
             clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
@@ -27180,4 +27183,116 @@ class Slice291Test {
             "p@(${p.ak},${p.al}) S${p.S} maxAk=$maxAk died=$died jC=${w.jC}")
     }
 
+}
+
+// ---- Slice 297: mission-7 capstone (finale, aj7) ----------------------------
+// Map 2000x2040: spawn ax0 uid107@(579,1740); bottom boss arena
+// ax29 uid251@(1324,1920) + ax11 guards; crusher rows ax44 @y1559 x137-1040,
+// @y579 x318-1021, @y997 x1237-1414; lift row ax66 uid22-27@y1500 x636-1004;
+// ax72 counterweights (510,1345)/(866,1160)/(1300,794)/(386,390)/(957,394);
+// top boss ax29 uid307@(1377,238); cps uid233@(1244,1470) uid347@(1131,489)
+// uid339@(1266,1244); ax5 intro uid7@(547,1692) script 8.
+
+private fun chaseMask297(p: Entity, w: Level0World): Int {
+    var mask = Pad.M_RIGHT
+    when (p.S) {
+        65 -> mask = Pad.M_UP + Pad.M_TAP_R
+        228, 358 -> mask = Pad.M_RIGHT + Pad.M_UP
+        297, 89, 90 -> mask = Pad.M_CONTEXT
+        5, 79, 235, 236, 237, 238, 239, 240, 241, 242, 243,
+        258, 259, 260, 261, 262, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+        60, 61, 203 -> mask = Pad.M_UP
+        33 -> mask = if (p.av) Pad.M_LEFT else Pad.M_RIGHT
+        22, 23, 43 -> mask =
+            (if (p.av) Pad.M_LEFT + Pad.M_TAP_L else Pad.M_RIGHT + Pad.M_TAP_R)
+        34 -> mask = Pad.M_RIGHT + Pad.M_UP
+        else -> mask = Pad.M_RIGHT + Pad.M_UP
+    }
+    return mask
+}
+
+class Slice297Test {
+
+    /** m7 leg A — ax37 scroll-holder survives a level reload (zombie
+     *  regression). The player spawns at (850,1920) inside uid41's zone
+     *  [810,1641,1890,1961] → it claims k.ah → bound writes arm
+     *  R/S/T/U. `resetLevel(false)` rebuilds `scrollTriggers` with fresh
+     *  instances; a stale `scrollHolder` (pre-fix) then blocked every
+     *  claim via the mode-1 lock → `k.ah==null` → `k.m()`'s `k.n()`
+     *  zeroed the bounds every tick → the arena clamp teleported the
+     *  boss to ~-7. `kN()` now releases `scrollHolder` with `k.ah`. */
+    @Test fun mission7ScrollHolderReload() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        repeat(30) { w.pad.e(Pad.M_RIGHT); w.tick(emptyList()) }
+        assertTrue(w.boundMinX != 0 || w.boundMaxX != 0,
+            "bounds armed pre-reload: [${w.boundMinX},${w.boundMaxX}]")
+        // resetLevel(false) → a(false) → loadMission → loadPackI:
+        // the fail-retry path — rebuilds `scrollTriggers` with fresh
+        // instances (the zombie trigger).
+        w.resetLevel(false)
+        settleIntro(w)
+        // record spawn (579,1740) → walk back inside uid41 (≥830).
+        repeat(80) { w.pad.e(Pad.M_RIGHT); w.tick(emptyList()) }
+        assertTrue(w.boundMinX != 0 || w.boundMaxX != 0,
+            "bounds armed post-reload (zombie holder leaves them 0): " +
+            "[${w.boundMinX},${w.boundMaxX}] p@(${w.player.ak},${w.player.al})")
+    }
+
+    /** m7 leg B — the ax29 duel runs without the arena-clamp teleport
+     *  artifact: uid251@(1324,1920) engages (iBy=1 native, kAU armed),
+     *  takes real damage, and `ak` never drops below -50 — the clamp on
+     *  `W[2] >= r13=0` (unset bounds) used to slam it to ~-7 every
+     *  chase cycle. Death/reload mid-fight must not re-zombie the
+     *  holder either (assert bounds re-arm after respawn). */
+    @Test fun mission7BossArenaClamp() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        var sawEngage = false; var sawBossHit = false
+        var sawBoundsAfterDeath = false
+        var respawns = 0
+        for (t in 0..3000) {
+            val boss = w.npcs.firstOrNull { it.ax == 29 }
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 29) && it.aB > 0 && it.S != 139 &&
+                    kotlin.math.abs(it.ak - p.ak) < 130 && kotlin.math.abs(it.al - p.al) < 90
+            }
+            var mask = chaseMask297(p, w)
+            if (foe != null && kotlin.math.abs(foe.ak - p.ak) < 70)
+                mask = if (foe.ak < p.ak) Pad.M_LEFT + Pad.M_CONTEXT else Pad.M_RIGHT + Pad.M_CONTEXT
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (boss != null) {
+                assertTrue(boss.ak > -50,
+                    "boss teleported via unset bounds: ak=${boss.ak} at t=$t")
+                if (boss.S !in intArrayOf(0)) sawEngage = true
+                if (boss.aB < 800) sawBossHit = true
+            }
+            if (w.jC == 15) break
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                respawns++
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                // post-respawn: settle the intro replay, then walk back
+                // into uid41's zone and prove the holder re-arms (the
+                // zombie fix's whole point).
+                settleIntro(w)
+                repeat(80) { w.pad.e(Pad.M_RIGHT); w.tick(emptyList()) }
+                if (w.boundMinX != 0 || w.boundMaxX != 0) sawBoundsAfterDeath = true
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(sawEngage, "boss never left S0 — duel never started")
+        assertTrue(sawBossHit, "boss took no damage — duel never engaged")
+        if (respawns > 0) assertTrue(sawBoundsAfterDeath,
+            "bounds never re-armed after reload — holder zombied")
+    }
 }
