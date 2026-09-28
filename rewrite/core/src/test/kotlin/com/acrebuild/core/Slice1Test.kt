@@ -27194,6 +27194,11 @@ class Slice291Test {
 // uid339@(1266,1244); ax5 intro uid7@(547,1692) script 8.
 
 private fun chaseMask297(p: Entity, w: Level0World): Int {
+    // ax29 S7 grab-QTE escape (i.java:L314): `pad.v(16388)` while the
+    // boss's T<=6 arms `iCj` → the T==7 `applyHit(4,…)` never lands.
+    // Highest priority — the grab is what kills an idle/attacking bot.
+    val boss = w.npcs.firstOrNull { it.ax == 29 }
+    if (boss != null && boss.S == 7 && boss.T <= 6) return Pad.M_UP
     var mask = Pad.M_RIGHT
     when (p.S) {
         65 -> mask = Pad.M_UP + Pad.M_TAP_R
@@ -27294,5 +27299,69 @@ class Slice297Test {
         assertTrue(sawBossHit, "boss took no damage — duel never engaged")
         if (respawns > 0) assertTrue(sawBoundsAfterDeath,
             "bounds never re-armed after reload — holder zombied")
+    }
+
+    /** m7 leg C — the iBy=1 duel phase-win: stagger the boss to
+     *  `aB<=300` → it retreats S13 → the ax10-S55 zone uid306 anchors it
+     *  → S25→S26 (block) — press CONTEXT (65568) while overlapping →
+     *  `k.q(Z[1]=280)` binds ax5 uid280 → script 305 sets `by=2` → aP()
+     *  returns early → the boss goes dormant and the climb route opens.
+     *  (iBy=1 cannot die by hits — the heal cycle is the design; the
+     *  phase win is the S26 counter-press, proven i.java:8540-8564 +
+     *  op10 `by=i21, aU.aB=300` i.java:18287.) */
+    @Test fun mission7BossPhaseWin() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        var sawGrabQte = false; var sawHeal = false; var sawPhaseWin = false
+        var minBossAb = 800
+        for (t in 0..12000) {
+            val boss = w.npcs.firstOrNull { it.ax == 29 }
+            if (w.iBy == 2) { sawPhaseWin = true; break }
+            if (boss != null) {
+                if (boss.S == 7) sawGrabQte = true
+                if (boss.S == 25 || boss.S == 26 || boss.S == 27) sawHeal = true
+                if (boss.aB < minBossAb) minBossAb = boss.aB
+            }
+            var mask = chaseMask297(p, w)
+            if (boss != null && boss.aB > 0 && boss.S != 139 &&
+                !(boss.S == 7 && boss.T <= 6)) {
+                if (boss.S == 26) {
+                    // S26 block/counter window — walk INTO the boss and
+                    // press CONTEXT; the ax5 bind needs e.W ∩ p.W/X.
+                    mask = (if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT) + Pad.M_CONTEXT
+                } else if (w.kC != null && w.kC!!.aw == 280 &&
+                    (boss.S == 23 || boss.S == 25 || boss.S == 27)) {
+                    // Script-305 QTE: prompt-1 = CONTEXT (steps 5-20),
+                    // prompt-2 = LEFT (steps 58-81) — hold LEFT+CONTEXT
+                    // through the S23 heal-outro window.
+                    mask = Pad.M_LEFT + Pad.M_CONTEXT
+                } else if (kotlin.math.abs(boss.ak - p.ak) < 170 &&
+                    kotlin.math.abs(boss.al - p.al) < 60) {
+                    mask = if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
+                    if (kotlin.math.abs(boss.ak - p.ak) < 70) mask += Pad.M_CONTEXT
+                }
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (w.jC == 15) break
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                settleIntro(w)
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        assertTrue(sawGrabQte, "boss never entered the S7 grab-QTE")
+        assertTrue(sawHeal,
+            "boss never entered the S25/26/27 heal chain — aB floor $minBossAb")
+        assertTrue(sawPhaseWin, "by never advanced to 2 — aB floor $minBossAb")
     }
 }
