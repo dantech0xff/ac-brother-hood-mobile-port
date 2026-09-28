@@ -26861,4 +26861,64 @@ class Slice291Test {
             "legA spawn(17,740)->ax5@801: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC} marks=$marks")
     }
 
+    /** Mission-6 capstone leg B — from the checkpoint-795 junction @(5973,180)
+     *  (pinned leg start) east across the Pantheon's east mass: run the upper
+     *  route → drop to the floor → long hop → S101 column grab → capture-chain
+     *  (uid102 → uid97/96 vaults → chimney S29 → uid99 sprint) → step-face
+     *  ping-pong → uid103/uid110 capture-vaults → block top → checkpoint
+     *  **uid113 @(7096,225)** fires → S164 designed chasm descent → S361 carry.
+     *  Milestone: checkpoint 113 consumed and the player past the mass east
+     *  wall (x7300+) alive — proven end-to-end by real input. The S361 carry
+     *  landing / camera-below frontier is leg-C's job. */
+    @Test fun mission6CapstoneLegB() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(6060, 219); p.refreshBoxes()
+        w.kP = 700
+        for (t in 0..160) { w.pad.e(0); w.tick(emptyList()) }
+        var maxAk = p.ak; var cp113 = false; var died = false
+        for (t in 0..900) {
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            val threat = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
+                    kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
+            }
+            w.pad.e(when {
+                p.S == 28 || p.S == 318 -> Pad.M_DOWN
+                p.S == 65 -> Pad.M_UP
+                p.S == 228 || p.S == 358 -> Pad.M_UP
+                p.S == 101 && p.ak < 6500 -> Pad.M_LEFT
+                p.S == 101 -> Pad.M_RIGHT
+                p.S == 36 && p.ak < 6700 -> Pad.M_RIGHT
+                !p.aZ && p.al > 440 && p.ak in 6920..7050 -> Pad.M_TAP_R or Pad.M_UP
+                !p.aZ && p.ag < 0 && p.al in 300..470 && p.ak in 6900..7050 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al in 240..460 && p.ak in 6790..6900 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al > 560 && p.ak in 6800..6920 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al > 380 && p.ak in 6500..6680 -> Pad.M_TAP_R or Pad.M_UP
+                !p.aZ && p.ak < 6480 && p.al < 330 -> Pad.M_TAP_L
+                !p.aZ && threat != null && p.al > 600 -> Pad.M_RIGHT
+                p.aZ && p.al in 600..680 && p.ak > 6940 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 400..470 && p.ak in 6960..7060 -> Pad.M_LEFT or Pad.M_UP or Pad.M_TAP_L
+                p.aZ && p.al in 400..470 && p.ak > 7060 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 460..500 && p.ak >= 6540 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 460..560 && p.ak >= 6800 && p.ak < 6960 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al < 400 -> Pad.M_RIGHT
+                p.ga != null && p.ak >= 5380 -> Pad.M_RIGHT or Pad.M_UP
+                p.aZ && p.al > 600 && p.ak in 6430..6510 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al > 600 && p.ak >= 6880 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al > 600 -> Pad.M_RIGHT
+                p.aZ -> Pad.M_RIGHT
+                else -> Pad.M_RIGHT
+            })
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (w.checkpoints.any { it.aw == 113 && it.consumed }) cp113 = true
+            if (w.jC == 12 || w.jC == 13) { died = true; break }
+            if (cp113 && p.ak > 7500) break
+        }
+        assertTrue(cp113, "legB checkpoint uid113 fired: maxAk=$maxAk died=$died @(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(maxAk > 7300, "legB crossed mass east wall: maxAk=$maxAk died=$died jC=${w.jC}")
+    }
+
 }
