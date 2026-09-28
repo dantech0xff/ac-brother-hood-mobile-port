@@ -27800,3 +27800,106 @@ class Slice302Test {
             "west-wing chain not climbed — ak=${p.ak} al=${p.al} S=${p.S} kC=${w.kC?.aw} minAl=$minAl maxAk=$maxAk")
     }
 }
+
+class Slice303Test {
+
+    /** m7 leg H — upper wing descent: from the u252 chain release
+     *  (~x410,y1299) ride the ax66 sink lifts to r78, crouch-walk west
+     *  under the lift bind zones, drop past the r87 gap to the r96
+     *  under-chamber — assert reaching the boss-2/top route
+     *  (u269 claim zone fired, or the under-chamber gate al>1760 with
+     *  minAl<1200 already satisfied). */
+    @Test fun mission7UpperWing() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        driveDuelWin300(w, p)
+        driveRopeClimb300(w, p)
+        var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        val trace = ArrayDeque<String>(60)
+        var lastS = p.S
+        var jumpCd = 0
+        var landed = false; var launched = false; var kCFired = false
+        var u269Fired = false; var u252Fired = false; var chainDone = false
+        var minAl = 99999; var maxAk = 0
+        for (t in 0..24000) {
+            var mask = chaseMask297(p, w)
+            when {
+                p.bM != null -> mask = Pad.M_UP
+                !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
+                    !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
+                    w.kC != null -> Pad.M_CONTEXT
+                    else -> if (p.ak < 210) Pad.M_RIGHT else Pad.M_LEFT
+                }
+                w.kC != null -> mask = Pad.M_CONTEXT   // phase 1 — let any claim script run (u269 zone + fuse carries)
+                else -> {
+                    when {
+                        p.ga != null -> mask = 0                            // riding an ax66 sink lift — wait it out
+                        p.al > 1760 -> mask = 0                             // under-chamber — done
+                        !p.aZ -> mask = Pad.M_LEFT                          // airborne: always drift west — lands '2'/r78, never the x1120-1499 hole
+                        p.al > 1530 && p.ak in 620..1100 -> mask = Pad.M_DOWN + Pad.M_LEFT   // lift bind zone — crouch-walk under: 36px box clears the y1500-1520 hover
+                        p.al > 1530 -> mask = Pad.M_LEFT                    // '2'/r78/r87 — west to r78's x0 edge → drop to r96 (r87 east is walled: towers at x1020/x1500)
+                        else -> mask = Pad.M_RIGHT                          // lift-transit band — east to the next sink lift
+                    }
+                }
+            }
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_L
+                63, 318 -> mask = Pad.M_UP
+                164 -> mask = 0
+                56, 60 -> mask = if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP  // tower face: release back to r87, else climb
+                61 -> mask = if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                62 -> mask = if ((p.al > 1500 && !(chainDone && p.al > 1530)) || (chainDone && p.ak < 1110)) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP  // hang: release on the tower face, climb elsewhere
+                27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
+                in 259..266 -> mask = Pad.M_RIGHT
+            }
+            if (jumpCd <= 0 && landed && w.kC == null && !chainDone) {
+                mask = if (p.S in 259..266 || p.ak < 310) Pad.M_RIGHT + 8 else 16388
+                jumpCd = if (p.S in 259..266) 8 else 14
+            } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
+                mask = 16390 or Pad.M_LEFT
+                jumpCd = 20
+            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ) {
+                mask = if (p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)  // '2'/r78/r87: hop west; lift band: east
+                jumpCd = 30
+            }
+            if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release beats every nudge
+            jumpCd--
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 60) trace.removeFirst()
+                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
+                lastS = p.S
+            }
+            if (p.S == 280) launched = true
+            if (launched && !landed && p.aZ && p.al > 1340) landed = true
+            if (w.kC != null) { kCFired = true
+                if (w.kC!!.aw == 252) u252Fired = true
+                if (w.kC!!.aw == 269) u269Fired = true }
+            if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
+            if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
+            if (w.jC == 15) break
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                settleIntro(w)
+                continue
+            }
+            if (w.jC != 8) break
+            if (u269Fired) break
+            if (p.al > 1760 && minAl < 1200) break
+            if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            lastAk = p.ak; lastAl = p.al
+        }
+        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired launched=$launched landed=$landed minAl=$minAl maxAk=$maxAk trace=${trace.joinToString(" ")}")
+        assertTrue(u269Fired || (p.al > 1760 && minAl < 1200),
+            "boss-2 arena not reached — ak=${p.ak} al=${p.al} S=${p.S} u269=$u269Fired minAl=$minAl maxAk=$maxAk")
+    }
+}
