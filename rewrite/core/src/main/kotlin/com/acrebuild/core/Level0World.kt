@@ -213,8 +213,12 @@ class Level0World(
     // ax55 waypoint pool (c.java:1-120 proven — k.c field): records carry
     // {uid,x,y,param-d,c,f,g} in f[1..7]; ax54/ax30 runners resolve their
     // Z[1..4] uid chain into entity-shifted copies (aw(), uid base 10000).
-    // Declared before init{} — spawnEntities() calls waypointPool.clear().
+    // Declared before init{} — spawnEntities() calls waypointPool.clear()
+    // and waypoints.reset().
     val waypointPool = Waypoint.Pool()
+    override val waypoints = WaypointPool()    // c.m/l/j — declared before
+    // init{} (spawnEntities resets it); the single `c` pool's second half —
+    // the runners use waypointPool, the director/pursuers use this one.
 
     // ax24 projectile pool (k.aX = new i[k.aW=50], i.java:2837 proven):
     // seeded by the first S==0 ax24 record; slots with P&128==0 are free.
@@ -702,6 +706,8 @@ class Level0World(
         grabHolder = null; player.gb = null         // g.h=null; g.b=null (:2486-2489)
         marker = null; markerTag = -1
         waypointPool.clear()
+        waypoints.reset()   // c.a() (i.java:2567, proven) — same `c` pool
+                            // the director/pursuers read; reset on reload
         projectilePool = null
         kAY.fill(null)                            // k.aY (i.java:2541)
         // i.D() tail — the modeled statics that must not survive a reload:
@@ -755,7 +761,10 @@ class Level0World(
 
         for ((i, f) in level.entities.withIndex()) {
             if (f.isEmpty()) continue
-            if (f[0] == 55) { waypointPool.load(f.toList()); continue }   // k.java:6049
+            if (f[0] == 55) { waypointPool.load(f.toList()); waypoints.add(f); continue }  // k.java:6049
+            // `c.a(short[])` (k.java:6049, proven): ax55 records feed ONE `c`
+            // pool in the original — the port split it into waypointPool
+            // (runners) + waypoints (director/pursuers); both must load.
             // the 0/25 player-slot record becomes `aS`, not a bb[] npc
             // (inferred — `k.aS` is built from it, not spawned twice).
             if (f[0] == 0 || f[0] == 25) continue
@@ -994,7 +1003,6 @@ class Level0World(
     override var iCC = 0                       // i.cC — waypoint phase
     override var iCD = -1                      // i.cD — active phase
     override var iCE = -1                      // i.cE — f(int) gate
-    override val waypoints = WaypointPool()    // c.m/l/j
     override var dirWp: WaypointNode? = null   // i.cB
     override var kB: Entity? = null            // k.B — arena boundary
     override var kAi = false                   // k.ai — director active
@@ -1561,13 +1569,18 @@ class Level0World(
     override var kAZ = false                   // k.aZ (:252) — save byte 68 flag
     override var kBQ = false                   // k.bQ (:140) — map dirty flag
     override fun audioTrackPlay(n: Int) { z(n) } // e.a(n,false) → private z()
-    /** `k.b(8,level,row,span)` (k.java:350, proven) — checkpoint-map
-     *  marker; `row==-1 → false`, else `kU=slot` and the map region is
-     *  marked complete (the `w` count is consumed by the map screen —
-     *  stubbed there; `inferred` bookkeeping, proven signature). */
+    /** `k.b(8,level,row,span)` (k.java:349-360, proven) — checkpoint-map
+     *  marker; `row==-1 → false`, else it writes k.u (the lowercase map-
+     *  region slot — a write-only bookkeeping latch in the original,
+     *  consumed nowhere) and marks the region's `w` map cells complete
+     *  (stubbed). PROVEN NOT `k.U`: the camera's bottom bound `U` is a
+     *  different field armed only by ax37 triggers (i.java:7152) — an
+     *  earlier rev aliased them, so every S21 checkpoint zone poisoned
+     *  `boundMaxY` and the camera rocketed to a fake kill ceiling. */
+    var kMapSlot = 0                           // k.u — map-region slot
     override fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean {
         if (row == -1) return false
-        kU = slot; kBQ = true
+        kMapSlot = slot; kBQ = true
         return true
     }
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
@@ -1995,7 +2008,7 @@ class Level0World(
                 camX = camA; camY = camB; camCC = 0; camCD = 0
                 kU = 0; kSBound = 0; kT = 0; kR = 0                 // snap clears walls
             } else if (ae != null) {
-            if (ae.ax == 43 && ae.S != 1) {                         // L339: speed-follow
+            if (ae.ax == 43 && (ae.S == 1 || ae.S == 4)) {          // L339: speed-follow
                 camX += camCC / r6
                 camCD = lerpStep(camB - camY, 28)
                 camY += camCD / r6
@@ -4577,6 +4590,11 @@ class Level0World(
 
     // -- sim --------------------------------------------------------------
 
+    private fun claimSuspendsPlayer(): Boolean =
+        (kC?.claimAb() == true || (jC == 21 && dlgU == 9)) &&
+            (player.P and 512) == 0 && kC !== player &&
+            player.ax != 8 && player.ax != 24
+
     fun tick(events: List<InputQueue.Event>) {
         consume(events)
         // k.H/k.I live for one frame (k.java:1874-77 — `H=ch;I=ci;ch=-1;
@@ -4733,10 +4751,7 @@ class Level0World(
         // `aa()` drives `ak`/`al` directly. `s()` (advanceAnim) stays
         // outside: suspended entities still advance anims (the L34-L81
         // arm runs before the gate).
-        val claimSuspended = (kC?.claimAb() == true ||
-            (jC == 21 && dlgU == 9)) &&
-            (player.P and 512) == 0 && kC !== player &&
-            player.ax != 8 && player.ax != 24
+        val claimSuspended = claimSuspendsPlayer()
         if (!claimSuspended) {
             player.collideSides(this, true)
             playerFsm.tick(player, pad)
@@ -4874,13 +4889,17 @@ class Level0World(
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
-        // below camera bottom: i.java:4137-4145 (proven) —
-        // `if (!v()) { if (al > k.P + 240) l(12) }` — the fail is gated by
-        // the `i.v()` in-play predicate: while the player's box intersects
-        // `k.ac` (the camera view) the check is skipped, so claim scripts
-        // that dip the player below the view edge (e.g. script 104's gap
-        // descent at the x5500 wall) do not kill the run mid-cutscene.
-        else if (!player.inPlayV(this) && player.al > camY + VIEW_H) stateL(12)
+        // below camera bottom (B(), i.java:1386-1389, proven):
+        // `if (!v()) { if (al > k.P + 240) l(12) }` — in the original this
+        // sits inside n(), the player's own tick, so it runs BEFORE any
+        // entity's claim ops and can never see the post-op camera pan: a
+        // script that binds a hold on the player while snapping the camera
+        // away (mission-4 script 41's op11 snap + op21 hold) skips it.
+        // The equivalent here is a LIVE re-check (not the tick-top local):
+        // on the bind tick the claim is already bound by the time the pan
+        // lands, so the gate is closed.
+        else if (!claimSuspendsPlayer() && !player.inPlayV(this) &&
+                 player.al > camY + VIEW_H) stateL(12)
 
         // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
         // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`
@@ -4938,6 +4957,15 @@ class Level0World(
         // `i.cu` world-freeze (i.java:15264 L109, proven): while the ax10
         // S55 claim zone holds it, every non-ax10 entity skips `I()`.
         if (Entity.icu && n.ax != 10) return
+        // `I()` head integrator (i.java:3886-3918, proven): every entity
+        // that reaches the dispatch integrates its velocity here — the
+        // `aH` slow-mo driver divides by `aI` (ax10 on `bh[k.aj]==3`
+        // missions always integrates at full rate); `bh[k.aj]==3` then
+        // snapshots `bY/bZ` via `bF()` before the arm dispatch.
+        n.integratedThisTick = false
+        n.integrate(if (!iAH || (Entity.MISSION_BH[kAj] == 3 && n.ax == 10)) 1 else maxOf(1, iAI))
+        n.integratedThisTick = true
+        if (Entity.MISSION_BH[kAj] == 3) n.posToWaypoint(this)
         var claimed = true
         if (n.ax == 44) npcFsm.tickDoor(n, player)
         else if (n.ax == 10) npcFsm.tickTrigger(n, this, player, pad)

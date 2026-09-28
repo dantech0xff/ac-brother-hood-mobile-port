@@ -265,8 +265,10 @@ class NpcFsm(val world: LevelCellSource) {
             e.ax != 50 && e.ax != 73) { defaultArm(e, player); return }
         // L70-L78 (i.java:4886-4898, proven): the fixed-point integrator
         // runs at the TOP of I() for every entity — under `aH` slow-mo it
-        // swaps to the aI-divided variant (L72→L75, i.java:6370-6384).
-        e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
+        // swaps to the aI-divided variant (L72→L75, i.java:6370-6384). The
+        // dispatch head already ran it for `I()`-entered entities; this
+        // fallback covers direct arm calls.
+        if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
         e.collideSides(world, true)
         // `I()` head (i.java:4024, proven): aB<=0 on any live state →
         // i(0) death entry. Without this an S85/SC hurt soldier recovered
@@ -1867,8 +1869,13 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 if (e.nl != 0) return                                  // L737
+                // L73f gate (i.java:12414-12419, proven): `aH==true →
+                // L233` (re-fires only while `k.am==false`), else
+                // L234 `b(2); k.o()` — one-shot: after firing, aH&&am
+                // skips. `!aH || !am`, NOT `aH || !am` — an inverted
+                // `iAH` would re-timewarp every tick and decay kX→0.
                 if (w.missionBh() == 3 &&
-                    (w.iAH || !w.kAm)) {                               // L73f
+                    (!w.iAH || !w.kAm)) {                              // L73f
                     e.timewarp(w, 2); e.lockInput(w)                   // L756
                 }
                 if (e.aB == 0) {                                       // L75d
@@ -2544,7 +2551,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // L131/L143 — player boards/attacks onto the crate
                 if (p.ga !== e && e.S != 13 &&
                     Entity.overlapI(p.W, e.W) &&
-                    (w.playerAttacking() || p.S == 236 || p.S == 239)) {
+                    (p.gB() || p.S == 236 || p.S == 239)) {             // g.b(k.aS.S)
                     if (r8 != null && r8.ax == 66 && r8.S == 16) {
                         p.flingAirborne(p.ah, w); p.ga = null       // L143
                     }
@@ -2626,7 +2633,7 @@ class NpcFsm(val world: LevelCellSource) {
             //    anim-done → i(18) + release) ------------------------
             19, 20, 21, 22 -> {
                 if (p.ga !== e) {                                   // L254
-                    if (w.playerAttacking() &&
+                    if (p.gB() &&                                     // g.b(k.aS.S)
                         Entity.overlapI(p.W, e.W)) {
                         p.setAnim(if (p.S == 264) 262 else 260)     // L260
                         p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0      // L261
@@ -4038,7 +4045,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
         // ---- L84-L135: dual-respawn + waypoint travel ----------------------
         3 -> {
             for (r93 in 0 until 2) {
-                val r05 = w.findByAw(e.Z[93 + 13]) ?: continue
+                val r05 = w.findByAw(e.Z[r93 + 13]) ?: continue
                 // L92 gate: P&16 set → respawn needs S10 && !v() && cC!=6
                 val gate = (r05.P and 16) == 0 ||
                     (r05.S == 10 && !r05.inPlayV(w) && w.iCC != 6)
@@ -4078,7 +4085,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                     }
                 } else {
                     for (r94 in 0 until 2) {
-                        val r08 = w.findByAw(e.Z[94 + 13]) ?: continue
+                        val r08 = w.findByAw(e.Z[r94 + 13]) ?: continue
                         if (r08.S == 10) {
                             r08.P = r08.P and -17
                             r08.P = r08.P and -33
@@ -4162,12 +4169,18 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                     e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
                     e.aC = w.dirWp!!.e; e.j = w.dirWp!!.d
                 }
-                // L222 — monitor the Z[3] pursuer
+                // L222-L226 (i.java:18366-18370, proven): the chase pauses
+                // only while the Z[3] pursuer holds S22 — the pv3 charge
+                // pose (Entity `respawnAttack` L57 arm) — because the L237
+                // watcher's `S==22 → S23 + k=true` release needs the pause
+                // to resolve before the chase advances the script. `r015`
+                // null (removed) OR `S != 22` (any other anim) → `d(false)`
+                // runs. The decompiler's `S!=22` fall-through into the L197
+                // cascade is a dropped edge — L197 → L214 → L222 → L225 →
+                // L197 loops the router inside one tick, impossible in a
+                // shipped game; the live reading is `S!=22 → L226` (`d(false)`).
                 val r015 = w.findByAw(e.Z[3])
-                if (r015 == null) directorChase(e, false)
-                // inferred: L225's `S!=22` fall-through lands on L237 (the
-                // physically-following L197 chain would re-run the router
-                // forever — a decompiler drop)
+                if (r015 == null || r015.S != 22) directorChase(e, false)
             }
         }
         // ---- L227-L235: finale ----------------------------------------------
@@ -6705,10 +6718,11 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
             e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }
         }
     }
-    e.integrate()                                              // L148 b(true)
-    // b(true) runs bF() every tick on flying levels — bh[k.aj]==3
-    // (i.java:4906, proven): waypoint coords = ak / al-kP.
-    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    if (!e.integratedThisTick) {
+        e.integrate()
+        if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    }
+    e.syncAd(w)                                                // L148 b(true)
 }
 
 /** ax24 init (L75/L84 arms of `i(short[])`, i.java:2837, proven) —
@@ -6887,8 +6901,10 @@ fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
         }
         else -> {}                                          // L159 default
     }
-    e.integrate()
-    if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)   // bF() tail
+    if (!e.integratedThisTick) {
+        e.integrate()
+        if (Entity.MISSION_BH[w.kAj] == 3) e.posToWaypoint(w)
+    }
 }
 
 // ============================================================ ax24 = ba()
@@ -6965,7 +6981,7 @@ private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
             }
             32 -> {
                 if ((r0.l and 1) == 0) continue
-                if (r0.S in 21..27 && !w.iCF) break          // cF gate → abort sweep
+                if (r0.S in 21..27 && !w.cFFlag) break         // L87 cF gate → abort sweep
                 if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
                 if (r0.aB > 0) {
                     r0.aB -= Entity.WEAPON_K[w.weaponSlot]
@@ -7164,7 +7180,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
         }
         else -> {}                                       // L206 inert
     }
-    e.integrate()
+    if (!e.integratedThisTick) e.integrate()
 }
 
 // ==================================================================// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
@@ -7609,8 +7625,10 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
                     return
                 }
             }
-            // L29 — player attack cuts the bind → i(7)
-            if (w.playerAttacking() && p.ga === e) {
+            // L29 — `!g.g() || g.a != this` ride arm; else (player dead
+            // while bound) `g.a=null; i(7)` — g.g() = `x[1]<=0` death check
+            // (g.java:4431, proven), NOT an attack.
+            if (p.x1 <= 0 && p.ga === e) {
                 p.ga = null
                 e.setAnim(7)
                 return
@@ -10551,6 +10569,11 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
             if (pr != null) {
                 pr.a = colW - 10 + i * colW
                 pr.b = 160
+                // i.java:32740 `bA[].b(j.f)` — the draw arm advances
+                // each armed prompt's anim by the frame delta (62ms per
+                // fixed tick here); without it `stopped()` never latches
+                // and the claim-completion `nl=1` path is unreachable.
+                pr.anim.tick(62)
                 w.drawFxPrompt(i + off)
             }
             i++

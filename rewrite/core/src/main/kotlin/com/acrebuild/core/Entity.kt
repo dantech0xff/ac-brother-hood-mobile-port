@@ -3859,6 +3859,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `i.bF()` (i.java:18921): world → waypoint-coords — `bY=ak; bZ=al-k.P`. */
     fun posToWaypoint(world: LevelCellSource) { bY = ak; bZ = al - world.kP }
+    /** Porting aid — `true` once the `I()`-head integrator ran for this
+     *  entity this tick (i.java:3886): per-arm integrates then no-op so a
+     *  dispatched entity never double-integrates, while a direct arm call
+     *  (tests) still integrates once. Cleared+set by the dispatch head. */
+    var integratedThisTick = false
+
 
     /** `i.u()` (i.java:700, proven): off-screen distance score into `au` —
      *  `|ak-(k.O+200)|/400 + |al-(k.P+120)|/240` for ax13/ax21 (and ax67
