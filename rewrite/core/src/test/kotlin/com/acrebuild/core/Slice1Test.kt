@@ -27070,13 +27070,55 @@ class Slice291Test {
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.al > maxAl) maxAl = p.al
+            if (t % 5 == 0) println("D t=$t p=(${p.ak},${p.al}) S${p.S} ag=${p.ag} ah=${p.ah} aZ=${p.aZ} ga=${p.ga?.aw} bM=${p.bM?.aw} ac=${p.ac?.aw} wp=$wp jC=${w.jC}")
             if (w.jC == 12 || w.jC == 13) { died = true; break }
             if (p.ak > 9900) break
         }
+        println("D end p=(${p.ak},${p.al}) S${p.S} maxAk=$maxAk maxAl=$maxAl died=$died jC=${w.jC}")
         assertTrue(!died,
             "legD player survived the lift/spring/mass band: maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
         assertTrue(maxAk > 9650,
             "legD crossed the mass band to the far-east gauntlet: maxAk=$maxAk maxAl=$maxAl jC=${w.jC}")
+    }
+
+    /** Mission-6 capstone leg E — the end-game chain: door mass top x10700
+     *  → hop the mass's west edge x10540 → descend the shaft x10420-10539 →
+     *  lower mass y1000 → walk east into door179's box [10645,904,10695,991]
+     *  → UP-hold fires the S16 door arm (marker ae=105 → `doorExitBh` →
+     *  S284 + `bindAc` uid178) → teleport to door178's dest (10275,1217) →
+     *  descend the masses east → S34 drop → win zone uid271@(10924,1166)
+     *  → `k.l(15)` mission-complete. Pin start: on the door mass's top. */
+    @Test fun mission6CapstoneLegE() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10700, 800); p.refreshBoxes()
+        w.kO = 10560; w.kP = 700
+        var maxAk = 0; var minAl = 9999; var won = false
+        for (t in 0..3000) {
+            if (w.jC == 15) { won = true; break }
+            if (p.ak - 200 > w.kO) w.kO = p.ak - 200
+            if (p.al - 120 > w.kP) w.kP = p.al - 120
+            val pad = when {
+                w.jC == 10 || w.jC == 15 || w.jC == 21 -> 327712
+                (p.ac != null && p.ac!!.ax == 10) ||
+                (p.aZ && p.ak in 10590..10700 && p.al in 990..1040) -> Pad.M_UP
+                p.ak in 10910..10960 && p.al > 1100 -> Pad.M_CONTEXT
+                p.S == 65 || p.S == 228 || p.S == 358 -> 16396
+                p.al < 880 && p.ak > 10560 -> Pad.M_LEFT
+                p.al < 880 && p.ak in 10540..10560 && p.S == 26 -> Pad.M_UP
+                p.al < 880 && p.ak > 10540 -> Pad.M_LEFT
+                p.ak in 10620..10700 && p.al in 880..1020 -> Pad.M_UP
+                p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
+                else -> Pad.M_RIGHT
+            }
+            w.pad.e(pad)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+        }
+        assertTrue(won,
+            "legE door mass → door179 teleport → win: p@(${p.ak},${p.al}) S${p.S} maxAk=$maxAk minAl=$minAl jC=${w.jC}")
     }
 
 }
