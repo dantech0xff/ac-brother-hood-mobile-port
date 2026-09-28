@@ -27486,11 +27486,7 @@ class Slice298Test {
     }
 }
 
-class Slice300Test {
-
-    /** Shared phase-1 driver — the script-305 duel, identical to
-     *  mission7BossPhaseWin / mission7PostDuelClimb. */
-    private fun driveDuelWin(w: Level0World, p: Entity) {
+private fun driveDuelWin300(w: Level0World, p: Entity) {
         for (t in 0..12000) {
             val boss = w.npcs.firstOrNull { it.ax == 29 }
             if (w.iBy == 2) return
@@ -27527,8 +27523,8 @@ class Slice300Test {
         }
     }
 
-    /** Shared phase-2 driver — east-wall rebound → ax13 uid37 rope → top. */
-    private fun driveRopeClimb(w: Level0World, p: Entity) {
+/** Shared phase-2 driver — east-wall rebound → ax13 uid37 rope → top. */
+private fun driveRopeClimb300(w: Level0World, p: Entity) {
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
         var jumpCd = 0
         for (t in 0..12000) {
@@ -27576,6 +27572,8 @@ class Slice300Test {
         }
     }
 
+class Slice300Test {
+
     /** m7 leg E — post-rope shelf run: off the rope top the bot drops onto
      *  the east shelf (y1500, x940-1520), runs west past checkpoint
      *  uid233@(1244,1470) (aY → checkpointSnap + kG=351) and the ax5 uid351
@@ -27587,9 +27585,9 @@ class Slice300Test {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
         val p = w.player
-        driveDuelWin(w, p)
+        driveDuelWin300(w, p)
         assertEquals(2, w.iBy, "duel phase-win never reached")
-        driveRopeClimb(w, p)
+        driveRopeClimb300(w, p)
         assertTrue(p.al < 1460, "never topped out on the rope — al=${p.al}")
         // Phase 3 — shelf run west.
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
@@ -27646,5 +27644,74 @@ class Slice300Test {
         assertTrue(p.ak <= 1040 || w.checkpointSnap != null,
             "never reached the lift row / checkpoint — ak=${p.ak} al=${p.al}")
         if (w.checkpointSnap != null) assertEquals(233, w.checkpointSnap!!.aw)
+    }
+}
+
+class Slice301Test {
+
+    /** m7 leg F — west to the spring u33@(336,1522): off the lift row the
+     *  bot runs west along the shelf blocks (ends x620), drops onto the
+     *  '02' floor y1540 and keeps west into the spring's W-box —
+     *  S0 pad arm (i.java:13647): falling overlap → `a(11,0,0,this)`
+     *  Z-launch `ag=-50<<8, ah=-90<<8` → thrown up-left into the west
+     *  wing. Asserts the launch (al < 1360 = 160px+ above the pad). */
+    @Test fun mission7SpringLaunch() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        driveDuelWin300(w, p)
+        driveRopeClimb300(w, p)
+        var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        val trace = ArrayDeque<String>(60)
+        var lastS = p.S
+        var jumpCd = 0
+        var minAl = p.al
+        for (t in 0..12000) {
+            var mask = chaseMask297(p, w)
+            when {
+                p.bM != null -> mask = Pad.M_UP
+                !p.aZ -> mask = Pad.M_LEFT + Pad.M_UP
+                else -> mask = Pad.M_LEFT
+            }
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_L
+                63, 318 -> mask = Pad.M_UP
+                56, 60, 61, 62 -> mask = Pad.M_LEFT + Pad.M_UP
+                27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
+            }
+            if (jumpCd <= 0 && stall > 0 && stall % 20 == 0) {
+                mask = 16390 or Pad.M_LEFT
+                jumpCd = 20
+            }
+            jumpCd--
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 60) trace.removeFirst()
+                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
+                lastS = p.S
+            }
+            if (p.al < minAl) minAl = p.al
+            if (w.jC == 15) break
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                settleIntro(w)
+                continue
+            }
+            if (w.jC != 8) break
+            if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            lastAk = p.ak; lastAl = p.al
+            if (p.al < 1360) break
+        }
+        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} minAl=$minAl trace=${trace.joinToString(" ")}")
+        assertTrue(p.al < 1360,
+            "never launched off the spring — al=${p.al} ak=${p.ak}")
     }
 }
