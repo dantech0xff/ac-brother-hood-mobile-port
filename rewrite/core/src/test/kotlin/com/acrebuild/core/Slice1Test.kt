@@ -26767,3 +26767,98 @@ class Slice289Test {
             "legJ cp405->platforms->poles->finale@15439: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
     }
 }
+
+
+// ---- Slice 291: mission-6 capstone (Pantheon, aj6/pack-12) ------------------
+// Recon legs on `world(aj = 6)`: spawn ax0 @(17,740); ax5 milestone spine
+// (19,658) uid16, (801,930) uid116, (8654,206) uid772, (10290,439) uid153,
+// (10924,1166) uid271, (9672,358) uid311, (7667,556) uid240; checkpoints
+// ax2 uid38@(1878,922), uid188@(1873,908), uid72@(3242,680),
+// uid113@(7096,225), uid328@(8068,523), uid180@(9275,112),
+// uid795@(5973,180). Same capstone pattern as slices 279-289 — real
+// input only, no state pinning.
+
+private fun chaseMask291(p: Entity, w: Level0World): Int {
+    var mask = Pad.M_RIGHT
+    when (p.S) {
+        65 -> mask = Pad.M_UP + Pad.M_TAP_R
+        228, 358 -> mask = Pad.M_RIGHT + Pad.M_UP
+        297, 89, 90 -> mask = Pad.M_CONTEXT
+        // S5/79 land-recovery, S258-266 perch/launch family: RIGHT to
+        // continue east; UP edge would fire the wrong launch.
+        5, 79, 235, 236, 237, 238, 239, 240, 241, 242, 243,
+        258, 259, 260, 261, 262, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+        // ledge-hangs: UP edge climbs up (S62 arm); the lip grabs on
+        // the column faces are how the chimney climb proceeds.
+        60, 61, 203 -> mask = Pad.M_UP
+        // S33 wall-cling: dir-into-wall arms the L859 launch.
+        33 -> mask = if (p.av) Pad.M_LEFT else Pad.M_RIGHT
+        // climb-arc states: dir-into-wall + TAP arms aF so the
+        // wall-grab / lip-grab re-fires on contact (m5 pattern).
+        22, 23, 43 -> mask =
+            (if (p.av) Pad.M_LEFT + Pad.M_TAP_L
+             else Pad.M_RIGHT + Pad.M_TAP_R)
+        // stub crouch-crawl: S79's l() arm uses the dir key for the S32
+        // crouch-walk (DOWN held keeps the low stance alive).
+        78, 79, 80, 32 -> mask = Pad.M_DOWN + Pad.M_RIGHT
+        else -> if (!p.aZ) mask = 0
+    }
+    // crouch-crawl under the slab stub x720-760 (40px passage): on the
+    // corridor/pit floor the grounded run would auto-vault into the stub
+    // face. DOWN alone brakes to S78→S79; the crouch states above then
+    // crawl east — a dir key in lShared would route to ax() and never
+    // reach the aw() DOWN dip.
+    if (p.ak > 680 && p.ak < 800 && p.al > 700 &&
+        p.S !in intArrayOf(33, 36, 60, 61, 101, 203)) {
+        mask = when {
+            // crouch family: dir key arms the S32 crawl (DOWN held keeps
+            // the low stance); never M_UP here — UP would vault.
+            p.S == 78 || p.S == 79 || p.S == 80 || p.S == 32 -> Pad.M_DOWN + Pad.M_RIGHT
+            else -> Pad.M_DOWN
+        }
+    } else if (p.aZ && p.av) mask = Pad.M_RIGHT
+    else if (p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
+    return mask
+}
+
+class Slice291Test {
+
+    @Test fun mission6CapstoneLegA() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // recon: spawn -> first ax5 milestone uid116 @(801,930)
+        var maxAk = 0; var minAl = 10000; var reached = false; var lastS = p.S
+        val marks = mutableListOf<String>()
+        for (t in 0..12000) {
+            w.pad.e(chaseMask291(p, w))
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al < minAl) minAl = p.al
+            if (p.S != lastS || t % 60 == 0)
+                println("M6A t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ag=${p.ag} ah=${p.ah} jC=${w.jC} kC=${w.kC?.ax}")
+            lastS = p.S
+            if (w.jC == 15) { reached = true; marks += "WON@t$t"; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                marks += "died@(${p.ak},${p.al}) S${p.S} t=$t"
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+            // uid116 zone [801,930,1001,973] — pit-floor band, not the
+            // corridor floor above.
+            if (p.ak >= 790 && p.al >= 920) { reached = true; marks += "M801@t$t"; break }
+        }
+        println("M6A reached=$reached maxAk=$maxAk minAl=$minAl p@(${p.ak},${p.al}) S${p.S} jC=${w.jC} marks=$marks")
+        assertTrue(reached,
+            "legA spawn(17,740)->ax5@801: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC} marks=$marks")
+    }
+
+}
