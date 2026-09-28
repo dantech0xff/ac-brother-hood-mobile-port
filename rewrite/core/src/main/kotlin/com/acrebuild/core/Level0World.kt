@@ -4753,11 +4753,26 @@ class Level0World(
         // arm runs before the gate).
         val claimSuspended = claimSuspendsPlayer()
         if (!claimSuspended) {
+            // The wall rescan `a(an())` also runs inside `g.e()`'s head
+            // (g.java:1282, proven); this pre-tick `a(true)` is a slice-2
+            // superset the bot legs were proven against — removing it
+            // stalls proven crossings (gate row, canyon shaft), so it
+            // stays until a proven arm covers those states.
             player.collideSides(this, true)
             playerFsm.tick(player, pad)
             player.integrate()
         }
         player.advanceAnim()
+        // `I()` L1f35 shared tail for the player slot (i.java:18904-18922,
+        // proven): in the original every dispatched entity — the player
+        // (ax0, via i.I()) included — ends its I() with `if (b) t()` +
+        // the `av→P&1` facing sync, so npc arms ticking later this frame
+        // read the post-integrate bounds. Without it the player is the
+        // only entity left stale — asymmetric W shrinks catch/mount
+        // windows (ax10-S36 bound-catch, ax51 crate mounts).
+        player.b = true
+        player.refreshBoxes()
+        player.P = if (player.av) player.P or 1 else player.P and -2
 
         // `k.I()` player-link tail (k.java:8798-8810 L2df-L32a,
         // proven): immediately after `aS.I()` the player's `ac`/`ab`
