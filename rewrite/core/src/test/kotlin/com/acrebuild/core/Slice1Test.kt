@@ -26921,4 +26921,72 @@ class Slice291Test {
         assertTrue(maxAk > 7300, "legB crossed mass east wall: maxAk=$maxAk died=$died jC=${w.jC}")
     }
 
+    /**
+     * m6 capstone leg C — chasm scripted carry + perch chain.
+     * Same pin as leg B: player descends the S164 slide into uid240's
+     * zone [7663,341,7903,661] → the scripted sequence (2 CONTEXT QTEs,
+     * camera pan, down-carry to y775, jC=21 dialog, up-carry) → released
+     * at ~(8025,560) on the platform → vault east → ax22 perch chain
+     * @(8158,476)→(8304,452) → cross x8400 toward the lift/spring band.
+     * Asserts: uid240's script runs to completion (claim released) and
+     * maxAk > 8400.
+     */
+    @Test fun mission6CapstoneLegC() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(6060, 219); p.refreshBoxes()
+        w.kP = 700
+        for (t in 0..160) { w.pad.e(0); w.tick(emptyList()) }
+        var maxAk = p.ak; var released = false
+        for (t in 0..1600) {
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            val threat = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
+                    kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
+            }
+            w.pad.e(when {
+                w.kC != null -> Pad.M_CONTEXT                  // uid240 QTE chain (op107/108 pairs): answer every prompt while a claim holds the player
+                p.aZ && p.al > 500 && p.ak in 8000..8080 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R   // platform edge → vault east onto ax22@(8158,476)
+                !p.aZ && p.ag > 0 && p.ak in 8040..8200 -> Pad.M_TAP_R or Pad.M_UP                  // mid-flight: keep the arc
+                p.S == 361 -> Pad.M_CONTEXT
+                p.S == 28 || p.S == 318 -> Pad.M_DOWN
+                p.S == 65 -> Pad.M_UP
+                p.S == 228 || p.S == 358 -> Pad.M_UP
+                p.S == 101 && p.ak < 6500 -> Pad.M_LEFT
+                p.S == 101 -> Pad.M_RIGHT
+                p.S == 36 && p.ak < 6700 -> Pad.M_RIGHT
+                !p.aZ && p.al > 440 && p.ak in 6920..7050 -> Pad.M_TAP_R or Pad.M_UP
+                !p.aZ && p.ag < 0 && p.al in 300..470 && p.ak in 6900..7050 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al in 240..460 && p.ak in 6790..6900 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al > 560 && p.ak in 6800..6920 -> Pad.M_TAP_L or Pad.M_UP
+                !p.aZ && p.al > 380 && p.ak in 6500..6680 -> Pad.M_TAP_R or Pad.M_UP
+                !p.aZ && p.ak < 6480 && p.al < 330 -> Pad.M_TAP_L
+                !p.aZ && threat != null && p.al > 600 -> Pad.M_RIGHT
+                p.aZ && p.al in 600..680 && p.ak > 6940 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 400..470 && p.ak in 6960..7060 -> Pad.M_LEFT or Pad.M_UP or Pad.M_TAP_L
+                p.aZ && p.al in 400..470 && p.ak > 7060 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 460..500 && p.ak >= 6540 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al in 460..560 && p.ak >= 6800 && p.ak < 6960 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al < 400 -> Pad.M_RIGHT
+                p.ga != null && p.ak >= 5380 -> Pad.M_RIGHT or Pad.M_UP
+                p.aZ && p.al > 600 && p.ak in 6430..6510 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al > 600 && p.ak >= 6880 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                p.aZ && p.al > 600 -> Pad.M_RIGHT
+                p.aZ -> Pad.M_RIGHT
+                else -> Pad.M_RIGHT
+            })
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak > 8045) released = true                 // script released the player east of x8000
+            if (w.jC == 12 || w.jC == 13) break
+            if (p.ak > 9200) break
+        }
+        println("M6C maxAk=$maxAk released=$released p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(released,
+            "uid240 scripted sequence released the player east of x8000: maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(maxAk > 8400,
+            "perch chain crossed the chasm band: maxAk=$maxAk p@(${p.ak},${p.al}) jC=${w.jC}")
+    }
+
 }
