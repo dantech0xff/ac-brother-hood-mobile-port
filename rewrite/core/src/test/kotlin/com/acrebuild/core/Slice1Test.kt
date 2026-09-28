@@ -23827,8 +23827,7 @@ class Slice245Test {
         val milestones = intArrayOf(1400, 2500, 3900, 4650, 5950, 7150,
                                     8950, 10020, 11410, 12150)
         var mi = 0
-        var doorS1Ticks = 0                      // consecutive door-S1 count
-        var standTicks = 0                       // drop-point stand counter (phase sweep)
+        var towerStall = 0                       // far-tower lip hold (door-phase sweep)
         var doorPulse = 0                        // UP-edge cadence in the door box
         var topUpHeld = false                    // UP-edge cadence on the massif top
         // pole cycle→phase map, hoisted for the strip arm too
@@ -23848,6 +23847,7 @@ class Slice245Test {
                     w.pad.e(327712); w.tick(emptyList())
                     w.pad.e(327712); w.tick(emptyList())
                     deaths++; marks += "respawn@${p.ak},${p.al} t=$t"
+                    towerStall = 0
                     if (deaths > 300) break; continue
                 }
                 w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
@@ -24127,8 +24127,22 @@ class Slice245Test {
                         // Dismounting at >=9590 throws the arc ~+55px
                         // further, landing ~9850 — past the first
                         // guard's patrol bound — a clean run to the lip.
+                        // Dismount sweep `9590 + deaths % 28`: a fixed
+                        // dismount makes the whole re-drive deterministic
+                        // — same tower landing, same elite interception,
+                        // same shaft-descent phase → same death every
+                        // retry (301). Sweeping the drop point sweeps the
+                        // patrol phase at arrival, the strike position,
+                        // and the door phase at the ax22 capture+1 tick
+                        // (the crush race — door record 26/27 ticks ~364
+                        // slots before the zone's record 390, so a door
+                        // in a blocking frame kills the pinned player
+                        // before the vault fires). Retries exhaust the
+                        // mixed-mode failures until a capture+safe-phase
+                        // attempt survives.
                         p.ac != null && p.ac!!.ax == 40 && p.S == 164 ->
-                            if (p.ak >= 9590) Pad.M_TAP_R else 0
+                            if (p.ak >= 9590 + deaths % 28) Pad.M_TAP_R
+                            else 0
                         // FAR TOWER top (x9700-9979 @ y360): two aB>200
                         // elite ax11s patrol it (x9723/x9753, alert to
                         // ~x9903) and chase at run speed — every duel
@@ -24139,6 +24153,23 @@ class Slice245Test {
                         // ledge (x9880-10119), dodge its two crushers,
                         // then off the east end to floor y720 → the
                         // ax2@10016 checkpoint → pillar x10080 → ax5.
+                        // DESCENT PHASE SWEEP (crush race): the shaft's
+                        // ax44 doors only tick once `au<2` (camera gate,
+                        // k.java L215) — their 7-tick cycle starts at a
+                        // deterministic offset before the ax22 capture,
+                        // so the capture+1 tick lands vuln on S0 every
+                        // attempt (the blocking frame: W[1]=570 vs the
+                        // pinned player's W[3]=576 → crush → S50 → x1=0
+                        // — door records 26/27 tick ~364 slots before
+                        // the zone's record 390, killing him before the
+                        // vault fires). A stall BEFORE the descent can't
+                        // move the lock. Extra east ticks on the floor
+                        // shift everything downstream by `deaths % 7` —
+                        // vuln sweeps the cycle until it lands on a
+                        // retracted frame (S1/S2, W[1]>=577).
+                        p.aZ && p.al in 330..400 && p.ak in 9600..9820 &&
+                            towerStall < deaths % 7 ->
+                            { towerStall++; Pad.M_RIGHT }
                         // KILL-HOP on the top: the S157 fling lands ON
                         // guard1 (@9723) and kills it outright (S89 →
                         // its S139) — the same landing-crush works on
@@ -24149,7 +24180,7 @@ class Slice245Test {
                         p.aZ && p.al in 330..400 && p.ak in 9600..10080 ->
                             if (foe != null && foe.ax == 11 &&
                                 foe.aB > 200 &&
-                                kotlin.math.abs(foe.ak - p.ak) in 35..70)
+                                kotlin.math.abs(foe.ak - p.ak) in 20..110)
                                 (if (foe.ak > p.ak) Pad.M_RIGHT
                                  else Pad.M_LEFT) or Pad.M_UP
                             else Pad.M_RIGHT
@@ -24553,15 +24584,9 @@ class Slice245Test {
             atkCd--
             w.pad.e(held)
             w.tick(emptyList())
-            if (t <= 1400 && t % 5 == 0)
-                println("TRC $t ${p.ak},${p.al} S${p.S} aZ=${p.aZ} ag=${p.ag} ah=${p.ah} W=${p.W.toList()}")
             if (p.S != lastS) {
                 if (trace.size == 80) trace.removeFirst()
-                val d2 = w.npcs.filter { it.ax == 44 }.minByOrNull {
-                    kotlin.math.abs(it.ak - p.ak) }
-                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}" +
-                    " d=${d2?.ak}:S${d2?.S}W${d2?.W?.toList()}/$doorS1Ticks" +
-                    " x1=${p.x1}")
+                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
                 lastS = p.S
             }
             if (p.ak > maxAk) { maxAk = p.ak; stall = 0 }
@@ -24640,6 +24665,8 @@ class Slice245Test {
             "capstone must complete mission-0 end to end — " +
             "maxAk=$maxAk deaths=$deaths marks=${marks.takeLast(8)}")
     }
+
+}
 
 
 // ---- Slice 277: weakened-victim mount = faithful soft-lock ---------------
