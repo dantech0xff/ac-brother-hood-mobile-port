@@ -26989,4 +26989,94 @@ class Slice291Test {
             "perch chain crossed the chasm band: maxAk=$maxAk p@(${p.ak},${p.al}) jC=${w.jC}")
     }
 
+    /** Mission-6 capstone leg D — from leg C's perch-uid139 deposit on the
+     *  y304 lift row (probe: lands on lift uid410@(8293,304) at ~(8312,304)):
+     *  hop WEST to lift uid143@(8178,304) → LEFT|UP launch into spring
+     *  uid420@(8079,250) → chained launch off spring uid123@(8200,183) →
+     *  apex ~y86 → land the y145 lift row → hop east off lift uid191@(8511,145)
+     *  → mass-A top (x8640-8900,y~220) → edge hop into the A-B gap → drift
+     *  east past trap lift uid156@(8938,580) → vault/grab near
+     *  perch uid159@(9164,497) → rope uid162@(9213,169) swing → S101 wall
+     *  hops up mass C's west face → S284 edge grab → east past
+     *  ax5 uid311@(9672,358). Milestone: player east of x9650, no fail. */
+    @Test fun mission6CapstoneLegD() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // pin standing where leg C's perch uid139 rise deposits the player —
+        // on lift uid410@(8293,304)'s top (probe: lands at (8312,304)).
+        p.setPositionPx(8312, 296); p.refreshBoxes()
+        w.kO = 8000; w.kP = 150
+        for (t in 0..60) { w.pad.e(0); w.tick(emptyList()) }
+        val wps = listOf(
+            intArrayOf(8178, 304, 143), intArrayOf(8079, 240, 0),
+            intArrayOf(8339, 145, 146), intArrayOf(8397, 145, 149),
+            intArrayOf(8455, 145, 150), intArrayOf(8511, 145, 191),
+            intArrayOf(8660, 230, 0), intArrayOf(8890, 220, 0),
+            intArrayOf(8960, 760, 0), intArrayOf(9120, 760, 0),
+            intArrayOf(9164, 500, 0), intArrayOf(9290, 150, 0),
+            intArrayOf(9680, 360, 0),
+        )
+        var wp = 0; var bindT = 0; var maxAk = 0; var maxAl = 0; var died = false
+        for (t in 0..2400) {
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            w.pad.e(when {
+                w.kC != null -> Pad.M_CONTEXT
+                p.S == 361 -> Pad.M_CONTEXT
+                p.S == 28 || p.S == 318 -> Pad.M_DOWN
+                p.S == 65 || p.S == 228 || p.S == 358 -> Pad.M_UP
+                else -> {
+                    when {
+                        // spring launch — ride it east
+                        kotlin.math.abs(p.ag) > 5000 -> Pad.M_RIGHT
+                        // gap-lift uid156 oscillation — drift off east into the gap
+                        p.ga != null && p.ga!!.aw == 156 -> Pad.M_RIGHT or Pad.M_DOWN
+                        !p.aZ && p.al > 430 && p.ak in 8900..8945 -> Pad.M_RIGHT
+                        // committed gap-edge hops on the mass tops
+                        p.aZ && p.al < 290 && p.ak in 8820..8900 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                        p.aZ && p.al < 290 && p.ak in 9100..9165 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                        // inside a gap — drift toward the east face
+                        !p.aZ && p.al > 240 && p.ak in 8850..9250 -> Pad.M_RIGHT
+                        // bound on an ax66 lift — ride ≥4 ticks then hop toward the next point
+                        p.ga != null && p.ga!!.ax == 66 -> {
+                            val bound = wps.indexOfFirst { it[2] == p.ga!!.aw }
+                            if (bound >= 0 && wp <= bound) wp = bound + 1
+                            bindT++
+                            if (bindT >= 4) {
+                                val t = wps[minOf(wp, wps.lastIndex)]
+                                val nx = t[0] - p.ak
+                                when {
+                                    nx > 25 -> Pad.M_RIGHT or Pad.M_UP
+                                    nx < -25 -> Pad.M_LEFT or Pad.M_UP
+                                    else -> Pad.M_UP
+                                }
+                            } else 0
+                        }
+                        else -> {
+                            bindT = 0
+                            val t = wps[minOf(wp, wps.lastIndex)]
+                            val dx = t[0] - p.ak; val dy = t[1] - p.al
+                            if (kotlin.math.abs(dx) < 40 && kotlin.math.abs(dy) < 55) wp++
+                            when {
+                                dx > 40 -> Pad.M_RIGHT or Pad.M_UP
+                                dx < -40 -> Pad.M_LEFT or Pad.M_UP
+                                dy < -20 -> Pad.M_UP
+                                else -> Pad.M_RIGHT
+                            }
+                        }
+                    }
+                }
+            })
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.al > maxAl) maxAl = p.al
+            if (w.jC == 12 || w.jC == 13) { died = true; break }
+            if (p.ak > 9900) break
+        }
+        assertTrue(!died,
+            "legD player survived the lift/spring/mass band: maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(maxAk > 9650,
+            "legD crossed the mass band to the far-east gauntlet: maxAk=$maxAk maxAl=$maxAl jC=${w.jC}")
+    }
+
 }
