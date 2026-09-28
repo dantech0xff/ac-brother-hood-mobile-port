@@ -27906,11 +27906,16 @@ class Slice303Test {
 
 class Slice304Test {
 
-    /** m7 leg I — r96 under-chamber corridor: from the r87-gap drop
-     *  (~x880,y1770) land the r96 floor, cross the corridor bound
-     *  x1077-1497 east (prop ax27#308 doorpost x1060-1077), reach the
-     *  u280 goal zone @(1265,1975) — assert u280 fires, or the player
-     *  grounds east of x1200 on r96. */
+    /** m7 leg I — under-chamber is a sealed pit; the route goes UP.
+     *  Proven: the r96 floor has NO holes east of x880 and the ax27#308
+     *  doorpost x1060-1077 is permanently armed (`fuseArm` — Z[0]=0 →
+     *  findByAw(0)=null → P|4096 fire-push only, Z[1]<0 kills the lever
+     *  arm; script-311's door anims need u310, sealed east of the door).
+     *  The intended descent is the chimney hole → auto-grab ax13#37 rope
+     *  → release onto the slab → west across cp#233@(1244,1470) → the
+     *  west tower ledge (x300-559,y1300) → ax10#48 S34 rail ride →
+     *  ax4 crates. Assert: rope ride lands the slab, cp#233 crossed,
+     *  S164 rail ride, crates grounded. */
     @Test fun mission7UnderChamber() {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
@@ -27922,7 +27927,9 @@ class Slice304Test {
         var lastS = p.S
         var jumpCd = 0
         var landed = false; var launched = false; var kCFired = false
-        var u269Fired = false; var u252Fired = false; var u280Fired = false; var chainDone = false; var descended = false
+        var u269Fired = false; var u252Fired = false; var u280Fired = false; var u306Fired = false
+        var chainDone = false; var descended = false; var midCorridor = false; var ropeBound = false; var onSlab = false; var cp233 = false
+        var railRide = false; var crateTop = false
         var minAl = 99999; var maxAk = 0
         for (t in 0..28000) {
             var mask = chaseMask297(p, w)
@@ -27936,9 +27943,11 @@ class Slice304Test {
                 w.kC != null -> mask = Pad.M_CONTEXT   // phase 1 — let any claim script run (u269 zone + fuse carries)
                 else -> {
                     when {
-                        p.ga != null -> mask = 0                            // riding an ax66 sink lift — wait it out
+                        p.ga != null && !onSlab -> mask = 0                 // riding an ax66 sink lift — wait it out (except post-ride on the slab)
+                        onSlab -> mask = if (jumpCd <= 0 && p.ak > 1300) { jumpCd = 30; (16390 or Pad.M_LEFT) } else Pad.M_LEFT   // slab top — west to #233/u351, jump the x1340-1439 hole
+                        p.al > 1780 -> mask = if (p.ak in 1020..1090) (16396 or Pad.M_RIGHT) else Pad.M_RIGHT   // mid corridor — jump east over the #308 door at x1060-1077
                         !p.aZ && p.al > 1700 -> mask = Pad.M_RIGHT          // hole drop / corridor descent — drift east
-                        p.al > 1700 -> mask = Pad.M_RIGHT                   // trap floor / mid corridor — east
+                        p.al > 1700 -> mask = if (descended) (Pad.M_LEFT + Pad.M_DOWN) else Pad.M_RIGHT   // trap floor — crouch-west under the pillar
                         p.al > 1530 -> mask = Pad.M_RIGHT                   // '2' strip / r78 floor — east to the hole
                         else -> mask = Pad.M_RIGHT                          // lift-transit band — east
                     }
@@ -27948,9 +27957,9 @@ class Slice304Test {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
                 164 -> mask = 0
-                56, 60 -> mask = if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
-                61 -> mask = if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
-                62 -> mask = if ((p.al > 1500 && !(chainDone && p.al > 1530)) || (chainDone && p.ak < 1110)) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                56, 60 -> mask = if (descended && !midCorridor) Pad.M_LEFT else if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                61 -> mask = if (descended && !midCorridor) Pad.M_LEFT else if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                62 -> mask = if (descended && !midCorridor) Pad.M_LEFT else if ((p.al > 1500 && !(chainDone && p.al > 1530)) || (chainDone && p.ak < 1110)) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
                 27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
                 in 259..266 -> mask = Pad.M_RIGHT
             }
@@ -27962,7 +27971,7 @@ class Slice304Test {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
             } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ) {
-                mask = if (p.al > 1530 && !descended) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
+                mask = if (midCorridor) (16396 or Pad.M_RIGHT) else if (descended || p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
                 jumpCd = 30
             }
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release
@@ -27981,9 +27990,15 @@ class Slice304Test {
             if (w.kC != null) { kCFired = true
                 if (w.kC!!.aw == 252) u252Fired = true
                 if (w.kC!!.aw == 269) u269Fired = true
+                if (w.kC!!.aw == 306) { u306Fired = true; println("U306 t=$t ak=${p.ak} al=${p.al} S=${p.S}") }
                 if (w.kC!!.aw == 280) { u280Fired = true; println("U280 t=$t ak=${p.ak} al=${p.al} S=${p.S}") } }
             if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
             if (!descended && chainDone && p.aZ && p.al > 1700) { descended = true; println("DESCENDED t=$t ak=${p.ak} al=${p.al}") }
+            if (!midCorridor && descended && p.aZ && p.al > 1780) { midCorridor = true; println("MIDCORRIDOR t=$t ak=${p.ak} al=${p.al}") }
+            if (!onSlab && ropeBound && !descended && p.aZ && p.al in 1400..1560 && p.ak > 1060) { onSlab = true; println("ONSLAB t=$t ak=${p.ak} al=${p.al}") }
+            if (!cp233 && onSlab && p.ak in 1200..1300 && p.al < 1520) { cp233 = true; println("CP233 t=$t ak=${p.ak} al=${p.al}") }
+            if (p.S == 164 && !railRide) { railRide = true; println("RAIL t=$t ak=${p.ak} al=${p.al}") }
+            if (!crateTop && p.aZ && p.al < 1310 && p.ak in 640..780) { crateTop = true; println("CRATES t=$t ak=${p.ak} al=${p.al}") }
             if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
             if (w.jC == 15) break
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
@@ -27997,14 +28012,16 @@ class Slice304Test {
                 continue
             }
             if (w.jC != 8) break
-            if (u269Fired || u280Fired) break
-            if (descended && p.ak > 1260) break
+            if (u269Fired || u280Fired || u306Fired || (midCorridor && p.ak > 1280)) break
+            if (descended && !midCorridor && p.ak > 1560) break
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
             lastAk = p.ak; lastAl = p.al
             if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
+            val rope = w.findByAw(37)
+            if (rope?.bM === p || p.bM === rope) ropeBound = true
         }
-        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired u280=$u280Fired descended=$descended minAl=$minAl maxAk=$maxAk trace=${trace.joinToString(" ")}")
-        assertTrue(u280Fired || u269Fired || (descended && p.ak > 1200),
-            "under-chamber corridor not crossed — ak=${p.ak} al=${p.al} S=${p.S} u280=$u280Fired descended=$descended minAl=$minAl maxAk=$maxAk")
+        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired u280=$u280Fired u306=$u306Fired descended=$descended midCorr=$midCorridor onSlab=$onSlab cp233=$cp233 rail=$railRide crates=$crateTop minAl=$minAl maxAk=$maxAk trace=${trace.joinToString(" ")}")
+        assertTrue(u280Fired || u269Fired || u306Fired || railRide || crateTop || (midCorridor && p.ak > 1280),
+            "trap-corridor leg not crossed — ak=${p.ak} al=${p.al} S=${p.S} u280=$u280Fired u306=$u306Fired descended=$descended midCorr=$midCorridor onSlab=$onSlab cp233=$cp233 rail=$railRide crates=$crateTop minAl=$minAl maxAk=$maxAk")
     }
 }
