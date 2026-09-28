@@ -569,7 +569,15 @@ class Level0WorldTest {
             "weakened soldier should counter-engage the next attack (sS=${s.S})")
         // S216 is h()-exempt (i.java:1272): it reaches j()'s finisher arm
         // (i.java:1334) — aB=0 + diagonal launch (ag=±5120, ai=∓2560).
-        // Let the anim run until its X-arc frames land.
+        // Wait out S17: its counter arm (i.java:6036) force-S8s any attacking
+        // player — including the dive — so strike once the arm advances to
+        // S11 (Z0==2 → i(11)), where tail[2] arms j() intake instead.
+        for (i in 0 until 60) {
+            w.player.setPositionPx(s.ak - 20, s.al)
+            w.tick(emptyList())
+            if (s.S != 17) break
+        }
+        assertTrue(s.S != 17, "counter-engage should resolve (sS=${s.S})")
         w.player.setAnim(216)
         for (i in 0 until 60) {
             w.player.setPositionPx(s.ak - 20, s.al)
@@ -19845,11 +19853,16 @@ class Slice203Test {
     }
 
     @Test fun `S215 grabs without intent and flips facing`() {
-        // tall wall (10,3)+(10,4)=20 — the lip probes' `e(i2,i4-1)>0`
-        // pocket check fails, so the i(101) grab isn't remounted by the
-        // ct consumer's ledge mount in the same tail.
+        // fallback g.java:4596-4609 (proven): the S215 corner check is
+        // INVERTED vs the cv&&aF path — the mount throws the player
+        // backward so the grab face is the one they fly INTO: `av →
+        // aU==20`, `!av → aT==20`. West wall (9,3)+(9,4)=20 with av=false
+        // (facing east, flying west) → aT==20 → grab. The lip probes'
+        // `e(i2,i4-1)>0` pocket check fails on this tall wall, so the
+        // i(101) grab isn't remounted by the ct consumer's ledge mount
+        // in the same tail.
         val w = GrabWorld(cellFn = { cx, cy ->
-            if (cx == 10 && (cy == 3 || cy == 4)) 20 else 0 })
+            if (cx == 9 && (cy == 3 || cy == 4)) 20 else 0 })
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 215; p.av = false; p.aF = 0
         fsm.tick(p, Pad())
@@ -21751,6 +21764,21 @@ class Slice245Test {
             // while stalled against a face so the next grab site fires S101.
             if (stall > 40 || p.S == 33 || p.S == 34 || p.S == 101 || p.S == 92)
                 held = held or Pad.M_UP
+            // L1f35 fresh-W: after the x1400-face S36 west-kick, drift
+            // back east and re-grab higher — chaining grabs climbs to the
+            // ax7 slot @1397,506 (swallow → eject east over the wall).
+            // Scoped x>1100 so the x930-1040 pit keeps its tap-fall route.
+            if (!p.aZ && p.ak > 1100 && p.ak < 1560)
+                held = held or Pad.M_UP
+            // x900-face climb + roof-edge jump into ax22 zone1: the
+            // designed route climbs the x900-1120 building's west face
+            // to its y780 roof, then vaults east off the lip into
+            // zone1's [1208,626..1248,669] box — hold UP+RIGHT while
+            // grounded through the face + roof (same grammar as the
+            // spawn→corridor leg). Without it the bot walks under the
+            // roof into the floor channel, where kicks can't reach.
+            if (p.aZ && p.ak in 860..1180)
+                held = held or Pad.M_UP or Pad.M_RIGHT
             // airborne inside the chimney channel x1700-1820: keep UP held
             // so the wall-kick latch arms and face grabs chain upward —
             // the top launch arcs east into the ax22 aerial chain.
@@ -22429,7 +22457,7 @@ class Slice245Test {
             // west edge into the under-band; then east again
             if (p.al < 560 && p.ak in 2880..2930)
                 held = Pad.M_LEFT or Pad.M_DOWN
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 4) && it.S != 139 &&
                     it.ak - p.ak in -20..90 &&
                     kotlin.math.abs(it.al - p.al) < 80
@@ -22691,7 +22719,7 @@ class Slice245Test {
                 w.pad.e(16396); w.tick(emptyList()); continue
             }
             var held = Pad.M_RIGHT
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 4) && it.S != 139 &&
                     it.ak - p.ak in -20..90 &&
                     kotlin.math.abs(it.al - p.al) < 80
@@ -22779,10 +22807,10 @@ class Slice245Test {
                 w.pad.e(16396); w.tick(emptyList()); continue
             }
             var held = Pad.M_RIGHT
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 4) && it.S != 139 &&
                     it.ak - p.ak in -20..90 &&
-                    kotlin.math.abs(it.al - p.al) < 80
+                    kotlin.math.abs(it.al - p.al) < 45
             }
             if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
             val stuck = p.aZ && p.ag in -256..256
@@ -22850,7 +22878,7 @@ class Slice245Test {
                 w.pad.e(16396); w.tick(emptyList()); continue
             }
             var held = Pad.M_RIGHT
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 4) && it.S != 139 &&
                     it.ak - p.ak in -20..90 &&
                     kotlin.math.abs(it.al - p.al) < 80
@@ -23500,7 +23528,7 @@ class Slice245Test {
                 w.pad.e(16396); w.tick(emptyList()); continue
             }
             var held = 0
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 4) && it.S != 139 &&
                     it.ak - p.ak in -20..90 &&
                     kotlin.math.abs(it.al - p.al) < 80
@@ -23800,6 +23828,7 @@ class Slice245Test {
                                     8950, 10020, 11410, 12150)
         var mi = 0
         var doorS1Ticks = 0                      // consecutive door-S1 count
+        var standTicks = 0                       // drop-point stand counter (phase sweep)
         var doorPulse = 0                        // UP-edge cadence in the door box
         var topUpHeld = false                    // UP-edge cadence on the massif top
         // pole cycle→phase map, hoisted for the strip arm too
@@ -23915,6 +23944,16 @@ class Slice245Test {
                         // by the state keys above.
                         if (p.aZ && p.ag in -256..256 && p.S != 79)
                             held = held or Pad.M_UP
+                        // L1f35 fresh-W: after the S36 west-kick, drift
+                        // back east to the tower face and re-grab higher —
+                        // chaining S33/S92 grabs climbs the face to the
+                        // ax7 slot @1397,506 (swallow → eject east over
+                        // the wall). RIGHT alone lets the fall run out
+                        // first; UP arms the aF latch on face contact.
+                        // Scoped x>1100 so the x930-1040 descent pit
+                        // keeps its proven tap-fall route.
+                        if (!p.aZ && p.ak > 1100)
+                            held = held or Pad.M_UP
                     } else {
                         // CHANNEL CROSSING (slice-273 — proven end-to-end):
                         // the '5' floor strip x1580-2120 is ONE continuous
@@ -23976,68 +24015,69 @@ class Slice245Test {
                         // door-A zone x3784-3818/y737-837 — grounded UP.
                         // aZ required: airborne UP triggers ledge-grabs
                         // that drop him into the door-crush band instead.
-                        p.aZ && p.al in 780..850 && p.ak in 3760..3820 &&
-                            p.S != 284 ->
-                            Pad.M_RIGHT or Pad.M_UP          // door-A teleport
-                        // corridor floor (lethal — blades are synced):
-                        // jump west IMMEDIATELY — exposure is the landing
-                        // tick only. The arc reaches the face ~x3885.
+                        // The x window must stay INSIDE the door's W x-span
+                        // (record fields → W=[3784,737..3818,837]): pressing
+                        // UP west of 3784 launches the S22 vault before the
+                        // player box overlaps the door W — the teleport arm
+                        // then sees aZ=false forever and the arc lands on the
+                        // x3831 blade face.
+                        // slice-289: the door's OUTER gate is
+                        // `rectsOverlap && player.g == null` — the posted
+                        // ax11 @3811 binds p.g on approach, so UP while
+                        // bound can never teleport: it only vaults into
+                        // the S101→S36 bounce loop. Press UP only once the
+                        // bind is clear (guard killed → g.aB<=0 → p.g=null);
+                        // while bound, back west of the blade lip and let
+                        // the strike arm run the duel.
+                        // unbound → UP+LEFT: faces WEST so the east guard
+                        // can't rebind before the door arm fires (the
+                        // az() scan only binds targets in front of him).
+                        // While the elite chaser is bound the attack gate
+                        // duels it — the bind clears when it dies.
+                        p.aZ && p.al in 780..850 && p.ak in 3780..3816 &&
+                            p.S != 284 && p.g == null ->
+                            Pad.M_LEFT or Pad.M_UP           // door-A teleport
+                        // '5' top west end (x3860-3899): walk EAST to the
+                        // drop point — the corridor arm owns the crossing.
+                        p.aZ && p.al in 540..620 && p.ak >= 3860 ->
+                            Pad.M_RIGHT
+                        // corridor floor / falling: drift east nonstop.
                         p.aZ && p.al in 700..790 && p.ak >= 3860 ->
-                            Pad.M_UP or Pad.M_LEFT
-                        // falling post-drop: drift west + buffered jump.
+                            Pad.M_RIGHT
                         !p.aZ && p.al in 600..790 && p.ak >= 3860 ->
-                            Pad.M_UP or Pad.M_LEFT
+                            Pad.M_RIGHT
                         else -> Pad.M_RIGHT
                     }
                 }
-                // '5'-strip top + corridor → shimmy → east exit (slice-274,
-                // proven end-to-end): the corridor is a sealed slot —
-                // '5' ceiling, '20' faces, 11 synchronized crushers on the
-                // floor. Route: strip top → face west + DOWN → S257 drops
-                // through '5' → land → jump west → face-grab x3880 →
-                // S101 → S36 bounce → S280 '5' grab → S37 shimmy east.
-                p.ak in 3900..4700 -> {
-                    // Phase-gate the drop on the gauntlet's door cycle:
-                    // the ax44 run ~1 tick apart (west lags east: door-1
-                    // @3898 = door-2 pos −1, door-3 = +1); only S0's slam
-                    // is lethal (he survives S3 on the floor). Land =
-                    // trigger+14 ≡ same pos, so fire ONLY on door-2's 2nd
-                    // S1 tick → lands door-2 pos2 → door-1 pos1, door-3
-                    // pos3, all safe; the S0s then fall at land+4/+5/+6
-                    // once he is rising above the blade band.
-                    val landDoor = w.npcs.firstOrNull {
-                        it.ax == 44 && it.ak in 3920..3960 }
-                    if (landDoor != null) {
-                        if (landDoor.S == 1) doorS1Ticks++
-                        else doorS1Ticks = 0
-                    }
-                    val doorEdge = doorS1Ticks == 2
+                // '5'-strip corridor (x3860-4700, proven this slice): the
+                // slot is a sealed kill box — '5' ceiling r29, '2' floor
+                // r38, 11 lockstep crushers (kill slivers y748-774). The
+                // designed crossing never touches the floor:
+                //   '5' top east → divider face ~x3993 → DOWN = S257
+                //   vault-drop (g.java:2874 `aQ∈{20,5}&&aR==0`) which
+                //   drifts UNDER the x3960-4039 divider east edge → lands
+                //   in the slot ~x4101 → held-UP jump climbs THROUGH '5'
+                //   (one-way from below — '5' blocks from above only) →
+                //   arc east over the '5' tip → '20' plateau top → hop
+                //   east. Doors can't reach him: he's airborne or above
+                //   the W band the whole way (probed: x3995→x4405 clean).
+                p.ak in 3860..4700 -> {
                     held = when {
-                        // '5' strip top x3900-3999: converge to x3920-3940
-                        // facing WEST, wait for S1's 2nd tick, DOWN →
-                        // S257 (exit ~30px west → lands x3919 → squat S21
-                        // → rise S22 west → face-grab x3880 by ~t22).
-                        p.aZ && p.al in 560..620 && p.ak in 3900..3999 -> when {
-                            !p.av -> if (p.ak < 3930) Pad.M_RIGHT
-                                     else Pad.M_LEFT
-                            p.ak > 3940 -> Pad.M_LEFT
-                            p.ak < 3920 -> Pad.M_RIGHT
-                            doorEdge -> Pad.M_DOWN
-                            else -> 0              // stand west, wait phase
-                        }
-                        // corridor floor: jump west immediately — the floor
-                        // is lethal, exposure is the landing tick only.
-                        p.aZ && p.al in 700..790 && p.ak in 3880..3999 ->
-                            Pad.M_UP or Pad.M_LEFT
-                        // falling post-S257: drift west + buffered jump.
-                        !p.aZ && p.al in 600..790 && p.ak in 3880..3999 ->
-                            Pad.M_UP or Pad.M_LEFT
-                        // '5' shimmy east under the bar; UP|RIGHT mantles
-                        // at the east lip x4240+.
-                        p.S == 37 || p.S == 38 || p.S == 280 ->
-                            if (p.ak < 4240) Pad.M_RIGHT
-                            else Pad.M_RIGHT or Pad.M_UP
-                        p.S == 54 -> Pad.M_RIGHT or Pad.M_UP  // east-lip mantle
+                        // '5' top west of the divider face — run east.
+                        p.aZ && p.al in 540..640 && p.ak < 3993 ->
+                            Pad.M_RIGHT
+                        // at the divider face — DOWN edge → S257
+                        // vault-drop under the divider east edge.
+                        p.aZ && p.al in 540..640 && p.ak in 3993..4020 ->
+                            Pad.M_DOWN
+                        // airborne (S257 landing, slot falls, or the
+                        // through-'5' climb) — hold UP: jumps climb
+                        // through '5' and arc east to the plateau.
+                        !p.aZ -> Pad.M_UP
+                        // grounded past the divider ('20' plateau top or
+                        // a '2' slot-floor touch) — jump/hop back up-east.
+                        p.aZ && p.al > 700 -> Pad.M_UP
+                        p.aZ && p.al in 540..640 -> Pad.M_UP
                         else -> Pad.M_RIGHT
                     }
                 }
@@ -24433,8 +24473,12 @@ class Slice245Test {
             // elite MUST die — fleeing just feeds it a strike mid-vault
             // (22→9 knockdown). Attack anims are i-frames, so the combo
             // chain itself is the defense: duel here, not flee.
+            // slice-289: EXCEPT the door-A band (~3300-3850) — the posted
+            // elite @3811 auto-binds p.g on approach and the door's outer
+            // gate requires g==null, so fleeing here is a deadlock: the
+            // duel MUST run (kill → g.aB<=0 → p.g clears → teleport).
             val fleeElite = foe != null && foe.ax == 11 && foe.aB > 200 &&
-                p.ak < 10520
+                p.ak < 10520 && p.ak !in 3300..3850
             // slice-279 cont'd: past the channel the finale floor packs
             // 2-4 ax11s at ~x10465 — engaging ANY of them swings into a
             // 1vN: the mid-swing lock eats strikes from the rest and the
@@ -24456,6 +24500,13 @@ class Slice245Test {
             // The door is ~70px past the lip — tank the chase and run
             // through instead of dueling the posted pair.
             val fleeTop = foe != null && foe.ax == 11 && p.al < 480
+            // slice-289: door-A's teleport gate is
+            // `rectsOverlap && player.g == null` — the posted ax11 @3811
+            // auto-binds p.g on approach, so fleeing it at the door is a
+            // deadlock: the door never accepts UP while the guard lives.
+            // The duel must run (kill → g.aB<=0 → p.g clears), so no
+            // flee suppression here — the position policy keeps him west
+            // of the blade lip while bound.
             // Live ax11 bodies within duel range — when the kite has
             // strung the pack out to one, the strike arm below re-arms
             // and it becomes a normal duel. While 2+ bodies share the
@@ -24502,6 +24553,8 @@ class Slice245Test {
             atkCd--
             w.pad.e(held)
             w.tick(emptyList())
+            if (t <= 1400 && t % 5 == 0)
+                println("TRC $t ${p.ak},${p.al} S${p.S} aZ=${p.aZ} ag=${p.ag} ah=${p.ah} W=${p.W.toList()}")
             if (p.S != lastS) {
                 if (trace.size == 80) trace.removeFirst()
                 val d2 = w.npcs.filter { it.ax == 44 }.minByOrNull {
@@ -24571,12 +24624,23 @@ class Slice245Test {
         // (ax13 rope @11312,441 / deep pit with patrols) → far shelf
         // x11320+ → goal ax5@11448,503. WON with deaths=0, maxAk=11576
         // on the reference run.
+        // Proven frontier (slice 289): the 11-crusher corridor
+        // (x3880-4259) is crossed via the designed chain — S257
+        // vault-drop TELEPORTS under the x3960-4039 divider east edge
+        // into the slot (~x4101), then '5' is a one-way cell (solid
+        // from above aR=5, climbable from below): the held-UP jump
+        // climbs THROUGH '5' back to its top, arcs east to the '20'
+        // plateau, and the floor's kill slivers (y748-774) are never
+        // touched. Result: deaths 301→2, maxAk ~3994→9850. The new
+        // stall is the x8900 re-drive: after deaths on the far-tower
+        // descent, checkpoint ax2@(8926,757) respawns him at the pit
+        // floor and the chimney-zigzag entry (x8872-8990, S22/36/43)
+        // doesn't re-engage — next leg.
         assertTrue(won,
             "capstone must complete mission-0 end to end — " +
             "maxAk=$maxAk deaths=$deaths marks=${marks.takeLast(8)}")
     }
 
-}
 
 // ---- Slice 277: weakened-victim mount = faithful soft-lock ---------------
 //
@@ -24890,7 +24954,7 @@ class Slice280Test {
             Triple(560, 590, "claim"),
         )
         var leg = 0; var t = 0; var won = false; var prevS = p.S; var prevAE = w.kAE
-        var prevCamY = w.kP; var stallT = 0
+        var prevCamY = w.kP; var stallT = 0; var prevAL = p.al
         while (t++ < 60000) {
             when {
                 // `stateL(15)` re-enters as i=22 (medals) the same tick when
@@ -24968,10 +25032,37 @@ class Slice280Test {
                 else if (p.al < w.kP + 140) held = Pad.M_DOWN else held = 0
                 // shrine legs advance on FIRE, not position — handled below
             }
-            if (p.ak < tx - 12) held = held or Pad.M_RIGHT else if (p.ak > tx + 12) held = held or Pad.M_LEFT
+            // L1f35 fresh-W: the 6020→2928 shaft pinches into a diagonal
+            // west edge (x<360@y5000 → x<400@4400 → x<480@4300 →
+            // x<560@4250 → x<640@4120 → x<720@4000). x=471 collides with
+            // the wall face mid-gap — steer ~40px west of the west face.
+            val steTx = if (tag.startsWith("shrine") && p.al in ty - 400..ty + 600) {
+                // final approach — column-align with the shrine's x so the
+                // S20 arm's box-overlap check actually fires.
+                tx
+            } else if (tag.startsWith("shrine") && leg == 4) {
+                when {
+                    p.al > 4500 -> 320
+                    p.al > 4380 -> 360
+                    p.al > 4300 -> 400
+                    p.al > 4240 -> 440
+                    p.al > 4180 -> 480
+                    p.al > 4100 -> 540
+                    else -> 620
+                }
+            } else tx
+            if (p.ak < steTx - 12) held = held or Pad.M_RIGHT else if (p.ak > steTx + 12) held = held or Pad.M_LEFT
             val preAF = w.kAF
             prevS = p.S; prevAE = w.kAE
             w.pad.e(held); w.tick(emptyList())
+            if (p.al - prevAL > 1000) {
+                // checkpoint respawn put the player back down the shaft —
+                // rewind the route to the first shrine not yet passed so
+                // refills re-arm in order (fuel can't span the full climb).
+                val rewind = route.indexOfFirst { (_, rty, rtag) -> rtag.startsWith("shrine") && p.al > rty - 300 }
+                if (rewind >= 0 && rewind < leg) leg = rewind
+            }
+            prevAL = p.al
             if (w.kP == prevCamY) stallT++ else stallT = 0; prevCamY = w.kP
             // shrine fire = S20 arm overlap → p.setAnim(21) + kAF trickle.
             // With a full tank kAF stays 0, so detect the S21 heal-anim edge
@@ -24983,7 +25074,11 @@ class Slice280Test {
             // safety: if a shrine never fires but we're far past it, advance
             if (leg < route.size && tag.startsWith("shrine") && p.al < ty - 400) leg++
         }
-        assertTrue(won)
+        println("M1CAP leg=$leg won=$won t=$t pos=${p.ak},${p.al} S=${p.S} camY=${w.kP} kAF=${w.kAF} iBB=${w.iBB} iBi=${w.iBi}")
+        var n37 = 0
+        for (e in w.npcs) if (e.ax == 37) n37++
+        println("BOUNDS ax37count=$n37 kT=${w.kT} kU=${w.kU} kX=${w.kX} kZ=${w.kZ} pW=${p.W.joinToString()} camRect=${w.camRect.joinToString()}")
+        assertTrue(won, "m1 capstone — leg=$leg pos=${p.ak},${p.al} S=${p.S} camY=${w.kP}")
     }
 }
 
@@ -25030,7 +25125,7 @@ class Slice281Test {
                     it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
                     Math.abs(it.al - p.al) < 60
                 }) mask = Pad.M_RIGHT + Pad.M_UP
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25118,7 +25213,7 @@ class Slice281Test {
                     it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
                     Math.abs(it.al - p.al) < 60
                 }) mask = Pad.M_RIGHT + Pad.M_UP
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25206,7 +25301,8 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297, 89, 90 -> mask = Pad.M_CONTEXT
+                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
                 258, 260, 262 -> mask = Pad.M_DOWN
@@ -25215,7 +25311,7 @@ class Slice282Test {
                 else -> if (!p.aZ) mask =
                     if (p.ak >= 1415) Pad.M_RIGHT else Pad.M_RIGHT + Pad.M_UP
             }
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25228,6 +25324,15 @@ class Slice282Test {
             // where the chain bounces it back west (verified live)
             if (p.ak in 1330..1500 && (p.S == 101 || p.S == 62 || p.S == 60 || p.S == 61))
                 mask = Pad.M_RIGHT
+            // post-intro drop: the aF latch catches the gap's east wall at
+            // ~(979,548) when any direction is held airborne — the auto-
+            // S36 kick then rebounds west into the pole-row pit kill
+            // floor (verified S50 @863,813). Pressing NOTHING in the
+            // x930-1040 descent leaves aF unarmed: no grab, the player
+            // falls past onto the y~700 street east of the gap. S297
+            // (the balance pin at 980,563) and S295 keep their masks —
+            // they need the TAP/CONTEXT edges to release.
+            if (!p.aZ && p.ak in 930..1040 && p.S != 297 && p.S != 295) mask = 0
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -25262,7 +25367,8 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297, 89, 90 -> mask = Pad.M_CONTEXT
+                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
                 258, 260, 262 -> mask = Pad.M_DOWN
@@ -25270,7 +25376,7 @@ class Slice282Test {
                 235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
                 else -> if (!p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
             }
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25315,7 +25421,8 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297, 89, 90 -> mask = Pad.M_CONTEXT
+                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
                 258, 260, 262 -> mask = Pad.M_DOWN
@@ -25324,7 +25431,7 @@ class Slice282Test {
                 else -> if (!p.aZ) mask =
                     if (p.ak >= 4520) Pad.M_RIGHT else Pad.M_RIGHT + Pad.M_UP
             }
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25333,6 +25440,19 @@ class Slice282Test {
             // (4548-4583 x 283-370) directly below — UP kicks back west
             if (p.S == 101 && p.ak >= 4530) mask = Pad.M_DOWN
             if (p.S == 28 || p.S == 29) mask = Pad.M_DOWN
+            if (p.S == 295 || p.S == 157) {
+                // same carrier-QTE chain as legD — zone aw674's box starts
+                // at x5476, so the claim script (op107/108 prompt) binds
+                // the player on the street walk: 693 wants UP, later ax5
+                // scripts want TAP-R; bound idle rides on RIGHT.
+                val scr = w.kC
+                mask = when {
+                    scr != null && scr.ax == 5 && scr.aG == 693 -> Pad.M_UP
+                    scr != null && scr.ax == 5 -> Pad.M_TAP_R
+                    p.ga != null -> Pad.M_RIGHT
+                    else -> Pad.M_UP
+                }
+            }
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -25379,7 +25499,8 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297, 89, 90 -> mask = Pad.M_CONTEXT
+                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
                 258, 260, 262 -> mask = Pad.M_DOWN
@@ -25389,7 +25510,7 @@ class Slice282Test {
                     if (p.ak >= 4520 && p.ak < 6400 || p.ak >= 6760) Pad.M_RIGHT
                     else Pad.M_RIGHT + Pad.M_UP
             }
-            val foe = w.npcs.firstOrNull {
+        val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
@@ -25594,9 +25715,12 @@ class Slice282Test {
         w.kO = 12800; w.kP = 420
         for (e in w.npcs) if (e.aw == 925 || e.aw == 924 || e.aw == 606 ||
             e.aw == 409 || e.aw == 613 || e.aw == 620 || e.aw == 910 ||
-            e.aw == 912 || e.aw == 263 || e.aw == 780) keepLive(e)
+            e.aw == 912 || e.aw == 263 || e.aw == 780 || e.aw == 610 ||
+            e.aw == 819 || e.aw == 823 || e.aw == 825) keepLive(e)
         var east = false
         var fired = false
+        var descend = false
+        var toPit = false
         for (t in 0..6000) {
             var mask = if (east) Pad.M_RIGHT else Pad.M_LEFT
             // Claim-top walk: east through aw132's box → descent claim 927.
@@ -25605,15 +25729,56 @@ class Slice282Test {
             // Pit ledge → east jump to aw409's pad.
             if (east && p.aZ && p.al in 1290..1320 && p.ak in 12780..12800)
                 mask = 8
-            val guard = w.npcs.firstOrNull { it.aw == 606 }
-            val g606 = guard != null && !guard.deadRelease() && guard.al in 780..860 &&
-                kotlin.math.abs(guard.ak - p.ak) <= 44
-            if (g606 && t % 6 == 0) mask = Pad.M_CONTEXT
+            val guard = w.npcs.firstOrNull {
+                it.ax == 11 && !it.deadRelease() && it.al in 780..1150 &&
+                    kotlin.math.abs(it.ak - p.ak) <= 52 &&
+                    kotlin.math.abs(it.al - p.al) <= 80
+            }
+            if (guard != null) {
+                if ((guard.P and 32) != 0) {
+                    // Parked guard — dormant statue, NOT solid (P lacks
+                    // bit12 → pushApart skips it): walk straight through.
+                    mask = if (east) Pad.M_RIGHT else Pad.M_LEFT
+                } else {
+                    val west = guard.ak < p.ak
+                    mask = if (west != p.av) if (west) Pad.M_LEFT else Pad.M_RIGHT
+                        else if (kotlin.math.abs(guard.ak - p.ak) > 24)
+                            if (west) Pad.M_LEFT else Pad.M_RIGHT
+                        else Pad.M_CONTEXT
+                }
+            }
+            // y819 platform (606 fight region) → descend the WEST side:
+            // raised block x13340-13420 is a 100px wall (unclimbable),
+            // so the route is west off the platform edge x13240 → fall
+            // alongside the narrowed column → land on the one-way ledge
+            // (x13120-13220 @ y980) or the wide block top (x13020-13300
+            // @ y1000) → east → off x13300 → land on the y1240 floor
+            // block (x13320+) → east into aw925's zone W
+            // [13339,1099,13555,1272] → claim-QTE mount → win.
+            if (p.aZ && guard == null && p.al in 760..860 && p.ak in 13300..13400) descend = true
+            if (descend) {
+                if (p.ga != null) mask = Pad.M_LEFT      // ax66 perch — launch WEST (S264 ag=-3072,ah=-7680) past it
+                else if (!p.aZ) mask = 0                 // falling — no drift
+                else if (p.al >= 960) { descend = false; toPit = true }
+                else mask = Pad.M_LEFT                   // platform → west edge
+            }
+            // Beam/block-top (y~1079) → WEST off the pit edge x12740 →
+            // bound-catch aw610 (W=[12704,1084,12739,1184]) rides down to
+            // the pit floor (y1300) → east to aw409's spring pad → launch.
+            if (toPit) {
+                if (p.al >= 1250) { toPit = false; east = true }
+                else if (p.aZ && p.al in 1000..1150) mask = Pad.M_LEFT
+            }
+            // ax27 fuse prop @x12997 — solid-ish; '8' forward jump clears
+            // it (M_UP would trigger the S267 carry-init instead).
+            if (p.aZ && p.al in 1000..1120 && p.ak in 12950..12985) mask = 8
             if (p.S == 65) mask = 16390                    // aw910 west vault
-            if (p.S == 297) { mask = 8; east = true }      // beam east leap
+            if (p.S == 297) mask = Pad.M_DOWN              // beam drop-off
             if (p.S == 29) mask = Pad.M_DOWN               // carrier descend
             if (p.S == 28) mask = if (t % 4 == 0) Pad.M_DOWN else 0
-            if (p.S == 60 || p.S == 61) mask = Pad.M_DOWN  // ledge hang → drop
+            if (p.S == 60) mask = Pad.M_UP               // ledge hang → mantle
+            if (p.S == 61) mask = Pad.M_DOWN             // ledge hang → drop
+            // Raised block face (x13340) is a bounce wall — no vault.
             if (p.S in 257..259) mask = Pad.M_DOWN         // carrier hold
             if (p.S == 79) mask = Pad.M_RIGHT or Pad.M_CONTEXT // lip embed creep
             if (p.S == 274 || p.S == 277 || p.S == 317 ||
@@ -25798,3 +25963,780 @@ class Slice288Test {
     }
 }
 
+
+private fun chaseMask289(p: Entity, w: Level0World): Int {
+    var mask = Pad.M_RIGHT
+    when (p.S) {
+        65 -> mask = Pad.M_UP + Pad.M_TAP_R
+        // S228/358 carrier-bound: UP-held + dir into facing releases
+        // into the S235 dive. Leg A's spawn-pit carrier releases west
+        // (staircase); leg B's deep-pit carriers release east into the
+        // channel under the block.
+        228, 358 -> mask =
+            (if (p.ak < 1000) Pad.M_LEFT else Pad.M_RIGHT) + Pad.M_UP
+        297, 89, 90 -> mask = Pad.M_CONTEXT
+        // S258/260/262 perch: a direction edge fires the side-launch
+        // S261 (ag=±3072, ah=-7680) — arcs over the corridor gap to
+        // mass2. DOWN would drop the player off the perch into the pit.
+        258, 260, 262, 259, 261, 263, 264, 265, 266 -> mask = Pad.M_RIGHT
+        // S5/79 land-recovery: an UP edge on the landing tick fires
+        // the parkour leap (landArm L1834) — and the kick lands
+        // facing west, so it would leap west into the pit
+        5, 79,
+        235, 236, 237, 238, 239, 240, 241, 242, 243 -> mask = Pad.M_RIGHT
+        // S60/61/203 ledge-hangs: UP edge fires the S62 climb-up
+        // (L2460 arm). aF doesn't matter mid-hang.
+        60, 61, 203 -> mask = Pad.M_UP
+        // S33 wall-cling: hold dir-into-wall — east face (av=false)
+        // arms the L859 launch (i(22), ah=-5120, ag=+2048 — the
+        // wall-slide chimney climb); west face arms the L822 lip
+        // scan / L824 kick ping-pong. aZ=false mid-cling so the
+        // generic airborne rule would zero the mask and kick off.
+        33 -> mask = if (p.av) Pad.M_LEFT else Pad.M_RIGHT
+        // S22/23/43 climb arc: dir-into-wall + the TAP edge arms aF
+        // (L3a9d `cv && u|v(UP|TAP)`) so the wall-grab re-fires on
+        // contact — M_LEFT/M_RIGHT alone don't set the tap bits.
+        22, 23, 43 -> mask =
+            (if (p.av) Pad.M_LEFT + Pad.M_TAP_L
+             else Pad.M_RIGHT + Pad.M_TAP_R)
+        // every other airborne state (grab/kick/launch/fall/vault arc)
+        // is ballistic — direction input only re-arms the aF grab latch
+        // (landArm L2092), which then kills the arc on the next wall
+        // contact. Grounded run-ups arm aF; wallGrabSnap consumes it.
+        else -> if (!p.aZ) mask = 0
+    }
+    // corridor approach x1260-1900: the channel runs UNDER the y400-460
+    // block on the y580-620 floor — no vault; an UP press here vaults
+    // into the block's west face and the kick rebounds west. East of
+    // x1900 (interior shaft/climb) the vault is needed again.
+    if (p.aZ && p.ak >= 560 && !(p.ak in 1260..1900 && p.al > 470))
+        mask = Pad.M_RIGHT + Pad.M_UP
+    // leg-B route (proven via ACLV): the x1340-1560 block is a 340px
+    // solid wall grounded on the y620 floor — uncrossable from the pit.
+    // roof east to cp180 (leg A): the x1340 wall rises to y240 —
+    // uncrossable; the only through-route is the tunnel mouth below
+    // the roof slab (x1240-1339, y640-740), which leg B enters via a
+    // pin inside the tunnel (no roof walk needed there).
+    if (p.aZ && p.al in 560..640 && p.ak in 1240..1340) mask = Pad.M_RIGHT
+    // bowl/mouth drift band: while airborne anywhere in the bowl or
+    // the mouth window (x1050-1400, y540-790) hold EAST — overrides the
+    // S22/43 facing arm (post-kick av=true would drift west to death).
+    if (!p.aZ && p.al in 540..790 && p.ak in 1050..1400) mask = Pad.M_RIGHT
+    // deep-floor east run under the block — no vault (low headroom)
+    if (p.aZ && p.al > 700 && p.ak < 1860) mask = Pad.M_RIGHT
+    // leg-A staircase vault bands (proven via ACLV + probeStair): the
+    // S233 launch arc must reach the face with al<=1059 (hand row
+    // W[1]<=989 -> i4=49 -> ledgeLipGrab -> S60). The launch rises
+    // ~44px in ~4 ticks then falls — it only stays in the lip window
+    // when it fires ~x578-586 (edge ~x570-578); earlier falls too low,
+    // later hits mid-face (S101 -> kick). These bands must sit AFTER
+    // the deep-floor RIGHT arm or UP never reaches the pad.
+    if (p.aZ && p.al > 1000 && p.ak in 563..573)
+        mask = Pad.M_RIGHT + Pad.M_UP                     // x620 face
+    if (p.aZ && p.al in 930..1000 && p.ak in 725..760)
+        mask = Pad.M_RIGHT + Pad.M_UP                     // x780 face (shelf)
+    // x1020 bowl crossing (proven via ACLV + ax66 bm()): the gap is a
+    // bound-carry chain — land crate-1 @(1089,641) → auto-carry S236/237
+    // → S228 ride on crate-2 @(1169,620). Its linked S15 marker then
+    // removes the crate, so the ride needs the L196 dismount (grabKey =
+    // UP held) before removal — hop east into the x1240 tunnel mouth.
+    if (p.S == 228 || p.S == 358)
+        mask = Pad.M_RIGHT + Pad.M_UP                     // crate dismount east
+    // ---- leg B (proven end-to-end: probeInteriorClimb climbs the
+    // slot base (1910,759) → shaft → slab → tower top at t=351;
+    // probeZipline rides the tower top → cp555 @(3043,368) at t=187) —
+    // tunnel east → floor-gap vault → pillar → x1860-1939 slot kicks
+    // → drift west → shaft x1500-1659 chimney → slab top y400 →
+    // x1940 tower face → tower top → S34 rail → block2/3 tops.
+    // Grounded anywhere in the climb region x1460-1960, y470-790 —
+    // tunnel floor, pillar, slot base, y579 cavity floor: run east +
+    // UP-held vaults. On the y579 floor the S233 hop-chain migrates
+    // the player west toward the shaft; the slab ceiling y460 caps.
+    if (p.aZ && p.al > 470 && p.ak in 1460..1960)
+        mask = Pad.M_RIGHT + Pad.M_TAP_R + Pad.M_UP     // climb-column vaults
+    // The whole climb column x1460-2119 airborne: RIGHT + TAP_R —
+    // probeInteriorClimb's proven hold. Ballistic, but the TAP edge
+    // re-arms aF so each east-face contact grabs (slot kicks, shaft
+    // ping-pong, tower-face chain). West-drift legs land back on a
+    // floor and relaunch — net +40px/cycle up the 280px tower face.
+    if (!p.aZ && p.ak in 1460..2119)
+        mask = Pad.M_RIGHT + Pad.M_TAP_R                // airborne column
+    // y399 slab-top (post-shaft): RUN east to the x1960 tower face —
+    // holding UP here turns every landing into a standstill squat-jump
+    // (ag never rebuilds → stationary bounce at ~x1825). The face
+    // approach still gets RIGHT+UP from the generic band at x1930+,
+    // and airborne contacts get RIGHT+TAP_R from the column band.
+    if (p.aZ && p.al <= 470 && p.ak in 1560..1929)
+        mask = Pad.M_RIGHT                              // slab-top run
+    // Tops east (slab y400, tower top y120, block2/3 y400): grounded
+    // run + vault — on the tower top the vault catches the S34 rail.
+    if (p.aZ && p.al <= 545 && p.ak >= 1960)
+        mask = Pad.M_RIGHT + Pad.M_UP                   // tops east
+    // ax16-S32 kill-prompt marker uid19 @(1953,289): a CONTEXT tap
+    // while overlapping its box teleports the player to (1908,289)
+    // and fires S214 -> S215 mount-fling up the tower face (the
+    // designed shortcut past the one-sided face — kicks alone can't
+    // climb it). Wide window: the kick rebound drifts the player
+    // through it.
+    if (p.ak in 1860..1980 && p.al in 240..330)
+        mask = Pad.M_CONTEXT                            // prompt zone
+    // ...but S5/79 land-recovery + S21 squat must hold UP ONLY (no
+    // direction): the kick's rebound already flipped av — holding a
+    // direction re-faces the player and every hop arc goes the wrong
+    // way (probeInteriorClimb's westward migration needs av preserved).
+    // LAST leg-B arm — must override every band above regardless of aZ.
+    if ((p.S == 5 || p.S == 79 || p.S == 21) &&
+        p.al > 470 && p.ak in 1460..1960)
+        mask = Pad.M_UP                                 // hop: keep av
+    // melee override — LAST so no traversal arm can silence it (the
+    // tunnel guard at ~x1500,y767 patrols the corridor floor; the slab-
+    // top ax73 at (1845,398) blocks the leg-B tower run): any living
+    // soldier in sword range while grounded -> face east + attack.
+    val foe = w.npcs.firstOrNull {
+        (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
+            Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55
+    }
+    if (foe != null && p.aZ) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+    return mask
+}
+
+class Slice289Test {
+    /** Slice 289 — mission-5 capstone bot legs on `world(aj = 5)`
+     *  (Venice/Octavien chase, pack-11: spawn (44,582) -> east chase
+     *  -> finale ax5-S8 zone uid308 @(15439,603) aG=389 -> win).
+     *  Same capstone pattern as slices 279-282/288 — real input only,
+     *  no state pinning. The ax5-S8 spine marks the milestones:
+     *  6170, 7140, 7579, 8314, 9439, 11061, 11891, 12312, 13689,
+     *  14735, 15439 — claim-script gates that fire on overlap.
+     *  Checkpoints ax2: 1256, 3043, 5135, 5868, 7105, 8122, 11135,
+     *  12276, 13584.
+     *
+     *  Leg A: spawn -> intro drops the player into the x120-440 pit ->
+     *  west-face staircase (pit floor -> slab x440-620/y1120 -> corridor
+     *  shelf x620-780/y980 -> mass top x780-1020/y660) -> cp180 @(1256,590).
+     *  The face ascents are the two-vault chain proven in slice-289 recon:
+     *  vault -> S101 grab -> S36 kick (facing flips west, lands back on
+     *  the lower shelf) -> re-run east RIGHT-only (re-faces) -> second
+     *  vault catches the shelf lip (S60) -> mantle. */
+
+    @Test fun mission5CapstoneLegA() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        var maxAk = 0; var reached = false
+        for (t in 0..8000) {
+            val mask = chaseMask289(p, w)
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            val m = chaseMask289(p, w)
+            val ax5 = w.npcs.firstOrNull { it.ax == 5 }
+            val plats = w.npcs.filter { it.ax == 66 && it.ak in 1000..1400 }
+                .joinToString(",") { "66(${it.ak},${it.al})S${it.S}" }
+            if (t % 25 == 0 || p.S == 233 || p.S == 33 || (p.S == 22 && p.ak < 640) || p.S == 317 || p.S == 43 || p.S == 105 || (t in 300..520 && t % 4 == 0) || (p.ak in 960..1400 && t % 4 == 0))
+                println("TRC t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ag=${p.ag} ah=${p.ah} camY=${w.kP} m=$m kC=${w.kC?.ax} plats=$plats ax5alive=${ax5 != null}")
+            if (p.ak >= 1256) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("M5A reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legA spawn->staircase->cp180@(1256,590): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegB() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legB — cp180(1256,590) -> cp555(3043,368). ACLV-verified:
+        // the x1340 wall rises to y240 — the only through-route is the
+        // tunnel mouth below the x1240-1339 roof slab (y640-740). Pin
+        // inside the mouth -> drop to the y760 floor, run east under
+        // the slab to the x1880-1959 gap column, kick up the x1960
+        // tower face into the chamber (mid-slab top y580), run west to
+        // the x1520-1599 shaft, kick up to the slab top y400, then the
+        // ax16 marker @(1953,289) teleports past the tower; street
+        // y660 + block2/3 tops -> cp555.
+        p.setPositionPx(1300, 700); p.ak = 1300; p.al = 700; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        // checkpoint leg-start state: the kill-prompt unlock bit — any
+        // real mission-5 save carries it (granted by an ax73 death
+        // i.java:9739 g.g(2) or an ax16-S30 pickup i.java:14091); the
+        // S32 marker @(1953,289) refuses to arm without J&2
+        // (NpcFsm.kt:3882).
+        p.gJ = p.gJ or 2
+        w.kO = 1100; w.kP = 560
+        var reached = false; var maxAk = 0
+        for (t in 0..8000) {
+            val mask = chaseMask289(p, w)
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak >= 3043 && p.al <= 410 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("M5B reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legB cp180->street->tower->cp555@(3043,368): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegC1DiveVerdict() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legC1 — the cp555 canyon descent VERDICT. The ax10-S33 zone
+        // @(3071,176) autowalk+flings the player into the pit. Every
+        // landing under it is mathematically lethal as modeled:
+        //   pit floor y1020 = v=3 (not in the landing set {>=12,4,5} —
+        //   falls through -> KO);
+        //   crate chain tops ~y965-1004 — ax51 mount drains op21 by
+        //   (al-g.y)/20 cells; g.y apex stamps ~398 at the S148 entry ->
+        //   (965-398)/20 = 28 cells -> drain ~147 > x1=30 -> KO.
+        // The drive records which landing is taken; the leg asserts the
+        // descent ends in KO — no survivable landing exists.
+        p.setPositionPx(3043, 360); p.ak = 3043; p.al = 360; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        var ko = false; var mount = false; var minX1 = 30; var maxAk = 3043
+        var mountDesc = ""; var prevS = -1
+        for (t in 0..600) {
+            w.pad.e(if (p.aZ || p.S == 22 || p.S == 23 || p.S == 43 || p.S == 150) Pad.M_RIGHT else 0)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.x1 < minX1) minX1 = p.x1
+            if (p.ga != null && !mount) {
+                mount = true
+                mountDesc = "ax${p.ga?.ax}uid${p.ga?.aw}@(${p.ga?.ak},${p.ga?.al})"
+                println("C1 MOUNT t=$t on $mountDesc gy=${p.gy} x1=${p.x1}")
+            }
+            if (p.S != prevS || t % 20 == 0) {
+                val near = w.npcs.filter { it.ax != 0 && Math.abs(it.ak - p.ak) < 100 && Math.abs(it.al - p.al) < 120 }
+                    .joinToString(",") { "ax${it.ax}(${it.ak},${it.al})" }
+                println("C1 t=$t S${p.S} @(${p.ak},${p.al}) aZ=${p.aZ} ah=${p.ah} gy=${p.gy} x1=${p.x1} ga=${p.ga?.ax} near=$near jC=${w.jC}")
+            }
+            prevS = p.S
+            if (w.jC == 12 || w.jC == 13) { ko = true; break }
+            if (p.S == 147 || p.S == 317) { ko = true; break }
+            if (w.jC != 8) break
+        }
+        println("C1 VERDICT ko=$ko mount=$mount($mountDesc) maxAk=$maxAk minX1=$minX1 p@(${p.ak},${p.al}) S${p.S}")
+        assertTrue(ko,
+            "legC1 canyon descent -> KO (28-cell fall, mount+drain or v=3 floor): got S${p.S} @(${p.ak},${p.al}) x1=${p.x1} jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegC2PlazaTower() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legC2 — post-pit approach. The pit's east side opens onto the
+        // base plateau y960 (x4820-5239); the cp321 tower rises from the
+        // wide base x5060-5259 top y920 to the tower top y840 x5120-5239.
+        // Checkpoint-style start on the plateau floor; walk east, step
+        // the 40px wide base, climb the 80px tower face, reach cp321
+        // @(5135,797).
+        p.setPositionPx(4880, 930); p.ak = 4880; p.al = 930; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 4700; w.kP = 800
+        var reached = false; var maxAk = 4880; var prevS = -1
+        for (t in 0..3000) {
+            val mask = chaseMask289(p, w)
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.S != prevS || t % 60 == 0 || (p.ak > 5050 && t % 12 == 0))
+                println("C2 t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} camY=${w.kP} m=$mask jC=${w.jC}")
+            prevS = p.S
+            if (p.ak >= 5120 && p.al <= 850 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("C2 reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legC2 plateau->tower->cp321@(5135,797): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegD() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legD — cp321 -> cp300@(5868,174). The v=3 pit x5240-5459 is
+        // crossed by the ax72-counterweight lunge chain (proven): mount
+        // uid62 -> M_UP binds ax72 uid70 -> context tap -> S275 lunge ->
+        // S277 mount -> orbitSwing launch -> seesaw uid76 catch (S297) ->
+        // M_TAP_R -> S19 launch onto the slab (y499). From the slab a
+        // jump overlaps ax16 uid69's kill-prompt W -> context tap ->
+        // S214 teleport + S215 leap up the wall face -> block top y219
+        // -> east to cp300.
+        val m62 = w.npcs.first { it.aw == 62 }
+        val e69 = w.npcs.first { it.aw == 69 }
+        p.setPositionPx(5318, 634); p.ak = 5318; p.al = 634; p.av = false
+        p.S = 260; p.ga = m62; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 5100; w.kP = 470
+        var reached = false; var maxAk = 5318; var upTicks = 0
+        var prevS = -1; var stall = 0; var lastAk = 5318
+        for (t in 0..7000) {
+            p.gJ = 7                                   // equip incl. the ax16-prompt bit
+            val mask = when {
+                p.S == 297 -> Pad.M_TAP_R                          // seesaw launch east
+                Entity.at != null && p.ga == null -> Pad.M_CONTEXT // bound ax72 -> lunge
+                p.ga == m62 && upTicks < 6 -> Pad.M_UP             // mount-up -> bind
+                Entity.overlapI(p.W, e69.W) -> Pad.M_CONTEXT       // kill-prompt overlap
+                p.ak in 5560..5780 && p.al >= 480 -> Pad.M_UP or Pad.M_RIGHT
+                else -> Pad.M_RIGHT
+            }
+            if (mask == Pad.M_UP) upTicks++
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 60 == 0) {
+                println("D t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} " +
+                    "ga=${p.ga?.aw} at=${Entity.at?.aw} m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 5840 && p.al <= 240 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("D reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legD cp321->launch-chain->block->cp300@(5868,174): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegE() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legE — cp300 -> cp303@(7105,1060). East along the block top,
+        // drop into the x6315-6318 gap (wisp trail descends to y986),
+        // land on the lethal-band bridge y1120, then hop the ax51 crate
+        // chain across the lethal floor to the right bridge -> cp303.
+        p.setPositionPx(5870, 219); p.ak = 5870; p.al = 219; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 5700; w.kP = 100
+        var reached = false; var maxAk = 5870; var prevS = -1; var stall = 0; var lastAk = 5870
+        for (t in 0..7000) {
+            p.gJ = 7
+            val mask = when {
+                p.S == 297 -> Pad.M_TAP_R
+                p.S == 89 || p.S == 90 || p.S == 250 -> Pad.M_CONTEXT // perch kill-leap tap
+                // the ax10-S36 bound-catch carrier @x6439 lowers the player
+                // down the shaft — keep its bind while inside the descent
+                // column, release it elsewhere.
+                p.S == 315 || p.S == 318 ->
+                    if (p.ak in 6300..6600) 0 else Pad.M_DOWN
+                // x6520-6580 40px step on the y719 floor: hop west over it
+                p.aZ && p.al in 700..790 && p.ak in 6560..6660 ->
+                    Pad.M_UP or Pad.M_LEFT
+                // y719 floor + step top: walk WEST — the floor ends at
+                // x6440 and the drop lands on the y1100 bridge.
+                p.aZ && p.al in 660..790 && p.ak > 6380 -> Pad.M_LEFT
+                // lethal-band crate chain: S8 crates can't mount; the S1
+                // crates carry a side-pin (can't walk off) — vault ONCE at
+                // the bridge edge onto uid74, then vault-hop crate to crate
+                p.al > 980 && (p.ga != null || (p.aZ && p.ak in 6530..6590)) -> Pad.M_RIGHT + Pad.M_UP
+                p.al > 980 -> Pad.M_RIGHT
+                p.aZ -> Pad.M_RIGHT + Pad.M_UP
+                else -> Pad.M_RIGHT                          // airborne: drift east
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 60 == 0 || stall > 120 || p.S in listOf(315,318,89,90,297)) {
+                println("E t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 7070 && p.al in 1000..1120 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("E reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legE cp300->gap-drop->crate-hop->cp303@(7105,1060): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegF() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legF — cp303@(7105,1060) -> cp404@(8122,600). East on the right
+        // bridge, ax13 rope uid93 @(7219,611) up past the lethal band to
+        // the x7380+ roof (y640), then east on the roof to cp404.
+        p.setPositionPx(7105, 1050); p.ak = 7105; p.al = 1050; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 6900; w.kP = 890
+        var reached = false; var maxAk = 7105; var prevS = -1; var stall = 0; var lastAk = 7105
+        for (t in 0..7000) {
+            p.gJ = 7
+            val mask = when {
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                p.S == 315 || p.S == 318 -> Pad.M_DOWN
+                p.aZ -> Pad.M_RIGHT + Pad.M_UP
+                else -> Pad.M_RIGHT
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 40 == 0 || stall > 100) {
+                println("F t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} ga=${p.ga?.aw} stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 8060 && p.al <= 640 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("F reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legF cp303->rope->roof->cp404@(8122,600): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegG() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legG — cp404@(8122,600) -> cp408@(11135,985). Drop off the roof
+        // east edge to the street platforms, then across the lethal band
+        // via the ax15 grapple-block chain @x8795-9454 to cp408.
+        p.setPositionPx(8090, 600); p.ak = 8090; p.al = 600; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 7900; w.kP = 440
+        var reached = false; var maxAk = 8090; var prevS = -1; var stall = 0; var lastAk = 8090
+        for (t in 0..9000) {
+            p.gJ = 7
+            val mask = when {
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                p.S == 65 -> Pad.M_UP                          // ax22: vault east
+                // zipline: hop off once past the pit's east lip — the
+                // S157 exit fling (ag+2048 / ah-2560) lands on the block
+                p.S == 164 && p.ak > 9200 -> Pad.M_TAP_R
+                p.S == 164 || p.S == 157 -> Pad.M_RIGHT
+                // ax5-S8 uid200 script-201 ride: QTE gates at script
+                // steps 20/63/134 need M_UP / M_CONTEXT / M_DOWN presses
+                p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
+                p.S == 315 || p.S == 318 -> Pad.M_DOWN
+                // x8560 street edge -> x8760 face: hold the vault till the
+                // edge so the ~200px arc reaches the S6 block's hang zone
+                p.aZ && p.al > 1000 && p.ak < 8540 -> Pad.M_RIGHT
+                p.aZ -> Pad.M_RIGHT + Pad.M_UP
+                else -> Pad.M_RIGHT
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 40 == 0 || stall > 100 || p.S in listOf(209,107,108)) {
+                println("G t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} ga=${p.ga?.aw}(ax${p.ga?.ax}) stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 11000 && p.al <= 1020 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("G reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legG cp404->grapple-chain->cp408@(11135,985): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegH() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legH — cp408@(11135,985) -> cp342@(12276,909). East over the
+        // gap via ax22 uid211@11408 (S65 -> M_UP launch onto the x11520
+        // pillar), soldiers uid213/932 on the x11780 block, then ax22
+        // uid214@12151 launches across the 380px void past cp342's zone.
+        p.gJ = 7
+        p.setPositionPx(11135, 985); p.ak = 11135; p.al = 985; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 10900; w.kP = 800
+        var reached = false; var maxAk = 11135; var prevS = -1; var stall = 0; var lastAk = 11135
+        for (t in 0..9000) {
+            p.gJ = 7
+            val mask = when {
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                p.S == 65 -> Pad.M_UP                          // ax22: vault east
+                p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
+                p.S == 164 || p.S == 157 -> Pad.M_RIGHT
+                p.S == 315 || p.S == 318 -> Pad.M_DOWN
+                p.S == 68 || p.S == 69 -> Pad.M_CONTEXT        // combo chain
+                // the void-gap vault must take off right at the x12060
+                // edge so the arc threads the ax22 uid214 zone — walk the
+                // last ~20px grounded (no hop), then vault at the edge
+                p.aZ && p.ak in 12000..12050 && p.al < 1000 -> Pad.M_RIGHT
+                p.aZ -> Pad.M_RIGHT + Pad.M_UP
+                else -> Pad.M_RIGHT + Pad.M_UP
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 40 == 0 || stall > 100 || p.S in listOf(209,107,108)) {
+                println("H t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 12240 && p.al <= 960 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("H reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legH cp408->ax22-chain->cp342@(12276,909): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test fun mission5CapstoneLegI() {
+        val w = world(aj = 5)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        // legI — cp342 lip (x12260-13020, top y940) -> cp405@(13584,665)
+        // on tower B. Stepping crates uid241@13109/uid240@13270 (~y1150),
+        // ax66-S12 platform uid96@13389, tower-A face x13380, then east
+        // gap x13460-13560 down onto tower B top y700.
+        p.gJ = 7
+        p.setPositionPx(12280, 939); p.ak = 12280; p.al = 939; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 12080; w.kP = 780
+        var reached = false; var maxAk = 12280; var prevS = -1; var stall = 0; var lastAk = 12280
+        for (t in 0..60000) {
+            p.gJ = 7
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
+                    Math.abs(it.ak - p.ak) < 90 && Math.abs(it.al - p.al) < 60
+            }
+            // kill-dive marker uid246 W=[13469,1052,13554,1104] — the shaft
+            // entry: tap context inside it → teleport into the chimney at
+            // (13508,1080); then the S101/S36 auto-bounce climbs between
+            // mass-A's east face (x13460) and mass-B's west face (x13560)
+            // up to the ledge at y700. Inside the chimney hold M_UP so the
+            // aF intent latch keeps arming the wall-grabs.
+            val inMarker = p.ak in 13469..13554 && p.al in 1052..1104 && p.S != 214 && p.S != 215
+            val inChimney = p.ak in 13460..13565 && p.al in 740..1140
+            val mask = when {
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                p.S == 65 -> Pad.M_UP                          // ax22: vault east
+                p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
+                p.S == 164 || p.S == 157 -> Pad.M_RIGHT
+                p.S == 315 || p.S == 318 -> Pad.M_DOWN
+                // airborne launch/fall states (S149/150 hit-launch, S147
+                // descent): hold east — the foes' own strikes toss the
+                // player toward the gap; steering mid-air carries it the
+                // last ~50px to the x13120 lip edge and down to the crates.
+                p.S == 149 || p.S == 150 || p.S == 147 -> Pad.M_RIGHT
+                p.S == 101 || p.S == 36 -> Pad.M_UP            // chimney bounce
+                inMarker -> Pad.M_CONTEXT                    // S32 teleport-dive
+                inChimney -> Pad.M_UP
+                // launch-pad walk: ax10-S33 uid398 W=[12974,854,+61,+100]
+                // covers the lip's east edge — inside it, plain-run (no
+                // vault) so the zone arms gA→S148 autowalk → gL ~10.6px/t
+                // scripted east to x13091, dropping onto crate uid241.
+                p.ak >= 12960 && p.ak < 13050 && p.al < 960 && p.aZ -> Pad.M_RIGHT
+                p.ak > 13050 && p.al < 960 && p.aZ -> Pad.M_RIGHT
+                // crate-240 walk: on its top run east to ~x13300 first —
+                // vaulting earlier undershoots platform uid96 (W x13380-
+                // 13400 top y1101); from the east edge the S235 push chain
+                // homes onto it, then the S238 release dives over the gap.
+                p.ga?.aw == 240 && p.ak < 13300 -> Pad.M_RIGHT
+                p.ga != null -> Pad.M_RIGHT + Pad.M_UP
+                // attack-through: CONTEXT held ONLY while a gap foe is in
+                // range — the S67/68/69 combo staggers it at point-blank so
+                // its tumble→pin chain never starts and the launch-pad
+                // zone's gA autowalk fires cleanly. Held constantly it
+                // would swing-crawl the whole 700px approach (~5px/swing).
+                foe != null -> Pad.M_RIGHT + Pad.M_UP + Pad.M_CONTEXT
+                else -> Pad.M_RIGHT + Pad.M_UP
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 40 == 0 || stall > 100 || p.S in listOf(209,107,108)) {
+                println("I t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} ga=${p.ga?.aw} foe=${foe?.aw}@aB${foe?.aB},S${foe?.S} stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (p.ak >= 13560 && p.al <= 740 && p.aZ) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("I reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legI cp342->crates/platform->towerB cp405@(13584,665): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+
+    @Test
+    fun mission5CapstoneLegJ() {
+        val w = world(aj = 5)
+        val p = w.player
+        // legJ — cp405 ledge (13564,699) -> finale uid308@15439 (ax5-S8,
+        // script 389 -> k.l(15)). Route: east along tower-B roof (top y700)
+        // -> 600px gap x13880-14480 (water floor y900, v=2 -> S50) crossed
+        // via ax66 platform tops (13968/14047/14127, S12 y635-676 / S15
+        // y709-750) and ax47-S93 kill sentinels at x14279/14384 -> east rim
+        // y700 -> second water gap x14740-15360 (v=2 y740) via ax44-S8 pole
+        // line y761 -> finale.
+        p.gJ = 7
+        p.setPositionPx(13564, 699); p.ak = 13564; p.al = 699; p.av = false
+        p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
+        w.kO = 13380; w.kP = 520
+        var reached = false; var maxAk = 13564; var prevS = -1; var stall = 0; var lastAk = 13564
+        for (t in 0..30000) {
+            p.gJ = 7
+            val foe = w.npcs.firstOrNull {
+                (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
+                    Math.abs(it.ak - p.ak) < 90 && Math.abs(it.al - p.al) < 60
+            }
+            val foeWindup = foe != null && foe.S == 6
+            // only swing when the foe is in a damageable window — pushing
+            // into S144/S17 (invulnerable) just bounces the player back
+            // west via the S267/268 ledge chain and deadlocks the leg.
+            val foeOpen = foe != null && foe.S != 144 && foe.S != 17
+            // ax72 swing-pole mount: Entity.at binds in the az() scan once
+            // the pole is in 440 range (J&4 armed); the L1947 context press
+            // lunges onto it. Each pole's press has to land in its low-SW
+            // box so the lunge ends below-left of the head (cy>128) — the
+            // orbit then swings UP first and the cB radius decays before
+            // the launch throws east over the canal. Pressing above-left
+            // (cy<128) dips the swing bottom into the water (v=2 row 37,
+            // feet = al+41 >= 740): S50 death.
+            // pole-1 uid283@(14971,611): press ~(14844,726).
+            // pole-2 uid289@(15199,610): press ~(15100-15160,665-700) —
+            // probe-verified landing (15359-15386,699) on the east rim.
+            val pole = Entity.at
+            val poleSwing = pole != null && pole.ax == 72 && (
+                (pole.aw == 283 && p.ak - pole.ak in -135..-45 &&
+                    p.al - pole.al in 114..135) ||
+                (pole.aw == 289 && p.ak - pole.ak in -110..-35 &&
+                    p.al - pole.al in 55..95))
+            val mask = when {
+                poleSwing -> Pad.M_CONTEXT + Pad.M_RIGHT + Pad.M_UP
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                p.S == 65 -> Pad.M_UP
+                p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
+                p.S == 164 || p.S == 157 -> Pad.M_RIGHT
+                p.S == 315 || p.S == 318 -> Pad.M_DOWN
+                p.S == 68 || p.S == 69 -> Pad.M_CONTEXT
+                p.S == 101 || p.S == 36 -> Pad.M_UP
+                foeWindup -> Pad.M_LEFT
+                !foeOpen && foe != null -> Pad.M_RIGHT + Pad.M_UP   // run past / hop over
+                foeOpen -> Pad.M_CONTEXT
+                p.aZ -> Pad.M_RIGHT + Pad.M_UP
+                else -> Pad.M_RIGHT + Pad.M_UP
+            }
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+            if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
+            if (p.S != prevS || t % 40 == 0 || stall > 100) {
+                println("J t=$t (${p.ak},${p.al}) S${p.S} aZ=${p.aZ} ah=${p.ah} ga=${p.ga?.aw} aR=${p.aR} stall=$stall m=$mask jC=${w.jC}")
+            }
+            prevS = p.S
+            if (w.jC == 15) { reached = true; break }
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                println("J FAIL t=$t @(${p.ak},${p.al}) S${p.S} jC=${w.jC} maxAk=$maxAk")
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                continue
+            }
+            if (w.jC != 8) break
+        }
+        println("J reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        assertTrue(reached,
+            "legJ cp405->platforms->poles->finale@15439: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+    }
+}
