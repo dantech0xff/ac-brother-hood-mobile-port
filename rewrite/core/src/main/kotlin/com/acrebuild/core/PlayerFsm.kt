@@ -1461,7 +1461,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             242, 243 -> {
                 p.aj = 1536
                 if (p.S == 242 && p.ah >= 0) p.setAnim(243)
-                if (p.S == 243 && p.animFinished()) p.setAnim(0)
+                // `r() → a(0)` — a(0) is g.a(int)=enterFall (S43, ag kept),
+                // NOT i(0): the ax72 fling's ag must survive so the drift
+                // carries the player across the u219 grab chain.
+                if (p.S == 243 && p.animFinished()) p.flingAirborne(0, world)
                 p.airWallResolve(world)                                  // av()
                 if (p.climbCheck()) {                                    // y()
                     p.collideSides(world, true)                          // a(true)
@@ -1741,12 +1744,25 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 return aw(p, pad)
             }
             else -> {
-                // L120 fold (high-confidence): running → brake 11; braking →
-                // settle on anim end; everything else → aw().
-                if (p.S == 12 && p.co < 4) return aw(p, pad)
-                if (p.S != 11) { p.setAnim(11); return true }
-                if (p.animFinished()) return aw(p, pad)
-                return true
+                // L120/L124/L94 (proven, g.java:5042-5077): no dir held —
+                // `S==12 && co>=4` → i(11) brake; `S!=11` → aw();
+                // S==11 falls into the L94 right-arm tail: av → L98/L100
+                // (turn-face-e + x(8256) lunge, else aw()); !av → ax().
+                // The earlier S11→i(11)-then-aw() fold was wrong: the
+                // original drops airborne S11s facing east through ax(),
+                // which preserves ag (e.g. the ax72 fling's 2218 drift).
+                if (p.S == 12 && p.co >= 4) { p.setAnim(11); return true }
+                if (p.S != 11) return aw(p, pad)
+                if (p.av) {
+                    if (p.aA != 0) { p.av = false; return aw(p, pad) }
+                    if (pad.x(Pad.M_RIGHT)) {
+                        p.setAnim(10); p.ag = 4096
+                        if (p.hitWall()) p.ag = 0
+                        return true
+                    }
+                    return aw(p, pad)
+                }
+                return ax(p)
             }
         }
     }
@@ -1785,8 +1801,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun aw(p: Entity, pad: Pad): Boolean {
         p.ag = 0; p.ah = 0
         if (!p.aZ && p.standingOn == null) {
-            p.cq = false; p.z = false
+            // `k.aS.af` (g.java:5120-5124, proven): bound → return true
+            // (stay); unbound → L58: `S==284 → L73 return true` (bound
+            // state rides out), else `a(0)` = g.a(int) = enterFall.
+            if (p.af != null) return true
+            if (p.S == 284) return true
             p.enterFall(0, world)
+            p.cq = false; p.z = false
             return true
         }
         if (p.S == 79 && !bn) {
