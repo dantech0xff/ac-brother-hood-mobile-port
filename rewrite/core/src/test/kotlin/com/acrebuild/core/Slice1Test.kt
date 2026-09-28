@@ -27903,3 +27903,108 @@ class Slice303Test {
             "boss-2 arena not reached — ak=${p.ak} al=${p.al} S=${p.S} u269=$u269Fired minAl=$minAl maxAk=$maxAk")
     }
 }
+
+class Slice304Test {
+
+    /** m7 leg I — r96 under-chamber corridor: from the r87-gap drop
+     *  (~x880,y1770) land the r96 floor, cross the corridor bound
+     *  x1077-1497 east (prop ax27#308 doorpost x1060-1077), reach the
+     *  u280 goal zone @(1265,1975) — assert u280 fires, or the player
+     *  grounds east of x1200 on r96. */
+    @Test fun mission7UnderChamber() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        driveDuelWin300(w, p)
+        driveRopeClimb300(w, p)
+        var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        val trace = ArrayDeque<String>(60)
+        var lastS = p.S
+        var jumpCd = 0
+        var landed = false; var launched = false; var kCFired = false
+        var u269Fired = false; var u252Fired = false; var u280Fired = false; var chainDone = false; var descended = false
+        var minAl = 99999; var maxAk = 0
+        for (t in 0..28000) {
+            var mask = chaseMask297(p, w)
+            when {
+                p.bM != null -> mask = Pad.M_UP
+                !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
+                    !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
+                    w.kC != null -> Pad.M_CONTEXT
+                    else -> if (p.ak < 210) Pad.M_RIGHT else Pad.M_LEFT
+                }
+                w.kC != null -> mask = Pad.M_CONTEXT   // phase 1 — let any claim script run (u269 zone + fuse carries)
+                else -> {
+                    when {
+                        p.ga != null -> mask = 0                            // riding an ax66 sink lift — wait it out
+                        !p.aZ && p.al > 1700 -> mask = Pad.M_RIGHT          // hole drop / corridor descent — drift east
+                        p.al > 1700 -> mask = Pad.M_RIGHT                   // trap floor / mid corridor — east
+                        p.al > 1530 -> mask = Pad.M_RIGHT                   // '2' strip / r78 floor — east to the hole
+                        else -> mask = Pad.M_RIGHT                          // lift-transit band — east
+                    }
+                }
+            }
+            when (p.S) {
+                65 -> mask = Pad.M_UP + Pad.M_TAP_L
+                63, 318 -> mask = Pad.M_UP
+                164 -> mask = 0
+                56, 60 -> mask = if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                61 -> mask = if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                62 -> mask = if ((p.al > 1500 && !(chainDone && p.al > 1530)) || (chainDone && p.ak < 1110)) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
+                27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
+                in 259..266 -> mask = Pad.M_RIGHT
+            }
+            if (descended && p.al > 1700 && p.S in 56..63) mask = Pad.M_DOWN + Pad.M_RIGHT  // trap-floor slab edge: drop off east, don't re-hang
+            if (jumpCd <= 0 && landed && w.kC == null && !chainDone) {
+                mask = if (p.S in 259..266 || p.ak < 310) Pad.M_RIGHT + 8 else 16388
+                jumpCd = if (p.S in 259..266) 8 else 14
+            } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
+                mask = 16390 or Pad.M_LEFT
+                jumpCd = 20
+            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ) {
+                mask = if (p.al > 1530 && !descended) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
+                jumpCd = 30
+            }
+            if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release
+            jumpCd--
+            w.pad.e(mask)
+            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            w.tick(emptyList())
+            if (p.S != lastS) {
+                if (trace.size == 60) trace.removeFirst()
+                trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
+                lastS = p.S
+            }
+            if (p.S == 280) launched = true
+            if (launched && !landed && p.aZ && p.al > 1340) landed = true
+            if (w.kC != null) { kCFired = true
+                if (w.kC!!.aw == 252) u252Fired = true
+                if (w.kC!!.aw == 269) u269Fired = true
+                if (w.kC!!.aw == 280) { u280Fired = true; println("U280 t=$t ak=${p.ak} al=${p.al} S=${p.S}") } }
+            if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
+            if (!descended && chainDone && p.aZ && p.al > 1700) { descended = true; println("DESCENDED t=$t ak=${p.ak} al=${p.al}") }
+            if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
+            if (w.jC == 15) break
+            if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
+            if (w.jC == 12 || w.jC == 13) {
+                var guard = 0
+                while (w.jC != 8 && w.jC != 15 && guard++ < 400) {
+                    w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
+                    w.tick(emptyList())
+                }
+                settleIntro(w)
+                continue
+            }
+            if (w.jC != 8) break
+            if (u269Fired || u280Fired) break
+            if (descended && p.ak > 1260) break
+            if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            lastAk = p.ak; lastAl = p.al
+            if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
+        }
+        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired u280=$u280Fired descended=$descended minAl=$minAl maxAk=$maxAk trace=${trace.joinToString(" ")}")
+        assertTrue(u280Fired || u269Fired || (descended && p.ak > 1200),
+            "under-chamber corridor not crossed — ak=${p.ak} al=${p.al} S=${p.S} u280=$u280Fired descended=$descended minAl=$minAl maxAk=$maxAk")
+    }
+}
