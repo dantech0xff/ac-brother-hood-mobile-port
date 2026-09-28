@@ -27121,4 +27121,63 @@ class Slice291Test {
             "legE door mass → door179 teleport → win: p@(${p.ak},${p.al}) S${p.S} maxAk=$maxAk minAl=$minAl jC=${w.jC}")
     }
 
+    /** Mission-6 capstone leg F — the east-gauntlet leg, proven end-to-end:
+     *  '5' floor x10000-10419@y580 → run east → jump at x10420 → perch
+     *  uid165@(10469,604) catches (S65) → context-hold vaults EAST (record
+     *  Z[2]=1 → +20/3328/-3840) — clearing the crusher ledge x10420-10559@y700
+     *  (ax44 uid897-900 permanent S8) — or launcher uid176@(10488,451) mounts
+     *  → S261 east launch — landing the far-east '#######' ledge x10760+ →
+     *  LEFT → gap x10700-10759 → door mass top y840 → west edge x10540 →
+     *  shaft drop → pit floor y1000 → door179 box [10645,904,10695,991] →
+     *  UP → S16 door arm → teleport to the lower room (floor y1320) → ride
+     *  S295 east → claim uid271@(10924,1166) (ax5 S8 watcher, script 274 —
+     *  no input needed; ride to the east wall, S33/34 bounce) → jC=21 →
+     *  jC=15 mission-complete. Pin start: on the '5' floor where leg D's
+     *  slab-drop exit deposits the player. */
+    @Test fun mission6CapstoneLegF() {
+        val w = world(aj = 6)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.setPositionPx(10160, 560); p.refreshBoxes()
+        w.kO = 10080; w.kP = 400
+        var maxAk = 0; var won = false; var died = false
+        for (t in 0..3000) {
+            if (w.jC == 15) { won = true; break }
+            if (w.jC == 12 || w.jC == 13) { died = true; break }
+            if (p.ak - 200 > w.kO) w.kO = p.ak - 200
+            if (p.al - 120 > w.kP) w.kP = p.al - 120
+            val foe = w.npcs.filter { it.ax == 11 && it.aB > 0 && it.S != 139 &&
+                kotlin.math.abs(it.ak - p.ak) < 130 && kotlin.math.abs(it.al - p.al) < 80 }
+                .minByOrNull { kotlin.math.abs(it.ak - p.ak) }
+            val pad = when {
+                w.jC == 10 || w.jC == 15 || w.jC == 21 -> 327712
+                w.kC != null && w.kC!!.aw != 271 -> Pad.M_CONTEXT
+                p.S == 65 || p.S == 228 || p.S == 358 -> 16396
+                p.S == 101 -> Pad.M_RIGHT or Pad.M_UP
+                p.ga != null && p.ga!!.ax == 66 -> Pad.M_RIGHT
+                foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 -> {
+                    if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
+                }
+                p.ak in 10645..10695 && p.al >= 900 -> Pad.M_UP
+                p.S == 260 || p.S == 262 -> Pad.M_RIGHT
+                (p.ac != null && p.ac!!.ax == 10) ||
+                (p.aZ && p.ak in 10590..10700 && p.al in 990..1040) -> Pad.M_UP
+                p.ak in 10910..10960 && p.al > 1100 -> Pad.M_CONTEXT
+                p.al in 690..880 && p.ak in 10540..10560 && p.S == 26 -> Pad.M_UP
+                p.ak in 10620..10700 && p.al in 880..1020 -> Pad.M_UP
+                p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
+                p.al in 880..1020 && p.ak > 10700 -> Pad.M_LEFT
+                p.al in 690..880 && p.ak > 10540 -> Pad.M_LEFT
+                p.al < 600 && p.ak > 10420 -> Pad.M_RIGHT or Pad.M_UP
+                else -> Pad.M_RIGHT
+            }
+            w.pad.e(pad)
+            w.tick(emptyList())
+            if (p.ak > maxAk) maxAk = p.ak
+        }
+        assertTrue(won && !died,
+            "legF '5' floor → perch/launcher → door179 → uid271 win: " +
+            "p@(${p.ak},${p.al}) S${p.S} maxAk=$maxAk died=$died jC=${w.jC}")
+    }
+
 }
