@@ -1068,7 +1068,10 @@ class Level0World(
     override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
-    override var iBy = 0                       // i.by — boss phase tier
+    override var iBy = 1                       // i.by — boss phase tier
+                                             // (i.java:2475 D() `by = 1`,
+                                             //  i.java:22326 statics — proven;
+                                             //  NOT 0: by0 = inert-boss arm)
     override var iCi: IntArray? = null         // i.ci[5]
     override var iCj = false                   // i.cj
     override var iCk: Entity? = null           // i.ck — aura entity
@@ -1103,6 +1106,10 @@ class Level0World(
             pendingCommands += Command.MissionLoaded(mission)
         }
         applyG2()
+        // `k.d(boolean)` → `i.D()` (k.java:5944, i.java:2475, proven):
+        // `by = 1` on every level load — a fresh mission's ax29 duels
+        // again at the active tier. (D() does NOT touch ci/cn/co/cp.)
+        iBy = 1
         kDN = -1; kDO = -1; kDP = -1; kDQ = -1
         flyingRestamp()
     }
@@ -1857,9 +1864,14 @@ class Level0World(
         queueInsert(e)
         return e
     }
-    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. */
+    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. `scrollHolder`
+     *  tracks the ax37 trigger standing in for `k.ah`, so it must release
+     *  here too — otherwise a level reload (which rebuilds `scrollTriggers`
+     *  with fresh instances) leaves a stale holder whose `===` checks never
+     *  match, wedging the claim lock and zeroing the bounds every tick. */
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
+        scrollHolder = null
     }
 
     /** `k.l(int,int)` (k.java:2844, proven): `clamp(d/2, -k, k)` —
