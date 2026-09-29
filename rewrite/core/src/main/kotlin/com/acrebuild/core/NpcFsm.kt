@@ -325,9 +325,12 @@ class NpcFsm(val world: LevelCellSource) {
             23 -> {
                 // L444 windup-approach: ag=∓512 toward player; aF() done →
                 // strike anim 12 (the contact arm at L478 runs next).
+                // `z7 = true` (i.java:4651, proven): j() runs in the shared
+                // tail — the windup is the weakened guard's damage window.
                 facePlayer(e, player)
                 e.collideSides(world, true)
                 e.ag = if (e.av) -512 else 512
+                tail[2] = true
                 if (e.animFinished()) e.setAnim(12)
             }
             12 -> {
@@ -8503,33 +8506,38 @@ private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
     e.P = e.P or 16
     w.kAA = 60
     e.av = p.ak < e.ak                                    // Q()
+    var r7: Int; var r8: Int
     if (e.aq != 0) {
         // L5: leap-landing arm — bound ax69 kill or Z0==3 ceiling probe.
         val af = e.af
         if (af != null && af.ax == 69 && af.aA == 1 &&
             Entity.overlapStrict(e.W, af.W)) { e.setAnim(138); return }
-        val r7 = Math.abs(e.aq - e.ak); val r8 = Math.abs(e.ar - e.al)
+        r7 = Math.abs(e.aq - e.ak); r8 = Math.abs(e.ar - e.al)
         e.av = e.aq < e.ak                                // face the marker
         if (e.Z[0] == 3) {                                // L20-L42 leaper
-            var r03 = false
-            if (r7 >= 10 && Math.abs(p.ak - e.ak) < 140) {
-                val x0 = e.ak / 20 + if (e.av) -1 else 1
+            // i.java:25336-25391 — leap when the marker is reached, the
+            // player is out of reach (>=140), a ceiling blocks the backing
+            // direction, or the floor ends under the trailing edge (aF).
+            var leap = r7 < 10 || Math.abs(p.ak - e.ak) >= 140
+            if (!leap) {
+                val x0 = e.ak / 20 + if (e.av) 1 else -1
                 for (r9 in 1..3)
-                    if (e.e(w, x0, e.al / 20 - r9) >= 12) { r03 = true; break }
+                    if (e.e(w, x0, e.al / 20 - r9) >= 12) { leap = true; break }
+                if (!leap) leap = crateEdge73(e, w)
             }
-            if (r03 || crateEdge73(e, w)) return          // wall/edge → stay
-        }
-        // L42-L46: arrived → i(165) leap (Z0==3) or i(152) reset.
-        if (r7 < 10) {
-            if (e.S == 155) {
+            if (leap && e.S == 155) {                     // Lf3
                 e.ar = 0; e.aq = 0; w.kAA = 0
                 e.setAnim(165); e.am = e.ak; w.gZ = false
             }
-            if (e.Z[0] != 3) { e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0; e.setAnim(152) }
+            return
         }
-        return
+        // L11f: marker reached → c(2,152) reset, then j-tier fallthrough.
+        if (r7 < 10) {
+            e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0; e.setAnim(152)
+        }
+    } else {
+        r7 = Math.abs(p.ak - e.ak); r8 = Math.abs(p.al - e.al)
     }
-    val r7 = Math.abs(p.ak - e.ak); val r8 = Math.abs(p.al - e.al)
     when (e.j) {
         // L50: unaware → stalk the player until close, else countdown back
         // to S152 idle.

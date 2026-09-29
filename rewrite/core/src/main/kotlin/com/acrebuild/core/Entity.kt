@@ -1547,7 +1547,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         ah = vy
         aj = 1536
         standingOn = null
-        // ac = null (climbable ref) — unused in slice 2
+        ac = null    // g.java:126 — `a = null; ac = null`
     }
 
     /**

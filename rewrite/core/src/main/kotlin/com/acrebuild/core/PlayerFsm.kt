@@ -729,9 +729,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 } else {
                     val dirKey = if (!p.av) pad.u(Pad.M_RIGHT)
                                  else pad.u(Pad.M_LEFT)
-                    // (proven, g.java L1b0a-L1b8f — branch order matters:
-                    //  holding toward the wall WHILE RISING arms the lip
-                    //  scan; any other case probes for the kick/fall.)
+                    // L1b0a-L1b8f (fallback g.java:4150-4157, proven —
+                    // branch order matters: holding toward the wall
+                    // WHILE RISING arms the lip scan; any other case —
+                    // no dir press, or dir press while falling — probes
+                    // for the kick/fall).
                     if (dirKey && p.ah < 0) {
                         p.ct = true
                         if (p.animFinished()) {                          // r()
@@ -754,6 +756,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                             }
                         }
                     } else {
+                        // L824-L832 (proven): x() probe → aR|aS∈{5,20}
+                        // → a(43,32) fall; else a(34,36)+aA() wall-kick.
                         p.probeCells(world)                            // x()
                         if (p.aR == 5 || p.aR == 20 ||
                             p.aS == 5 || p.aS == 20) {
@@ -1364,7 +1368,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.aj = 0; p.ah = 0; p.ai = 0; p.ag = 0
                 if (pad.u(Pad.M_UP) ||
                     (if (p.av) pad.u(Pad.M_TAP_L) else pad.u(Pad.M_TAP_R))) {
-                    if (p.ac != null && p.av != (p.ac!!.ak < p.ak)) {
+                    // simple g.java:L1748-1754 (proven — structured folds
+                    // the ac==null arm wrongly): release fires whenever
+                    // `ac==null` OR facing away from the claim.
+                    if (p.ac == null || p.av != (p.ac!!.ak < p.ak)) {
                         p.setAnim(235)
                         p.bindAc(null)                                   // ac = null
                         p.releaseAe()                                    // G()
@@ -1457,7 +1464,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             242, 243 -> {
                 p.aj = 1536
                 if (p.S == 242 && p.ah >= 0) p.setAnim(243)
-                if (p.S == 243 && p.animFinished()) p.setAnim(0)
+                // `r() → a(0)` — a(0) is g.a(int)=enterFall (S43, ag kept),
+                // NOT i(0): the ax72 fling's ag must survive so the drift
+                // carries the player across the u219 grab chain.
+                if (p.S == 243 && p.animFinished()) p.flingAirborne(0, world)
                 p.airWallResolve(world)                                  // av()
                 if (p.climbCheck()) {                                    // y()
                     p.collideSides(world, true)                          // a(true)
@@ -1590,33 +1600,33 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // `l()` head (g.java:11608-11617, proven): `cp=1; cq=1; z=1`
         // every tick the grounded family runs.
         p.cp = true; p.cq = true; p.z = true
-        if (p.aO <= 12 || p.aR <= 12) {
-            if (p.S == 79) {
-                p.ag = 0; p.ah = 0
-            }
-            if (p.S == 11) p.ag = (p.ag shl 1) / 3
-            // L691-692 (proven): down-held at a ledge → a(257,8) vault-drop;
-            // L2886 (proven): down-edge into a wall → am() climb-up S63
-            if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
-            if (ledgeDrop257(p, pad)) return
-            // The I==1 sword arm of `ap()` moved to postTail with the rest
-            // of the equip/context dispatcher (L2057 arm, g.java:3817).
-            if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
-            if (!l(p, pad)) {
-                p.cq = false; p.z = false      // `cq=0; z=0` airborne arm
-                p.enterFall(0, world)
-            }
-            // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
-            // checks `cp && ct` (edge ledge-grab ak()||al()), `cu`
-            // (down-edge pop + drop held), `cv` (dir press → aF=1), and
-            // `cw` (aO==5 → i(280) one-way hang) — but e()'s head clears
-            // all five flags every tick (g.java:617-623) and case 0 sets
-            // none of them, so all four arms read false and can never
-            // fire in the original. `al()` and `i.H()` are ported on
-            // Entity for their live call sites.
-        } else {
-            p.setAnim(79)
+        // L682-687 (proven, g.java:2851-2855): `aO>12 && aR>12` only re-sets
+        // the crouch anim — it does NOT gate the tail; `l()` (locomotion)
+        // runs every tick, so S79 still walks/drops off edges.
+        if (p.aO > 12 && p.aR > 12) p.setAnim(79)
+        if (p.S == 79) {
+            p.ag = 0; p.ah = 0
         }
+        if (p.S == 11) p.ag = (p.ag shl 1) / 3
+        // L691-692 (proven): down-held at a ledge → a(257,8) vault-drop;
+        // L2886 (proven): down-edge into a wall → am() climb-up S63
+        if (pad.u(Pad.M_DOWN) && wallClimb(p)) return
+        if (ledgeDrop257(p, pad)) return
+        // The I==1 sword arm of `ap()` moved to postTail with the rest
+        // of the equip/context dispatcher (L2057 arm, g.java:3817).
+        if (p.hitWall()) { p.ag = 1; p.collideSides(world, true); p.ag = 0 }
+        if (!l(p, pad)) {
+            p.cq = false; p.z = false      // `cq=0; z=0` airborne arm
+            p.enterFall(0, world)
+        }
+        // g.java:824-844 (proven-DEAD, omitted): the case-0 arm
+        // checks `cp && ct` (edge ledge-grab ak()||al()), `cu`
+        // (down-edge pop + drop held), `cv` (dir press → aF=1), and
+        // `cw` (aO==5 → i(280) one-way hang) — but e()'s head clears
+        // all five flags every tick (g.java:617-623) and case 0 sets
+        // none of them, so all four arms read false and can never
+        // fire in the original. `al()` and `i.H()` are ported on
+        // Entity for their live call sites.
     }
 
     /**
@@ -1737,12 +1747,25 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 return aw(p, pad)
             }
             else -> {
-                // L120 fold (high-confidence): running → brake 11; braking →
-                // settle on anim end; everything else → aw().
-                if (p.S == 12 && p.co < 4) return aw(p, pad)
-                if (p.S != 11) { p.setAnim(11); return true }
-                if (p.animFinished()) return aw(p, pad)
-                return true
+                // L120/L124/L94 (proven, g.java:5042-5077): no dir held —
+                // `S==12 && co>=4` → i(11) brake; `S!=11` → aw();
+                // S==11 falls into the L94 right-arm tail: av → L98/L100
+                // (turn-face-e + x(8256) lunge, else aw()); !av → ax().
+                // The earlier S11→i(11)-then-aw() fold was wrong: the
+                // original drops airborne S11s facing east through ax(),
+                // which preserves ag (e.g. the ax72 fling's 2218 drift).
+                if (p.S == 12 && p.co >= 4) { p.setAnim(11); return true }
+                if (p.S != 11) return aw(p, pad)
+                if (p.av) {
+                    if (p.aA != 0) { p.av = false; return aw(p, pad) }
+                    if (pad.x(Pad.M_RIGHT)) {
+                        p.setAnim(10); p.ag = 4096
+                        if (p.hitWall()) p.ag = 0
+                        return true
+                    }
+                    return aw(p, pad)
+                }
+                return ax(p)
             }
         }
     }
@@ -1781,8 +1804,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     private fun aw(p: Entity, pad: Pad): Boolean {
         p.ag = 0; p.ah = 0
         if (!p.aZ && p.standingOn == null) {
-            p.cq = false; p.z = false
+            // `k.aS.af` (g.java:5120-5124, proven): bound → return true
+            // (stay); unbound → L58: `S==284 → L73 return true` (bound
+            // state rides out), else `a(0)` = g.a(int) = enterFall.
+            if (p.af != null) return true
+            if (p.S == 284) return true
             p.enterFall(0, world)
+            p.cq = false; p.z = false
             return true
         }
         if (p.S == 79 && !bn) {
@@ -1894,9 +1922,28 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (p.gI == 4) p.z = true              // L1ce8 — I==4 arms z
         p.aj = 1536
         if (p.S == 22 && p.animFinished()) p.P = p.P or 64
-        if (p.S == 20) {
-            p.ag = if (p.av) -2048 else 2048
-            p.ah = -5120
+        // L1d21-L1e37 (g.java:4436-4565, proven): the airborne launch
+        // block — the ballistic impulse for the air states. Gate A:
+        // `T==1 && U==0 && S∉{19,23}` (the second-anim-frame entry tick);
+        // gate B: `S==215 && ah==0` (mount fling — instant on entry).
+        // ag: S20/S215→av?+2048:-2048; S25→av?+1024:-1024; S36→av?-2048:
+        // +2048; S24→0; else→av?-2048:+2048. ah: S20/S36→-5120; S215→
+        // -6656; else `g.a.ax==51`→-2560; else -5120.
+        if ((p.T == 1 && p.U == 0 && p.S != 19 && p.S != 23) ||
+            (p.S == 215 && p.ah == 0)) {
+            p.ag = when (p.S) {
+                20, 215 -> if (p.av) 2048 else -2048
+                25 -> if (p.av) 1024 else -1024
+                36 -> if (p.av) -2048 else 2048
+                24 -> 0
+                else -> if (p.av) -2048 else 2048
+            }
+            p.ah = when {
+                p.S == 215 -> -6656
+                p.S == 20 || p.S == 36 -> -5120
+                p.ga != null && p.ga!!.ax == 51 -> -2560
+                else -> -5120
+            }
         }
         // L1e3e/L1e6e (g.java:4578-4630, proven): y() (hitWall) gates ONLY
         // the wall-grab — `cv && aF!=0` (armed by the postTail cv producer
@@ -1905,8 +1952,16 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // met → L1f84 drift clamp for S25/15/19 under wall contact, then
         // L1fb3 runs av()+land either way (contact or not).
         if (p.hitWall()) {
-            if (((p.cv && p.aF != 0) || p.S == 215) && !p.ba &&
-                (if (p.av) p.aT == 20 else p.aU == 20)) {
+            // L1e3e/L1e65 vs L1e8b (g.java:4578-4630, proven): the S215
+            // corner check is INVERTED vs the cv&&aF path — the normal
+            // path grabs the face you're FACING (av→aT, !av→aU) while
+            // S215 grabs the face you're FLYING INTO (av→aU, !av→aT),
+            // because the mount throws the player backward.
+            val grabNormal = p.cv && p.aF != 0 &&
+                (if (p.av) p.aT == 20 else p.aU == 20)
+            val grab215 = p.S == 215 &&
+                (if (p.av) p.aU == 20 else p.aT == 20)
+            if ((grabNormal || grab215) && !p.ba) {
                 wallGrabSnap(p, flipOn215 = true)
                 return
             }
@@ -2297,8 +2352,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         Entity.at?.let { a ->
             val drop = when {
                 a.ax != 11 || !a.deadRelease() -> {
+                    // g.java:5570-5578 (proven) — drop only when the
+                    // target falls BEHIND: `ak - i.at.ak < 0 && av`
+                    // (player west, facing west) or `> 0 && !av`
+                    // (east, facing east); `W[3] < W[1]` when above.
                     p.h(p.ak - a.ak, p.al - a.al) > 440 ||
-                    (p.ak - a.ak >= 0 && p.av) || (p.ak - a.ak <= 0 && !p.av) ||
+                    (p.ak - a.ak < 0 && p.av) || (p.ak - a.ak > 0 && !p.av) ||
                     p.W[3] < a.W[1]
                 }
                 else -> true                       // dead ax11 → L83
@@ -2337,8 +2396,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.av && e.ak - p.ak >= 0) continue
                 if (!p.av && e.ak - p.ak <= 0) continue
                 if (p.h(p.ak - e.ak, p.al - e.al) >= 440) continue
-                if (e.Z[0] == 1 && p.h(p.ak - e.ak, p.al - e.al) >= e.Z[3]) continue
-                if (p.W[1] < e.W[3]) continue
+                // g.java:5673-5680 — the `p.W[1] >= e.W[3]` gate is
+                // Z[0]==1-ONLY in the original: for other configs (uid70's
+                // Z0=0 launch counterweight) the player only needs his
+                // bottom reaching the box top (`p.W[3] >= e.W[1]`).
+                if (e.Z[0] == 1) {
+                    if (p.h(p.ak - e.ak, p.al - e.al) >= e.Z[3]) continue
+                    if (p.W[1] < e.W[3]) continue
+                }
                 if (p.W[3] < e.W[1]) continue
                 if (p.losBlocked(e, world)) continue
                 if (Entity.at != null) continue

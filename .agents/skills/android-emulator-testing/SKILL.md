@@ -179,3 +179,79 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   the portrait launcher surface — start after the game is fullscreen.
 - **S79 wedge** recurs on teleport-into-solid (aO>12&&aR>12) — stage drops
   ~80px above ground, not inside geometry.
+
+## Run-11 additions — screenrecord finalize + input flakiness
+
+- **Never pull an mp4 while screenrecord is still writing** — the moov
+  atom lands at finalize; early pulls yield unplayable files (lost a full
+  take this way). Check `ls -la` twice — pull only after growth stops.
+- **adb input is flaky per-process**, not just post-ANR: it worked ~3min
+  on a fresh process then froze with no ANR. Diagnose via `lastMoveX/Y`
+  staying −1; switch to mouse input without restarting.
+- Slice 310: KO→YES gave **full level reload** in the observed cases
+  (checkpoint respawn not seen this run — may need the checkpoint armed
+  first, or semantics changed).
+- The B-lift chain is the reliable showcase: jtp5 to (2050,660) → S65 →
+  fixed-pad up cell (window ~174,189) taps ×4 → roof-B → run east → KO.
+
+## Run-12 additions — mission-complete + pad injection + m1 crash
+
+- **Mission-0 win** = claim-script uid 116 (1 block: `op37 r12=1 →
+  screenL(15)`). Showcase recipe: `set kAV.aG=116` →
+  `eval kAV.bindContext(world)` → `set kAV.cd[1]=true` +
+  `set kAV.cd[2]=true` → l142Tail ticks `runClaimScript` → jC=15.
+- **Post-win routing**: stats `v(458784)` advance → `v(327712)` confirm →
+  `kAj++`+`kBA[14]` persist → `stateL(30)` medal browse → context →
+  `stateL(9)` next briefing. `M_CYCLE` back-out → `stateL(19/2)`.
+- **Injecting pad edges via jdb**: `eval world.pad.e(mask,false)` — the
+  real e() pipeline (eK|=mask → commit → bB). `set pad.bB` is useless —
+  `commit()` rewrites bB from eK every frame.
+- **`scripts.bin` decode** (see Report run-12 script): `by[s][b]` blocks,
+  group key + op stream; `op37 r12` = runArgSub 26-case switch
+  (1=win,2=fail,4/5=kAV arm,0=cd2 latch).
+- **ax42 escape fuse**: kind-1 expiry → `l(13)`+`kBx=58` timeout-fail;
+  collect (player∩W while aJ==2) just removes the fuse — NOT the win.
+- 🔴 **mission-1 crashes on device**: `LevelPack.stampAt` unguarded
+  negative `%` on parallax<0 → ArrayIndexOutOfBounds ~20s into m1
+  gameplay. Reproduced clean ×2 — the m1+ missions can't currently run.
+
+## Run-13 addition — m1 crash fix verified
+
+- Slice-311 `stampAt` fix verified on-device: negative parallax
+  (parallaxX=-1, parallaxY=-3015 live) no longer crashes — m1 runs 90s+
+  through multiple KO→restart→glider-respawn cycles. Mission-1 content:
+  canyon + wolf horde + wisps + ax25 glider respawn. The CONTINUE row's
+  right cell reaches jC=30 browse; M_CONTEXT there → briefing → m1.
+
+## Run-14 additions — mission unlock + per-mission smoke
+
+- **Unlock all**: `set world.kBA[14]=7` then `set kDa=8` at jC=19 (the
+  select's row bound). Select = `set kBw=N` (0..7) → `pad.e(327712)` →
+  jC=30 browse → `pad.e(327712)` → briefing → tap → gameplay.
+- **Mission map**: kAj 0-7 = L1 ROME / L2 ROME-escape / L3 FLORENCE /
+  L4 FLORENCE / L5 ROME / L6 VENICE / L7 PANTHEON / L8 COLOSSEUM-boss.
+- **First-load wedge**: missions 3/5/6 spawn S79-embedded on the first
+  load (insta-fail); the KO→YES reload lands a proper spawn. m5's
+  wedge can soft-lock (S79 above the kill-line → no fail fires).
+- All 8 packs render crash-free @46329a09 — no other OOB signature.
+
+### Run-15 — mission-entry spawn bug (menuJc9 skips resetPlayerToSpawn)
+
+- **jC9 briefing → gameplay does NOT reposition the player** —
+  `menuJc9` (Level0World.kt ~:3606) runs `spawnEntities(); postSpawn()`
+  at `jG==164` but omits `resetPlayerToSpawn()`. The player keeps his
+  previous coords: on a fresh boot that's level0's record spawn
+  **(85,940)**; on sequential mission switches it's the previous
+  mission's end position. Missions where (85,940) has no floor
+  (m3, m6) insta-fail at (85,1399); where a floor exists (m5) he lands
+  and plays. `statsReset()` is skipped too — counters carry over.
+- KO→YES reload goes through `reload()` → `resetPlayerToSpawn()` →
+  lands the pack's own `playerSpawn()` record (verified m3→21,699 /
+  m6→17,740).
+- ACLV packs are **little-endian** (PackReader): `ACLV` + ver u8 +
+  cols/rows u16 + cellpx u8 + nLayers u8 + per-layer
+  (id u8, tileset u16, hasFlags u8, lw/lh u16, cells, flags) +
+  entCount u16 + records (len u16 + i16 fields). `playerSpawn` = first
+  record type 0/25, coords at rec[2]/rec[3].
+- Restart-prompt YES via jdb: `pad.e(327712,false)` — sometimes needs
+  two edges (first may land during the banner transition).

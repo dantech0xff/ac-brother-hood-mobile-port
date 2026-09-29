@@ -1068,7 +1068,10 @@ class Level0World(
     override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
-    override var iBy = 0                       // i.by — boss phase tier
+    override var iBy = 1                       // i.by — boss phase tier
+                                             // (i.java:2475 D() `by = 1`,
+                                             //  i.java:22326 statics — proven;
+                                             //  NOT 0: by0 = inert-boss arm)
     override var iCi: IntArray? = null         // i.ci[5]
     override var iCj = false                   // i.cj
     override var iCk: Entity? = null           // i.ck — aura entity
@@ -1103,6 +1106,10 @@ class Level0World(
             pendingCommands += Command.MissionLoaded(mission)
         }
         applyG2()
+        // `k.d(boolean)` → `i.D()` (k.java:5944, i.java:2475, proven):
+        // `by = 1` on every level load — a fresh mission's ax29 duels
+        // again at the active tier. (D() does NOT touch ci/cn/co/cp.)
+        iBy = 1
         kDN = -1; kDO = -1; kDP = -1; kDQ = -1
         flyingRestamp()
     }
@@ -1857,9 +1864,14 @@ class Level0World(
         queueInsert(e)
         return e
     }
-    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. */
+    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. `scrollHolder`
+     *  tracks the ax37 trigger standing in for `k.ah`, so it must release
+     *  here too — otherwise a level reload (which rebuilds `scrollTriggers`
+     *  with fresh instances) leaves a stale holder whose `===` checks never
+     *  match, wedging the claim lock and zeroing the bounds every tick. */
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
+        scrollHolder = null
     }
 
     /** `k.l(int,int)` (k.java:2844, proven): `clamp(d/2, -k, k)` —
@@ -3596,7 +3608,15 @@ class Level0World(
         // entity spawn — run on their `j.g` ticks; every other stage is
         // a resource load the converter already emitted.
         if (jG == 3L) loadPackI(kAj)
-        if (jG == 164L) { spawnEntities(); postSpawn() }
+        if (jG == 164L) {
+            // `G(164)=d(false)` (k.java:4741+) — mission-entry spawn is a
+            // FRESH `new i` at the pack record, never a checkpoint restore.
+            // reload()'s order (spawnEntities→statsReset→resetPlayerToSpawn→
+            // postSpawn) is the same fresh path; skipping resetPlayerToSpawn
+            // left the player at his previous position → m3/m6 insta-fail.
+            checkpointSnap = null; kG = 0; kBA[16] = 0
+            spawnEntities(); statsReset(); resetPlayerToSpawn(); postSpawn()
+        }
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
             kBg = 0                                  // bG = 0
             kBA[16] = 0                              // a(bA,16,(short)0)
@@ -4753,11 +4773,26 @@ class Level0World(
         // arm runs before the gate).
         val claimSuspended = claimSuspendsPlayer()
         if (!claimSuspended) {
+            // The wall rescan `a(an())` also runs inside `g.e()`'s head
+            // (g.java:1282, proven); this pre-tick `a(true)` is a slice-2
+            // superset the bot legs were proven against — removing it
+            // stalls proven crossings (gate row, canyon shaft), so it
+            // stays until a proven arm covers those states.
             player.collideSides(this, true)
             playerFsm.tick(player, pad)
             player.integrate()
         }
         player.advanceAnim()
+        // `I()` L1f35 shared tail for the player slot (i.java:18904-18922,
+        // proven): in the original every dispatched entity — the player
+        // (ax0, via i.I()) included — ends its I() with `if (b) t()` +
+        // the `av→P&1` facing sync, so npc arms ticking later this frame
+        // read the post-integrate bounds. Without it the player is the
+        // only entity left stale — asymmetric W shrinks catch/mount
+        // windows (ax10-S36 bound-catch, ax51 crate mounts).
+        player.b = true
+        player.refreshBoxes()
+        player.P = if (player.av) player.P or 1 else player.P and -2
 
         // `k.I()` player-link tail (k.java:8798-8810 L2df-L32a,
         // proven): immediately after `aS.I()` the player's `ac`/`ab`

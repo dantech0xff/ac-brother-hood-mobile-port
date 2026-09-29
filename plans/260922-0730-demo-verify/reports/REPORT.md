@@ -1,7 +1,7 @@
 ---
 title: Golden-path verification — devin/land (10a200ec → eb6516f5)
 phase: demo-verify
-status: 290d62c2-golden-path-VERIFIED-hopscotch-roof-checkpoint-combat-ko-respawn
+status: 46329a09-all-8-missions-load-render-no-crash-m5-spawn-wedge
 build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
 date: 2026-09-24
@@ -756,3 +756,233 @@ attack radial (305,215)→(478,252) slashes; KO YES (175,122)→(301,169).
   `d4-ko-roof.png`, `d4-respawn.png`, `d5-f38.png` (melee exchange),
   `d5-f34.png` (standing on '5' strip), menus `d1-title/lsel/brief/dlg/
   spawn/x499/x1379.png`.
+
+# Run 11 — devin/land @ f9bf7230 (slice 310, all-8-missions win conditions) — STOCK build, showcase demo
+
+`./gradlew :android:assembleDebug` @ f9bf7230 → installed, pid 4545.
+
+## Verified on camera (f1-full-demo.mp4, 169.4s + e1 boot/menus)
+
+- ✅ Boot chain (e1): legal card → jC23 attract → jC18 title → jC2 level-select
+  → jC9 briefing → hint card → jC21 → SKIP → jC8 play.
+- ✅ Run east real-input: spawn run cell5 hold → x499→1381, camera tracks,
+  score ticks to 8/100; the x~1400 wall still dead-ends ground traversal.
+- ✅ **ax22 B-lift chain on camera again** (teleport-staged entry; all
+  captures/vaults/climbs are real game FSM + touch edges):
+  (2064,695) S65 → up-cell → W vault (1982,605) → up-cell → E vault
+  (2104,546) → up-cell → S203@(2200,479) → up-cell → S0@(2210,479) roof-B.
+- ✅ Roof run east → KO by the guard pack → jC12 "DO YOU WANT TO RESTART?"
+  → YES → **full level reload** (hint card → dialog → spawn) — in this run
+  no checkpoint respawn was observed; the two roof KOs may have been
+  pre-arming, or slice-310 changed respawn semantics — flag for the lead.
+- ✅ Combat melee on the strip: attack radial lands slashes (red alert
+  border, score 4/100), guard strikes back → KO → banner → YES → reload.
+- ✅ Loop closes cleanly back at spawn, game still running, no crashes/ANRs.
+
+## Harness notes
+
+- **adb input died mid-session AGAIN on a fresh process** — no ANR this
+  time either; it worked for the nav taps (~3min) then froze (lastMove=-1).
+  It's flaky per-process, not just post-ANR. Mouse fallback used for all
+  gameplay.
+- **screenrecord moov corruption**: pulling while the recorder is still
+  writing yields an unplayable mp4 (lost e2 this way; f1 recovered by
+  waiting for the file size to stop growing BEFORE pulling).
+- e1 take mostly a briefing stall (the dead-input gap) — boot/menus valid
+  for ~90s; the gameplay showcase is entirely on f1.
+
+## Artifacts
+- **`f1-full-demo.mp4`** (169.4 s, 23.5 MB) — THE demo take: zone-1 capture
+  → 3 vaults → S203 → climb → roof → KO → YES → reload → SKIP → spawn →
+  strip melee → KO → YES → reload → spawn.
+- `e1-demo-290.mp4` (169 s) — boot→menus→briefing (usable first ~90s).
+- Frames: `f1-vault.png` (mid-vault), `f1-f96.png` (strip melee, alert
+  border), `f1-fight.png`/`f1-ko.png` (restart banner), `f1-f75.png`
+  (post-reload spawn), `e1-menu.png` (title), `e1-vault.png` (briefing).
+
+# Run 12 — devin/land @ f9bf7230 — MISSION COMPLETE chain verified + m1 stampAt CRASH
+
+## Verified end-to-end on camera (w2-winflow.mp4 + w3-m1-crash.mp4)
+
+- ✅ **MISSION COMPLETE screen** — jC=15: "MISSION COMPLETE" title,
+  stat rows ENEMIES KILLED 1 / SILENT KILLS 0 / RETRIES 0 / SOULS 0 /
+  TIME 2:32 / SCORE 200, typewriter footer "NEXT next-mission".
+- ✅ **Win script path** — mission-0's win = script uid 116
+  (`op37 r12=1 → screenL(15)`). Staged: `set kAV.aG=116` +
+  `kAV.bindContext(world)` + `cd[1]=cd[2]=true` → the claim tail runs
+  `runClaimScript` → op fires → jC=15. All downstream 100% real code.
+- ✅ **Post-win routing** — stats confirm (`v(327712)` inside
+  `v(458784)`) → `kAj++` → `kBA[14]=1` persisted (saveFlush) →
+  `stateL(30)` medal browse (EZIO card) → confirm → `stateL(9)`
+  briefing → mission-1 pack loads (ROME/A.D.1486/ESCAPE) → gameplay.
+- ✅ **Unlock persists across relaunch** — fresh boot: YES/NO save
+  prompt → title → CONTINUE/SELECT LEVEL rows → kDa=2 unlocked.
+
+## 🔴 NEW BUG — mission-1 gameplay crashes deterministically
+
+`FATAL EXCEPTION: GLThread — ArrayIndexOutOfBoundsException: length=273;
+index=-1` (first crash) / `index=-57` (clean repro):
+```
+LevelPack.stampAt(LevelPack.kt:79)   // dl[(cx % 21) * 13 + (cy % 13)]
+Level0Renderer.render(Level0Renderer.kt:1174)   // bh3 tile stamp loop
+```
+`stampAt` uses Kotlin `%` (sign-preserving) — when `parallaxX`/`parallaxY`
+go negative the `dl[]` index goes negative → OOB crash. Mission-0 never
+hits it (parallax stays ≥0); mission-1's spawn drives parallax negative
+within ~20s of load. Reproduced on a fully clean path (fresh boot →
+CONTINUE → browse → briefing → tap → gameplay → crash). Mission 1 renders
+a few frames (golden tileset + soldier horde) before dying.
+**Blocks any mission-1+ gameplay verification.**
+
+## Also decoded this run
+
+- ax42 escape fuse at (11410,418): kind-1, binds aw531, 70s countdown;
+  expiry → `screenL(13)` with `kBx=58` = "MISSION FAILED. DIDN'T REACH
+  THE ESCAPE LOCATION IN TIME"; `kBx=56` = "DID NOT CATCH YOUR TARGET"
+  (the iW==2 far-band arm). Both fail-stat variants land on jC=31.
+- Stats-screen input = `v(458784)` advance → `v(327712)` confirm.
+- **Pad injection recipe**: `eval world.pad.e(mask,false)` — writes the
+  real eK edge → commit → bB → `v()` fires. `set pad.bB` does NOT work
+  (commit overwrites bB from eK every frame).
+- Win op table: `runArgSub` r013==1 r12==1 → `screenL(15)` (WIN);
+  r12==4/5 arm/disarm `kAV.Z[0]` (the chase goal). Level0 scripts carry
+  no direct win op — the mission win routes through script uid 116.
+
+## Artifacts
+- **`w2-winflow.mp4`** (124s): gameplay → escape-zone collect →
+  MISSION COMPLETE stats → (injected) NEXT → browse → m1 loading.
+- **`w3-m1-crash.mp4`** (150s): clean relaunch → save prompt → title →
+  level select → CONTINUE → EZIO medal browse card.
+- `w1-winflow.mp4` (149s): escape-fuse arm + collect + fail-stat screens.
+- `w2-mission-complete.png` / `w2-win.png` — the win screen.
+- `w3-m1-gameplay.png` — mission-1 renders (golden tileset + horde).
+- `w3-m1-loading.png`, `w3-ezio-browse.png`, `w1-escapezone.png`.
+
+# Run 13 — devin/land @ 46329a09 (slice 311) — m1 stampAt CRASH-FIX verified
+
+`./gradlew :android:assembleDebug` → installed → pid 22650.
+
+## Verified on camera (m1fix-verified.mp4 150s + m1fix2-gameplay.mp4 90s)
+
+- ✅ Boot → YES/NO save prompt → title → level-select → CONTINUE →
+  jC=30 EZIO browse → briefing (ROME/A.D.1486/ESCAPE) → TOUCH → m1 gameplay.
+- ✅ **Mission-1 renders + stays alive 90s+** — canyon tiles, wisp flames,
+  the wolf horde formation, HUD + score (0→1/222) — the scene that
+  crashed at ~20s pre-fix now runs continuously.
+- ✅ **The exact crash condition is live**: `parallaxX=-1, parallaxY=-3015`
+  measured mid-run — `stampAt` wraps the negative rows via `cyMod+=13`
+  (k.java:4434-4438) → **zero ArrayIndexOutOfBounds** in logcat all run.
+- ✅ **Real m1 gameplay loop**: spawn → horde combat → KO → "DO YOU WANT
+  TO RESTART?" ×3 → YES → checkpoint respawn **on the glider** (ax25
+  flying player — m1's flying mechanic) → combat again. Score ticks
+  0→1 (a kill registered).
+- 🔴 pre-fix behavior (run-12): `ArrayIndexOutOfBoundsException
+  length=273; index=-1/-57` at `LevelPack.stampAt:79` ~20s into m1.
+- ✅ post-fix: **no exception at all** — m1+ missions are runnable again.
+
+## Artifacts
+- **`m1fix2-gameplay.mp4`** (90s) — m1 horde combat + glider respawn +
+  KO→restart cycles.
+- `m1fix-verified.mp4` (150s) — the full nav chain to m1 gameplay.
+- `m1-gameplay-fixed.png` / `m1fix2-t45.png` — canyon + wolf horde live.
+- `m1-restart-banner.png`, `m1-glider-respawn.png`.
+
+# Run 14 — devin/land @ 46329a09 — all-8-mission load/run smoke test
+
+Unlock staged: `kBA[14]=7` + `kDa=8` → jC=19 select shows all 8 cards
+(LEVEL 1-8: ROME×3, FLORENCE×2, VENICE, PANTHEON, ROME/COLOSSEUM).
+Each: select → jC=30 browse → briefing → load → tap → gameplay →
+15-25s monitor + logcat FATAL/AIOOBE/NPE scan.
+
+## Verdict table
+
+| kAj | Mission | Type/scene | Verdict |
+|-----|---------|------------|---------|
+| 0 | L1 ROME — rescue/escape the chase target | rooftop | ✅ verified earlier (win chain, Run-12) |
+| 1 | L2 ROME — ESCAPE | canyon + wolf horde + glider | ✅ 90s+, KO→restart→glider respawn |
+| 2 | L3 FLORENCE — KILL LUCREZIA & RESCUE CATERINA | night + soldiers + wheel | ✅ 18s+ |
+| 3 | L4 FLORENCE — KILL JUAN BORGIA | night + spinners | ✅ 18s+ (spawn wedge → reload lands right) |
+| 4 | L5 ROME — ESCAPE | canyon + wolf horde | ✅ 18s+ |
+| 5 | L6 VENICE — KILL OCTAVIEN | dark scene + spinners | ⚠️ loads+renders, no crash — staged-entry soft-lock (S79 wedge off-camera); play unverified |
+| 6 | L7 ROME PANTHEON — KILL MICHELOTTO | cyan interior + wisps + spinners | ✅ 18s+ |
+| 7 | L8 ROME COLOSSEUM — KILL BORGIA & APPLE (BOSS) | skull arena + lava + saws | ✅ 24s+ |
+
+**All 8 mission packs load + render without crashing** — zero FATAL /
+ArrayIndexOutOfBounds / NullPointer across the whole run (vs the
+pre-fix m1 AIOOBE). The stampAt wrap fix holds across every level's
+tile data.
+
+## Notable findings
+
+- **First-load spawn wedge on m3/m5/m6** — the first gameplay spawn
+  wedges the player (S79) → insta-fail; the KO→YES reload lands him
+  on a proper spawn and the mission plays. Possibly a real
+  first-spawn placement bug (or staged-entry carryover from the prior
+  mission's fall state — needs a clean-entry recheck to classify).
+- **m5 soft-lock signature** — S79 wedge at (21,-1334) with camY=0:
+  above the kill-line so no fail fires; gameplay freezes off-camera.
+  The reload path cleared it on m3 but m5's YES click resumed play
+  still wedged.
+- Each mission has distinct art/objectives: m2-3 Florence night,
+  m4-5 canyon+dark, m6 Pantheon cyan+wisps, m7 Colosseum skulls+lava.
+
+## Artifacts
+- `m7-boss.mp4` (89s) — Colosseum arena scene on take.
+- `m2-florence.png` `m3-florence.png` `m4-rome.png` `m5-venice.png`
+  `m6-pantheon.png` `m7-colosseum.png` `m7-t15.png` — per-mission scenes.
+
+---
+
+# Run-15 — spawn-wedge classification: REAL first-spawn bug (menuJc9 omits resetPlayerToSpawn)
+
+APK @ `46329a09`, emulator-5554, three separate FRESH boots (force-stop
+→ am start → YES/NO → title → jC2 → stateL(19) select → kDa=8 + kBw=N →
+context → browse → briefing → touch → gameplay → 15s+ monitor).
+
+## Per-mission clean-entry verdict
+
+| kAj | Mission | Clean entry | Where he landed | Verdict |
+|---|---|---|---|---|
+| 3 | L4 FLORENCE | S=5 fall → x1=0 → jC=12 in ~3s | dies at **(85,1399)** camY=1160 | **REAL bug** — insta-fail |
+| 5 | L6 VENICE | S=0 standing, x1=30, stable 15s+ | (85,1143) on a floor | **plays** — the sequential wedge (21,-1334) was m4 carryover |
+| 6 | L7 PANTHEON | S=5 fall → x1=0 → jC=12 in ~3s | dies at **(85,1399)** camY=1160 — identical | **REAL bug** — insta-fail |
+
+KO→YES reload lands the pack's own spawn record (m3→(21,699), m6→(17,740)
+— the lead's headless coords exactly) and both missions then play stably.
+
+## Root cause — menuJc9() never repositions the player
+
+`Level0World.menuJc9` (the briefing LOADING→TOUCH screen tick, :3606-3628):
+`jG==3 → loadPackI(kAj)` swaps the pack; `jG==164 → spawnEntities(); postSpawn()`
+rebuilds NPCs — **but `resetPlayerToSpawn()` is never called** (reload()
+:4067 calls `spawnEntities → statsReset → resetPlayerToSpawn → postSpawn`;
+menuJc9 does only the middle two). The player therefore enters every
+mission keeping his previous coordinates:
+
+- Clean boot → constructor `init{}` placed him at level0's record spawn
+  **(85,940)** → every briefing-entry mission starts at (85,940):
+  - m3: (85,940) has no floor → falls to world bottom (1399 = worldH-1)
+    → kill-line x1=0 → jC=12 insta-fail.
+  - m5: (85,940) falls onto a floor → stands at (85,1143) → plays (luck).
+  - m6: identical to m3 → insta-fail.
+  - m0: (85,940) IS m0's own spawn → works by coincidence.
+- Sequential entries carry the previous mission's end position (m5's
+  (21,-1334) off-camera soft-lock was m4's glider/fall state; m2's
+  (60,1840) was m1's canyon fall state).
+
+The original J2ME `G(164)=d(false)` respawned ALL entities from records
+including the player; the port's `spawnEntities` deliberately skips the
+persistent player entity — so `resetPlayerToSpawn()` must be called
+explicitly after it on this path (and `statsReset()` too — death/kill
+counters currently carry into the new mission as well).
+
+Verified: pack spawn records (aclv, little-endian) m3=(21,699) m5=(44,582)
+m6=(17,740) have solid floor (layer0 tile 20) directly beneath — geometry
+is fine; the bug is purely the missing spawn-position reset.
+
+## Artifacts
+- `m3-clean-insta-fail.png` `m6-clean-insta-fail.png` — restart banner on clean entry
+- `m5-venice-plays.png` — clean entry playing Venice (carryover cleared)
+- `m6-playing.png` — m6 playing post-reload at (17,740)
+
+Status: `46329a09-spawn-wedge-CLASSIFIED-menuJc9-missing-resetPlayerToSpawn-m3-m6-real-m5-carryover`
