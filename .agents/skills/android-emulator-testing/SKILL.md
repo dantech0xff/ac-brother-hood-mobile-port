@@ -179,3 +179,38 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   the portrait launcher surface — start after the game is fullscreen.
 - **S79 wedge** recurs on teleport-into-solid (aO>12&&aR>12) — stage drops
   ~80px above ground, not inside geometry.
+
+## Run-11 additions — screenrecord finalize + input flakiness
+
+- **Never pull an mp4 while screenrecord is still writing** — the moov
+  atom lands at finalize; early pulls yield unplayable files (lost a full
+  take this way). Check `ls -la` twice — pull only after growth stops.
+- **adb input is flaky per-process**, not just post-ANR: it worked ~3min
+  on a fresh process then froze with no ANR. Diagnose via `lastMoveX/Y`
+  staying −1; switch to mouse input without restarting.
+- Slice 310: KO→YES gave **full level reload** in the observed cases
+  (checkpoint respawn not seen this run — may need the checkpoint armed
+  first, or semantics changed).
+- The B-lift chain is the reliable showcase: jtp5 to (2050,660) → S65 →
+  fixed-pad up cell (window ~174,189) taps ×4 → roof-B → run east → KO.
+
+## Run-12 additions — mission-complete + pad injection + m1 crash
+
+- **Mission-0 win** = claim-script uid 116 (1 block: `op37 r12=1 →
+  screenL(15)`). Showcase recipe: `set kAV.aG=116` →
+  `eval kAV.bindContext(world)` → `set kAV.cd[1]=true` +
+  `set kAV.cd[2]=true` → l142Tail ticks `runClaimScript` → jC=15.
+- **Post-win routing**: stats `v(458784)` advance → `v(327712)` confirm →
+  `kAj++`+`kBA[14]` persist → `stateL(30)` medal browse → context →
+  `stateL(9)` next briefing. `M_CYCLE` back-out → `stateL(19/2)`.
+- **Injecting pad edges via jdb**: `eval world.pad.e(mask,false)` — the
+  real e() pipeline (eK|=mask → commit → bB). `set pad.bB` is useless —
+  `commit()` rewrites bB from eK every frame.
+- **`scripts.bin` decode** (see Report run-12 script): `by[s][b]` blocks,
+  group key + op stream; `op37 r12` = runArgSub 26-case switch
+  (1=win,2=fail,4/5=kAV arm,0=cd2 latch).
+- **ax42 escape fuse**: kind-1 expiry → `l(13)`+`kBx=58` timeout-fail;
+  collect (player∩W while aJ==2) just removes the fuse — NOT the win.
+- 🔴 **mission-1 crashes on device**: `LevelPack.stampAt` unguarded
+  negative `%` on parallax<0 → ArrayIndexOutOfBounds ~20s into m1
+  gameplay. Reproduced clean ×2 — the m1+ missions can't currently run.

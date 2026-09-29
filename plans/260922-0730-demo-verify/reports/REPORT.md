@@ -1,7 +1,7 @@
 ---
 title: Golden-path verification — devin/land (10a200ec → eb6516f5)
 phase: demo-verify
-status: 290d62c2-golden-path-VERIFIED-hopscotch-roof-checkpoint-combat-ko-respawn
+status: f9bf7230-win-chain-VERIFIED-missionComplete-stats-browse-unlock-m1-stampAt-CRASH
 build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
 date: 2026-09-24
@@ -756,3 +756,104 @@ attack radial (305,215)→(478,252) slashes; KO YES (175,122)→(301,169).
   `d4-ko-roof.png`, `d4-respawn.png`, `d5-f38.png` (melee exchange),
   `d5-f34.png` (standing on '5' strip), menus `d1-title/lsel/brief/dlg/
   spawn/x499/x1379.png`.
+
+# Run 11 — devin/land @ f9bf7230 (slice 310, all-8-missions win conditions) — STOCK build, showcase demo
+
+`./gradlew :android:assembleDebug` @ f9bf7230 → installed, pid 4545.
+
+## Verified on camera (f1-full-demo.mp4, 169.4s + e1 boot/menus)
+
+- ✅ Boot chain (e1): legal card → jC23 attract → jC18 title → jC2 level-select
+  → jC9 briefing → hint card → jC21 → SKIP → jC8 play.
+- ✅ Run east real-input: spawn run cell5 hold → x499→1381, camera tracks,
+  score ticks to 8/100; the x~1400 wall still dead-ends ground traversal.
+- ✅ **ax22 B-lift chain on camera again** (teleport-staged entry; all
+  captures/vaults/climbs are real game FSM + touch edges):
+  (2064,695) S65 → up-cell → W vault (1982,605) → up-cell → E vault
+  (2104,546) → up-cell → S203@(2200,479) → up-cell → S0@(2210,479) roof-B.
+- ✅ Roof run east → KO by the guard pack → jC12 "DO YOU WANT TO RESTART?"
+  → YES → **full level reload** (hint card → dialog → spawn) — in this run
+  no checkpoint respawn was observed; the two roof KOs may have been
+  pre-arming, or slice-310 changed respawn semantics — flag for the lead.
+- ✅ Combat melee on the strip: attack radial lands slashes (red alert
+  border, score 4/100), guard strikes back → KO → banner → YES → reload.
+- ✅ Loop closes cleanly back at spawn, game still running, no crashes/ANRs.
+
+## Harness notes
+
+- **adb input died mid-session AGAIN on a fresh process** — no ANR this
+  time either; it worked for the nav taps (~3min) then froze (lastMove=-1).
+  It's flaky per-process, not just post-ANR. Mouse fallback used for all
+  gameplay.
+- **screenrecord moov corruption**: pulling while the recorder is still
+  writing yields an unplayable mp4 (lost e2 this way; f1 recovered by
+  waiting for the file size to stop growing BEFORE pulling).
+- e1 take mostly a briefing stall (the dead-input gap) — boot/menus valid
+  for ~90s; the gameplay showcase is entirely on f1.
+
+## Artifacts
+- **`f1-full-demo.mp4`** (169.4 s, 23.5 MB) — THE demo take: zone-1 capture
+  → 3 vaults → S203 → climb → roof → KO → YES → reload → SKIP → spawn →
+  strip melee → KO → YES → reload → spawn.
+- `e1-demo-290.mp4` (169 s) — boot→menus→briefing (usable first ~90s).
+- Frames: `f1-vault.png` (mid-vault), `f1-f96.png` (strip melee, alert
+  border), `f1-fight.png`/`f1-ko.png` (restart banner), `f1-f75.png`
+  (post-reload spawn), `e1-menu.png` (title), `e1-vault.png` (briefing).
+
+# Run 12 — devin/land @ f9bf7230 — MISSION COMPLETE chain verified + m1 stampAt CRASH
+
+## Verified end-to-end on camera (w2-winflow.mp4 + w3-m1-crash.mp4)
+
+- ✅ **MISSION COMPLETE screen** — jC=15: "MISSION COMPLETE" title,
+  stat rows ENEMIES KILLED 1 / SILENT KILLS 0 / RETRIES 0 / SOULS 0 /
+  TIME 2:32 / SCORE 200, typewriter footer "NEXT next-mission".
+- ✅ **Win script path** — mission-0's win = script uid 116
+  (`op37 r12=1 → screenL(15)`). Staged: `set kAV.aG=116` +
+  `kAV.bindContext(world)` + `cd[1]=cd[2]=true` → the claim tail runs
+  `runClaimScript` → op fires → jC=15. All downstream 100% real code.
+- ✅ **Post-win routing** — stats confirm (`v(327712)` inside
+  `v(458784)`) → `kAj++` → `kBA[14]=1` persisted (saveFlush) →
+  `stateL(30)` medal browse (EZIO card) → confirm → `stateL(9)`
+  briefing → mission-1 pack loads (ROME/A.D.1486/ESCAPE) → gameplay.
+- ✅ **Unlock persists across relaunch** — fresh boot: YES/NO save
+  prompt → title → CONTINUE/SELECT LEVEL rows → kDa=2 unlocked.
+
+## 🔴 NEW BUG — mission-1 gameplay crashes deterministically
+
+`FATAL EXCEPTION: GLThread — ArrayIndexOutOfBoundsException: length=273;
+index=-1` (first crash) / `index=-57` (clean repro):
+```
+LevelPack.stampAt(LevelPack.kt:79)   // dl[(cx % 21) * 13 + (cy % 13)]
+Level0Renderer.render(Level0Renderer.kt:1174)   // bh3 tile stamp loop
+```
+`stampAt` uses Kotlin `%` (sign-preserving) — when `parallaxX`/`parallaxY`
+go negative the `dl[]` index goes negative → OOB crash. Mission-0 never
+hits it (parallax stays ≥0); mission-1's spawn drives parallax negative
+within ~20s of load. Reproduced on a fully clean path (fresh boot →
+CONTINUE → browse → briefing → tap → gameplay → crash). Mission 1 renders
+a few frames (golden tileset + soldier horde) before dying.
+**Blocks any mission-1+ gameplay verification.**
+
+## Also decoded this run
+
+- ax42 escape fuse at (11410,418): kind-1, binds aw531, 70s countdown;
+  expiry → `screenL(13)` with `kBx=58` = "MISSION FAILED. DIDN'T REACH
+  THE ESCAPE LOCATION IN TIME"; `kBx=56` = "DID NOT CATCH YOUR TARGET"
+  (the iW==2 far-band arm). Both fail-stat variants land on jC=31.
+- Stats-screen input = `v(458784)` advance → `v(327712)` confirm.
+- **Pad injection recipe**: `eval world.pad.e(mask,false)` — writes the
+  real eK edge → commit → bB → `v()` fires. `set pad.bB` does NOT work
+  (commit overwrites bB from eK every frame).
+- Win op table: `runArgSub` r013==1 r12==1 → `screenL(15)` (WIN);
+  r12==4/5 arm/disarm `kAV.Z[0]` (the chase goal). Level0 scripts carry
+  no direct win op — the mission win routes through script uid 116.
+
+## Artifacts
+- **`w2-winflow.mp4`** (124s): gameplay → escape-zone collect →
+  MISSION COMPLETE stats → (injected) NEXT → browse → m1 loading.
+- **`w3-m1-crash.mp4`** (150s): clean relaunch → save prompt → title →
+  level select → CONTINUE → EZIO medal browse card.
+- `w1-winflow.mp4` (149s): escape-fuse arm + collect + fail-stat screens.
+- `w2-mission-complete.png` / `w2-win.png` — the win screen.
+- `w3-m1-gameplay.png` — mission-1 renders (golden tileset + horde).
+- `w3-m1-loading.png`, `w3-ezio-browse.png`, `w1-escapezone.png`.
