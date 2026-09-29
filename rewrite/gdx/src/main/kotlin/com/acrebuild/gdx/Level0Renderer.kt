@@ -1272,17 +1272,21 @@ class Level0Renderer {
         drawFrame(12, 2, tierFrame, 2, 30, 0)
         drawFrame(98, 8 + world.kBL, 0, 22, 30, 0)
 
-        // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
-        // reveals z[12] bar art; sprite undecoded → filled rect (inferred
-        // color) + thin track. FBO is y-up: y6-top bar → VIEW_H-6-20.
-        val mw = (world.player.x1 * 11) / 15
-        batch.setColor(0.1f, 0.1f, 0.1f, 0.8f)
-        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(), 66f, 20f)
-        batch.setColor(0.9f, 0.85f, 0.4f, 1f)
-        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
-                   mw.toFloat(), 20f)
-        batch.setColor(1f, 1f, 1f, 1f)
-        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
+        // HUD sync meter — k.java:4184-4185 (proven): `j.a(cd,43,6,w,20)` is a
+        // setClip (j.java:890) that reveals `z[12]` anim 6 — the meter bar —
+        // to width w = x1*11/15. (The earlier "clip43" read was wrong; there
+        // is no clip43.) Scissor the (43,6,w,20) region — y-up fboY =
+        // VIEW_H-6-20 — then draw anim 6 inside it. J2ME clip coords are
+        // y-down: (43,6,w,20) → ortho-bottom y = 240-26 = 214.
+        val mw = ((world.player.x1 * 11) / 15).coerceAtLeast(0)
+        batch.flush()
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+        Gdx.gl.glScissor(offsetX + 43 * scale,
+                         offsetY + (Level0World.VIEW_H - 26) * scale,
+                         mw * scale, 20 * scale)
+        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 clipped bar
+        batch.flush()
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
 
         // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
         // claim-script entity (`kC`) is active (`ab()`), its cb/cc state
