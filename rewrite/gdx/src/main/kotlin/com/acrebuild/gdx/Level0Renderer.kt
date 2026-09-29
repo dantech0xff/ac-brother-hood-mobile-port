@@ -157,13 +157,23 @@ class Level0Renderer {
         }
     }
 
+    /** Placement/transform lookup — `b.java:96` `aQ = {0,2,1,3,5,7,4,6}`.
+     *  The acpk placement transform bits (and the caller flip word XORed
+     *  with them) are an *index* into this table, not the J2ME
+     *  `Sprite.TRANS_*` constant itself. `b.a(...)` leaf draws apply
+     *  `aQ[i4 & 7]` (b.java:1113/1119) before `drawRegion`. */
+    private val aQTransform = intArrayOf(0, 2, 1, 3, 5, 7, 4, 6)
+
     /**
-     * Draw module `m` of clip `pack` with J2ME `Sprite.TRANS_*` `transform`
-     * (`b` uses `aQ[i & 7]`). J2ME draws the *transformed* image's top-left
-     * at (x, y); rot90/270 swap the box to h×w.
-     * Constants: 0 none, 1 MIRROR_ROT180, 2 MIRROR, 3 ROT180,
-     * 4 MIRROR_ROT270, 5 ROT90, 6 ROT270, 7 MIRROR_ROT90.
-     * FBO space is y-up vs J2ME y-down: screen-CW rotations are CCW here.
+     * Draw module `m` of clip `pack`. `transform` is the placement-bit value
+     * (`i12 & 15`, b.java:934) — mapped through `aQTransform` to the real
+     * J2ME `Sprite.TRANS_*` op. J2ME draws the *transformed* image's
+     * top-left at (x, y); rot90/270 swap the box to h×w.
+     * Ops: 0 none, 1 MIRROR_ROT180 (V), 2 MIRROR (H), 3 ROT180,
+     * 4 MIRROR_ROT270, 5 ROT90 (90 CW), 6 ROT270 (90 CCW), 7 MIRROR_ROT90.
+     * libGDX `draw` rotation is CCW-positive and our ortho is y-up, so a
+     * J2ME clockwise op needs a *negative* rot (ROT90→-90) and a J2ME
+     * counter-clockwise op a positive one (ROT270→+90).
      */
     private fun moduleRegion(pack: Int, m: Int, palette: Int): TextureRegion? {
         val base = (clipModules[pack] ?: clipModules[-pack])
@@ -192,7 +202,7 @@ class Level0Renderer {
     private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
         val src = moduleRegion(pack, m, palette) ?: return
         val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
-        val t = transform and 7
+        val t = aQTransform[transform and 7]
         // shared scratch: setRegion resets the uv box to `src`, flips then
         // mutate only this instance — draw() samples the values immediately.
         val region = drawScratch
@@ -203,10 +213,10 @@ class Level0Renderer {
             1 -> region.flip(false, true)               // MIRROR_ROT180 = V flip
             2 -> region.flip(true, false)               // MIRROR = H flip
             3 -> region.flip(true, true)                // ROT180
-            4 -> { region.flip(true, false); rot = 270f; dw = h; dh = w }
-            5 -> { rot = 90f; dw = h; dh = w }          // ROT90 (screen CW)
-            6 -> { rot = -90f; dw = h; dh = w }         // ROT270
-            7 -> { region.flip(true, false); rot = 90f; dw = h; dh = w }
+            4 -> { region.flip(true, false); rot = 90f; dw = h; dh = w }
+            5 -> { rot = -90f; dw = h; dh = w }         // ROT90 = 90 CW
+            6 -> { rot = 90f; dw = h; dh = w }          // ROT270 = 90 CCW
+            7 -> { region.flip(true, false); rot = -90f; dw = h; dh = w }
         }
         val fy = Level0World.VIEW_H - y - dh
         if (rot == 0f) {
