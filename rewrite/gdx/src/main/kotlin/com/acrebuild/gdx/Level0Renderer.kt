@@ -157,13 +157,23 @@ class Level0Renderer {
         }
     }
 
+    /** Placement/transform lookup — `b.java:96` `aQ = {0,2,1,3,5,7,4,6}`.
+     *  The acpk placement transform bits (and the caller flip word XORed
+     *  with them) are an *index* into this table, not the J2ME
+     *  `Sprite.TRANS_*` constant itself. `b.a(...)` leaf draws apply
+     *  `aQ[i4 & 7]` (b.java:1113/1119) before `drawRegion`. */
+    private val aQTransform = intArrayOf(0, 2, 1, 3, 5, 7, 4, 6)
+
     /**
-     * Draw module `m` of clip `pack` with J2ME `Sprite.TRANS_*` `transform`
-     * (`b` uses `aQ[i & 7]`). J2ME draws the *transformed* image's top-left
-     * at (x, y); rot90/270 swap the box to h×w.
-     * Constants: 0 none, 1 MIRROR_ROT180, 2 MIRROR, 3 ROT180,
-     * 4 MIRROR_ROT270, 5 ROT90, 6 ROT270, 7 MIRROR_ROT90.
-     * FBO space is y-up vs J2ME y-down: screen-CW rotations are CCW here.
+     * Draw module `m` of clip `pack`. `transform` is the placement-bit value
+     * (`i12 & 15`, b.java:934) — mapped through `aQTransform` to the real
+     * J2ME `Sprite.TRANS_*` op. J2ME draws the *transformed* image's
+     * top-left at (x, y); rot90/270 swap the box to h×w.
+     * Ops: 0 none, 1 MIRROR_ROT180 (V), 2 MIRROR (H), 3 ROT180,
+     * 4 MIRROR_ROT270, 5 ROT90 (90 CW), 6 ROT270 (90 CCW), 7 MIRROR_ROT90.
+     * libGDX `draw` rotation is CCW-positive and our ortho is y-up, so a
+     * J2ME clockwise op needs a *negative* rot (ROT90→-90) and a J2ME
+     * counter-clockwise op a positive one (ROT270→+90).
      */
     private fun moduleRegion(pack: Int, m: Int, palette: Int): TextureRegion? {
         val base = (clipModules[pack] ?: clipModules[-pack])
@@ -192,7 +202,7 @@ class Level0Renderer {
     private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
         val src = moduleRegion(pack, m, palette) ?: return
         val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
-        val t = transform and 7
+        val t = aQTransform[transform and 7]
         // shared scratch: setRegion resets the uv box to `src`, flips then
         // mutate only this instance — draw() samples the values immediately.
         val region = drawScratch
@@ -203,10 +213,10 @@ class Level0Renderer {
             1 -> region.flip(false, true)               // MIRROR_ROT180 = V flip
             2 -> region.flip(true, false)               // MIRROR = H flip
             3 -> region.flip(true, true)                // ROT180
-            4 -> { region.flip(true, false); rot = 270f; dw = h; dh = w }
-            5 -> { rot = 90f; dw = h; dh = w }          // ROT90 (screen CW)
-            6 -> { rot = -90f; dw = h; dh = w }         // ROT270
-            7 -> { region.flip(true, false); rot = 90f; dw = h; dh = w }
+            4 -> { region.flip(true, false); rot = 90f; dw = h; dh = w }
+            5 -> { rot = -90f; dw = h; dh = w }         // ROT90 = 90 CW
+            6 -> { rot = 90f; dw = h; dh = w }          // ROT270 = 90 CCW
+            7 -> { region.flip(true, false); rot = -90f; dw = h; dh = w }
         }
         val fy = Level0World.VIEW_H - y - dh
         if (rot == 0f) {
@@ -977,13 +987,19 @@ class Level0Renderer {
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
-        val clip = clips[pack] ?: clips[-pack] ?: return
+        // tileset clips sit at NEGATED keys in `clips` — the `G(4..7)` map
+        // shares positive ids with entity packs (Level0Game.kt load,
+        // k.java:4775-4830), so `clips[+ts]` is the entity clip, not the
+        // tileset. Resolve the tileset via `-pack`, falling back to `pack`
+        // only when the negated key was never loaded.
+        val ts = if (clips.containsKey(-pack)) -pack else pack
+        val clip = clips[ts] ?: return
         if (cell >= clip.objPlaceStart.size) return
         // tile cells sit on a 20px grid: +20 anchor compensation on the
         // mirrored axes (k.java:4476-4490)
         val anchorX = x + if (dX and 1 != 0) 20 else 0
         val anchorY = y + if (dX and 2 != 0) 20 else 0
-        drawObject(pack, cell, anchorX, anchorY, dX)
+        drawObject(ts, cell, anchorX, anchorY, dX)
     }
 
     /** `b.e(b.d(anim,0))` (k.java:2254-2257, proven): the pixel width
@@ -1266,17 +1282,21 @@ class Level0Renderer {
         drawFrame(12, 2, tierFrame, 2, 30, 0)
         drawFrame(98, 8 + world.kBL, 0, 22, 30, 0)
 
-        // HUD sync meter — k.java:5388 (proven): j.a clip (43,6,x1*11/15,20)
-        // reveals z[12] bar art; sprite undecoded → filled rect (inferred
-        // color) + thin track. FBO is y-up: y6-top bar → VIEW_H-6-20.
-        val mw = (world.player.x1 * 11) / 15
-        batch.setColor(0.1f, 0.1f, 0.1f, 0.8f)
-        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(), 66f, 20f)
-        batch.setColor(0.9f, 0.85f, 0.4f, 1f)
-        batch.draw(white, 43f, (Level0World.VIEW_H - 26).toFloat(),
-                   mw.toFloat(), 20f)
-        batch.setColor(1f, 1f, 1f, 1f)
-        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 overlay emblem
+        // HUD sync meter — k.java:4184-4185 (proven): `j.a(cd,43,6,w,20)` is a
+        // setClip (j.java:890) that reveals `z[12]` anim 6 — the meter bar —
+        // to width w = x1*11/15. (The earlier "clip43" read was wrong; there
+        // is no clip43.) Scissor the (43,6,w,20) region — y-up fboY =
+        // VIEW_H-6-20 — then draw anim 6 inside it. J2ME clip coords are
+        // y-down: (43,6,w,20) → ortho-bottom y = 240-26 = 214.
+        val mw = ((world.player.x1 * 11) / 15).coerceAtLeast(0)
+        batch.flush()
+        Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+        Gdx.gl.glScissor(offsetX + 43 * scale,
+                         offsetY + (Level0World.VIEW_H - 26) * scale,
+                         mw * scale, 20 * scale)
+        drawFrame(12, 6, tierFrame, 2, 30, 0)     // k.java:4185 clipped bar
+        batch.flush()
+        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
 
         // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
         // claim-script entity (`kC`) is active (`ab()`), its cb/cc state

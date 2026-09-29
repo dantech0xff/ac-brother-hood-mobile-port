@@ -255,3 +255,11 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   record type 0/25, coords at rec[2]/rec[3].
 - Restart-prompt YES via jdb: `pad.e(327712,false)` — sometimes needs
   two edges (first may land during the banner transition).
+
+### Run-16 — slice-312 fix verified
+
+- menuJc9 now calls `resetPlayerToSpawn()` + clears checkpointSnap on
+  briefing entry — all missions land their pack record on clean entry.
+  Re-verify recipe: fresh boot per mission (carryover positions pollute
+  sequential entries), `stateL(19)` + `kDa=8` + `kBw=N`, two
+  `pad.e(327712)` edges for select→browse→briefing.
