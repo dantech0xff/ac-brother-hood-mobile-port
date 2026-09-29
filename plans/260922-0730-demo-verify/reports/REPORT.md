@@ -986,3 +986,31 @@ is fine; the bug is purely the missing spawn-position reset.
 - `m6-playing.png` — m6 playing post-reload at (17,740)
 
 Status: `46329a09-spawn-wedge-CLASSIFIED-menuJc9-missing-resetPlayerToSpawn-m3-m6-real-m5-carryover`
+
+---
+
+# Run-16 — slice-312 spawn fix VERIFIED: clean entries land pack records
+
+APK @ `e1c58157` (slice 312 — menuJc9 now calls resetPlayerToSpawn +
+clears checkpointSnap), emulator-5554. Same fresh-boot clean-entry
+procedure as Run-15.
+
+## Per-mission verdict (clean entry → coords → plays)
+
+| kAj | Mission | Clean-entry spawn | Pre-fix | Now |
+|---|---|---|---|---|
+| 3 | L4 FLORENCE | **(21,699)** S=0 x1=30 jC=8, stable 10s+ | insta-fail (85,940→1399) | ✅ lands record, plays |
+| 5 | L6 VENICE | **(44,582)** S=0 x1=30 jC=8, stable 10s+ | carried→fell→(85,1143) | ✅ lands record (better than pre-fix fallback), plays |
+| 6 | L7 PANTHEON | **(17,740)** S=0 x1=30 jC=8, stable 10s+ | insta-fail (85,940→1399) | ✅ lands record, plays |
+
+All three clean entries now land the pack's own playerSpawn record on
+first gameplay — no insta-fail, no wedge, no carryover. m5 even improved
+on its pre-fix behavior (it used to fall from (85,940) and land wherever
+a floor caught it at (85,1143); now it starts at the designed (44,582)
+rooftop spawn). The spawn bug is dead.
+
+## Artifacts
+- `m3-fixed-spawn.png` `m5-fixed-spawn.png` `m6-fixed-spawn.png` —
+  post-fix clean-entry gameplay at the record spawns.
+
+Status: `e1c58157-slice312-spawn-fix-VERIFIED-m3-21x699-m5-44x582-m6-17x740`
