@@ -3608,7 +3608,15 @@ class Level0World(
         // entity spawn — run on their `j.g` ticks; every other stage is
         // a resource load the converter already emitted.
         if (jG == 3L) loadPackI(kAj)
-        if (jG == 164L) { spawnEntities(); postSpawn() }
+        if (jG == 164L) {
+            // `G(164)=d(false)` (k.java:4741+) — mission-entry spawn is a
+            // FRESH `new i` at the pack record, never a checkpoint restore.
+            // reload()'s order (spawnEntities→statsReset→resetPlayerToSpawn→
+            // postSpawn) is the same fresh path; skipping resetPlayerToSpawn
+            // left the player at his previous position → m3/m6 insta-fail.
+            checkpointSnap = null; kG = 0; kBA[16] = 0
+            spawnEntities(); statsReset(); resetPlayerToSpawn(); postSpawn()
+        }
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
             kBg = 0                                  // bG = 0
             kBA[16] = 0                              // a(bA,16,(short)0)
