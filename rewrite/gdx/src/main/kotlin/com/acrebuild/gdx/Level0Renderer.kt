@@ -202,6 +202,12 @@ class Level0Renderer {
     private fun drawModule(pack: Int, m: Int, x: Int, y: Int, transform: Int, palette: Int = 0) {
         val src = moduleRegion(pack, m, palette) ?: return
         val (w, h) = (clipDims[pack] ?: clipDims[-pack])!![m]
+        // placement transform indexes the aQ table (b.java:96). The leaf does
+        // a bit0<->bit1 normalize first (b.java:1039-1045), but that normalize is
+        // paired with its own base-image layout — our decoded PNGs are already in
+        // display orientation, so applying it here double-swaps the flips and
+        // breaks the composite (verified: D-pad renders a pinwheel, not the
+        // correct v^<> arrows). Keep aQ[transform] for our base convention.
         val t = aQTransform[transform and 7]
         // shared scratch: setRegion resets the uv box to `src`, flips then
         // mutate only this instance — draw() samples the values immediately.
