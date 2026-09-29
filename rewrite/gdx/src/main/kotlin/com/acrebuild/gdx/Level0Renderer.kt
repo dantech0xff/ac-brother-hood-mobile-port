@@ -977,13 +977,19 @@ class Level0Renderer {
     /** `b.java:915` composite-sprite draw for one tile cell. */
     private fun drawTileCell(pack: Int, cell: Int, x: Int, y: Int, dX: Int) {
         if (cell == 255) return
-        val clip = clips[pack] ?: clips[-pack] ?: return
+        // tileset clips sit at NEGATED keys in `clips` — the `G(4..7)` map
+        // shares positive ids with entity packs (Level0Game.kt load,
+        // k.java:4775-4830), so `clips[+ts]` is the entity clip, not the
+        // tileset. Resolve the tileset via `-pack`, falling back to `pack`
+        // only when the negated key was never loaded.
+        val ts = if (clips.containsKey(-pack)) -pack else pack
+        val clip = clips[ts] ?: return
         if (cell >= clip.objPlaceStart.size) return
         // tile cells sit on a 20px grid: +20 anchor compensation on the
         // mirrored axes (k.java:4476-4490)
         val anchorX = x + if (dX and 1 != 0) 20 else 0
         val anchorY = y + if (dX and 2 != 0) 20 else 0
-        drawObject(pack, cell, anchorX, anchorY, dX)
+        drawObject(ts, cell, anchorX, anchorY, dX)
     }
 
     /** `b.e(b.d(anim,0))` (k.java:2254-2257, proven): the pixel width
