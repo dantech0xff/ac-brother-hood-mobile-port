@@ -27,6 +27,21 @@ Nguyên tắc xuyên suốt:
 - Không xấp xỉ: cơ chế gameplay port theo semantic đã mine, asset dùng bản
   decode gốc (không vẽ lại), timing giữ đúng tick/fixed-point gốc.
 
+## Screenshots — bản port chạy trên Android
+
+Bản port `rewrite/` (Kotlin + LibGDX) chạy trên Android emulator, chụp theo
+luồng boot → menu → briefing → gameplay (mission-0, Rome Colosseum):
+
+| Title | Main menu |
+|---|---|
+| ![Title screen](docs/screenshots/title-screen.png) | ![Main menu](docs/screenshots/main-menu.png) |
+| **Mission briefing** | **Tutorial dialog** |
+| ![Mission briefing](docs/screenshots/mission-briefing.png) | ![Tutorial dialog](docs/screenshots/tutorial-dialog.png) |
+| **Gameplay — spawn** | **Gameplay — traversal** |
+| ![Gameplay spawn](docs/screenshots/gameplay-spawn.png) | ![Gameplay balcony](docs/screenshots/gameplay-balcony.png) |
+| **Gameplay — combat** | |
+| ![Gameplay combat](docs/screenshots/gameplay-combat.png) | |
+
 ## Điểm vào nhanh
 
 - [Báo cáo tổng quan dự án và PDR](docs/project-overview-pdr.md)
