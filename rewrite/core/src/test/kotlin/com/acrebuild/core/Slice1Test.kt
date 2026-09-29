@@ -28401,3 +28401,43 @@ class Slice307Test {
 
 
 
+
+
+class Slice308Test {
+    /** m7 capstone leg L — arena approach (proven end-to-end):
+     *  pillar top (349,540) → run east + jump → catch sky-lift
+     *  uid225@(723,521) → S235/S236 ride homing → mid-ride M_UP jump-release
+     *  → arc lands on band top y560 → run east → x1040 40px step vault →
+     *  arena floor y519 → uid303 win-fuse claim fires (kC=303 → script 304
+     *  consumes boss-3 uid307 intro). Asserts each stage marker. */
+    @Test fun mission7ArenaApproach() {
+        val w = world(aj = 7)
+        w.stateL(8); settleIntro(w)
+        val p = w.player
+        p.gJ = 5
+        driveDuelWin300(w, p)
+        driveRopeClimb300(w, p)
+        val rope = p.bM; p.bM = null; rope?.bM = null; p.aA = 0
+        p.ak = 349; p.al = 540; p.N = 349 shl 8; p.av = false; p.setAnim(12)
+        var liftCaught = false; var bandTop = false
+        var arenaFloor = false; var fuseFired = false
+        for (t in 0..1200) {
+            w.pad.e(if (w.kC != null) Pad.M_CONTEXT
+                    else if (p.S == 358) { if (p.av) Pad.M_RIGHT else Pad.M_UP }
+                    else if (p.ac != null) Pad.M_UP
+                    else if (p.aZ && p.ak > 990 && p.al in 540..600) Pad.M_RIGHT or Pad.M_UP
+                    else if (p.aZ && p.ak > 1200) 0
+                    else if (p.aZ) Pad.M_RIGHT
+                    else 0)
+            w.tick(emptyList())
+            if (!liftCaught && p.ac?.ax == 66) { liftCaught = true; println("STAGE lift t=$t @(${p.ak},${p.al}) uid=${p.ac!!.aw}") }
+            if (!bandTop && p.aZ && p.al in 555..590 && p.ak > 700) { bandTop = true; println("STAGE band t=$t @(${p.ak},${p.al})") }
+            if (!arenaFloor && p.aZ && p.ak > 1040 && p.al < 540) { arenaFloor = true; println("STAGE arena t=$t @(${p.ak},${p.al})") }
+            if (!fuseFired && (w.kC?.aw == 303 || w.npcs.none { it.aw == 307 })) { fuseFired = true; println("STAGE fuse t=$t @(${p.ak},${p.al}) kC=${w.kC?.aw}") ; break }
+        }
+        assertTrue(liftCaught, "sky-lift uid225 catch from pillar-top launch")
+        assertTrue(bandTop, "mid-ride jump-release lands on band top y560")
+        assertTrue(arenaFloor, "x1040 step vault onto arena floor")
+        assertTrue(fuseFired, "win-fuse uid303 claim fires + boss-3 intro consumed")
+    }
+}
