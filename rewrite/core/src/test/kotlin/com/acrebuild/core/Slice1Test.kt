@@ -17224,6 +17224,24 @@ class Slice179Test {
     @Test fun `stampAt is -1 on grounded packs`() {
         assertEquals(-1, world().level.stampAt(1, 1))
     }
+
+    /** bh3 wraps negative rows above the world back positive
+     *  (`i14=i13%13; if(i14<0)i14+=13`, k.java:4434-4438, proven):
+     *  a negative parallax-y must fold `cy%13` into [0,13) instead of
+     *  indexing `dL` out of bounds (the m1-spawn crash). */
+    @Test fun `stampAt wraps negative rows`() {
+        val w = world(aj = 1)
+        tickPlay(w, 2)
+        val dl = w.level.flyingGrid!!
+        // pick an in-range positive cell and prove its negative-row
+        // alias resolves to the same index instead of throwing.
+        val bx = 7; val by = 4
+        val want = dl[bx * 13 + by]
+        assertEquals(want, w.level.stampAt(bx, by - 13))  // cy-13 ≡ cy mod 13
+        // a wildly negative cy stays in-bounds rather than crashing.
+        w.level.stampAt(0, -200)
+        w.level.stampAt(21, -40)
+    }
 }
 
 class Slice180Test {

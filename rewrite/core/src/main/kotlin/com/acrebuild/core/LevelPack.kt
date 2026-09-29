@@ -73,10 +73,20 @@ class LevelPack private constructor(
 
     /** `dL` stamp lookup for a LOGICAL cell (renderer bh3 arm): the et
      *  index `dL[cx%21][cy%13]` resolves to, or -1 when unset / pointing
-     *  past the et plane (`g()`'s own `i4<0||i4>=len → 0` guard). */
+     *  past the et plane (`g()`'s own `i4<0||i4>=len → 0` guard).
+     *  bh3 keeps negative rows (the wrap band above the world): the
+     *  original folds them back positive — `i14=i13%13; if(i14<0)i14+=13`
+     *  (k.java:4434-4438, proven). Kotlin `%` keeps the sign like Java,
+     *  so the same fold is required or a negative parallax-y indexes
+     *  `dL` out of bounds. Negative cols are folded identically for
+     *  safety (the render loop only feeds cx≥0). */
     fun stampAt(cx: Int, cy: Int): Int {
         val dl = flyingGrid ?: return -1
-        val idx = dl[(cx % 21) * 13 + (cy % 13)]
+        var cyMod = cy % 13
+        if (cyMod < 0) cyMod += 13      // k.java:4434-4438
+        var cxMod = cx % 21
+        if (cxMod < 0) cxMod += 21
+        val idx = dl[cxMod * 13 + cyMod]
         return if (idx < 0 || idx >= et.cells.size) -1 else idx
     }
 
