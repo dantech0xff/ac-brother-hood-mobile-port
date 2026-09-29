@@ -1368,7 +1368,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.aj = 0; p.ah = 0; p.ai = 0; p.ag = 0
                 if (pad.u(Pad.M_UP) ||
                     (if (p.av) pad.u(Pad.M_TAP_L) else pad.u(Pad.M_TAP_R))) {
-                    if (p.ac != null && p.av != (p.ac!!.ak < p.ak)) {
+                    // simple g.java:L1748-1754 (proven — structured folds
+                    // the ac==null arm wrongly): release fires whenever
+                    // `ac==null` OR facing away from the claim.
+                    if (p.ac == null || p.av != (p.ac!!.ak < p.ak)) {
                         p.setAnim(235)
                         p.bindAc(null)                                   // ac = null
                         p.releaseAe()                                    // G()
