@@ -194,8 +194,12 @@ fun world(charmap: ByteArray? = null, aj: Int = 0):
             clips[-12] = Clip.load(asset("level0/tileset-12/clip.acpk"))
         }
     // pack-14 entry-<aj+1> level-string table (line-delimited emit)
+    // j.g(i) slot fidelity (same fix as the gdx loader, k.d→j.g): empty
+    // pack slots are real table entries — filtering shifts every later
+    // index (slice-316 root cause of the invisible bubbles).
     val levelStrings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
-        .readText().split("\n").filter { it.isNotEmpty() }
+        .readText().split("\n")
+        .let { if (it.last().isEmpty()) it.dropLast(1) else it }
         .map { it.replace("\\n", "\n") }
     return Level0World(level, clips, DeterministicRandom(1L),
         levelStrings = levelStrings, charmap = charmap,
@@ -212,7 +216,8 @@ fun world(charmap: ByteArray? = null, aj: Int = 0):
  *  gdx launcher assembles in `missionPack`. */
 private fun missionPackFor(aj: Int): MissionPack {
     val strings = java.io.File("../generated/level$aj/strings-${aj + 1}.txt")
-        .readText().split("\n").filter { it.isNotEmpty() }
+        .readText().split("\n")
+        .let { if (it.last().isEmpty()) it.dropLast(1) else it }
         .map { it.replace("\\n", "\n") }
     return MissionPack(
         LevelPack.load(asset("level$aj/level$aj.aclv")), strings,
@@ -8702,7 +8707,7 @@ class Slice69AdTest {
     @Test fun `wait mode holds while claim is active`() {
         val w = world(); val e = bubbler()
         val q = e.cQ!!
-        q[5] = 4; q[6] = 6; q[7] = 1; q[3] = 10
+        q[5] = 7; q[6] = 8; q[7] = 1; q[3] = 10
         w.kC = activeClaimer()
         w.npcFsm.tickBubble(e, w)
         assertNotNull(e.cQ)                           // survived — filled page
@@ -8713,10 +8718,10 @@ class Slice69AdTest {
     @Test fun `refill wraps text and arms the draw descriptor`() {
         val w = world(); val e = bubbler()
         val q = e.cQ!!
-        q[5] = 4; q[6] = 4; q[2] = -1; q[3] = 30
+        q[5] = 7; q[6] = 7; q[2] = -1; q[3] = 30
         w.kO = 60; w.kP = 40
         w.npcFsm.tickBubble(e, w)
-        // bK(): cR = k.d(1+aj, 4) + '\n'; 2 wrapped lines at 20 ch/line →
+        // bK(): cR = k.d(1+aj, 7) + '\n'; 2 wrapped lines at 20 ch/line →
         // q[4]=2 clamped to q[1]-q[0]=1 (verbatim L10 quirk)
         assertEquals("KEEP YOUR EYES OPEN, SOLDIER!\n", e.cR)
         assertEquals(0, q[0]); assertEquals(1, q[4]); assertEquals(1, q[1])
@@ -8751,7 +8756,7 @@ class Slice69AdTest {
     @Test fun `last string teardown arms cd flags on active claim`() {
         val w = world(); val e = bubbler()
         val q = e.cQ!!
-        q[5] = 4; q[6] = 4; q[2] = -1; q[3] = 2; q[9] = 1
+        q[5] = 7; q[6] = 7; q[2] = -1; q[3] = 2; q[9] = 1
         w.kC = activeClaimer()
         w.npcFsm.tickBubble(e, w)                       // refill (2 lines)
         // drain timer+pages until teardown
@@ -8767,7 +8772,7 @@ class Slice69AdTest {
         val w = world(); w.kAj = 1                     // MISSION_BH[1]==3
         val e = bubbler()
         val q = e.cQ!!
-        q[5] = 4; q[6] = 4; q[2] = -1; q[3] = 30
+        q[5] = 7; q[6] = 7; q[2] = -1; q[3] = 30
         e.av = true                                   // facing flip (suppressed by bh3)
         w.kO = 0; w.kP = 0
         e.setPositionPx(200, 40)                      // al-kP-70-h < 0 → tailUp
