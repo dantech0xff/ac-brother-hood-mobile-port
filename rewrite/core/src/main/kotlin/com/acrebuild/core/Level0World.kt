@@ -1722,6 +1722,12 @@ class Level0World(
         }
         return intArrayOf(lines) + starts.toIntArray()
     }
+    /** `k.y.k(n)` (b.java:1609, proven): real y-font line metric
+     *  `n*J + (n-1)*K` — the ad() bubble panel's height input; the
+     *  interface default (n*10) under-sized the panel by ~14px on a
+     *  3-line page so the bottom line clipped under the border. */
+    override fun dialogAdvance(lines: Int): Int =
+        footerFont?.linesHeight(lines) ?: (lines * 10)
     /** `k.ac` — the same camera view rect as `camRect` (aliased;
      *  ax35's off-screen containment test reads it via this name). */
     override val kAc: IntArray? get() = camRect
