@@ -297,3 +297,110 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - NEW GAME path: level-select row-1 → EASY → EZIO card (confirm via
   pad.e(327712), the arrows are back/browse) → story card → briefing.
 - Prop smash: attack radial works on vases — orb drops + score bump.
+
+## Run-19 — desktop LWJGL3 jdb + the m0 claim/bubble site
+- Desktop session: `cd /tmp/headwt/rewrite && ./gradlew :lwjgl3:run` —
+  window "AC Rewrite Spike (dev)", JDWP **5005** (suspend=n). Breakpoint
+  thread is "main" (not GLThread — desktop runs the world tick on main).
+- jdb fd lifetime: `exec 3>fifo` dies with the exec call — the WHOLE bp→
+  set→run sequence must live inside ONE exec call; poll jfoT for
+  'Breakpoint hit'/'will be instance'. A second writer can inject into
+  the same fifo while the first session holds fd3 open.
+- Field watchpoints work: `watch com.acrebuild.core.Level0World.bubbleDraw`
+  → suspends at setBubbleDraw() bci=2 BEFORE the store; `next` steps into
+  `NpcFsmKt.tickBubble` (static — `this` dies, use locals `w`/`e`/`q`).
+  `w.bubbleDraw.x` etc readable there; `q` = the entity's cQ int[10].
+- m0 claim site (ax5 uid234, rec f=[5,234,3650,721,0,8,0,0,1,327,0,0,
+  24,150,...]): W strip = pos+(f12,f13) = x3650-3674 y721-871 INSIDE the
+  balcony shaft. Natural reach = fall off the balcony west edge; for
+  verification just teleport the player to (3662,790) — claim fires.
+  Fires script 327 → camera pan + Altaïr-vs-guard + SKIP strip; the
+  player DIES right after (real melee, input-suspended during claim).
+- jC=12 YES banner on desktop: mouse taps at the YES row work;
+  pad.e(327712) worked once then went dead — prefer mouse; two taps
+  ~1s apart. jC=21 intro card needs the SKIP strip tap (848,565), not
+  pad edges.
+
+## Run-20 — the jdb suspend-leak + emulator tap recipe
+- **jdwp forward binds to a PID — after force-stop/relaunch re-run
+  `adb forward tcp:8888 jdwp:<new pid>` or jdb attaches to a dead
+  endpoint** ("Nothing suspended"/evals all null).
+- **Suspend-leak**: every bp-hit suspends GLThread; if the jdb session
+  dies mid-suspend the count PERSISTS in the VM (thread shows 'running'
+  in `threads` but never ticks — bp never hits, taps queue forever,
+  screen static). Fix inside ONE session: `threads` →
+  `resume <GLThread-id>` ×4-6 → then `stop in` works again. Or
+  force-stop. Keep every suspended window <2s — >5s triggers ANR
+  "isn't responding" (shows on screenrecord — user-forbidden overlay).
+- One-shot edge pattern that avoids the leak: bp→eval→clear→run all
+  in one <2s window (`/tmp/edge.sh`).
+- **Real taps DO work** once the thread is free — `input tap` on menu
+  rows, `input swipe x y x y <ms>` as a hold for the D-pad
+  (right=view~97,185; up=~77,118; attack btn=view~335,185;
+  SKIP pill=view 349,198→dev 1870,891). Device coords = view*4.5 + x300.
+- Long teleports kill via camera-lag OOB — hop ~350px per jdb set.
+
+## Run-21 — m2 Florence combat (pad/menu notes)
+
+- **jC=12 restart-confirm**: `pad.e(327712)` edges often get eaten —
+  the jC==12 path first flushes held pad bits (`kJT!=0 → skip frame`),
+  and the confirm arm is `pad.v(M_CONTEXT)||rowTap` then kBw arming.
+  Two edges usually work, but when pointer+edges are flaky, call the
+  dispatcher directly: `eval this.menuItem(14)` (14=YES row id, 15=NO)
+  in bp-context → `reloadCheckpoint(true)` immediately (jC 12→8).
+- **Pointer dead during jC=12**: taps DO work when alive — YES row is
+  dev ~(1025,590) on the banner. But pointer flakiness is per-process.
+- **m2 fightable soldier**: spawn-adjacent guard ~x946 wall-clings —
+  he perches on the vine strip cycling top/mid, never grounds for
+  melee. The ROOF soldier at ~(968,1876) DOES fight: hop-teleport
+  (753,1925)→(880,1900)→(968,1876), then real attack taps. Fight
+  gives slash arcs, overhead health bar, orb drops, real damage both
+  ways — soldier counters kill if you just spam.
+- **Checkpoint-snap hazard**: crossing the floating C ring mid-roof
+  apparently poisoned the respawn — later reloads insta-died back to
+  jC=12. If a reload loop appears, suspect a bad checkpoint snap.
+- **MenuItem row ids** (Level0World.kt :3140+ dispatch): 11=RESUME,
+  12=RESTART, 14=YES, 15=NO — callable via jdb eval as a last resort
+  when the edge chain won't confirm.
+
+## Run-22 — bdf117d3 demo (jC=20 exit, combat notes)
+
+- **jC=20 story intro exits via M_CYCLE (131072)**, or M_PAUSE once
+  kCu==5 (the scrollPanel stage). Taps/65568 only rewind the
+  typewriter — the intro loops otherwise and eats recording time.
+- **jC=21 dlgU=9 SKIP pill**: dev(1870,891), pointer-only, two taps.
+- **Roof terrace soldier (m0 ~x2150,y~770)**: clinch melee is lethal —
+  he wins every blind attack-spam exchange (blocks/counters). x1=90
+  health set still lost. For a scripted kill shot, pre-stage health or
+  accept honest losses. He never leaves his ledge lip — S25 ledge-fall
+  can't be triggered by push combat.
+- **Restart replays jC=21 intro dialog** — expected; SKIP it again.
+- **YES at jC=12**: `menuItem(14)` in bp-context (Run-21 note) is more
+  reliable than taps/edges when pointer is flaky.
+- Take budget: jC=20 auto-play + menu edges consumed ~100s of take 1 —
+  start the gameplay take BEFORE the briefing completes.
+
+## Run-23 — ax5 claim trigger without travel (entity-move trick)
+
+- **CORRECTED (Run-24)**: the ax5's `W` rect is computed ONCE in
+  `initMissionLogic` (`e.W[0]=e.ak; e.W[2]=W[0]+rf(12)` — NpcFsm.kt:2942)
+  and is NOT re-derived per tick. The full working recipe needs BOTH:
+  `ak`/`al` move the entity into the tick-active window (its
+  `tickMissionLogic` is gated by position — at x3650 it never ticks near
+  spawn, so eventBind never runs), AND `W[0..3]` provides the overlap
+  rect `eventBind` checks. Set all six in one suspend:
+  `ak=75, al=880, W=[70,880,110,1000]` over the spawn player (80,940) →
+  `run` → claim fires within ~1s → script 327 stages + cQ bubble plays.
+  Single-field scripts race the suspend landing — retry or send a
+  `print` first so later `set`s land inside the suspended window.
+- The m0 street is NOT continuous: a waterfall/canal kill-strip runs
+  ~x3400-3700 at street level (y~1095) — teleport hops along the road
+  die there. Approaching the balcony W zone needs the roofline or the
+  entity-move trick.
+- Claim re-arm is per-LOAD not per-reload: after the claim has played
+  once, `reloadCheckpoint(true)` may restore a post-claim snap where
+  the entity's zone is already spent — force a fresh mission entry
+  (pm clear or level-select) to re-fire.
+- Field races on multi-field jdb sets: `set e.X = v` lines inside one
+  suspend can still race ("Thread not suspended" → value=null) —
+  verify each field after (print), retry misses.
