@@ -1014,3 +1014,89 @@ rooftop spawn). The spawn bug is dead.
   post-fix clean-entry gameplay at the record spawns.
 
 Status: `e1c58157-slice312-spawn-fix-VERIFIED-m3-21x699-m5-44x582-m6-17x740`
+
+---
+
+# Run-17 — m2–m7 play-through verification @ f7e868da (slice 314)
+
+APK @ `f7e868da` (slice 314 — text-panel + typewriter + medal icons,
+render/dead-path only), emulator-5554, ONE process, sequential mission
+entries via the real chain (stateL(19) → kBw=N → browse → briefing →
+touch → gameplay) — post-slice-312 this lands the pack record spawn.
+Device `screenrecord` per mission; jdb bp-context evals for state.
+
+## Per-mission play-through verdict
+
+| kAj | Mission | Boots? | Spawn | Plays? | Deaths | Crash |
+|---|---|---|---|---|---|---|
+| 2 | L3 FLORENCE — kill Lucrezia | ✅ | record | ✅ ran east + orb 4/100 + jump over wall | none (guard blocked x~946) | none |
+| 3 | L4 FLORENCE — kill Juan Borgia | ✅ | (21,699) | ✅ runs/jumps/restart ×2 | spike pit off the east ledge ×2 (real hazard) | none |
+| 4 | L5 ROME — escape (FLYING) | ✅ | ax25 glider | ✅ sustained canyon glide ~20s, steered | descent into soldier horde → KO (real) | none |
+| 5 | L6 VENICE — kill Octavien | ✅ | (44,582) | ✅ ran east on roofs | canal fall → KO (real hazard) | none |
+| 6 | L7 PANTHEON — kill Micheletto | ✅ | (17,740) | ✅ ran east + orb 5/100 | none (eagle-statue wall needs up-route) | none |
+| 7 | L8 COLOSSEUM — kill Borgia (boss) | ✅ | (579,1740) | ✅ ran east ~1500px through aqueduct | none | none |
+
+**All six missions boot into gameplay on their pack record spawn and
+are playable** — zero insta-fails, zero FATAL/AIOOBE/NPE app crashes.
+Every death observed was a real level hazard encountered while running
+(spike pit, canal water, the canyon soldier horde) — the authentic
+gauntlet design, not placement bugs. Mission-type coverage: grounded
+(m2/m3/m5/m6), flying ax25 (m4), boss arena (m7).
+
+Caveats: input died mid-m6 (the recurring per-process pointer flakiness —
+pad.e()/mouse fallback used; not a game defect). The m4 record ends on
+the restart banner so the final ~30s shows the KO loop, not more flight.
+Manual traversal couldn't clear every early hazard on first tries —
+routes exist (headless bot won all 8) but need real play.
+
+## Artifacts
+- `pt-m2.mp4` `pt-m3.mp4` `pt-m4.mp4` `pt-m5.mp4` `pt-m6.mp4` `pt-m7.mp4`
+  (~140-150s each) — briefing→spawn→gameplay per mission.
+- `pt-m2-roofs.png` `pt-m2-run.png` `pt-m3-spikes.png` `pt-m4-glider.png`
+  `pt-m4-horde.png` `pt-m5-canal.png` `pt-m6-eagle.png` `pt-m7-run.png`
+
+Status: `f7e868da-m2-m7-all-boot-play-no-crash-real-hazard-deaths-only`
+
+---
+
+# Run-18 — slice-315 demo @ 3344539d (headwt): golden path + prop smash + KO/restart
+
+APK built from `/tmp/headwt/rewrite` @ `3344539d` (slice 315 — the
+i.ad() speech-bubble draw path + all prior fixes), emulator-5554
+(pid 19260). Device `screenrecord` ×2; real input where alive, pad.e()
+edges for menus/dialog (labeled).
+
+## Beats verified on camera
+- ✅ Boot → YES/NO save prompt → title → level-select → NEW GAME →
+  EASY/NORMAL difficulty → EZIO card → **story intro card**
+  ("IN AN ATTACK ON THE AUDITORE FAMILY VILLA…" full text render) →
+  briefing "ROME/COLOSSEUM/KILL WOLFMEN" → two hint pages → gameplay
+- ✅ Run east — camera tracks, score 0→4/100; spawned at level0 record
+- ✅ **Destructible prop smash** — amphora vase broken → orb drop →
+  score 8/100 → 12/100
+- ✅ Wall-terrace climbing — vine ledges (partial hopscotch area)
+- ✅ **Pause menu** — RESUME/RESTART/OPTIONS/HELP/MAIN MENU/EXIT rows
+  render over live gameplay (accidental pause, kept — bonus coverage)
+- ✅ KO → "DO YOU WANT TO RESTART?" banner (YES/NO) → YES → reload →
+  respawn at spawn, score reset — **loop closes clean**
+- ℹ️ No speech bubble seen — expected on m0 (the new i.ad() path is
+  armed but no bubble-guard fired it this run).
+
+## Notes
+- The KO was staged via a `jtp5` teleport into a kill volume (assist —
+  labeled), not a guard strike; guard melee untested this run (pointer
+  flakiness kept interrupting combat approach).
+- Intro dialog dismiss quirk: jC=21 dlgU=9 — pad edges don't dismiss;
+  the hint pages are jC=9's own load flow and advance on M_CONTEXT
+  edges (65568). The 327712 mask opens PAUSE from gameplay (jC=14) —
+  M_CYCLE (131072) backs out.
+- Input died intermittently mid-run (the per-process pointer flakiness);
+  recovered by waiting and re-tapping.
+
+## Artifacts
+- `head-m0.mp4` (150s) — boot→menus→spawn→run→vase-smash→climb→pause menu
+- `head-m0b.mp4` (150s) — climbing→KO banner→restart→respawn
+- `head-m0-spawn.png` `head-m0-vase-smash.png` `head-m0-restart.png`
+  `head-m0-pause.png` `head-m0-banner-hd.png`
+
+Status: `3344539d-slice315-demo-VERIFIED-goldenpath-propsmash-pause-ko-restart-nocrash`

@@ -115,8 +115,6 @@ class Pad {
     var edge: Int get() = bB; set(v) { bB = v }
     var held: Int get() = bC; set(v) { bC = v }
     var released: Int get() = eM; set(v) { eM = v }
-    /** double-press window remainder for g.S25 checks (`aA`, inferred). */
-    val aA: Int get() = if (eP < 5) 5 - eP else 0
     val tap: Int get() = if (eP < 5 && bB == eO) bB else 0
 
     companion object {

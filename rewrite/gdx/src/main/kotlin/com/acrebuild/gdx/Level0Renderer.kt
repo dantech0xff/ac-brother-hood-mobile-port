@@ -686,6 +686,84 @@ class Level0Renderer {
         }
     }
 
+    /** `j.b/j.a` rounded-rect fill + outline (arc 10) — quarter-disc
+     *  corners approximated per-scanline. */
+    private fun fillRoundAr(x: Int, y: Int, w: Int, h: Int, arc: Int, argb: Int) {
+        fillAr(x + arc, y, w - 2 * arc, h, argb)
+        fillAr(x, y + arc, w, h - 2 * arc, argb)
+        for (dy in 0 until arc) {
+            val dx = Math.sqrt((arc * arc - (dy + 0.5) * (dy + 0.5))
+                .coerceAtLeast(0.0)).toInt()
+            fillAr(x + arc - dx, y + arc - 1 - dy, dx, 1, argb)
+            fillAr(x + w - arc, y + arc - 1 - dy, dx, 1, argb)
+            fillAr(x + arc - dx, y + h - arc + dy, dx, 1, argb)
+            fillAr(x + w - arc, y + h - arc + dy, dx, 1, argb)
+        }
+    }
+
+    private fun outlineRoundAr(x: Int, y: Int, w: Int, h: Int, arc: Int, argb: Int) {
+        fillAr(x + arc, y, w - 2 * arc, 1, argb)
+        fillAr(x + arc, y + h - 1, w - 2 * arc, 1, argb)
+        fillAr(x, y + arc, 1, h - 2 * arc, argb)
+        fillAr(x + w - 1, y + arc, 1, h - 2 * arc, argb)
+        for (dy in 0 until arc) {
+            val dx = Math.sqrt((arc * arc - (dy + 0.5) * (dy + 0.5))
+                .coerceAtLeast(0.0)).toInt()
+            fillAr(x + arc - dx, y + arc - 1 - dy, 1, 1, argb)
+            fillAr(x + w - arc + dx - 1, y + arc - 1 - dy, 1, 1, argb)
+            fillAr(x + arc - dx, y + h - arc + dy, 1, 1, argb)
+            fillAr(x + w - arc + dx - 1, y + h - arc + dy, 1, 1, argb)
+        }
+    }
+
+    /** `i.a(IIIII)` (i.java:20767, proven): scanline-filled wedge — for
+     *  each y in [y8,y10], a black+white span between the lerped edges
+     *  (x6→x9) and (x7→x9); apex collapses to a point at y10. */
+    private fun bubbleWedge(x6: Int, x7: Int, y8: Int, x9: Int, y10: Int) {
+        val step = if (y8 <= y10) 1 else -1
+        var r12 = y8
+        while (if (y8 <= y10) r12 <= y10 else r12 >= y10) {
+            val r02 = x6 + ((r12 - y8) * (x9 - x6)) / (y10 - y8)
+            val r03 = x7 + ((r12 - y8) * (x9 - x7)) / (y10 - y8)
+            val lo = minOf(r02 - 1, r03 + 1)
+            fillAr(lo, r12, Math.abs((r03 + 1) - (r02 - 1)) + 1, 1,
+                   -0x1000000)
+            val lo2 = minOf(r02, r03)
+            fillAr(lo2, r12, Math.abs(r03 - r02) + 1, 1, -1)
+            r12 += step
+        }
+    }
+
+    /** `i.ad()` draw (i.java:20649-20700, proven): consumes `w.bubbleDraw`
+     *  — bh3 `k.f` is a 120-wide white fill + black square outline at
+     *  (x,y); non-bh3 `j.b`/`j.a` is a white roundrect fill + black
+     *  roundrect outline at (x-20, y, 160, h). The tail wedge arms at the
+     *  edge facing the entity (bottom normally, top when `tailUp`
+     *  flipped the bubble below the entity); `flip` moves it to the
+     *  right edge. Wrapped page text centers at `textX` on font `y`
+     *  variant 1 (`k.y.l(1)`), align 17 = HCENTER|TOP. */
+    private fun drawBubble(w: Level0World) {
+        val b = w.bubbleDraw ?: return
+        if (b.bh3) {
+            fillAr(b.x, b.y, 120, b.h, -1)
+            outlineAr(b.x, b.y, 120, b.h, -0x1000000)
+        } else {
+            fillRoundAr(b.x - 20, b.y, 160, b.h, 10, -1)
+            outlineRoundAr(b.x - 20, b.y, 160, b.h, 10, -0x1000000)
+        }
+        val tailY = if (b.tailUp) b.y else b.y + b.h
+        val apexY = tailY + (if (b.tailUp) -10 else 10)
+        if (b.flip) bubbleWedge(b.x + 90, b.x + 100, tailY, b.x + 110, apexY)
+        else bubbleWedge(b.x + 20, b.x + 30, tailY, b.x + 10, apexY)
+        if (b.text.isNotEmpty() && b.lines > 0) {
+            val u = fontY.wrap(b.text, 120)
+            fontY.l(1)
+            fontY.drawWrapped(b.text, u, b.textX, b.textY,
+                              b.pageStart, b.lines, 17, -1)
+            { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        }
+    }
+
     /**
      * `k.b(z2)` per-entity overlay tail (k.java:2931-2990, proven):
      * gated by `C==null || !C.ab() || !C.cd[2] || P&512 || ax==0` (a
@@ -1246,6 +1324,13 @@ class Level0Renderer {
                 drawEntity(world, kE, camX, camY); kE.advanceAnim()
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
+            // `i.ad()` draws inline in the entity pass — the descriptor
+            // tickBubble emitted for this entity is consumed now (one
+            // active cQ dialog at a time; clear so a stale one can't
+            // linger past its last draw tick).
+            if (world.bubbleDraw != null) {
+                drawBubble(world); world.bubbleDraw = null
+            }
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(world, ab, camX, camY)
@@ -1257,14 +1342,19 @@ class Level0Renderer {
         // speech bubble, sparkle dots; emitted in screen space already.
         fxOverlay(world)
 
-        // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
-        // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —
-        // fill 400×240 + alpha-100 + blit `cd`. The 3/4/6-arg j.a forms
-        // are unrecovered stubs; by shape it's the "input locked" dim —
-        // translucent black over the scene, under HUD + dialogs. Drawn
-        // every frame while `kAm` holds (no persistent back-buffer).
-        if (world.kAm) fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
-                              0x64000000.toInt())
+        // `k.b(true)` input-lock veil (k.java:9080-9101, proven): the
+        // latch frame's `j.a(cd,-1,-1,1,1,true)` is the recovered 6-arg
+        // form = Graphics.setClip(-1,-1,1,1) — clip collapse, voiding
+        // the frame (j.java:890-907); `j.a(0,false)` is the q/t input
+        // bitflag (j.java:1334-1341). The 3/4-arg `j.a` forms are
+        // unrecovered stubs. Our renderer is a single pass after the
+        // sim tick, so consume the `veilVoid` one-shot as a full black
+        // frame (input stays locked via `inputLockT`).
+        if (world.veilVoid) {
+            world.veilVoid = false
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
+                   0xFF000000.toInt())
+        }
 
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
@@ -1494,10 +1584,12 @@ class Level0Renderer {
 
         // -- b(z2) overlay tail (k.java:3166-3253) -------------------------
 
-        // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
-        // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
-        // surface. `volPaintRect` records the painted rect; the composite
-        // fills it (i.a(IIIIZ) — the ax35 eagle-view window).
+        // `k.aQ` blit (k.java:3140-3141, proven): `drawImage(aQ,
+        // 198 - aQ.getWidth(), 5)` — the offscreen surface `i.a(IIIIZ)`
+        // paints (i.java:20129-20165): level tiles per-20px cell into
+        // `volPaintRect`, the composite fills it (the ax35 eagle-view
+        // window).
+        // (The veil j.a draws are input-mask ops, not blits — proven.)
         world.volPaintRect?.let { r -> minimap(world, r) }
 
         // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
@@ -1713,11 +1805,14 @@ class Level0Renderer {
                 world.d0(43)?.let { t -> drawText(t, 95, 175, 20) }
                 drawText(world.fmtJ(world.statsScore), 305, 175, 24)
             }
-            // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
+            // `a(d(0,16), d(0,62)|"")` (k.java:3393-3395, proven):
+            // NEXT left-pill (text at 5+ce/2,222 over box a(5,235,ce))
+            // + MENU right icon A[2] frame 24/29 at (395-cf/2,222) —
+            // only while kAj<7. The (200,40) typewriter is N()'s, not
+            // this screen's.
             if (world.statsTypeNext >= 0) {
-                val t = (world.d0(16) ?: "NEXT") + " " +
-                        world.typewriterText
-                drawText(t, 200, 222, 3)
+                footer(world, world.d0(16),
+                       if (world.kAj < 7) world.d0(62) else "")
             }
         }
 
@@ -1764,17 +1859,15 @@ class Level0Renderer {
                 val ry = (H - 70 - i * 45 - 40).toFloat()
                 batch.setColor(0.16f, 0.14f, 0.2f, 1f)
                 batch.draw(white, 114f, ry, 172f, 40f)
-                // medal icon placeholder — z[73] frame circle
+                // z[73] medal icon (k.java:6417-6445, proven):
+                // `z[73].a(cd, i3, 0, 140, i4+91)` — frame = medal index
+                // when unlocked (`cc[i3]==2`), frame 3 when locked;
+                // `y.l(4)` dims the locked row's text.
                 val icon = world.medalRowIcon[i]
-                if (icon >= 0) {
-                    if (world.medalRowDim[i])
-                        batch.setColor(0.3f, 0.3f, 0.35f, 1f)
-                    else
-                        batch.setColor(0.85f, 0.7f, 0.25f, 1f)
-                    batch.draw(white, 122f, ry + 12f, 16f, 16f)
-                }
+                if (icon >= 0) drawFrame(73, icon, 0, 140, 91 + i * 45, 0)
                 val t = world.medalRowText[i]
-                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6)
+                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6,
+                        palette = if (world.medalRowDim[i]) 4 else 2)
             }
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.screenFadeAlpha > 0) {
@@ -1791,27 +1884,29 @@ class Level0Renderer {
             }
         }
 
-        // `f.bF` loading overlay (f.java:1857-1863, proven paint shape):
-        // the IGP f-loop drew the loadingMsg over the live screen —
-        // `drawString(bF, bK, bL-5, HCENTER|BOTTOM)` in white plus a
-        // white-outlined progress bar (`drawRect` + red `fillRect`).
-        // Our port draws it whenever `kLoading` is set (the `f.a(d(0,24),0)`
-        // call sites: save-slot load, store/IGP entry). Progress fill is
-        // a fixed stub — the underlying load is synchronous (`inferred`).
+        // `f.bF` loading screen (f.java:1445-1463, proven): a standalone
+        // paint — full-black `fillRect(0,0,bI,bJ)`, white `drawRect` +
+        // red `fillRect` at `i7=(bI-i3)/2` over `i3=3*bI/4` (~300x6 @
+        // (50,bL)), `drawString(bF,bK,bL-5,33)`. Our load is synchronous
+        // (the orig's `aJ++` progress is threaded), so `min(aJ,aK)/aK`
+        // is always full — fill 1.0, not a fixed 35% stub.
         if (world.kLoading) {
-            val bw = 120; val bx = (400 - bw) / 2; val by = 110
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H, 0xFF000000.toInt())
+            val i3 = (Level0World.VIEW_W * 3) / 4             // 300
+            val bx = (Level0World.VIEW_W - i3) / 2            // 50
+            val by = 120                                      // bL
             batch.setColor(1f, 1f, 1f, 1f)
-            // drawRect outline (J2ME strokes 1px — draw as 4 thin fills)
-            batch.draw(white, bx.toFloat(), by.toFloat(), bw.toFloat(), 1f)
-            batch.draw(white, bx.toFloat(), (by + 6).toFloat(), bw.toFloat(), 1f)
+            // drawRect(i7,bL,i3,6) — J2ME strokes 1px (4 thin fills)
+            batch.draw(white, bx.toFloat(), by.toFloat(), i3.toFloat(), 1f)
+            batch.draw(white, bx.toFloat(), (by + 6).toFloat(), i3.toFloat(), 1f)
             batch.draw(white, bx.toFloat(), by.toFloat(), 1f, 7f)
-            batch.draw(white, (bx + bw - 1).toFloat(), by.toFloat(), 1f, 7f)
+            batch.draw(white, (bx + i3 - 1).toFloat(), by.toFloat(), 1f, 7f)
             batch.setColor(0.9f, 0.15f, 0.15f, 1f)          // setColor(16711680)
             batch.draw(white, (bx + 2).toFloat(), (by + 2).toFloat(),
-                       (bw - 4).toFloat() * 0.35f, 3f)       // stub fill ~35%
+                       (i3 - 4).toFloat(), 3f)
             batch.setColor(1f, 1f, 1f, 1f)
-            // drawString(bF, bK, bL-5, HCENTER|BOTTOM) — centered, baseline
-            drawText(world.d0(24) ?: "LOADING", 200, 122, 3)
+            // drawString(bF, bK, bL-5, HCENTER|BOTTOM)
+            drawText(world.d0(24) ?: "LOADING", 200, by - 5, 3)
         }
 
         batch.end()
@@ -1840,7 +1935,7 @@ class Level0Renderer {
         val pack = clipPackOf(clip) ?: return
         val anim = e.trailAnim
         if (anim < 0 || anim >= clip.animCount()) return
-        val frame = e.trailFrame()
+        val frame = e.trailFrame(world?.jG ?: 0)
         if (frame < 0 || frame >= clip.frameCount(anim)) return
         for (i in 0 until 5) {
             val x = t[i * 2]; val y = t[i * 2 + 1]
@@ -1932,16 +2027,24 @@ class Level0Renderer {
                             palette = e.Z.getOrElse(0) { 0 } }
             e.ax == 46 -> e.remapTable =
                 if (e.Z.getOrElse(6) { 0 } == 0) e.Z.getOrElse(7) { 0 } else -1
+            // `ax29` draw arm (i.java:3153-3169, proven): `by==2` →
+            // `aa.a(0)` only (no blink); `by==3` → `aa.a(0)` + the
+            // `aa.j[0] = j[j.g%3==0?1:4]` palette-row blink under the
+            // S-guard AND `aa.j != null`; else `aa.a(-1)`. Our
+            // -palette-NN slots stand in for j[i] (inferred mapping).
             e.ax == 29 -> {
-                if (world.iBy == 2 || world.iBy == 3) {
-                    e.remapTable = 0
-                    // `aa.j[0] = j[1 or 4]` palette-row blink every 3rd
-                    // j.g → our -palette-NN slots (inferred mapping).
-                    if (e.S != 28 && e.S != 20 && e.S != 4 && e.S != 24 &&
-                        e.S != 25 && e.S != 26 && e.S != 22) {
-                        palette = if (world.jG % 3L == 0L) 1 else 4
+                when (world.iBy) {
+                    2 -> e.remapTable = 0
+                    3 -> {
+                        e.remapTable = 0
+                        if (e.S != 28 && e.S != 20 && e.S != 4 &&
+                            e.S != 24 && e.S != 25 && e.S != 26 &&
+                            e.S != 22) {
+                            palette = if (world.jG % 3L == 0L) 1 else 4
+                        }
                     }
-                } else e.remapTable = -1
+                    else -> e.remapTable = -1
+                }
             }
             e.ax == 61 -> palette = 0
             e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7

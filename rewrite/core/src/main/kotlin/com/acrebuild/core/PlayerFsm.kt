@@ -1814,9 +1814,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             return true
         }
         if (p.S == 79 && !bn) {
-            // overhead-solid probe — inferred literal
+            // overhead-solid probe (g.java:5130-5136, proven literal +
+            // `u(16388)`): `i(80); k.v()` — consume the grab input.
             if (p.e(world, ((p.W[0] + p.W[2]) / 2) / 20, p.W[1] / 20 - 1) > 12) return true
-            if (pad.u(Pad.M_UP)) { p.setAnim(80); return true }
+            if (pad.u(Pad.M_UP)) { p.setAnim(80); world.clearLatches(); return true }
             return true
         }
         if (p.S != 2 && pad.u(Pad.M_DOWN)) {
@@ -2113,11 +2114,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.ag = 0
             }
         } else {
-            // back-dash: opposite-direction double-tap while aA window open
-            if (p.av && pad.x(Pad.M_RIGHT)) { if (pad.aA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
-            if (!p.av && pad.x(Pad.M_LEFT)) { if (pad.aA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
+            // back-dash (g.java:3650-3664, proven): double-tap `x()`
+            // toward facing → S25 while the `k.aA` alert latch is hot
+            // (set 60 by NPC `aC()`/respawn, cleared at level/dispatch).
+            if (p.av && pad.x(Pad.M_RIGHT)) { if (world.kAA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
+            if (!p.av && pad.x(Pad.M_LEFT)) { if (world.kAA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
         }
-        // -- L2048-L2064 equip/context arms (g.java:~3711, proven) ---------
+        // -- L2048-L2064 equip/context arms (g.java:~3711, proven) -------
         // L2048: `o()` gate → `ao()` weapon cycle
         if (p.groundOrVehicle()) p.cycleEquip(world, pad)
         // L2051-L2054 (proven): `aA` counter bookkeeping — `aA==0 → aA=1`,
@@ -2448,14 +2451,14 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     // burst-entry, S20-23 wisp-burst chain, S24 stall, S2/24 stall-fail,
     // S26/28/29 intro anims, S30-33 banks, S1/9/12/27 hit-recoveries, S3.
     //
-    // JADX's switch groups are lossy (its own header warns "Can't fix
-    // incorrect switch cases order") — the glide arm is transcribed for
-    // S ∈ {0,4,5,17,18} so the inner `S==18`/`S==17`/`z4` checks are all
-    // reachable (`inferred` group cover; the S3/S20-24/26-33 cases are
-    // single-valued as printed).
+    // The case→label table (simple/g.java:5878-5958, proven) routes every
+    // state: S0→L141; S1/9/12/27→L130; S2/24→L325; S3→L137; S4/5/17/18→
+    // L146; S20→L331; S21→L55; S22→L76; S23→L97; S25→L118; S26→L121;
+    // S28→L124; S29→L127; S30-33→L139; all others→L346. The L141/L146
+    // glide tail is extracted as `glideTail` and shared by the L130/L137/
+    // L139/L325 fall-throughs exactly as the labels do.
     private fun flightTick(p: Entity, pad: Pad) {
-        var z2 = true
-        var z3 = true
+        val zFlags = booleanArrayOf(true, true)         // r6 = zFlags[0], r7 = zFlags[1]
         world.kAI++
         // `i.B()` (g.java:13907, proven): canyon-wall collide — the call's
         // return value is dead in n(); it runs for its side effects only.
@@ -2491,97 +2494,37 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         } else if (p.x1 <= 0) p.setAnim(2)
         if (world.iBB) { p.aq = -1; p.ar = -1 }
 
+        // case→label dispatch (simple/g.java:5878-5958, proven): the L141/
+        // L146 glide tail is shared — S0 enters at L141, S4/5/17/18 at
+        // L146, L130 (S1/9/12/27) / L137 (S3) / L139 (S30-33) / L325-
+        // L328 (S2/24) all funnel through it.
         when (p.S) {
-            0, 4, 5, 17, 18 -> {
-                if (p.S == 0 && p.animFinished()) p.T = (p.clip?.frameCount(0) ?: 0) - 2
-                // L437 gate (g.java:14393-14396, proven): `i.bi || g.E →
-                // scripted arm` (wind `ah = kY*iAI` while the countdown
-                // `i.b(r3)` owns the sim); else `aC()` + input. `i.bi` is
-                // the "sequence owns player" latch (S10 climb / ax64 grab)
-                // — scripted runs only while it or `g.E` is set.
-                if (world.iBi || Entity.gE) {
-                    if (world.kQ >= 230) {
-                        z3 = false
-                        p.ah = if (world.iAH) world.kY * world.iAI else world.kY
-                    }
-                } else {
-                    if (world.kAw == 20) world.kAw = 0            // aC()
-                    if (world.iAH && world.kQ >= 230) { p.ah = world.kY shl 1; z3 = false }
-                    if (!world.iBB && pad.v(1)) world.sfx(28)     // k.A(28) = z(28)
-                    if (p.S == 18) { p.av = p.ak > world.kO + 200; p.setAnim(20); world.iBk = true }
-                    else if (p.S == 17) p.setAnim(4)
-                    val z4 = p.S != 3 && p.S != 0 && p.S != 18 && p.S != 17 && p.S != 20
-                    if (!world.iBk && p.Q != 18 && world.kAI >= 10 && z4) { world.kAI = 0; flap(p, false) }
-                    if (pad.u(4112)) {
-                        if (p.ag > -2048) p.ag -= 768
-                        if (p.ag < -2048) p.ag = -2048
-                        z2 = false
-                        if (z4) p.setAnim(if (world.kBD >= 15) 30 else 33)
-                        p.av = false
-                    }
-                    if (pad.u(8256)) {
-                        if (p.ag < 2048) p.ag += 768
-                        if (p.ag > 2048) p.ag = 2048
-                        z2 = false
-                        if (z4) p.setAnim(if (world.kBD >= 15) 31 else 32)
-                        p.av = false                            // verbatim quirk — right-bank also faces left
-                    }
-                    if (pad.u(16388) && world.kQ > 117) {
-                        if (p.ah > -2048 + world.kY) p.ah -= 768
-                        if (p.ah < -2048 + world.kY) p.ah = -2048 + world.kY
-                        z3 = false; p.av = false
-                        if (z4) p.setAnim(4)
-                    }
-                    if (pad.u(33024) && world.kQ < 230) {
-                        if (p.ah < 2048 + world.kY) p.ah += 768
-                        if (p.ah > 2048 + world.kY) p.ah = 2048 + world.kY
-                        z3 = false; p.av = false
-                        if (z4) p.setAnim(5)
-                    }
-                    if (world.kBB == 0 && world.kBC == 0 && p.animFinished() && z4) { p.av = false; p.setAnim(4) }
-                    if (p.aq != -1 && p.ar != -1) {
-                        p.ah = 0; p.ag = 0; z3 = false; z2 = false
-                        if (p.aq < p.ak && !p.bb) {
-                            p.ak -= 10
-                            if (z4) { val i2 = world.kBD; world.kBD = i2 + 1; p.setAnim(if (i2 >= 15) 30 else 33) }
-                        } else if (p.aq > p.ak && !p.bc) {
-                            p.ak += 10
-                            if (z4) { val i3 = world.kBD; world.kBD = i3 + 1; p.setAnim(if (i3 >= 15) 31 else 32) }
-                        }
-                        p.ar += world.kX
-                        p.al += world.kX
-                        if (p.ar < p.al) { p.al -= 10; if (z4) p.setAnim(4) }
-                        else if (p.ar > p.al) { p.al += 10; if (z4) p.setAnim(5) }
-                        if ((p.aq < p.ak && p.aT >= 10) || (p.aq > p.ak && p.aU >= 10)) p.aq = p.ak
-                        if ((p.ar < p.al && world.kQ <= 117) || (p.ar > p.al && world.kQ >= 230)) p.ar = p.al
-                        if (Math.abs(p.aq - p.ak) <= 10) p.ak = p.aq
-                        if (Math.abs(p.ar - p.al) <= 10) p.al = p.ar
-                        if (p.ak == p.aq && p.al == p.ar) { p.aq = -1; p.ar = -1 }
-                    }
-                }
-            }
-            1, 9, 12, 27 -> {
+            0, 4, 5, 17, 18 -> glideTail(p, pad, zFlags)        // →L141/L146
+            1, 9, 12, 27 -> {                                   // L130
                 world.kAw = 20
                 if (p.animFinished()) {
                     if (world.iBB) { world.iBB = false; world.iBG = -1; p.az = 202 }
                     if (world.kAw == 20) world.kAw = 0          // aC()
                     p.setAnim(4)
+                    p.av = false                                // L139
+                    glideTail(p, pad, zFlags)                   // →L141
                 }
             }
-            2, 24 -> {
+            2, 24 -> {                                          // L325-L328
                 p.ag = p.ag shr 1; p.ah = p.ah shr 1
-                z2 = false; z3 = false
-                if (p.animFinished() || !flightAliveV(p)) world.stateL(12)
-            }
-            3 -> {
-                if (p.animFinished()) p.setAnim(4)
-                else {
+                zFlags[0] = false; zFlags[1] = false
+                if (p.animFinished()) world.stateL(12)            // r() → l(12)
+                else if (!flightAliveV(p)) {                      // !v() → L137→L139
                     p.av = false
-                    if (p.S == 0) p.T = (p.clip?.frameCount(0) ?: 0) - 2   // proven-dead inside case 3
-                    // `if (!i.bi) { if (k.Q >= 230) {} }` — empty arm, proven-dead
+                    glideTail(p, pad, zFlags)
                 }
+                // v() → L346: arm skipped verbatim
             }
-            20 -> {
+            3 -> {                                              // L137
+                if (p.animFinished()) p.setAnim(4) else p.av = false
+                glideTail(p, pad, zFlags)
+            }
+            20 -> {                                             // L331
                 if (world.iBk) {
                     if (p.T == 5) repeat(5) { flap(p, true) }
                     world.iBB = true; world.iBE = 999
@@ -2590,35 +2533,43 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
                 if (p.animFinished()) { world.iBB = false; world.iBG = -1; world.iBk = false; p.setAnim(4) }
             }
-            21 -> {
+            21 -> {                                             // L55
                 world.kAw = 20
                 if (p.animFinished()) { world.iBB = true; world.iBC = true; world.iBD = true; world.iBE = 999; p.setAnim(22) }
-                bankSteer(p, pad)
+                if (bankSteer(p, pad)) zFlags[0] = false          // r6 = false on steer
             }
-            22 -> {
+            22 -> {                                             // L76
                 world.kAw = 20
                 if (p.animFinished()) { world.iBB = true; world.iBC = false; world.iBD = false; world.iBE = 999; world.iBG = 100; p.setAnim(23) }
-                bankSteer(p, pad)
+                if (bankSteer(p, pad)) zFlags[0] = false
             }
-            23 -> {
+            23 -> {                                             // L97
+                world.kAw = 20
+                if (p.animFinished()) { world.iBB = true; world.iBC = false; world.iBD = false; world.iBE = 999; p.setAnim(25) }
+                if (bankSteer(p, pad)) zFlags[0] = false
+            }
+            25 -> {                                             // L118
                 world.kAw = 20
                 if (p.animFinished()) { world.iBB = false; world.iBG = -1; p.setAnim(4) }
             }
-            26 -> {
+            26 -> {                                             // L121
                 world.kAw = 20
                 if (p.animFinished()) p.T = (p.clip?.frameCount(p.S) ?: 0) - 2
             }
-            28 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(29) }
-            29 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(26) }
-            30, 31, 32, 33 -> p.av = false                      // `S==0`/`!bi` arms are empty, proven-dead
+            28 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(29) }   // L124
+            29 -> { world.kAw = 20; if (p.animFinished()) p.setAnim(26) }   // L127
+            30, 31, 32, 33 -> {                                 // L139
+                p.av = false
+                glideTail(p, pad, zFlags)
+            }
             else -> {}
         }
-        if (z2) {
+        if (zFlags[0]) {
             if (p.ag > 768) p.ag -= 768
             else if (p.ag < -768) p.ag += 768
             else p.ag = 0
         }
-        if (z3) {
+        if (zFlags[1]) {
             if (p.ah > 768 + world.kY) p.ah -= 768
             else if (p.ah < -768 + world.kY) p.ah += 768
             else p.ah = world.kY
@@ -2632,19 +2583,100 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         }
     }
 
+    /** `n()` shared glide tail L141→L146 (simple/g.java:6035-6080,
+     *  proven): L141 = `S==0 && r() → T=aa.b(S)-2`; L146 = the
+     *  `i.bi||g.E` scripted wind arm (L150: `ah = iAH ? kY*iAI : kY`,
+     *  r7=false when `kQ >= 230`) else the input block — `aC()`,
+     *  `z(28)`, `S18→20`/`S17→4`, `i.bk`-gated `e(false)` flap, the
+     *  four `u()` ±768 steering arms (bank anims via `bD`, r6/r7
+     *  clears), the `bB==0 && bC==0 && r() && r8 → i(4)` bank-exit
+     *  (L253), and the `aq/ar` wisp-marker chase. `z[0]`/`z[1]` are
+     *  caller's r6/r7 friction-suppress flags. */
+    private fun glideTail(p: Entity, pad: Pad, z: BooleanArray) {
+        if (p.S == 0 && p.animFinished()) p.T = (p.clip?.frameCount(0) ?: 0) - 2
+        // L146 gate: `i.bi || g.E →` scripted arm (wind `ah = kY*iAI`
+        // while the countdown `i.b(r3)` owns the sim); else `aC()` +
+        // input. `i.bi` is the "sequence owns player" latch (S10 climb /
+        // ax64 grab) — scripted runs only while it or `g.E` is set.
+        if (world.iBi || Entity.gE) {
+            if (world.kQ >= 230) {
+                z[1] = false
+                p.ah = if (world.iAH) world.kY * world.iAI else world.kY
+            }
+        } else {
+            if (world.kAw == 20) world.kAw = 0            // aC()
+            if (world.iAH && world.kQ >= 230) { p.ah = world.kY shl 1; z[1] = false }
+            if (!world.iBB && pad.v(1)) world.sfx(28)     // k.A(28) = z(28)
+            if (p.S == 18) { p.av = p.ak > world.kO + 200; p.setAnim(20); world.iBk = true }
+            else if (p.S == 17) p.setAnim(4)
+            val z4 = p.S != 3 && p.S != 0 && p.S != 18 && p.S != 17 && p.S != 20
+            if (!world.iBk && p.Q != 18 && world.kAI >= 10 && z4) { world.kAI = 0; flap(p, false) }
+            if (pad.u(4112)) {
+                if (p.ag > -2048) p.ag -= 768
+                if (p.ag < -2048) p.ag = -2048
+                z[0] = false
+                if (z4) p.setAnim(if (world.kBD >= 15) 30 else 33)
+                p.av = false
+            }
+            if (pad.u(8256)) {
+                if (p.ag < 2048) p.ag += 768
+                if (p.ag > 2048) p.ag = 2048
+                z[0] = false
+                if (z4) p.setAnim(if (world.kBD >= 15) 31 else 32)
+                p.av = false                            // verbatim quirk — right-bank also faces left
+            }
+            if (pad.u(16388) && world.kQ > 117) {
+                if (p.ah > -2048 + world.kY) p.ah -= 768
+                if (p.ah < -2048 + world.kY) p.ah = -2048 + world.kY
+                z[1] = false; p.av = false
+                if (z4) p.setAnim(4)
+            }
+            if (pad.u(33024) && world.kQ < 230) {
+                if (p.ah < 2048 + world.kY) p.ah += 768
+                if (p.ah > 2048 + world.kY) p.ah = 2048 + world.kY
+                z[1] = false; p.av = false
+                if (z4) p.setAnim(5)
+            }
+            if (world.kBB == 0 && world.kBC == 0 && p.animFinished() && z4) { p.av = false; p.setAnim(4) }
+            if (p.aq != -1 && p.ar != -1) {
+                p.ah = 0; p.ag = 0; z[1] = false; z[0] = false
+                if (p.aq < p.ak && !p.bb) {
+                    p.ak -= 10
+                    if (z4) { val i2 = world.kBD; world.kBD = i2 + 1; p.setAnim(if (i2 >= 15) 30 else 33) }
+                } else if (p.aq > p.ak && !p.bc) {
+                    p.ak += 10
+                    if (z4) { val i3 = world.kBD; world.kBD = i3 + 1; p.setAnim(if (i3 >= 15) 31 else 32) }
+                }
+                p.ar += world.kX
+                p.al += world.kX
+                if (p.ar < p.al) { p.al -= 10; if (z4) p.setAnim(4) }
+                else if (p.ar > p.al) { p.al += 10; if (z4) p.setAnim(5) }
+                if ((p.aq < p.ak && p.aT >= 10) || (p.aq > p.ak && p.aU >= 10)) p.aq = p.ak
+                if ((p.ar < p.al && world.kQ <= 117) || (p.ar > p.al && world.kQ >= 230)) p.ar = p.al
+                if (Math.abs(p.aq - p.ak) <= 10) p.ak = p.aq
+                if (Math.abs(p.ar - p.al) <= 10) p.al = p.ar
+                if (p.ak == p.aq && p.al == p.ar) { p.aq = -1; p.ar = -1 }
+            }
+        }
+    }
+
     /** `n()`'s shared steering block (g.java:5900-5916, proven) — the
-     *  S21/S22 cases carry the same `u(4112)`/`u(8256)` ±768 arms. */
-    private fun bankSteer(p: Entity, pad: Pad) {
+     *  S21/S22/S23 cases carry the same `u(4112)`/`u(8256)` ±768 arms.
+     *  Returns true when a steer consumed input (callers then write
+     *  `r6 = false`). */
+    private fun bankSteer(p: Entity, pad: Pad): Boolean {
+        var steered = false
         if (pad.u(4112)) {
             if (p.ag > -2048) p.ag -= 768
             if (p.ag < -2048) p.ag = -2048
-            p.av = false
+            p.av = false; steered = true
         }
         if (pad.u(8256)) {
             if (p.ag < 2048) p.ag += 768
             if (p.ag > 2048) p.ag = 2048
-            p.av = false
+            p.av = false; steered = true
         }
+        return steered
     }
 
     /** `g.e(boolean)` (g.java:6044-6079, proven) — the flap puff: spawn
