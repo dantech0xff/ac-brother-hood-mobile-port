@@ -263,3 +263,23 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   Re-verify recipe: fresh boot per mission (carryover positions pollute
   sequential entries), `stateL(19)` + `kDa=8` + `kBw=N`, two
   `pad.e(327712)` edges for select→browse→briefing.
+
+### Run-17 — m2-m7 play-through @ slice 314 + jdb bp-context evals
+
+- **jdb `this` context**: `stop in com.acrebuild.core.Level0World.tick` +
+  `run` + sleep → bp fires on GLThread → `this` = the world instance —
+  eval `this.jC`, `this.player.ak`, `this.pad.e(65568,false)` etc.
+  Thread NAME "GLThread 42" has a space → jdb `thread`/`suspend` can't
+  select it; the bp route is the reliable eval path. Ref ids in
+  `threads` output shift as hwuiTask threads respawn — don't trust them.
+- New-box note: `/tmp/jdbc2.sh`/`jtp5.sh` helpers don't survive reboots —
+  rebuild them (bp-context pattern in this file's Run-16/17 section).
+- Emulator fresh-boot ritual: `emulator -avd spike -gpu swiftshader_indirect`,
+  `adb wait-for-device`, then the WINDOW stays portrait until the toolbar
+  rotate button (display is already ROTATION_90 — just click rotate).
+- m4 flying mission: glider descends into a soldier horde on the bank —
+  restart banner = legit gauntlet end, not a wedge.
+- Briefing "TOUCH THE SCREEN" dismiss = `pointerStrip()` — real tap only
+  (pad.e masks don't dismiss it).
+- Multi-eval jdb reads race/interleave — take single-field reads or grep
+  the last ` = N` per field; identical values across fields = leaked.
