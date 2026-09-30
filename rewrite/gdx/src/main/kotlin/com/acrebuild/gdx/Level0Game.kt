@@ -40,9 +40,15 @@ class Level0Game : ApplicationAdapter() {
     private fun missionPack(aj: Int): MissionPack {
         val level = LevelPack.load(
             Gdx.files.internal("level$aj/level$aj.aclv").readBytes())
+        /* k.d(1+aj) → j.g(i): pack string table indexed by slot —
+         * empty entries are real (j.g returns null on a 0-length span),
+         * so keep them: filtering shifted every later index and made
+         * bubble/dialog lookups read the wrong line (fix proven on m0:
+         * slot 24 must read the guard's line, not "YES."). Only the
+         * trailing newline artifact is dropped. */
         val strings = Gdx.files.internal("level$aj/strings-${aj + 1}.txt")
             .readString("UTF-8").split("\n")
-            .filter { it.isNotEmpty() }
+            .let { if (it.last().isEmpty()) it.dropLast(1) else it }
             .map { it.replace("\\n", "\n") }
         val scripts = ScriptTables.load(
             Gdx.files.internal("level$aj/scripts.bin").readBytes())
