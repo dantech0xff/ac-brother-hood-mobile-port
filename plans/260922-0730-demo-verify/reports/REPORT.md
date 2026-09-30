@@ -1365,3 +1365,58 @@ p2 "FROM ENTERING / THE UPPER", p3 "LEAVE HERE AT" — all clean.
 - `fix324-staging.png` — scripted encounter staging frame
 
 Status: `5cd6e090-slice324-CLIPFIX-VERIFIED-all3pages-insidepanel-panelgrewup-tailanchor-same`
+
+---
+
+## Run-25 — pure-input store demo (emulator-5554) — ce8a600c
+
+Build: ce8a600c (slice-325 merge) — code-identical to 5cd6e090 (the merge
+adds only docs/report files; APK unchanged).
+
+PURE INPUT — no jdb assists. Input bridge is touch-only (`Level0InputBridge`
+has no key handler — `input keyevent` never reaches the game; keyevent 61/96
+hit Android instead and switched to the launcher). Pure-input menu recipe,
+proven live:
+- boot legal screens: tap anywhere or wait the auto-advance timers
+- **YES/NO sound prompt (jC=23)**: row taps do NOT confirm — the real input
+  is the LEFT footer soft-key (pause-icon zone, `pointerDownIn(-5,198,
+  kCe+20,47)` → `padE(M_PAUSE)` ⊂ 327712 → the case-23 else-branch →
+  `stateL(18)`). Device tap ~dev(490,940).
+- main menu / difficulty / character card: menuQ row taps work — NEW GAME
+  dev(1240,543), EASY dev(1049,498), EZIO dev(1240,345)
+- story intro jC=20: exits via M_CYCLE = the ↩ back-arrow footer icon
+  (dev~1900,940) — any time, not just at end
+- jC=9 hint pages: taps advance; jC=21 intro dlgU=9: SKIP pill dev(1870,891)
+- pause menu RESTART → YES row dev(1200,580); restart replays jC=21
+
+**Coord map correction**: view render is `sc = min(sw/400, sh/240)` with
+INT math → scale=4, offsetX=400, offsetY=60 on 2400x1080 (not 4.5/300/0):
+devX = 400 + lx*4, devY = 60 + ly*4.
+
+Per-process pointer death: taps/keyevents can land on a dead input pipe
+(0-diff screencaps) — force-stop + relaunch fixes; verify pointer life with
+a probe tap + diff before committing a take.
+
+**Encode lag**: the first take ran ~2.5-3× stretched during the menu
+section on swiftshader (the YES/NO prompt held ~35s of video; the whole
+menu chain consumed ~145s of a 173s take). Gameplay takes run ~realtime.
+Deliverable built by cutting the boot-path segments from take-1 +
+realtime gameplay segments from take-3 into `store-demo.mp4` (108s).
+
+Content shown: legal → YES/NO → title → NEW GAME → EASY → EZIO →
+story → ROME/COLOSSEUM "KILL WOLFMEN" briefing → intro dialog → SKIP →
+spawn → run east w/ camera → orb chain → double-urn smash (orbs 4→8→12) →
+ledge gap jump → wall-cling/grabs → upper terrace → sentry "!!" alert →
+climb attempts at the guard's perch + sword swings. No jdb anywhere.
+
+HONEST GAPS: no landed melee exchange (the posted sentry holds his lip —
+blind input can't top the rail climb) and no guard bubble (claim site not
+reachable by pure input). The posted-perch behavior is consistent with the
+S152 verdict (fightable but doesn't leave his post).
+
+## Artifacts
+- `store-demo.mp4` (108s) — THE DELIVERABLE, tight cut, all screens + gameplay
+- `store-demo-raw-full.mp4` (173s) — take-1 raw (full chain, menu section slow)
+- `store-demo-raw-gameplay.mp4` (164s) — take-3 raw (realtime gameplay)
+- `store-spawn.png` / `store-urn-approach.png` / `store-balcony.png` /
+  `store-alert-climb.png` — marketing stills

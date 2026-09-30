@@ -404,3 +404,29 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - Field races on multi-field jdb sets: `set e.X = v` lines inside one
   suspend can still race ("Thread not suspended" → value=null) —
   verify each field after (print), retry misses.
+
+## Run-25 — pure-input menu navigation (no-jdb) + demo recording
+
+- **Input bridge is touch-only** — `input keyevent` never reaches the game
+  (no key handler in `Level0InputBridge`); keyevents 61/96/108 hit Android
+  (task-switch/launcher). Never use keyevents to control the game.
+- **jC=23 YES/NO sound prompt**: row taps do NOT confirm — tap the LEFT
+  footer soft-key (pause-icon zone ~dev(490,940)) → posts M_PAUSE which IS
+  a 327712 confirm → `stateL(18)`. (menuQ row-tap path exists but this
+  screen's case-23 confirm is pad-edge-driven.)
+- **Menu screens**: row taps work — the tap's UP position is the row hit
+  (`lastTouchX/Y` = release point, one frame). Quick `input tap` is fine —
+  DOWN+UP batch in one tick.
+- **Story intro jC=20**: exits via the ↩ back-arrow footer icon
+  (~dev1900,940) = M_CYCLE edge — works at any page, skips the auto-play.
+- **Real view→device map**: renderer `sc=min(sw/400,sh/240)` integer math
+  → scale=4, offsets (400,60) on 2400x1080 → devX=400+lx*4, devY=60+ly*4.
+  (The old 4.5× note was wrong.)
+- **Pointer death is per-process**: taps landing on a dead pipe produce
+  zero screencap diff — verify pointer life with a probe tap+diff before
+  committing a recording take; force-stop+relaunch fixes.
+- **screenrecord encode lag on swiftshader**: menu/loading sections can
+  stretch ~2.5-3× vs wall-clock (encoder falls behind); gameplay runs
+  ~realtime. For store clips, cut the slow menu segments or re-take.
+- Menu tap coords (2400x1080): NEW GAME (1240,543), EASY (1049,498),
+  EZIO card (1240,345), jC=14 RESTART row then YES (1200,580).
