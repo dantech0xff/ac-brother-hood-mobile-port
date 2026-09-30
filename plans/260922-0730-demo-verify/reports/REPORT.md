@@ -1056,3 +1056,47 @@ routes exist (headless bot won all 8) but need real play.
   `pt-m4-horde.png` `pt-m5-canal.png` `pt-m6-eagle.png` `pt-m7-run.png`
 
 Status: `f7e868da-m2-m7-all-boot-play-no-crash-real-hazard-deaths-only`
+
+---
+
+# Run-18 — slice-315 demo @ 3344539d (headwt): golden path + prop smash + KO/restart
+
+APK built from `/tmp/headwt/rewrite` @ `3344539d` (slice 315 — the
+i.ad() speech-bubble draw path + all prior fixes), emulator-5554
+(pid 19260). Device `screenrecord` ×2; real input where alive, pad.e()
+edges for menus/dialog (labeled).
+
+## Beats verified on camera
+- ✅ Boot → YES/NO save prompt → title → level-select → NEW GAME →
+  EASY/NORMAL difficulty → EZIO card → **story intro card**
+  ("IN AN ATTACK ON THE AUDITORE FAMILY VILLA…" full text render) →
+  briefing "ROME/COLOSSEUM/KILL WOLFMEN" → two hint pages → gameplay
+- ✅ Run east — camera tracks, score 0→4/100; spawned at level0 record
+- ✅ **Destructible prop smash** — amphora vase broken → orb drop →
+  score 8/100 → 12/100
+- ✅ Wall-terrace climbing — vine ledges (partial hopscotch area)
+- ✅ **Pause menu** — RESUME/RESTART/OPTIONS/HELP/MAIN MENU/EXIT rows
+  render over live gameplay (accidental pause, kept — bonus coverage)
+- ✅ KO → "DO YOU WANT TO RESTART?" banner (YES/NO) → YES → reload →
+  respawn at spawn, score reset — **loop closes clean**
+- ℹ️ No speech bubble seen — expected on m0 (the new i.ad() path is
+  armed but no bubble-guard fired it this run).
+
+## Notes
+- The KO was staged via a `jtp5` teleport into a kill volume (assist —
+  labeled), not a guard strike; guard melee untested this run (pointer
+  flakiness kept interrupting combat approach).
+- Intro dialog dismiss quirk: jC=21 dlgU=9 — pad edges don't dismiss;
+  the hint pages are jC=9's own load flow and advance on M_CONTEXT
+  edges (65568). The 327712 mask opens PAUSE from gameplay (jC=14) —
+  M_CYCLE (131072) backs out.
+- Input died intermittently mid-run (the per-process pointer flakiness);
+  recovered by waiting and re-tapping.
+
+## Artifacts
+- `head-m0.mp4` (150s) — boot→menus→spawn→run→vase-smash→climb→pause menu
+- `head-m0b.mp4` (150s) — climbing→KO banner→restart→respawn
+- `head-m0-spawn.png` `head-m0-vase-smash.png` `head-m0-restart.png`
+  `head-m0-pause.png` `head-m0-banner-hd.png`
+
+Status: `3344539d-slice315-demo-VERIFIED-goldenpath-propsmash-pause-ko-restart-nocrash`
