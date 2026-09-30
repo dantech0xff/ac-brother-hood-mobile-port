@@ -1764,17 +1764,15 @@ class Level0Renderer {
                 val ry = (H - 70 - i * 45 - 40).toFloat()
                 batch.setColor(0.16f, 0.14f, 0.2f, 1f)
                 batch.draw(white, 114f, ry, 172f, 40f)
-                // medal icon placeholder — z[73] frame circle
+                // z[73] medal icon (k.java:6417-6445, proven):
+                // `z[73].a(cd, i3, 0, 140, i4+91)` — frame = medal index
+                // when unlocked (`cc[i3]==2`), frame 3 when locked;
+                // `y.l(4)` dims the locked row's text.
                 val icon = world.medalRowIcon[i]
-                if (icon >= 0) {
-                    if (world.medalRowDim[i])
-                        batch.setColor(0.3f, 0.3f, 0.35f, 1f)
-                    else
-                        batch.setColor(0.85f, 0.7f, 0.25f, 1f)
-                    batch.draw(white, 122f, ry + 12f, 16f, 16f)
-                }
+                if (icon >= 0) drawFrame(73, icon, 0, 140, 91 + i * 45, 0)
                 val t = world.medalRowText[i]
-                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6)
+                if (t.isNotEmpty()) drawText(t, 164, 91 + i * 45, 6,
+                        palette = if (world.medalRowDim[i]) 4 else 2)
             }
             batch.setColor(1f, 1f, 1f, 1f)
             if (world.screenFadeAlpha > 0) {

@@ -11789,6 +11789,23 @@ class Slice103Test {
         for (i in 1 until w.dlgW) assertEquals(5, w.dlgBN[i])
     }
 
+    @Test fun `kBMark is the verbatim k-b-IIII panel initializer`() {
+        val w = world()
+        assertFalse(w.kBMark(8, 1, -1, 0), "i3==-1 → false (:353)")
+        // multi-row arm (u8): u=slot; per-row a(d,·,i!=6,i) expansion;
+        // D(0); bQ; z()  (k.java:358-371, proven)
+        assertTrue(w.kBMark(8, 1, 26, 26))
+        assertEquals(8, w.dlgU)
+        assertTrue(w.dlgW >= 1); assertEquals(0, w.dlgV)
+        assertTrue(w.dlgBQ); assertEquals(30, w.dlgBS); assertEquals(0, w.dlgBT)
+        assertNotNull(w.dlgBM[0])
+        // single-text arm (kinds 0/4/5/7): a(d,0,false,i)+1 at 220px —
+        // no bN digit writes (k.java:356-357, proven)
+        val w2 = world()
+        assertTrue(w2.kBMark(0, 1, 26, 26))
+        assertEquals(0, w2.dlgU); assertTrue(w2.dlgW >= 1); assertTrue(w2.dlgBQ)
+    }
+
     @Test fun `typewriter counts bT up then pins -1`() {
         val w = world()
         w.kDialog(1, 27, 0)
@@ -15274,6 +15291,7 @@ class Slice148Test {
         override fun audioTrackPlay(n: Int) { audioTrack = n }
         override var kAZ = false
         override var kX = 0
+        override var kDlgX = 0
         override var kV = 0
         override var kW = 0
         val kNSetCalls = mutableListOf<Int>()
@@ -15374,12 +15392,14 @@ class Slice148Test {
         assertEquals(t, p.af); assertTrue(z !in w.removed)
     }
 
-    @Test fun `S21 overlap marks checkpoint + l21 + kX48 L1855`() {
+    @Test fun `S21 overlap marks checkpoint + l21 + kDlgX48 L1855`() {
         val w = S148World(); w.kAj = 2
         val z = zone(21) { it.aF = 5; it.pv = 9 }
         NpcFsm(w).tickTrigger(z, w, mk(200, 120), Pad())
         assertEquals(listOf(5), w.kBMarkCalls)
-        assertEquals(48, w.kX); assertTrue(z in w.removed)
+        assertEquals(48, w.kDlgX, "k.x (u8 page timer), not k.X (:12851)")
+        assertEquals(0, w.kX, "k.X crossfade untouched")
+        assertTrue(z in w.removed)
     }
 
     @Test fun `S22 overlap plays or stops the audio track L157d`() {
