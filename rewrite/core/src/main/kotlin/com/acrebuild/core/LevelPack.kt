@@ -93,6 +93,17 @@ class LevelPack private constructor(
     /** Pixel-space convenience: `k.g(x/20, y/20)`. */
     fun collisionAtPx(px: Int, py: Int): Int = collisionCell(px / cellPx, py / cellPx)
 
+    /** `et[r92 + r02*bp]` (k.java:2823 L24) — RAW et-plane access used by
+     *  the D() corridor scan: on bh3 the original still reads the raw
+     *  cell plane here, NOT the `dL[cx%21][cy%13]` wrap `g()` uses.
+     *  Out-of-bounds returns 20 (the original's raw index would throw —
+     *  only unreachable row/cols hit it). */
+    fun rawCell(cx: Int, cy: Int): Int {
+        if (cx < 0 || cx >= et.cols || cy < 0 || cy >= et.rows) return 20
+        val v = et.cells[cy * et.cols + cx]
+        return if (v == 255) 0 else v
+    }
+
     /**
      * Solidity classification of an `et` cell value (per mined semantics:
      * 255 = air; >=12 and != 255 = solid/LOS-block; {2,3,5,18} = landing

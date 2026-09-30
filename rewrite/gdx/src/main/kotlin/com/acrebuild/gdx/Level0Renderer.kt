@@ -1257,14 +1257,19 @@ class Level0Renderer {
         // speech bubble, sparkle dots; emitted in screen space already.
         fxOverlay(world)
 
-        // `k.b(true)` input-lock veil (k.java:9080-9101, latch proven /
-        // draw inferred): `k.am && !k.dd → k.dd=1` then the `j.a` ops —
-        // fill 400×240 + alpha-100 + blit `cd`. The 3/4/6-arg j.a forms
-        // are unrecovered stubs; by shape it's the "input locked" dim —
-        // translucent black over the scene, under HUD + dialogs. Drawn
-        // every frame while `kAm` holds (no persistent back-buffer).
-        if (world.kAm) fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
-                              0x64000000.toInt())
+        // `k.b(true)` input-lock veil (k.java:9080-9101, proven): the
+        // latch frame's `j.a(cd,-1,-1,1,1,true)` is the recovered 6-arg
+        // form = Graphics.setClip(-1,-1,1,1) — clip collapse, voiding
+        // the frame (j.java:890-907); `j.a(0,false)` is the q/t input
+        // bitflag (j.java:1334-1341). The 3/4-arg `j.a` forms are
+        // unrecovered stubs. Our renderer is a single pass after the
+        // sim tick, so consume the `veilVoid` one-shot as a full black
+        // frame (input stays locked via `inputLockT`).
+        if (world.veilVoid) {
+            world.veilVoid = false
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
+                   0xFF000000.toInt())
+        }
 
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
@@ -1494,10 +1499,12 @@ class Level0Renderer {
 
         // -- b(z2) overlay tail (k.java:3166-3253) -------------------------
 
-        // `k.aQ` blit (k.java:3140-3141, proven site / inferred body):
-        // `drawImage(aQ, 198 - aQ.getWidth(), 5)` — the vol-paint/debug
-        // surface. `volPaintRect` records the painted rect; the composite
-        // fills it (i.a(IIIIZ) — the ax35 eagle-view window).
+        // `k.aQ` blit (k.java:3140-3141, proven): `drawImage(aQ,
+        // 198 - aQ.getWidth(), 5)` — the offscreen surface `i.a(IIIIZ)`
+        // paints (i.java:20129-20165): level tiles per-20px cell into
+        // `volPaintRect`, the composite fills it (the ax35 eagle-view
+        // window).
+        // (The veil j.a draws are input-mask ops, not blits — proven.)
         world.volPaintRect?.let { r -> minimap(world, r) }
 
         // `an`/`ao` fades (k.java:3166-3188 + `aa()` :5715-5736, proven):
@@ -1713,11 +1720,14 @@ class Level0Renderer {
                 world.d0(43)?.let { t -> drawText(t, 95, 175, 20) }
                 drawText(world.fmtJ(world.statsScore), 305, 175, 24)
             }
-            // `a(d(0,16),str2)` hint — NEXT ▸ typewriter (inferred box)
+            // `a(d(0,16), d(0,62)|"")` (k.java:3393-3395, proven):
+            // NEXT left-pill (text at 5+ce/2,222 over box a(5,235,ce))
+            // + MENU right icon A[2] frame 24/29 at (395-cf/2,222) —
+            // only while kAj<7. The (200,40) typewriter is N()'s, not
+            // this screen's.
             if (world.statsTypeNext >= 0) {
-                val t = (world.d0(16) ?: "NEXT") + " " +
-                        world.typewriterText
-                drawText(t, 200, 222, 3)
+                footer(world, world.d0(16),
+                       if (world.kAj < 7) world.d0(62) else "")
             }
         }
 
@@ -1789,27 +1799,29 @@ class Level0Renderer {
             }
         }
 
-        // `f.bF` loading overlay (f.java:1857-1863, proven paint shape):
-        // the IGP f-loop drew the loadingMsg over the live screen —
-        // `drawString(bF, bK, bL-5, HCENTER|BOTTOM)` in white plus a
-        // white-outlined progress bar (`drawRect` + red `fillRect`).
-        // Our port draws it whenever `kLoading` is set (the `f.a(d(0,24),0)`
-        // call sites: save-slot load, store/IGP entry). Progress fill is
-        // a fixed stub — the underlying load is synchronous (`inferred`).
+        // `f.bF` loading screen (f.java:1445-1463, proven): a standalone
+        // paint — full-black `fillRect(0,0,bI,bJ)`, white `drawRect` +
+        // red `fillRect` at `i7=(bI-i3)/2` over `i3=3*bI/4` (~300x6 @
+        // (50,bL)), `drawString(bF,bK,bL-5,33)`. Our load is synchronous
+        // (the orig's `aJ++` progress is threaded), so `min(aJ,aK)/aK`
+        // is always full — fill 1.0, not a fixed 35% stub.
         if (world.kLoading) {
-            val bw = 120; val bx = (400 - bw) / 2; val by = 110
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H, 0xFF000000.toInt())
+            val i3 = (Level0World.VIEW_W * 3) / 4             // 300
+            val bx = (Level0World.VIEW_W - i3) / 2            // 50
+            val by = 120                                      // bL
             batch.setColor(1f, 1f, 1f, 1f)
-            // drawRect outline (J2ME strokes 1px — draw as 4 thin fills)
-            batch.draw(white, bx.toFloat(), by.toFloat(), bw.toFloat(), 1f)
-            batch.draw(white, bx.toFloat(), (by + 6).toFloat(), bw.toFloat(), 1f)
+            // drawRect(i7,bL,i3,6) — J2ME strokes 1px (4 thin fills)
+            batch.draw(white, bx.toFloat(), by.toFloat(), i3.toFloat(), 1f)
+            batch.draw(white, bx.toFloat(), (by + 6).toFloat(), i3.toFloat(), 1f)
             batch.draw(white, bx.toFloat(), by.toFloat(), 1f, 7f)
-            batch.draw(white, (bx + bw - 1).toFloat(), by.toFloat(), 1f, 7f)
+            batch.draw(white, (bx + i3 - 1).toFloat(), by.toFloat(), 1f, 7f)
             batch.setColor(0.9f, 0.15f, 0.15f, 1f)          // setColor(16711680)
             batch.draw(white, (bx + 2).toFloat(), (by + 2).toFloat(),
-                       (bw - 4).toFloat() * 0.35f, 3f)       // stub fill ~35%
+                       (i3 - 4).toFloat(), 3f)
             batch.setColor(1f, 1f, 1f, 1f)
-            // drawString(bF, bK, bL-5, HCENTER|BOTTOM) — centered, baseline
-            drawText(world.d0(24) ?: "LOADING", 200, 122, 3)
+            // drawString(bF, bK, bL-5, HCENTER|BOTTOM)
+            drawText(world.d0(24) ?: "LOADING", 200, by - 5, 3)
         }
 
         batch.end()
@@ -1838,7 +1850,7 @@ class Level0Renderer {
         val pack = clipPackOf(clip) ?: return
         val anim = e.trailAnim
         if (anim < 0 || anim >= clip.animCount()) return
-        val frame = e.trailFrame()
+        val frame = e.trailFrame(world?.jG ?: 0)
         if (frame < 0 || frame >= clip.frameCount(anim)) return
         for (i in 0 until 5) {
             val x = t[i * 2]; val y = t[i * 2 + 1]
@@ -1930,16 +1942,24 @@ class Level0Renderer {
                             palette = e.Z.getOrElse(0) { 0 } }
             e.ax == 46 -> e.remapTable =
                 if (e.Z.getOrElse(6) { 0 } == 0) e.Z.getOrElse(7) { 0 } else -1
+            // `ax29` draw arm (i.java:3153-3169, proven): `by==2` →
+            // `aa.a(0)` only (no blink); `by==3` → `aa.a(0)` + the
+            // `aa.j[0] = j[j.g%3==0?1:4]` palette-row blink under the
+            // S-guard AND `aa.j != null`; else `aa.a(-1)`. Our
+            // -palette-NN slots stand in for j[i] (inferred mapping).
             e.ax == 29 -> {
-                if (world.iBy == 2 || world.iBy == 3) {
-                    e.remapTable = 0
-                    // `aa.j[0] = j[1 or 4]` palette-row blink every 3rd
-                    // j.g → our -palette-NN slots (inferred mapping).
-                    if (e.S != 28 && e.S != 20 && e.S != 4 && e.S != 24 &&
-                        e.S != 25 && e.S != 26 && e.S != 22) {
-                        palette = if (world.jG % 3L == 0L) 1 else 4
+                when (world.iBy) {
+                    2 -> e.remapTable = 0
+                    3 -> {
+                        e.remapTable = 0
+                        if (e.S != 28 && e.S != 20 && e.S != 4 &&
+                            e.S != 24 && e.S != 25 && e.S != 26 &&
+                            e.S != 22) {
+                            palette = if (world.jG % 3L == 0L) 1 else 4
+                        }
                     }
-                } else e.remapTable = -1
+                    else -> e.remapTable = -1
+                }
             }
             e.ax == 61 -> palette = 0
             e.ax == 74 -> if (e.S == 3 || e.S == 4 || e.S == 5) palette = 7
