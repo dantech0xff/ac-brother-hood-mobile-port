@@ -28829,4 +28829,24 @@ class Slice318Test {
         while (g.S == 25 && ticks++ < 200) w.npcFsm.tick(g, w.player)
         assertTrue(g.S != 25, "S25 arm landed + resumed (S=${g.S})")
     }
+
+    @Test fun `S152 posted perch guard holds its post — verdict`() {
+        // m2's wall-perch trio aw311/312/313 are record-stamped ax11
+        // S=152 — a posted-guard anim, not a fall. In the original's
+        // soldier dispatch S152 hits the grouped arm (i.java:4462
+        // `default:` — Q==6/n(44,0)/S!=85/!h/!z5 shell) → the shared
+        // tail: j() damage intake + aB() melee + the open-cell fall
+        // gate. h() reads the perch cell under the feet as ground →
+        // the guard stays posted (it falls only when the perch opens
+        // or when knocked). Verdict: the reported "unfightable
+        // wall-perch guard" was the S=25 knock-freeze fixed by this
+        // slice — the S152 post itself is faithful and stays
+        // fightable through the shared tail.
+        val w = world(aj = 2)
+        val g = w.npcs.first { it.aw == 313 }
+        assertEquals(11, g.ax); assertEquals(152, g.S)
+        repeat(400) { w.npcFsm.tick(g, w.player) }
+        assertEquals(152, g.S, "posted guard holds S152 on its perch (no spurious fall)")
+        assertEquals(300, g.aB, "posted guard untouched while idle")
+    }
 }
