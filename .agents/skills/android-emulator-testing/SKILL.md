@@ -283,3 +283,17 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   (pad.e masks don't dismiss it).
 - Multi-eval jdb reads race/interleave — take single-field reads or grep
   the last ` = N` per field; identical values across fields = leaked.
+
+### Run-18 — headwt demo @ slice 315
+
+- Worktree builds: `/tmp/headwt/rewrite` is the devin/land checkout —
+  build from there when the lead says "worktree"; same package, install -r.
+- jC=21 intro dialog: pad edges do NOT dismiss (dlgU=9; SKIP is the
+  pointer pill at view 349,198,56,47). The "hint cards" are jC=9's own
+  pages — advance via `pad.e(65568)` (M_CONTEXT); after the last one it
+  enters jC=8. `pad.e(327712)` inside gameplay opens PAUSE (jC=14);
+  `pad.e(131072)` (M_CYCLE) backs out.
+- Restart-prompt YES: two `pad.e(327712)` edges, ~2s apart.
+- NEW GAME path: level-select row-1 → EASY → EZIO card (confirm via
+  pad.e(327712), the arrows are back/browse) → story card → briefing.
+- Prop smash: attack radial works on vases — orb drops + score bump.
