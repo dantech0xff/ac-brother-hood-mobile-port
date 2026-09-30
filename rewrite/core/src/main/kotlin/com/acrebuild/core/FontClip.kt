@@ -324,7 +324,9 @@ class FontClip(
             val w = minOf(u[(i9 shl 1) + 1], xEnd)
             if (v < str.length && str[v] == '\n') v++
             var i11 = x
-            var i12 = y + i10 * i8
+            // per-line a() adds `+N` (baseline reserve) internally —
+            // b.java:2264 r142 = r14 + this.N
+            var i12 = y + i10 * i8 + baseN
             if ((align and 43) != 0) {
                 if ((align and 8) != 0) i11 -= u[(i9 + 1) shl 1]
                 else if ((align and 1) != 0) i11 -= u[(i9 + 1) shl 1] shr 1
