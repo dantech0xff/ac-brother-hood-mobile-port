@@ -1576,18 +1576,33 @@ class Level0World(
     override var kAZ = false                   // k.aZ (:252) — save byte 68 flag
     override var kBQ = false                   // k.bQ (:140) — map dirty flag
     override fun audioTrackPlay(n: Int) { z(n) } // e.a(n,false) → private z()
-    /** `k.b(8,level,row,span)` (k.java:349-360, proven) — checkpoint-map
-     *  marker; `row==-1 → false`, else it writes k.u (the lowercase map-
-     *  region slot — a write-only bookkeeping latch in the original,
-     *  consumed nowhere) and marks the region's `w` map cells complete
-     *  (stubbed). PROVEN NOT `k.U`: the camera's bottom bound `U` is a
-     *  different field armed only by ax37 triggers (i.java:7152) — an
-     *  earlier rev aliased them, so every S21 checkpoint zone poisoned
-     *  `boundMaxY` and the camera rocketed to a fake kill ceiling. */
-    var kMapSlot = 0                           // k.u — map-region slot
+    /** `k.b(IIII)` (k.java:349-372, proven verbatim) — the jC==21 text-
+     *  panel initializer, NOT a map marker: `u = slot` is the panel kind
+     *  (kinds 0/4/5/7 = full-screen single-text at 220px; 1/2/3/6/8/9/10
+     *  = per-row dialogs expanded `i3..i4`). `row==-1 → false`. Dead on
+     *  shipped content: zero ax10-S21 records in any .aclv pack, so no
+     *  caller fires it; ported verbatim for completeness. */
     override fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean {
+        var i4 = span
         if (row == -1) return false
-        kMapSlot = slot; kBQ = true
+        dlgU = slot                                     // u = i (:355)
+        if (slot == 0 || slot == 4 || slot == 5 || slot == 7) {
+            dlgW = dlgLoadPage(levelString(level, row) ?: "", 0,
+                               false, slot) + 1         // (:356-357)
+        } else {
+            if (i4 < row) i4 = row                      // (:360-361)
+            dlgW = (i4 - row) + 1                       // (:362)
+            var i5 = 0
+            while (i5 < dlgW) {
+                val iA = dlgLoadPage(levelString(level, row + i5) ?: "",
+                                     i5, slot != 6, slot)   // (:366)
+                dlgW += iA - i5
+                i5 = iA + 1
+            }
+            dlgD(0)                                     // (:368)
+        }
+        dlgBQ = true                                    // bQ (:370)
+        dlgZ()                                          // z() (:371)
         return true
     }
     var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
@@ -1727,7 +1742,8 @@ class Level0World(
         dlgBN[0] = bN0
         dlgU = 9
         dialogLine = strRef
-        val iA = dlgLoadPage(levelString(1 + kAj, strRef) ?: "", 0, 300)
+        val iA = dlgLoadPage(levelString(1 + kAj, strRef) ?: "",
+                             0, true, 9)                // i!=6 → z2 (:363)
         dlgW = iA + 1                                     // w = iA+1 (:371)
         dlgD(0)                                           // D(0)   (:368)
         dlgBQ = true                                      // bQ     (:370)
@@ -1745,8 +1761,8 @@ class Level0World(
         if (strRef == -1) return false
         val str = levelString(1, strRef) ?: ""
         dlgU = 10
-        dlgBN[0] = (str.getOrNull(0) ?: '0') - '0'        // (:420-423)
-        val iA = dlgLoadPage(str, 0, 300)
+        val iA = dlgLoadPage(str, 0, true, 10)            // i!=6 → z2; bN[0]
+                                                        // digit inside (:380)
         dlgW = iA + 1
         dlgD(0)
         dlgBQ = true
@@ -1771,8 +1787,14 @@ class Level0World(
      *  `bM[]` pages of ≤3 wrapped lines starting at slot `i`, copying
      *  `bN[i]` into every page slot (`z2` arm); returns `i+i4`. The
      *  `i2==9` digit-write skip + the `bN` propagation are u==9's path. */
-    private fun dlgLoadPage(str: String, i: Int, width: Int): Int {
-        val u = wrapPage(str, width)                      // a(y,str,i3) (:382)
+    private fun dlgLoadPage(str: String, i: Int, z2: Boolean, kind: Int): Int {
+        var width = 220
+        if (str.length <= 1) return 0                     // (:378-379)
+        if (z2) {
+            if (kind != 9) dlgBN[i] = str[0] - '0'        // (:381-382)
+            width = 300                                   // (:383)
+        }
+        val u = wrapPage(str, width)                      // a(y,str,i3) (:385)
         var i4 = 0
         var s = 0
         var i5 = u[0]
@@ -1780,12 +1802,12 @@ class Level0World(
             i4++
             val s2 = u[(i4 shl 1) * 3 - 1]                // sArrA[6·i4-1] (:387)
             dlgBM[i + i4 - 1] = str.substring(s, s2)
-            dlgBN[i + i4 - 1] = dlgBN[i]                  // z2 arm      (:392)
+            if (z2 && i4 > 1) dlgBN[i + i4 - 1] = dlgBN[i] // (:392)
             s = s2
             i5 -= 3
         }
         dlgBM[i + i4] = str.substring(s)
-        dlgBN[i + i4] = dlgBN[i]                          // z2 arm      (:398)
+        if (z2 && i4 > 0) dlgBN[i + i4] = dlgBN[i]        // (:398)
         return i + i4
     }
 
@@ -1798,7 +1820,7 @@ class Level0World(
     private fun dlgZ() { dlgBS = 30; dlgBR = 0; dlgBT = 0 }
     /** `x` — u==8 page auto-advance countdown (k.java:964-967); re-arms
      *  at 48 each time it expires (the literal in the original). */
-    var kDlgX = 48
+    override var kDlgX = 48
     /** `fS` — `d(0,111)` tip-marquee counter (k.java:1027-1039); `<0` =
      *  idle (armed ≥0 by claim ops), crawls one char per two frames. */
     var kFS = -1
@@ -2547,17 +2569,25 @@ class Level0World(
         }
     }
 
-    /** `a(b,str)` typewriter tail (k.java:3447-3470, proven shape):
-     *  `dk` counts down; while `dk<=0` either inserts one char at `dj`
-     *  (the \0\2 markers are font markup — unported) or resets
-     *  `dj=0;dk=15` once `dj` reaches the end — a looping retype. */
+    /** `a(b,str)` typewriter tail (k.java:3447-3470, proven): `dk`
+     *  counts down; while `dk<=0` the FULL string draws with the char
+     *  at `dj` bracketed `\\2<char>\\0` (palette-2 highlight sweep —
+     *  a moving cursor, not a partial reveal); `dj++` per call, and on
+     *  reaching the end `dj=0;dk=15` re-arms a 15-frame hold. The
+     *  `bVar.f` bold latch around the draw is folded into the escape
+     *  markup (our renderer maps `\\0`/`\\2` to font `l()` variants). */
     private fun typewriterStep(s: String) {
         while (kDk <= 0) {
-            if (kDj < s.length) { typewriterText = s; kDj++; return }
+            if (kDj < s.length) {
+                typewriterText = "\\0" + s.substring(0, kDj) +
+                                 "\\2" + s[kDj] + "\\0" +
+                                 s.substring(kDj + 1)
+                kDj++; return
+            }
             kDj = 0; kDk = 15
         }
         kDk--
-        typewriterText = s
+        typewriterText = "\\0" + s
     }
 
     /** `K(int)` (k.java:6956, proven head) — banner-queue setup:

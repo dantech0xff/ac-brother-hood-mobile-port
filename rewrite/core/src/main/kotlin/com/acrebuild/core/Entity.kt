@@ -956,10 +956,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `s()` — per-tick anim advance (`i.java:293`): blocked while
-     * `P & 64` (hold), `U < 0`, or `V > 0` (decremented). Frames wrap to 0
-     * after the last; the special-case wrap side effects on `ax == 67` /
-     * flying levels are level-code, not ported here.
+     * `s()` — per-tick anim advance (`i.java:293-333`, proven): blocked
+     * while `P & 64` (hold), `U < 0`, or `V > 0` (decremented). Frames
+     * wrap to 0 after the last. Wrap tail (proven): runs only while a
+     * `j.c==21 && k.u!=8` modal is up (the only draw-pass caller) —
+     * clears the player's `ag/ah` pin (`bh!=3 && !aZ && (g.b(S)||S==79)
+     * → i(0);E()`), then `k.C!=null && ax!=67 → P|=64` re-arms this
+     * entity's hold (ax67 score floaties are the EXEMPTION, not a
+     * trigger). No-op in our model: entities don't tick during the
+     * modal at all, so the tail can never fire.
      */
     fun advanceAnim() {
         val c = clip ?: return
@@ -5150,13 +5155,13 @@ interface LevelCellSource {
      *  (`j.a(k.bA,68,aZ?1:0)` save at i.java:13494/17286; `aZ = bA[68]!=0`
      *  restore at k.java:5197). Written by the ax10 S6/S7 zone arms. */
     var kAZ: Boolean get() = false; set(_) {}
-    /** `k.b(int,int,int,int)` (k.java:350, proven) — checkpoint-map
-     *  marker: `u=slot` (8 = checkpoint kind), expands `d(level,row)`
-     *  entries into the `w` region; `i3==-1 → false` (no start row). */
+    /** `k.b(int,int,int,int)` (k.java:350-372, proven) — the jC==21
+     *  text-panel initializer (NOT a map marker): `u=slot` = panel kind,
+     *  expands `d(level,row..span)` into `bM[]` pages; `i3==-1 → false`. */
     fun kBMark(slot: Int, level: Int, row: Int, span: Int): Boolean = false
     /** `k.bQ` (k.java:140 `private static boolean`, proven) — the
-     *  checkpoint-map "region dirty" flag `k.b()` sets; consumed by the
-     *  map screen (unported there — flag tracked for parity). */
+     *  text-panel "content dirty" flag `k.b()` sets; consumed by the
+     *  panel render pass (flag tracked for parity). */
     var kBQ: Boolean get() = false; set(_) {}
     /** `e.b()` (e.java:87, proven) — stop the current audio track.
      *  (`k.w()` 0-arg, k.java:5707.) */
@@ -5264,6 +5269,10 @@ interface LevelCellSource {
     /** `k.X`/`k.W`/`k.V`/`k.aw` — time-scale statics touched by
      *  b(int)/O(). `k.V` is the camera-watch x (k.java:49 `-7`). */
     var kX: Int get() = 0; set(_) {}
+    /** `k.x` (k.java:963 lowercase, proven) — the u==8 dialog auto-page
+     *  countdown, distinct from `k.X` crossfade: ax10-S21 re-arms it at
+     *  48 (i.java:12851) after `k.l(21)`. */
+    var kDlgX: Int get() = 0; set(_) {}
     var kW: Int get() = 0; set(_) {}
     var kV: Int get() = 0; set(_) {}
     var kAw: Int get() = 0; set(_) {}

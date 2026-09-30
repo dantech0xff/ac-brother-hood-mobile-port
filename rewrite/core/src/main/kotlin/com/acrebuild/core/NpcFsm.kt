@@ -1502,7 +1502,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (rectsOverlap(player.W, e.W)) {
                     if (w.kBMark(8, 1 + w.kAj, e.aF, e.pv))
                         w.screenL(21)                               // L187f
-                    w.kX = 48
+                    w.kDlgX = 48                                    // k.x=48 (:12851)
                     w.removeEntity(e)
                 }
                 return
