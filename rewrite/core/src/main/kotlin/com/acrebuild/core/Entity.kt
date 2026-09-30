@@ -35,10 +35,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  F()'s ax29 arm writes it for the i.by==3 flicker, the Leec tail
      *  publishes it on every ax29 draw. -1 = unset. */
     var j0Frame = -1
-    /** `r16` of the ax64 S3-5 arm (i.java:13635, high-confidence): the
-     *  grab-scale `80 - (range·cA/cz)` the Lde8 overflow log guards
-     *  ("JUMP_MAN_MIN_SCALE_VALUE=80"). Stored for the draw side. */
-    var ax64Scale = 0
+    // (ax64 S3-5 "scale" dropped: r16 `100-(20*cA)/cz` was only a
+    // debug-log guard — no scale applied, i.java:3313-3321 proven)
     var N: Int = 0                   // 8.8 x
     var O: Int = 0                   // 8.8 y
     var ag: Int = 0                  // vx
@@ -287,10 +285,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `a.e` (a.java:33-42) — the anim index each trail card carries:
      *  captured `S` at arm time (`cU[i].a(this.S,-1)` i.java:19611/19615). */
     var trailAnim = -1
-    /** `a.g` (a.java:110-140, proven) — the trail cards' shared ms
-     *  accumulator: `b(j.g)` adds ~1/draw; frames hold `dur*40` units so
-     *  dots sit on armed-S frame ~0 for the trail's short life. */
-    var trailClock = 0
+    /** The trail card clock is `j.g` set per draw (`cU[i].b(j.g)`
+     *  i.java:19652) — no per-entity counter; see `trailFrame`. */
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
@@ -334,14 +330,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /** `i.d(x,y)` (i.java:9856, proven): move the hand indicator; T()
-     *  hands re-pin L/M; anim 1 while within 70px of (k.J,k.K) — the
-     *  held-point; the port reuses the single touch point (inferred —
-     *  J2ME tracks down vs current separately). */
+     *  hands re-pin L/M; anim 1 while within 70px of the HELD point
+     *  (k.J,k.K = lastMoveX/Y, proven i.java:7717) — not the
+     *  release-edge k.H/k.I. */
     fun moveHand(w: LevelCellSource, x: Int, y: Int) {
         val e = ae ?: return
         e.ak = x; e.al = y
         if (indicatorIsHand(w)) { L = x; M = y }
-        e.setAnim(if (w.touchNearView(e, 70)) 1 else 0)
+        e.setAnim(if (w.moveNearView(e, 70)) 1 else 0)
     }
 
     // -- i.C() victim hit-react + g.ar() the interact action -----------------
@@ -785,7 +781,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * wall-zero `ag`, `F = null`; then `av()`. */
     private fun orbitSwing(w: LevelCellSource, f: Entity) {
         cB -= cF shr 8
-        if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+        if (cy in (Trig.N + 1) until Trig.O) cy += cx else if (cy > Trig.O || cy < Trig.N) cy -= cx
         orbitPosition()
         if (overlapI(W, f.W)) {
             setAnim(22)
@@ -806,7 +802,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * unlinks `F` and `i.at` (no launch). */
     private fun orbitSlide(w: LevelCellSource, f: Entity) {
         cB -= cF shr 8
-        if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+        if (cy in (Trig.N + 1) until Trig.O) cy += cx else if (cy > Trig.O || cy < Trig.N) cy -= cx
         orbitPosition()
         if (overlapI(W, f.W)) { F = null; Entity.at = null }
         wallProbe(w)
@@ -827,7 +823,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             cB -= cF shr 8                            // L69/L76 floor 75
             if (cB < 75) cB = 75
             if (f.Z[0] == 2) cx = 15 * Trig.M / 360
-            if (cy in (Trig.N + 1) until Trig.O) cy += cx else cy -= cx
+            if (cy in (Trig.N + 1) until Trig.O) cy += cx else if (cy > Trig.O || cy < Trig.N) cy -= cx
             if (Math.abs(cy - Trig.O) <= cx) {        // L96 top band
                 cL = if (f.Z[0] == 2) 35 * Trig.M / 360 else 16 * Trig.M / 360
                 cM = 1
@@ -1576,12 +1572,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
             if (aR < 12 && (aS >= 12 || aS == 5)) al += 20
         }
         ah = 1
-        // d() fall-damage gate (g.java:4690-4700, proven): falls of
-        // >=20 cells (al - g.y >= 400px) without iframes call
-        // a(21,0,0,this) → the raw op21 drain. Original `return`s after
-        // the op (landing squat skipped); we apply it then continue the
-        // land so the transition can't re-fire — inferred control flow.
-        if ((al - gy) / 20 >= 20 && gt == 0 && ax == 0) {
+        // d() fall-damage gate (g.java:4978-4981, proven): op21 fires
+        // only on a normal landing (not platform variant, not the S16/
+        // Q16 door-exit arms), >=20 cells below the apex, no iframes —
+        // `S==16||Q==16||z2||!z3||(al-y)/20<20||h() -> return`.
+        if (!platformVariant && S != 16 && Q != 16 &&
+            (al - gy) / 20 >= 20 && gt == 0) {
             applyHit(21, 0, this, world)
         }
         if (platformVariant) {
@@ -1893,11 +1889,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `av` = "facing/mirroring left" that reads "other is in front". */
     fun faces(o: Entity): Boolean = (o.ak < ak) == av
 
-    /** `i.T()` (i.java:9879, proven): marker alive — `ae` exists, is the
-     *  clip-74 prompt clip, and `S ∈ {0,1}`. Our markers spawn on clip 9
-     *  (`spawnPickup`) so the clip-identity check is dropped (`inferred` —
-     *  same effect: `ae` is always the marker entity). */
-    fun markerAlive(): Boolean = ae != null && ae!!.S in 0..1
+    /** `i.T()` (i.java:7724-7729, proven): `ae` exists, is the clip-74
+     *  prompt clip, and `S ∈ {0,1}`. `ae` is shared — clip-74 hand via
+     *  `c()` vs clip-9/etc markers via `a()` — so for marker entities T()
+     *  is FALSE and `d()` does not re-pin L/M. Identical to
+     *  `indicatorIsHand`. */
+    fun markerAlive(w: LevelCellSource): Boolean = indicatorIsHand(w)
 
     /** `i.o(int,int)` (i.java:9825, proven): park the last marker point —
      *  class statics `L`/`M` consumed by `b(x,y)` (:9829). */
@@ -1912,8 +1909,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun moveMarker(w: LevelCellSource, x: Int, y: Int) {
         val m = ae ?: return
         m.ak = x; m.al = y
-        if (markerAlive()) markerPoint(x, y)
-        m.setAnim(if (w.touchNearView(m, 70)) 1 else 0)
+        if (markerAlive(w)) markerPoint(x, y)
+        m.setAnim(if (w.moveNearView(m, 70)) 1 else 0)
     }
 
     /** `i.V()` (i.java:9903, proven): marker-touch check — `ae` live and
@@ -3024,11 +3021,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun contextDispatch(w: LevelCellSource, pad: Pad) {
         if (gI == 4 && aA < 2) requestH(1, w)
         if (!pad.v(Pad.M_CONTEXT)) return
-        // L28-L33 (proven): blocked while riding a zipline OR while an
-        // attack anim plays — `b()` is the busy set {67-69,81,112-115,
-        // 183-184,216-217,286-287}; combo chaining runs inside the combo
-        // arms (`aj()`/`ay()`) instead of re-entering here.
-        if (ac?.ax == 10 || PlayerFsm.isAttackState(S)) return
+        // L28-L33 (proven): `z2 = (ac==null || ac.ax!=10) && !b()` —
+        // `b()` (g.java:263-286) is busy only while wielding sword
+        // (I==1) or knife (I==2) mid-attack anim {67-69,81,112-115,
+        // 183-184,216-217,286-287}; other equips don't block.
+        if (ac?.ax == 10 ||
+            ((gI == 1 || gI == 2) && PlayerFsm.isAttackState(S))) return
         when (gI) {
             1 -> {
                 ag = 0; ah = 0; aj = 0
@@ -4072,29 +4070,31 @@ open class Entity(val ax: Int, var clip: Clip?) {
         for (i in 1..4) { t[i * 2] = -200; t[i * 2 + 1] = -120 }
         cU = t; cV = true; cW = 0
         trailAnim = S
-        trailClock = 0
     }
 
     /** `i.af()` (i.java:21513, proven): ring-shift the trail dots —
-     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. The card clock
-     *  ticks here (`ah()`→`b(j.g)` in the original runs per draw; j.g is
-     *  ~1 in gameplay so +1/push is the same rate — `inferred`). */
+     *  `cU[i+1] = cU[i]`, then `cU[0]` = current pos. The card clock is
+     *  NOT advanced here — `ah()` sets each card's position to the
+     *  absolute frame counter `j.g` per draw (`cU[i].b(j.g)`). */
     fun pushTrail() {
         val t = cU ?: return
         for (i in 3 downTo 0) { t[(i + 1) * 2] = t[i * 2]; t[(i + 1) * 2 + 1] = t[i * 2 + 1] }
         t[0] = ak; t[1] = al
-        trailClock++
     }
 
     /** `a.b(i)`/`a.f()` (a.java:60,112-142, proven): the trail cards'
-     *  frame position — walk `dur*40`ms thresholds through `trailAnim`,
-     *  wrapping forever (`h=-2` < 0 → `f=0` loop, never `i=true`). */
-    fun trailFrame(): Int {
+     *  frame position — `b(j.g)` wraps the absolute frame counter into
+     *  `[0, total)` then walks `dur*40`ms thresholds to the frame index.
+     *  `jg` = `w.jG` (proven i.java:19652 `cU[i].b(j.g)`). */
+    fun trailFrame(jg: Long): Int {
         val c = clip ?: return 0
         if (trailAnim < 0 || trailAnim >= c.animCount()) return 0
         val n = c.frameCount(trailAnim)
         if (n <= 0) return 0
-        var rem = trailClock
+        var total = 0
+        for (i in 0 until n) total += c.frameDuration(trailAnim, i) * 40
+        if (total <= 0) return 0
+        var rem = (jg % total).toInt()
         var f = 0
         var guard = 0
         while (guard++ < 1024) {
@@ -4165,8 +4165,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `k.o()` (k.java:3429, proven): input-lock arm `am=true,dd=false`. */
     fun lockInput(w: LevelCellSource) { w.kAm = true; w.kDd = false }
     /** `k.p()` (k.java:3434, proven head): release `am=false,dd=false`
-     *  plus `j.b(0,false)`/`j.i(0)` UI resets (render-side, `inferred`). */
-    fun unlockInput(w: LevelCellSource) { w.kAm = false; w.kDd = false }
+     *  plus `j.b(0,false)` — the input-mask release (`t &= ~1`,
+     *  j.java:1344). */
+    fun unlockInput(w: LevelCellSource) {
+        w.kAm = false; w.kDd = false; w.inputLockT = false
+    }
 
     /** `i.p(int,int)` (i.java:18031, proven): damage-number popup —
      *  `a(24,40,31,az+10)` (ax24 `S==19` → 40), `ao/ap` offset, `P|=16,
@@ -4535,40 +4538,55 @@ open class Entity(val ax: Int, var clip: Clip?) {
                              ak - w.kO, al - w.kP, 0x44444444)
                 w.drawFxLine(Z[6] - w.kO, Z[7] - w.kP,
                              ak - w.kO, al - w.kP, -0x77777778)
-            } else if (S == 10 && Z[0] != -1) {          // L1a7 (:11983)
+            } else if (S == 10 && Z[0] != -1) {          // L1a7 (:2980)
+                // (i.java:2980-3046, proven): link must NOT be ax14.
                 val link = w.findByAw(Z[0])
-                if (link != null && link.ax == 14) {
+                if (link != null && link.ax != 14) {
                     link.af = this
                     val r15 = IntArray(4)
                     r15[0] = ((link.W[0] + link.W[2]) shr 1) - w.kO
-                    r15[1] = ((W[0] + W[2]) shr 1) - w.kO
-                    r15[2] = W[3] - w.kP
-                    r15[3] = link.W[3] - w.kP
+                    r15[2] = ((W[0] + W[2]) shr 1) - w.kO
+                    r15[1] = link.W[3] - w.kP
+                    // `this.S == 9 ? W[3] : W[1]` — dead arm inside S10;
+                    // always self-top.
+                    r15[3] = W[1] - w.kP
                     w.drawFxLine(r15[0], r15[1], r15[2], r15[3],
                                  0x44444444)
-                    w.drawFxLine(r15[0] + 1, r15[1] + 1,
-                                 r15[2], r15[3], -0x77777778)
-                    w.iR[0] = ak - 8; w.iR[1] = ak + 8
-                    w.iR[2] = al - 8; w.iR[3] = al + 8
+                    w.drawFxLine(r15[0] + 1, r15[1], r15[2] + 1, r15[3],
+                                 -0x77777778)
+                    // test rect around the LINK ±10 ([x1,y1,x2,y2]).
+                    w.iR[0] = link.ak - 10; w.iR[1] = link.al - 10
+                    w.iR[2] = link.ak + 10; w.iR[3] = link.al + 10
                     val ps = w.player.S
-                    // the second/third constants are stripped in the
-                    // fallback — inferred: the aerial family 234/235.
-                    if (ps != 233 && ps != 234 && ps != 235 &&
+                    if (ps != 233 && ps != 22 && ps != 23 &&
                         overlapI(w.player.X, w.iR)) {
-                        // L349-L44a (i.java:12274-12389): walk `af`
-                        // hops; each second-hop ax14 tombstones.
-                        var hop: Entity? = link
+                        // L3033-L3046: walk the af-chain; at the first
+                        // S==10 hop write iv.Z[4..7] = span-to-hop coords,
+                        // unbind af.Z[0], and tombstone the double-hop
+                        // ax14 (`k.q(k.q(iv.Z[0]).Z[0])`).
+                        var iv: Entity? = link
                         var guard = 0
-                        while (hop != null && guard++ < 64) {
-                            val nxt = hop.af ?: break
-                            if (nxt.Z[0] == -1) break
-                            val a2 = w.findByAw(nxt.Z[0]) ?: break
-                            val b2 = w.findByAw(a2.Z[0]) ?: break
-                            if (b2.ax == 14) {
-                                b2.P = b2.P or 128
-                                w.removeEntity(b2)
+                        while (iv != null && guard++ < 64) {
+                            val af = iv.af ?: break
+                            if (af.Z[0] == -1) break
+                            if (af.S == 10) {
+                                iv.Z[4] = (iv.W[0] + iv.W[2]) shr 1
+                                iv.Z[6] = (af.W[0] + af.W[2]) shr 1
+                                iv.Z[5] = iv.W[3]
+                                iv.Z[7] = af.W[1]
+                                af.Z[0] = -1
+                                if (iv.Z[0] != -1) {
+                                    val b2 = w.findByAw(iv.Z[0])?.let {
+                                        w.findByAw(it.Z[0])
+                                    }
+                                    if (b2 != null && b2.ax == 14) {
+                                        b2.P = b2.P or 128
+                                        w.removeEntity(b2)
+                                    }
+                                }
+                                break
                             }
-                            hop = nxt.af
+                            iv = af
                         }
                     }
                 }
@@ -4755,11 +4773,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                             cA++
                             if (cA > cz) cA = cz
                         }
-                        if (cz <= 0) { cA = 0; cz = 0 }
-                        // r16 = 80 - (range·cA/cz); the divisor guards
-                        // "JUMP_MAN_MIN_SCALE_VALUE=80" — the range
-                        // constant is stripped (inferred: same 80).
-                        ax64Scale = 80 - 80 * cA / maxOf(1, cz)
+                        if (cz <= 0) { cA = 0; cz = 1 }
+                        // the r16 `100 - (20*cA)/cz <= 0` read-out only
+                        // guards a debug StringBuffer — no scale is
+                        // applied (i.java:3313-3321, proven).
                     }
                     ax == -999 -> {
                         // Ldeb (i.java:13647): sentinel debug line —
@@ -5005,6 +5022,9 @@ interface LevelCellSource {
     /** `k.a(k.H,k.I, e.ak-k.O, e.al-k.P, r)` (k.java:627): is the entity
      *  within r px (k.h octagonal) of the view-space touch point? */
     fun touchNearView(e: Entity, r: Int): Boolean = false
+    /** `k.a(k.J,k.K, e.ak-k.O, e.al-k.P, r)` — same probe on the held/
+     *  move point (proven: i.java:7717 `i.d` anim-1 proximity). */
+    fun moveNearView(e: Entity, r: Int): Boolean = false
     /** `k.k()` (k.java:638) — `cm == 1` mounted flag. */
     val mounted: Boolean get() = false
     /** `cm = true` at g.java:3564 (L2040) — sets `cm = 1`. */
@@ -5386,13 +5406,16 @@ interface LevelCellSource {
     fun kM(mask: Int) {}
     /** `i.b(int)`/`i.O()` — slow-mo arm/disarm; already ported as
      *  `eventArm`/`eventDisarm` on Entity (no interface entry needed). */
-    /** `i.a(ax,S,...)` (i.java:6898, proven spawn form) — static spawn
-     *  returning the new entity (`aK` in callers). `a(9,47,5,400)` is the
-     *  sub-op-15 marker arm — `(ax,S,x?,y?)` arg mapping `inferred`. */
-    fun spawnStatic(ax: Int, s: Int, x: Int, y: Int): Entity? = null
+    /** `i.a(ax,clip,S,az)` (i.java:3644-3657, proven): 4-arg INSTANCE
+     *  spawn — writes `aK` with `aa = k.r(clip)`, `i(S)`, `az`,
+     *  inheriting the caller's `ak/al/av` (no `k.b` — callers queue
+     *  it). `a(9,47,5,400)` = the sub-op-15 marker arm. */
+    fun spawnStatic(ax: Int, clipIdx: Int, s: Int, az: Int): Entity? = null
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}
+    /** `j.t` bit-0 — input-mask latch (j.java:1334-1342, proven). */
+    var inputLockT: Boolean get() = false; set(_) {}
     /** `i.f(i)` (i.java:5382, proven) — the scroll-wall clamp called at
      *  the tail of the player's motion arms (16 call sites, all on g):
      *  while the ax37 holder is in overlap mode it pins the entity's Y
@@ -5417,16 +5440,18 @@ interface LevelCellSource {
     /** `k.bI` (k.java:313, proven): shared fade progress 0..255 ramped
      *  by `k.fk` per `aa()` step — read by the door arms at `> 13`. */
     var kBI: Int get() = 0; set(_) {}
-    /** `k.B(26)` (k.java:5738): arm the fade-IN ramp (`an`, `bI=0`). */
-    fun fadeIn() {}
-    /** `k.C(26)` (k.java:5745): arm the fade-OUT ramp (`ao`, `bI=255`). */
+    /** `k.B(26)` (k.java:5738-5743): arm the fade-OUT (cover) ramp
+     *  — `an`, `bI=0` ramping up (door-exit wipe). */
     fun fadeOut() {}
+    /** `k.C(26)` (k.java:5745-5750): arm the fade-IN (reveal) ramp
+     *  — `ao`, `bI=255` ramping down (door-arrival). */
+    fun fadeIn() {}
     /** `k.ah?.I()` (i.java:14444, proven): tick the scroll-wall holder
      *  entity — ported as the ax37 bounds refresh (inferred mapping). */
     fun refreshScrollBounds() {}
-    /** `k.aQ` — the debug vol-paint surface the ax35 `a(x,y,w,h,bool)`
-     *  rasterizer fills (i.java:22224). Debug-only: its sole reader is
-     *  the HUD blit at (198-w,5); ported as a rect recorder (`inferred`). */
+    /** `k.aQ` — the ax35 minimap Image the `a(x,y,w,h,bool)` vol
+     *  rasterizer fills (i.java:22224); the NORMAL HUD path blits it at
+     *  (198-w,5) (k.java:3140, proven — not debug-only). */
     var volPaintRect: IntArray? get() = null; set(_) {}
     /** `k.v(mask)` (k.java:7210, proven): edge-input `(bB & mask) != 0`. */
     fun padHeld(mask: Int): Boolean = false

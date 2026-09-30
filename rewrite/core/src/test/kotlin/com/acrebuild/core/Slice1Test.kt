@@ -1538,13 +1538,15 @@ class Level0WorldTest {
 
     // ---- slice 25 ----------------------------------------------------
 
-    @Test fun `held input maps J to f0do mask 5`() {
+    @Test fun `pointer-held writes no gJ — J comes from F(aj) and pickups`() {
         val w = world()
         w.npcs.clear()
         val q = InputQueue()
         q.post(InputQueue.Type.DOWN, 1200, 700)
         w.tick(q.drainTo(q.headSequence()))
-        assertEquals(5, w.player.gJ, "k.F(aj): J=f0do[*]=5 while held")
+        // k.java:4644-4651 (proven): g.J = 0 then g.g(f0do[aj]=5) runs
+        // once inside F(aj) at play-entry; no per-frame pointer write.
+        assertEquals(0, w.player.gJ, "held input does not write g.J")
     }
 
     @Test fun `ax16 S39 mount request ORs bit4 and consumes itself`() {
@@ -7259,6 +7261,9 @@ class Slice73Test {
         val rec = mutableListOf(73, e.aw, x, y)
         rec += f.toList()
         while (rec.size < 20) rec += -1
+        // shared-block layout (i.java:2230, proven): Z[0] = sArr[10] —
+        // default the archetype field to 0 when the caller omits it.
+        if (f.size <= 6) rec[10] = 0
         e.setPositionPx(x, y)
         w.npcFsm.initAx73(e, rec.toList())
         w.npcs.add(e)
@@ -7274,9 +7279,9 @@ class Slice73Test {
     @Test fun `init — minimal record — Z0=f4, az=f17, aB=bu, S=f5`() {
         val w = world()
         val e = ax73At(w, 100, 200, 0, 152, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 300)
-        assertEquals(0, e.Z[0], "L134: Z[0] = r8[4] = 0")
+        assertEquals(0, e.Z[0], "Z[0] = sArr[10] = 0")
         assertEquals(300, e.az, "az = r8[17]")
-        assertEquals(300, e.aB, "aB = bu[au=0] = 300")
+        assertEquals(600, e.aB, "aB = bu[au=0] shl 1 = 600 (ax==73 doubles)")
         assertEquals(152, e.S, "i(r8[5])")
         assertTrue(e.ae == null, "no marker bound at init")
     }
@@ -7307,7 +7312,7 @@ class Slice73Test {
 
     @Test fun `S152 idle — G + zero vel + Z0=0 and engage-able raises aA=1`() {
         val w = world()
-        val e = ax73At(w, 100, 200, 3, 152)
+        val e = ax73At(w, 100, 200, 0, 152, 0, 0, 0, 0, 3)
         e.ae = Entity(14, null); e.ah = 5; e.ag = 5
         w.player.setPositionPx(e.ak + 100, e.al)   // outside W, LOS-clear
         w.player.refreshBoxes()
@@ -7347,7 +7352,7 @@ class Slice73Test {
         w.player.refreshBoxes(); w.player.S = 0
         w.npcFsm.tickAx73(e, w, w.player)
         assertEquals(-512, e.ag, "L76-L79: av==false → ag=-512")
-        val e2 = ax73At(w, 500, 200, 3, 155)
+        val e2 = ax73At(w, 500, 200, 0, 155, 0, 0, 0, 0, 3)
         e2.s = Entity(51, null)
         e2.av = true; e2.Z[0] = 3; e2.aq = 0; e2.j = 0
         w.player.setPositionPx(e2.ak + 1000, e2.al); w.player.refreshBoxes()
@@ -7381,7 +7386,7 @@ class Slice73Test {
 
     @Test fun `j() — enraged guard ignores damage entirely`() {
         val w = world()
-        val e = ax73At(w, 100, 200, 3, 146)        // Z0=3 already
+        val e = ax73At(w, 100, 200, 0, 146, 0, 0, 0, 0, 3)  // Z0=3 already
         e.aB = 300
         w.player.S = 68; w.player.gI = 1
         w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
@@ -7468,7 +7473,7 @@ class Slice73Test {
 
     @Test fun `S171 enraged — player above sight rect disengages to S152`() {
         val w = world()
-        val e = ax73At(w, 100, 200, 3, 171)
+        val e = ax73At(w, 100, 200, 0, 171, 0, 0, 0, 0, 3)
         e.aq = 0
         e.s = Entity(51, null)                     // edge probes off
         w.player.setPositionPx(e.ak, e.al + 120)   // W[1] > Z[12] (=200)
@@ -8955,13 +8960,16 @@ class Slice73AutoCamTest {
         assertEquals(5, w.kX, "X is a sticky counter — no re-drain")
     }
 
-    @Test fun `iBW phase write persists extended snapshot then clears`() {
+    @Test fun `iBW phase write persists snapshot and stays armed`() {
+        // i.bW is never cleared (k.java:3365, proven): `if (bW) X()` re-fires
+        // every camera tick while armed — the phase checkpoint re-stamps
+        // continuously until class-init/reset.
         val w = world()
         w.kAj = 1
         w.kAp[0] = 7; w.kAp[3] = 2
         w.iBW = true
         w.tick(emptyList())
-        assertFalse(w.iBW, "pending write consumed")
+        assertTrue(w.iBW, "pending write stays armed (k.java:3365)")
         val s = w.checkpointSnap!!
         assertEquals(w.player.ak, s.ak); assertEquals(w.player.al, s.al)
         assertEquals(7, s.ap[0]); assertEquals(2, s.ap[3])
@@ -9068,14 +9076,15 @@ class Slice76Test {
     }
 
     @Test fun `l12 clears kAD and runs the banner tail`() {
-        val w = world()
+        val w = world(charmap = charmap())
         w.kAD = w.player
         w.screenL(12)
         assertNull(w.kAD)
         assertEquals(25, w.kEc); assertEquals(59, w.kEb)   // L17 (high-conf)
         assertEquals(3, w.kBv); assertEquals(-1, w.kBw)    // K(3): bw=-1
         assertEquals(2, w.kEy)                             // eA[3].size = 2
-        assertEquals(18, w.kEd)                            // eC text-height
+        // kEd = linesHeight(wrapPage(d0(25),206)[0]) — real font metrics
+        assertEquals(14, w.kEd)                            // eC text-height
     }
 
     @Test fun `l13 remaps to 31 when bx is set`() {
@@ -9495,8 +9504,8 @@ class Slice78Test {
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 200, 110 + 2 * 30),
             InputQueue.Event(1, InputQueue.Type.UP, 200, 110 + 2 * 30)))
-        assertEquals(1, w.kCm)
-        assertEquals(1, w.kBA[80])
+        assertEquals(0, w.cm)
+        assertEquals(0, w.kBA[80])
     }
 
     @Test fun `back edge pops the menu stack`() {
@@ -11530,9 +11539,9 @@ class Slice98Test {
         }
     }
 
-    @Test fun `fadeIn ramps nine stripes then one black frame`() {
+    @Test fun `fadeOut ramps nine stripes then one black frame`() {
         val w = world(); w.npcs.clear(); w.stateL(8)
-        w.fadeIn()                                        // k.B(26)
+        w.fadeOut()                                       // k.B(26)
         assertTrue(w.kAn); assertFalse(w.kAo)
         assertEquals(0, w.kBI); assertEquals(26, w.kFk)
         tickClean(w, 9)
@@ -11544,10 +11553,10 @@ class Slice98Test {
         assertTrue(w.fadeSolidFrame, "single solid-black frame armed")
     }
 
-    @Test fun `fadeOut drains bI and recedes stripes`() {
+    @Test fun `fadeIn drains bI and recedes stripes`() {
         val w = world(); w.npcs.clear(); w.stateL(8)
         w.kFn = 9
-        w.fadeOut()                                       // k.C(26)
+        w.fadeIn()                                        // k.C(26)
         assertTrue(w.kAo); assertFalse(w.kAn)
         assertEquals(255, w.kBI)
         tickClean(w, 1)
@@ -11563,7 +11572,7 @@ class Slice98Test {
         val w = world(); w.npcs.clear(); w.stateL(8)
         w.fadeOut()
         w.fadeIn()
-        assertTrue(w.kAn); assertFalse(w.kAo); assertEquals(0, w.kBI)
+        assertTrue(w.kAo); assertFalse(w.kAn); assertEquals(255, w.kBI)
     }
 
     @Test fun `vignette fs wraps at zero`() {
@@ -16836,14 +16845,13 @@ class Slice174Test {
         p.ak = 120; p.pushTrail()
         val t = p.cU!!
         assertEquals(120, t[0]); assertEquals(110, t[2]); assertEquals(100, t[4])
-        assertEquals(2, p.trailClock)
         // parked dots still parked
         assertEquals(-200, t[8]); assertEquals(-120, t[9])
     }
 
-    // a.f() = d.a(e,f)*40 (a.java:60, proven): frames hold 40 units per
-    // duration tick — clock 1 -> frame 0; frame advances only after the
-    // first dur*40 threshold, and wraps (h=-2 infinite loop).
+    // a.f()/b(j.g) (a.java:60,112-142, proven): the card's frame index is
+    // j.g wrapped mod total(Σdur*40), walking dur*40 thresholds — frame
+    // advances when j.g crosses each threshold, wraps to 0 at j.g=total.
     @Test fun `trailFrame walks dur-times-40 thresholds and wraps`() {
         val w = world()
         w.stateL(8)
@@ -16853,19 +16861,16 @@ class Slice174Test {
         val clip = p.clip!!
         val n = clip.frameCount(0)
         assertTrue(n > 0)
-        assertEquals(0, p.trailFrame())
-        // dur0*40 - 1 -> still frame 0; dur0*40 -> frame 1 (or wraps on n==1)
+        assertEquals(0, p.trailFrame(0))
+        // jg = dur0*40 - 1 -> still frame 0; jg = dur0*40 -> frame 1
         val d0 = clip.frameDuration(0, 0)
         if (d0 > 0 && n > 1) {
-            p.trailClock = d0 * 40 - 1
-            assertEquals(0, p.trailFrame())
-            p.trailClock = d0 * 40
-            assertEquals(1, p.trailFrame())
-            // far past the end: wraps back into range
+            assertEquals(0, p.trailFrame((d0 * 40 - 1).toLong()))
+            assertEquals(1, p.trailFrame((d0 * 40).toLong()))
+            // jg = total wraps back into range
             val total = (0 until n).sumOf { clip.frameDuration(0, it) } * 40
             if (total > 0) {
-                p.trailClock = total
-                assertEquals(0, p.trailFrame())
+                assertEquals(0, p.trailFrame(total.toLong()))
             }
         }
     }
@@ -21281,16 +21286,17 @@ class Slice239Test {
 
     @Test fun `ax15 S10 marker emits lines and the iR box`() {
         val w = world()
-        val zone = ent(14, w); zone.aw = 424242
+        // i.java:2980-3046 (proven): the S10 link must NOT be ax14.
+        val link = ent(9, w); link.aw = 424242
         val m = ent(15, w); m.S = 10; m.Z[0] = 424242
         m.setPositionPx(500, 700); m.refreshBoxes()
-        zone.setPositionPx(300, 300)
-        zone.refreshBoxes()
-        zone.W[0] = 280; zone.W[1] = 280; zone.W[2] = 320; zone.W[3] = 330
+        link.setPositionPx(300, 300)
+        link.refreshBoxes()
+        link.W[0] = 280; link.W[1] = 280; link.W[2] = 320; link.W[3] = 330
         m.drawStyleF(w)
         assertEquals(2, w.fxLines.size, "L1a7: two j.a marker lines")
-        assertEquals(intArrayOf(492, 508, 692, 708).toList(), w.iR.toList(),
-            "L2c8: i.r = {ak-8, ak+8, al-8, al+8}")
+        assertEquals(intArrayOf(290, 290, 310, 310).toList(), w.iR.toList(),
+            "L2c8: i.r = link box ±10 (ak-10,al-10,ak+10,al+10)")
     }
 
     @Test fun `slow mo off tick returns 0`() {
@@ -25992,6 +25998,8 @@ class Slice288Test {
         var leg = 0; var t = 0; var won = false
         var prevCamY = w.kP; var stallT = 0; var prevS = p.S
         var minAl = p.al
+        var dodgeT = 0; var lastShots = 0
+        var armedSeen = 0; var firedN = 0
         while (t++ < 120000) {
             when {
                 w.missionWon -> { won = true; break }
@@ -26034,6 +26042,7 @@ class Slice288Test {
                     p.al in z31.W[1] - 40..z31.W[3] + 40)) {
                 // any armed S31 zone in reach → press its lane once
                 if (z31 != null && z31.aB > 0) {
+                    armedSeen++
                     held = m4Cs[z31.Z[1] and 15]
                 } else if (z31 != null) {
                     // steer into the zone's W band so `aV()` can arm it
@@ -26048,9 +26057,14 @@ class Slice288Test {
                     else if (p.al > w.kP + 230) held = Pad.M_UP
                 }
             }
-            else if (tag == "perch") {
+            else if (tag == "perch" ||
+                (p.al in 3600..4500 &&
+                    w.npcs.any { it.ax == 10 && it.S == 10 })) {
+                // perch bind runs whenever an S10 zone is in reach —
+                // after a knockdown the player re-enters the band while
+                // the leg pointer has already advanced past "perch".
                 val zn = w.npcs.filter { it.ax == 10 && it.S == 10 }
-                    .minByOrNull { Math.abs(it.al - ty) }
+                    .minByOrNull { Math.abs(it.al - p.al) }
                 if (zn != null) {
                     val cx = (zn.W[0] + zn.W[2]) / 2
                     if (p.ak < cx - 10) held = held or Pad.M_RIGHT
@@ -26073,6 +26087,20 @@ class Slice288Test {
                 else if (p.al > w.kP + 200) held = Pad.M_UP
                 else if (p.al < w.kP + 140) held = Pad.M_DOWN else held = 0
             }
+            // Escort volley dodge: shots aim at the player's W-center at
+            // fire time (i.a(int,boolean) fan, structured/i.java:6245 —
+            // ±25-45° cone), so while a live in-flight shot is near, dive
+            // below it — the cone converges on the stale aim point.
+            val liveShots = w.projectilePool?.count {
+                it != null && (it.P and 128) == 0 && it.af != null &&
+                    (it.S in 0..4 || it.S in 22..28)
+            } ?: 0
+            if (liveShots > lastShots && leg >= 8) dodgeT = 60
+            lastShots = liveShots
+            if (dodgeT > 0 && leg >= 8) {
+                dodgeT--
+                held = held and Pad.M_UP.inv() or Pad.M_DOWN
+            }
             // arena wall duel: puffs only damage a wall they overlap, so
             // steer the player's lane onto the live wall's x-band.
             val wallT = w.npcs.firstOrNull {
@@ -26085,6 +26113,14 @@ class Slice288Test {
                 p.ak < txEff - 12) held = held or Pad.M_RIGHT
             else if (tag != "claim" && tag != "gate" &&
                 p.ak > txEff + 12) held = held or Pad.M_LEFT
+            // shield line: park just under the live wall — the volley's
+            // puffs fall on the player but hit the aligned wall's W first
+            // (a wall-hit puff dies in S9, so the wall tanks its own
+            // damage while covering us).
+            if (wallT != null && tag != "claim" && tag != "gate") {
+                if (p.al < wallT.W[3] + 40) held = held or Pad.M_DOWN
+                else if (p.al > wallT.W[3] + 90) held = held or Pad.M_UP
+            }
             val preAF = w.kAF
             prevS = p.S
             w.pad.e(held); w.tick(emptyList())
@@ -26100,7 +26136,8 @@ class Slice288Test {
         }
         val dir = w.npcs.firstOrNull { it.ax == 21 }
         println("M4CAP won=$won t=$t leg=$leg minAl=$minAl p@(${p.ak},${p.al}) " +
-            "dirAA=${dir?.aA} dirl=${dir?.l} jC=${w.jC} kP=${w.kP}")
+            "dirAA=${dir?.aA} dirl=${dir?.l} jC=${w.jC} kP=${w.kP} " +
+            "armed=$armedSeen fired=$firedN")
         assertTrue(won,
             "mission-4 capstone should reach missionWon; " +
                 "got leg=$leg p@(${p.ak},${p.al}) S${p.S} jC=${w.jC} kP=${w.kP} " +
@@ -26662,6 +26699,10 @@ class Slice289Test {
         // gap via ax22 uid211@11408 (S65 -> M_UP launch onto the x11520
         // pillar), soldiers uid213/932 on the x11780 block, then ax22
         // uid214@12151 launches across the 380px void past cp342's zone.
+        // Note: on the faithful sim (i.D() clears g.j post-respawn,
+        // i.java:2495) the run-hop arcs gain ~+20px — the original hop-hop
+        // script overshot the lip; releasing direction mid-hop shortens
+        // arcs so the run reaches the x12051 lip grounded, then edge-vaults.
         p.gJ = 7
         p.setPositionPx(11135, 985); p.ak = 11135; p.al = 985; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
@@ -26676,10 +26717,14 @@ class Slice289Test {
                 p.S == 164 || p.S == 157 -> Pad.M_RIGHT
                 p.S == 315 || p.S == 318 -> Pad.M_DOWN
                 p.S == 68 || p.S == 69 -> Pad.M_CONTEXT        // combo chain
+                // release direction during airborne hops — shortens each
+                // arc so the run lands before the lip and reaches x12051
+                // grounded (the faithful i.D()-cleared arcs gain +20px)
+                !p.aZ && p.ak in 11800..12120 && p.al < 1010 -> 0
                 // the void-gap vault must take off right at the x12060
                 // edge so the arc threads the ax22 uid214 zone — walk the
                 // last ~20px grounded (no hop), then vault at the edge
-                p.aZ && p.ak in 12000..12050 && p.al < 1000 -> Pad.M_RIGHT
+                p.aZ && p.ak in 11960..12050 && p.al < 1000 -> Pad.M_RIGHT
                 p.aZ -> Pad.M_RIGHT + Pad.M_UP
                 else -> Pad.M_RIGHT + Pad.M_UP
             }

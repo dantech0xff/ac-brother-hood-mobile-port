@@ -497,19 +497,10 @@ class NpcFsm(val world: LevelCellSource) {
                 return                                          // → L849
             }
             25 -> { /* fall — shared tail below */ }
-            9 -> {
-                // counter-stagger (from c(player)): decay the ±1536 knockback;
-                // anim end → weakened offer if at/below the counter line,
-                // else resume chase/patrol (arm shape inferred)
-                e.ag = (e.ag * 3) shr 2
-                if (e.animFinished()) {
-                    if (e.ax == 11 && e.aB <= H0 && e.aB > 0) {
-                        e.Z[0] = 2; e.setAnim(144)
-                    } else {
-                        e.setAnim(if (e.aA != 0) 4 else 3)
-                    }
-                }
-            }
+            // case 9 → L777 (i.java:5249, proven): no arm — the stagger
+            // persists until the shared tail transitions it. The weakened
+            // offer is C()'s (Entity.kt:451), not an S9 arm.
+            9 -> { /* shared tail below */ }
             85 -> {
                 // L302 (i.java:5447-5476, proven): hit-react — G(); the
                 // b() corner-support probe: while moving (ag!=0), facing
@@ -782,9 +773,9 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                 }
             }
-            else -> {
-                if (e.aA == 0 && e.animFinished()) e.setAnim(3)  // inferred
-            }
+            // default → L777 (i.java:5425, proven): unlisted S persists —
+            // no fabricated resume arm.
+            else -> { /* shared tail below */ }
         }
         // ---- L777 shared tail (i.java:6213-6250, proven) ----------------
         // The per-S arms set flags at their preludes (I() head defaults
@@ -2138,7 +2129,7 @@ class NpcFsm(val world: LevelCellSource) {
         p.ak = (e.W[0] + e.W[2]) shr 1
         val q = w.findByAw(e.oId)                        // k.q(this.o)
         if (q != null) p.bindAc(q)                       // aS.a(iVarQ)
-        w.fadeIn()                                       // k.B(26)
+        w.fadeOut()                                      // k.B(26)
     }
 
     /**
@@ -2157,7 +2148,7 @@ class NpcFsm(val world: LevelCellSource) {
         p.refreshBoxes()                                 // t()
         w.refreshScrollBounds()                          // k.ah?.I()
         w.kM(w.kAd)                                      // camera snap
-        w.fadeOut()                                      // k.C(26)
+        w.fadeIn()                                       // k.C(26)
     }
 
     // ============================================================ ax4 = aj()
@@ -2318,7 +2309,8 @@ class NpcFsm(val world: LevelCellSource) {
      *  false (inferred). */
     private fun pushOut(e: Entity, p: Entity, w: LevelCellSource) {
         if (e.S == 139) return
-        if (e.S == 18 && p.S == 12) return
+        if (e.S == 18 && p.S != 12) return           // L16-21: player S12
+                                                   // proceeds (i.java:926)
         if (e.S == 131 || e.S == 146) return
         if (!rectsOverlap(p.W, e.W)) return
         if (p.ga != null) return
@@ -4973,7 +4965,8 @@ private fun NpcFsm.bossPushPast(e: Entity) {
     val p = w.player
     if (e.S == 139) return
     if (p.S == 6 && e.ax == 11) return
-    if (e.S == 18 && p.S == 12) return
+    if (e.S == 18 && p.S != 12) return           // L16-21: player S12
+                                                   // proceeds (i.java:926)
     if (e.S == 131 || e.S == 146) return
     if (!Entity.overlapI(p.W, e.W)) return
     if (p.S > 43) return
@@ -6533,8 +6526,14 @@ private fun NpcFsm.dirVariant(x1: Int, y1: Int, x2: Int, y2: Int): Int {
 private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
                                w: Level0World) {
     val pool = w.projectilePool ?: return             // unseeded → inert (inferred)
-    val r0 = if (count > 1) count - 1 else -1         // L6 arm (inferred —
-    // jadx dropped the assignment; -1 → r02=0 = no fan for single shots)
+    // L6 (structured/i.java:6245, proven): fan half-angle —
+    // i<=1 → -1; even: <=2→45, <=4→35, else 25; odd: <=3→45, <=5→35,
+    // ==9→45, else 25. -1 → r02=0 (no fan for single shots).
+    val r0 = if (count <= 1) -1
+        else if (count % 2 == 0)
+            (if (count <= 2) 45 else if (count <= 4) 35 else 25)
+        else (if (count <= 3) 45 else if (count <= 5) 35
+            else if (count == 9) 45 else 25)
     val r02 = r0 * Trig.M / 360
     for (r10 in 0 until count) {
         val slot = w.projectileAlloc()               // av()
@@ -8212,14 +8211,13 @@ private val IH73 = intArrayOf(20, 20, 20)
  *  arm relies on (inferred reconciliation — the original would AIOOBE on
  *  Z[14] for a true 1-element Z, so shipped records must never arm the
  *  Z[14] paths; zeroed fields give exactly that). */
+/** ax73 heavy-guard record init — the shared ax11/ax73 ctor case
+ *  (i.java:2230-2273, proven): full int[22] block incl. the `aB<<=1`
+ *  (`Z[0]==1 || ax==73`) arm and the Z[13] claim-script bind, then
+ *  `ax==73 → Z[8]=0` (:2259). initSoldier carries every byte. */
 fun NpcFsm.initAx73(e: Entity, f: List<Int>) {
-    fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.az = rf(17)                                       // az = r8[17]
-    e.aB = BU73.getOrElse(e.au) { BU73[0] }             // aB = bu[au]
-    e.Z.fill(0)
-    e.Z[0] = rf(4)                                      // L134: Z[0]=r8[4]
-    e.setAnim(rf(5))                                    // L395: i(r8[5])
-    e.refreshBoxes()                                    // L427: t()
+    initSoldier(e, f, world)
+    e.Z[8] = 0                                             // :2259
 }
 
 /** `i.d()` (i.java:1466, proven) — awareness tier for ax73. 0 = unaware,
@@ -8872,11 +8870,13 @@ private val KILL_SKIP = intArrayOf(203, 204, 310, 311)
 private val KILL_ANIM = intArrayOf(49, 283, 357, 360)
 private val KILL_HOLD = intArrayOf(203, 89, 271, 297)
 
-/** `case 47 → L134` (i.java:3082, proven): `az=r8[17]; aB=bu[au];
- *  Z[0]=r8[4]; i(r8[5])` + shared `t()` tail. Records reach ax47 only via
- *  the `ax11 && r8[5]∈{80,93} → ax=47` retype (i.java:2644) applied in
- *  Level0World.initNpcs before dispatch. Minimal-Z semantics identical to
- *  initAx73 (inferred — fixed IntArray(22) zero-reads). */
+/** `case 47 → L134` (i.java:3055-3090, proven): `az=r8[17]; aB=bu[au];
+ *  Z=int[1]; Z[0]=r8[4]; i(r8[5])` + shared `t()` tail. Records reach
+ *  ax47 only via the `ax11 && r8[5]∈{80,93} → ax=47` retype
+ *  (i.java:2644) applied in Level0World.initNpcs before dispatch. The
+ *  port keeps the fixed IntArray(22) zero-reads reconciliation
+ *  (inferred — a true 1-element Z would AIOOBE the Z[14] sight paths
+ *  the ax11-family arms read). */
 fun NpcFsm.initAx47(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.az = rf(17)
@@ -9293,7 +9293,7 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
 //
 // Record (L321, i.java:3474): Z[0..9] = r8[7..16]; Z[1] = r8[8] + 7;
 // aC = Z[8]; az = 301; then L395 `i(r8[5])` + L427 `t()`.
-// bi[64] = -1 (k.java static table) → record-spawned ax64 is clipless.
+// bi[64] = 22 (k.java:266) → record-spawned ax64 binds `aa = k.r(22)`.
 // Proven-dead in this build: no `new i` with `ax=64` exists anywhere in
 // the bytecode (the only gameplay bindings are `i.a(ax,clip,…)` aK and
 // the `cr[][]` pool respawns at i.java:34240-34840 — none carry ax64),
@@ -9430,7 +9430,8 @@ fun NpcFsm.tickAx64(e: Entity, w: LevelCellSource, p: Entity) {
  *  directional grab marker (`p.ae`), then bind on `k.v(bl)` EDGE. The
  *  `ae.S==66 → L19` re-entry loop in the decompile (i.java:15863-15867)
  *  can only spin — collapsed to the same reposition arm as S60
- *  (`inferred`). */
+ *  (proven — structured/i.java:14969-14972 groups S60 and S66 into
+ *  the same `ae` reposition arm). */
 private fun ax64StalkArm(e: Entity, w: LevelCellSource, p: Entity) {
     val dx = abs(e.ak - p.ak)
     val dy = abs(e.al - p.al)
@@ -9607,13 +9608,17 @@ private fun ax64S1(e: Entity, w: LevelCellSource, p: Entity) {
 private fun ax64S2(e: Entity, w: LevelCellSource, p: Entity) {
     e.ag = p.ag; e.ah = p.ah; e.al = p.al          // mirror (L263)
     val m = p.ae
-    // L266-269 (proven; marker's clip-identity check relaxed to ax14/S —
-    // our markers spawn on clip9, `inferred`): bad marker → re-spawn it at
-    // the view centre.
-    val markerOk = m != null && m.ax == 14 && m.S == 0
-    if (!markerOk) {
-        p.releaseAe()
-        p.spawnAeMarker(w, 0, w.kO + 200, w.kP + 120)   // p.c(k.O+200,k.P+120)
+    // L266-269 (proven 3-way, i.java:15726-15731; marker's clip check
+    // relaxed to ax14 — our markers spawn on clip9, `inferred`):
+    //   m == null || m.ax != 14  → release + re-spawn the marker
+    //   m.S == 0                  → continue the hold
+    //   else (S != 0)             → L300 despawn tail
+    when {
+        m != null && m.ax == 14 && m.S != 0 -> { ax64S345(e, w, p); return }
+        m == null || m.ax != 14 -> {
+            p.releaseAe()
+            p.spawnAeMarker(w, 0, w.kO + 200, w.kP + 120)
+        }
     }
     if (e.aC <= 0) {                               // L271: hold expired
         p.gDrain(999, w)                           // g.d(999)
@@ -10132,6 +10137,11 @@ class BubbleDraw(
     val pageStart: Int, val lines: Int,
     val flip: Boolean, val tailUp: Boolean, val bh3: Boolean,
     val text: String, val textX: Int, val textY: Int,
+    /** `k.y.l(1)` (b.java:2436-2443, proven): `aH = 1` — the dialog
+     *  font's glyph-variant select before wrap+draw. Our FontClip
+     *  carries a single face (palette-variant only), so the draw
+     *  path records it via `fontVariant`. */
+    val fontVariant: Int = 0,
 )
 
 /**
@@ -10205,8 +10215,10 @@ fun NpcFsm.tickBubble(e: Entity, w: LevelCellSource) {
             pageStart = q[0], lines = q[4],
             flip = r17, tailUp = r18, bh3 = bh3,
             text = e.cR, textX = r14 + 60, textY = r16 + 5,
+            fontVariant = 1,
         )
-        // k.y.l(1) — typewriter advance (inferred; no core op)
+        // k.y.l(1) (proven i.java:20687 + b.java:2436-2443): font
+        // variant aH=1 select before wrap `k.a(k.y,cR,120)` + draw
         e.cS = w.wrapDialogText(e.cR, 120)                    // L81
         if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]            // L84
         // L84 tail: k.y.a(bg, cR, cS, x+60, y+5, q[0], q[4], 17, -1)
