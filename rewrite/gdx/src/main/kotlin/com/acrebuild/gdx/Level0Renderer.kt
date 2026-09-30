@@ -686,6 +686,84 @@ class Level0Renderer {
         }
     }
 
+    /** `j.b/j.a` rounded-rect fill + outline (arc 10) — quarter-disc
+     *  corners approximated per-scanline. */
+    private fun fillRoundAr(x: Int, y: Int, w: Int, h: Int, arc: Int, argb: Int) {
+        fillAr(x + arc, y, w - 2 * arc, h, argb)
+        fillAr(x, y + arc, w, h - 2 * arc, argb)
+        for (dy in 0 until arc) {
+            val dx = Math.sqrt((arc * arc - (dy + 0.5) * (dy + 0.5))
+                .coerceAtLeast(0.0)).toInt()
+            fillAr(x + arc - dx, y + arc - 1 - dy, dx, 1, argb)
+            fillAr(x + w - arc, y + arc - 1 - dy, dx, 1, argb)
+            fillAr(x + arc - dx, y + h - arc + dy, dx, 1, argb)
+            fillAr(x + w - arc, y + h - arc + dy, dx, 1, argb)
+        }
+    }
+
+    private fun outlineRoundAr(x: Int, y: Int, w: Int, h: Int, arc: Int, argb: Int) {
+        fillAr(x + arc, y, w - 2 * arc, 1, argb)
+        fillAr(x + arc, y + h - 1, w - 2 * arc, 1, argb)
+        fillAr(x, y + arc, 1, h - 2 * arc, argb)
+        fillAr(x + w - 1, y + arc, 1, h - 2 * arc, argb)
+        for (dy in 0 until arc) {
+            val dx = Math.sqrt((arc * arc - (dy + 0.5) * (dy + 0.5))
+                .coerceAtLeast(0.0)).toInt()
+            fillAr(x + arc - dx, y + arc - 1 - dy, 1, 1, argb)
+            fillAr(x + w - arc + dx - 1, y + arc - 1 - dy, 1, 1, argb)
+            fillAr(x + arc - dx, y + h - arc + dy, 1, 1, argb)
+            fillAr(x + w - arc + dx - 1, y + h - arc + dy, 1, 1, argb)
+        }
+    }
+
+    /** `i.a(IIIII)` (i.java:20767, proven): scanline-filled wedge — for
+     *  each y in [y8,y10], a black+white span between the lerped edges
+     *  (x6→x9) and (x7→x9); apex collapses to a point at y10. */
+    private fun bubbleWedge(x6: Int, x7: Int, y8: Int, x9: Int, y10: Int) {
+        val step = if (y8 <= y10) 1 else -1
+        var r12 = y8
+        while (if (y8 <= y10) r12 <= y10 else r12 >= y10) {
+            val r02 = x6 + ((r12 - y8) * (x9 - x6)) / (y10 - y8)
+            val r03 = x7 + ((r12 - y8) * (x9 - x7)) / (y10 - y8)
+            val lo = minOf(r02 - 1, r03 + 1)
+            fillAr(lo, r12, Math.abs((r03 + 1) - (r02 - 1)) + 1, 1,
+                   -0x1000000)
+            val lo2 = minOf(r02, r03)
+            fillAr(lo2, r12, Math.abs(r03 - r02) + 1, 1, -1)
+            r12 += step
+        }
+    }
+
+    /** `i.ad()` draw (i.java:20649-20700, proven): consumes `w.bubbleDraw`
+     *  — bh3 `k.f` is a 120-wide white fill + black square outline at
+     *  (x,y); non-bh3 `j.b`/`j.a` is a white roundrect fill + black
+     *  roundrect outline at (x-20, y, 160, h). The tail wedge arms at the
+     *  edge facing the entity (bottom normally, top when `tailUp`
+     *  flipped the bubble below the entity); `flip` moves it to the
+     *  right edge. Wrapped page text centers at `textX` on font `y`
+     *  variant 1 (`k.y.l(1)`), align 17 = HCENTER|TOP. */
+    private fun drawBubble(w: Level0World) {
+        val b = w.bubbleDraw ?: return
+        if (b.bh3) {
+            fillAr(b.x, b.y, 120, b.h, -1)
+            outlineAr(b.x, b.y, 120, b.h, -0x1000000)
+        } else {
+            fillRoundAr(b.x - 20, b.y, 160, b.h, 10, -1)
+            outlineRoundAr(b.x - 20, b.y, 160, b.h, 10, -0x1000000)
+        }
+        val tailY = if (b.tailUp) b.y else b.y + b.h
+        val apexY = tailY + (if (b.tailUp) -10 else 10)
+        if (b.flip) bubbleWedge(b.x + 90, b.x + 100, tailY, b.x + 110, apexY)
+        else bubbleWedge(b.x + 20, b.x + 30, tailY, b.x + 10, apexY)
+        if (b.text.isNotEmpty() && b.lines > 0) {
+            val u = fontY.wrap(b.text, 120)
+            fontY.l(1)
+            fontY.drawWrapped(b.text, u, b.textX, b.textY,
+                              b.pageStart, b.lines, 17, -1)
+            { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
+        }
+    }
+
     /**
      * `k.b(z2)` per-entity overlay tail (k.java:2931-2990, proven):
      * gated by `C==null || !C.ab() || !C.cd[2] || P&512 || ax==0` (a
@@ -1246,6 +1324,13 @@ class Level0Renderer {
                 drawEntity(world, kE, camX, camY); kE.advanceAnim()
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
+            // `i.ad()` draws inline in the entity pass — the descriptor
+            // tickBubble emitted for this entity is consumed now (one
+            // active cQ dialog at a time; clear so a stale one can't
+            // linger past its last draw tick).
+            if (world.bubbleDraw != null) {
+                drawBubble(world); world.bubbleDraw = null
+            }
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(world, ab, camX, camY)

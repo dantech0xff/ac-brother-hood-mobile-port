@@ -10210,6 +10210,8 @@ fun NpcFsm.tickBubble(e: Entity, w: LevelCellSource) {
             // L68: white outline + black fill bubble rects
         }
         // tail (a(5-arg) interpolates the 2-line wedge; tailUp flips it)
+        e.cS = w.wrapDialogText(e.cR, 120)                    // L81
+        if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]            // L84 clamp
         w.bubbleDraw = BubbleDraw(
             x = r14, y = r16, w = 120, h = r02,
             pageStart = q[0], lines = q[4],
@@ -10217,11 +10219,8 @@ fun NpcFsm.tickBubble(e: Entity, w: LevelCellSource) {
             text = e.cR, textX = r14 + 60, textY = r16 + 5,
             fontVariant = 1,
         )
-        // k.y.l(1) (proven i.java:20687 + b.java:2436-2443): font
-        // variant aH=1 select before wrap `k.a(k.y,cR,120)` + draw
-        e.cS = w.wrapDialogText(e.cR, 120)                    // L81
-        if (q[0] + q[4] > q[1]) q[4] = q[1] - q[0]            // L84
         // L84 tail: k.y.a(bg, cR, cS, x+60, y+5, q[0], q[4], 17, -1)
+        // (k.y.l(1) variant select before wrap — i.java:20687)
         return
     }
     // L31+: page/string advance on timer expiry
