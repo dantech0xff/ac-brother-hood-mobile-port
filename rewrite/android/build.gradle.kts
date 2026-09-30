@@ -14,12 +14,40 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1.0-spike"
+        versionName = "1.0.0"
+    }
+
+    // Release signing: create a keystore locally (never committed), then
+    // pass the creds via env or gradle properties:
+    //   RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD /
+    //   RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD
+    // Without them the release build stays unsigned.
+    val releaseStoreFile = providers.environmentVariable("RELEASE_STORE_FILE")
+        .orElse(providers.gradleProperty("RELEASE_STORE_FILE"))
+    val releaseStorePassword = providers.environmentVariable("RELEASE_STORE_PASSWORD")
+        .orElse(providers.gradleProperty("RELEASE_STORE_PASSWORD"))
+    val releaseKeyAlias = providers.environmentVariable("RELEASE_KEY_ALIAS")
+        .orElse(providers.gradleProperty("RELEASE_KEY_ALIAS"))
+    val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD")
+        .orElse(providers.gradleProperty("RELEASE_KEY_PASSWORD"))
+
+    signingConfigs {
+        if (releaseStoreFile.isPresent) {
+            create("release") {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.orNull
+                keyAlias = releaseKeyAlias.orNull
+                keyPassword = releaseKeyPassword.orNull
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseStoreFile.isPresent) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

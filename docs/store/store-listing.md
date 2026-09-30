@@ -65,9 +65,15 @@ Bản remake trung thực của game hành động cầm tay kinh điển — d�
 - [ ] Quyết tên app cuối (tránh trademark Ubisoft) → sửa `android:label`
       + `applicationId` (hiện `com.acrebuild.spike` — nên đổi trước khi
       publish lần đầu vì không đổi được sau này).
-- [ ] Đổi `versionName` (hiện `0.1.0-spike`) → `1.0.0`, `versionCode` 1.
-- [ ] Release signing key (không dùng debug key cho bản publish).
-- [ ] Release build: `:android:assembleRelease` + kiểm tra shrink/optimize.
+- [x] `versionName` → `1.0.0` (slice 321); `versionCode` vẫn 1.
+- [x] Release signing config đã wire (slice 321): tạo keystore local
+      (KHÔNG commit) rồi truyền qua env `RELEASE_STORE_FILE` /
+      `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` /
+      `RELEASE_KEY_PASSWORD` → `assembleRelease` ra APK ký v2.
+- [ ] Tạo keystore release THẬT của anh (giữ an toàn — mất key là mất
+      quyền update app); Play App Signing khuyến nghị bật.
+- [ ] Release build: `:android:assembleRelease` (minify đang tắt — bật
+      R8 sau khi test kỹ vì LibGDX cần keep rules).
 - [ ] Content rating questionnaire (IARC).
 - [ ] Privacy policy URL (nếu collect data — hiện game không collect).
 - [ ] Data safety form: "no data collected" nếu đúng.
