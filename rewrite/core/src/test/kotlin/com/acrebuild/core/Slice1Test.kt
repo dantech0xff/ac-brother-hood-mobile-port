@@ -27336,6 +27336,11 @@ class Slice291Test {
                 p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
                 p.al in 880..1020 && p.ak > 10700 -> Pad.M_LEFT
                 p.al in 690..880 && p.ak > 10540 -> Pad.M_LEFT
+                // the east shaft x10759+ is scroll-wall sealed (bound pins
+                // al at ~528 — falling there hovers forever). At the
+                // far-east ledge lip return LEFT into the gap mouth
+                // x10700-10759 to descend onto the door mass.
+                p.al < 600 && p.ak > 10700 -> Pad.M_LEFT
                 p.al < 600 && p.ak > 10420 -> Pad.M_RIGHT or Pad.M_UP
                 else -> Pad.M_RIGHT
             }
@@ -28756,5 +28761,72 @@ class Slice311Test {
             assertEquals(spawn.first, p.ak, "m$aj briefing entry lands pack spawn x")
             assertEquals(spawn.second, p.al, "m$aj briefing entry lands pack spawn y")
         }
+    }
+}
+
+class Slice318Test {
+    /** The S25 soldier-fall arm (i.java:4711-4736, proven) — the landing
+     *  resolution the previous bare fall-through lacked: forced terminal
+     *  fall (ah=5120, aj=1536) then, once the ANCHOR cell turns solid
+     *  (>=18 / 2|3), snap al to the cell top + resume via m() — soft drop
+     *  (<=80px from the Z[2] fall-start marker) → i(2) patrol for a Z0=0
+     *  guard; hard drop → i(0) kill. Without this arm a guard that fell
+     *  (ledge knock, or a record-stamped S25 like m2's aw313 wall perch)
+     *  froze in S25 forever — unfightable, the live repro's perch-guard. */
+    private fun fallingGuard(w: Level0World, dropPx: Int, flat: Boolean = false): Entity {
+        var g = w.npcs.first { it.ax == 11 }
+        if (flat) {
+            // a slope landing (iE 2|3) always resolves hard — the soft
+            // resume needs a flat >=18 cell under the anchor column.
+            g = w.npcs.filter { it.ax == 11 }.firstOrNull {
+                standOn(w, it)
+                w.collisionCell(it.ak / 20, it.al / 20 + 1) >= 18 ||
+                    w.collisionCell(it.ak / 20, it.al / 20) >= 18
+            } ?: g
+        }
+        standOn(w, g)                                   // real ground
+        val groundAl = g.al
+        g.setPositionPx(g.ak, groundAl - dropPx)        // suspend mid-air
+        g.refreshBoxes()
+        g.setAnim(25)
+        return g
+    }
+
+    @Test fun `S25 fall resumes — soft drop returns to patrol`() {
+        val w = world()
+        val g = fallingGuard(w, 40, flat = true)        // <=80px, flat cell
+        var ticks = 0
+        while (g.S == 25 && ticks++ < 200) w.npcFsm.tick(g, w.player)
+        assertEquals(2, g.S, "soft landing → i(2) patrol (m(40,2) Z0==0)")
+        assertEquals(0, g.ah); assertEquals(0, g.aj)
+        assertEquals(-1, g.Z[2], "fall marker consumed")
+    }
+
+    @Test fun `S25 fall resumes — hard drop kills the guard`() {
+        val w = world()
+        val g = fallingGuard(w, 120)                    // >80px drop
+        var ticks = 0
+        while (g.S == 25 && ticks++ < 200) w.npcFsm.tick(g, w.player)
+        assertEquals(0, g.S, "hard landing → i(0) (m(43,0) Z0==0)")
+        assertEquals(0, g.ah); assertEquals(0, g.aj)
+    }
+
+    @Test fun `airborne soldier enters S25 via the tail gate and resumes`() {
+        // the full real-world path: an arm-less state knocked airborne →
+        // the L777 open-cell gate fires i(25) → the S25 arm falls it,
+        // lands it at the anchor cell, and resumes — the loop that left
+        // the reported wall-perch guard unfightable before this arm.
+        val w = world()
+        val g = w.npcs.first { it.ax == 11 }
+        standOn(w, g)
+        g.setPositionPx(g.ak, g.al - 40)
+        g.refreshBoxes()
+        g.setAnim(50)                                   // no arm → tail gate
+        var ticks = 0
+        while (g.S != 25 && ticks++ < 20) w.npcFsm.tick(g, w.player)
+        assertEquals(25, g.S, "open cells → tail gate fires i(25)")
+        ticks = 0
+        while (g.S == 25 && ticks++ < 200) w.npcFsm.tick(g, w.player)
+        assertTrue(g.S != 25, "S25 arm landed + resumed (S=${g.S})")
     }
 }
