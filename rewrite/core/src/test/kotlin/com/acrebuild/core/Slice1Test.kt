@@ -28838,15 +28838,64 @@ class Slice318Test {
         // tail: j() damage intake + aB() melee + the open-cell fall
         // gate. h() reads the perch cell under the feet as ground →
         // the guard stays posted (it falls only when the perch opens
-        // or when knocked). Verdict: the reported "unfightable
-        // wall-perch guard" was the S=25 knock-freeze fixed by this
-        // slice — the S152 post itself is faithful and stays
-        // fightable through the shared tail.
+        // or when knocked). NOTE: this calls npcFsm.tick directly —
+        // the entity-level tick gate skips P|32 sentries entirely
+        // (see the dormant-park verdict below), so in live play the
+        // shared tail only runs once a wake trigger un-parks them.
         val w = world(aj = 2)
         val g = w.npcs.first { it.aw == 313 }
         assertEquals(11, g.ax); assertEquals(152, g.S)
         repeat(400) { w.npcFsm.tick(g, w.player) }
         assertEquals(152, g.S, "posted guard holds S152 on its perch (no spurious fall)")
         assertEquals(300, g.aB, "posted guard untouched while idle")
+    }
+
+    @Test fun `S152 posted guard is dormant while parked — verdict`() {
+        // aw311/312/313 spawn ax11 S=152 with P=33 (posted bit-0 +
+        // dormant-park bit-5). The entity tick gate (non-bh3 arm
+        // Level0World.kt:4966-4973, k.java L215 proven) drops a P|32
+        // sentry in BOTH branches — au<2 && P&32 without P&16 → skip,
+        // au>=2 without P&16 → skip — so a parked sentry NEVER ticks.
+        // The shared tail's j()/k() intake cannot run: the guard is
+        // invulnerable AND unresponsive while parked, by design — the
+        // same au-park dormant-sentry family as the slice-219 street
+        // soldiers. The original's wake is an external force-tick
+        // `P|=16` (i.java:2269+) or P&~32 from alert/director arms.
+        val w = world(aj = 2)
+        val g = w.npcs.first { it.aw == 313 }
+        assertTrue(g.P and 32 != 0, "sentry spawns parked (P|32)")
+        repeat(60) {
+            w.player.setPositionPx(g.ak + 20, g.al)
+            w.player.av = g.av
+            if (w.player.S !in intArrayOf(67, 68, 69, 112, 113, 114, 115))
+                w.player.setAnim(67)
+            w.tick(emptyList())
+        }
+        assertEquals(152, g.S, "parked sentry holds the posted anim")
+        assertEquals(300, g.aB, "parked sentry never ticks → no intake → invulnerable")
+    }
+
+    @Test fun `woken posted guard is beatable — verdict`() {
+        // Once the park bit clears (the external wake trigger) and the
+        // camera arrives with the player (au<2 — real play satisfies it
+        // because the tracker follows the player to the guard), the
+        // sentry joins the tick path → j() intake lands blind-side
+        // strikes → it dies. This is the actual fightable path the
+        // "unfightable posted guard" repro was missing: the sentry was
+        // still parked, not broken.
+        val w = world(aj = 2)
+        val g = w.npcs.first { it.aw == 313 }
+        g.P = g.P and -33                                  // wake: P&~32
+        var ticks = 0
+        while (g.aB > 0 && g.S != 139 && ticks++ < 800) {
+            w.player.setPositionPx(g.ak + 20, g.al)
+            w.player.av = g.av
+            if (w.player.S !in intArrayOf(67, 68, 69, 112, 113, 114, 115))
+                w.player.setAnim(67)
+            w.tick(emptyList())
+        }
+        assertTrue(g.aB <= 0 || g.S == 139,
+            "woken sentry beatable (aB=${g.aB}, S=${g.S}, ticks=$ticks)")
+        assertTrue(w.player.x1 > 0, "player survives (x1=${w.player.x1})")
     }
 }
