@@ -269,7 +269,13 @@ class NpcFsm(val world: LevelCellSource) {
         // dispatch head already ran it for `I()`-entered entities; this
         // fallback covers direct arm calls.
         if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
-        e.collideSides(world, true)
+        // S25 runs WITHOUT a(true) in the original (i.java:4711-4736 — the
+        // arm carries no side-collide, so the feet penetrate the landing
+        // row until its own anchor-cell check snaps + resumes). The port's
+        // per-tick safety collide would strip-pull al back to the cell
+        // boundary every tick → the arm's `e(ak/20,al/20)` never reads a
+        // solid row → the soldier grounded forever in S25.
+        if (e.S != 25) e.collideSides(world, true)
         // `I()` head (i.java:4024, proven): aB<=0 on any live state →
         // i(0) death entry. Without this an S85/SC hurt soldier recovered
         // at aB=0 instead of dying.
@@ -496,7 +502,39 @@ class NpcFsm(val world: LevelCellSource) {
                 e.P = e.P or 32 or 64
                 return                                          // → L849
             }
-            25 -> { /* fall — shared tail below */ }
+            25 -> {
+                // L4a1-L4d3 (i.java:4711-4736, proven): the soldier fall
+                // state — forced terminal fall (ag=0, ah=5120, aj=1536)
+                // plus the landing resolution: once the ANCHOR cell turns
+                // solid (>=18 platform / 2|3 floor-slope) snap al to the
+                // cell top, zero all four motion fields, and resume via
+                // m() — hard landing (slope cells or drop >80px from the
+                // Z[2] fall-start marker) → m(43,0) = Z0==2 ? i(43) :
+                // i(0); soft → m(40,2) = Z0==2 ? i(40) : i(2). Z[2] tags
+                // the fall start on the first airborne tick (-1 → al).
+                // Falls through to the shared tail below (verbatim
+                // `break`) — the open-cell gate there re-arms i(25)
+                // while still airborne.
+                e.ab = null
+                e.ag = 0
+                e.aj = 1536
+                e.ah = 5120
+                Entity.aL = null
+                if (player.aA <= 1) world.kAA = 0
+                if (!crateRide11(e)) {                              // !aD()
+                    if (e.Z[2] == -1) e.Z[2] = e.al
+                    val iE = e.e(world, e.ak / 20, e.al / 20)
+                    if (iE >= 18 || iE == 2 || iE == 3) {
+                        e.al = (e.al / 20) * 20 + 1
+                        e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
+                        if (iE == 2 || iE == 3 || e.al - e.Z[2] > 80)
+                            e.setAnim(if (e.Z[0] == 2) 43 else 0)   // m(43,0)
+                        else
+                            e.setAnim(if (e.Z[0] == 2) 40 else 2)   // m(40,2)
+                        e.Z[2] = -1
+                    }
+                }
+            }
             // case 9 → L777 (i.java:5249, proven): no arm — the stagger
             // persists until the shared tail transitions it. The weakened
             // offer is C()'s (Entity.kt:451), not an S9 arm.

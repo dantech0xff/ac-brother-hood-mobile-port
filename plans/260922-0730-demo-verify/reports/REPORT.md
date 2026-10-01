@@ -1100,3 +1100,323 @@ edges for menus/dialog (labeled).
   `head-m0-pause.png` `head-m0-banner-hd.png`
 
 Status: `3344539d-slice315-demo-VERIFIED-goldenpath-propsmash-pause-ko-restart-nocrash`
+
+# Run-19 — desktop LWJGL3 speech-bubble verify @ eff107e2 (slice 315)
+
+Target: the NEW `BubbleDraw` render path — `Level0Renderer.drawBubble`
+consuming `world.bubbleDraw`, emitted by `npcFsm.tickBubble`. Desktop
+`:lwjgl3:run` session, JDWP 5005. Claim site: m0 ax5 uid 234 at (3650,721),
+W strip x3650-3674 y721-871 in the balcony shaft (ACLV f12/f13=24x150).
+
+## Verdict — RENDERS, with one visual defect
+
+- ✅ **Real claim fired** — teleport player into the W strip (3662,790)
+  → `bindContext` → script 327 → camera pan → scripted Altaïr-vs-guard
+  encounter with SKIP strip → op106 arms guard uid 325's cQ →
+  `tickBubble` → `setBubbleDraw`.
+- ✅ **Bubble draws on screen** — white rounded panel + black outline,
+  wedge tail pointing at the guard, 3-line wrapped centered text,
+  typewriter crawl. Two pages captured on video:
+  "FREE CLAUDIO / FROM THE / WOLFMEN. IF YOU" and
+  "THEN PROVE YOU / ARE WORTH / HELPING. HELP US".
+- ✅ **Descriptor fields dumped live** (jdb watch on `bubbleDraw`,
+  `next` into `tickBubble` frame): `x=190 y=120 w=120 h=10 lines=0
+  flip=true tailUp=false text="YES.\n"` — real values mid-page-write;
+  watch fired null→BubbleDraw(1741)→null (write+consume lifecycle).
+- 🔴 **Visual defect — first text line clipped by panel top edge**:
+  on BOTH pages line 1 ("FREE CLAUDIO", "THEN PROVE YOU") sits half
+  ABOVE the panel's top border — `textY=y+5` vs the panel rect looks
+  ~1 line-height too low (baseline-vs-top-anchor). Reproducible.
+- ⚠️ jdb cQ re-display trick did NOT hold the bubble — `q[3]=600`,
+  `q[2]=-1` set OK but the sequence still completed → descriptor
+  nulled (the trick likely needs the claim gate / cd[] context).
+- ⚠️ Player dies right after the scripted encounter every pass — the
+  claim releases into a real melee the (input-dead) player loses.
+  `claimSuspendsPlayer` holds during the script, not after.
+- ⚠️ pad.e(327712) on the jC=12 banner worked once then stopped;
+  mouse taps worked. jC=21 intro needs the SKIP strip tap (848,565).
+
+## Artifacts
+- rec-3dbf568d…-edited.mp4 (40s) — claim sequences + combat passes
+- rec-8e3a9d93…-edited.mp4 (34s) — watchpoint pass
+- `dt-bubble-p1-crop.png` `dt-bubble-p2-crop.png` — THE bubble frames
+- `dt-bubble-page1.png` `dt-bubble-page2.png` — raw 1600x1200 frames
+- `dt-claim-scene.png` `dt-altair-vs-guard.png` — the encounter
+
+Status: `eff107e2-slice315-BUBBLE-RENDERS-VERIFIED-x190y120w120-flip-firstLineClip-defect`
+
+# Run-20 — showcase demo @ fa9fce4f on emulator-5554 (device screenrecord)
+
+Device `screenrecord` takes (framebuffer-only, landscape user_rotation=1).
+apk = headwt @ fa9fce4f (all fixes incl. speech-bubble path).
+
+## Verdict — playable end-to-end on camera, fight beat not captured
+
+- ✅ Cold boot → splash → YES/NO save prompt → title → NEW GAME →
+  ROME/COLOSSEUM "KILL WOLFMEN" briefing → intro dialog (typewriter,
+  Ezio portrait) → SKIP → LOWER COLOSSEUM AREA gameplay — full chain
+  on real taps (one labeled jdb edge assist at the save prompt).
+- ✅ Traversal — run east with camera track, ledge jump, vine/wall
+  climb (multi-segment auto-grab), mid-air poses all draw clean.
+- ✅ Destructible vases smashed ×3 → orb drops → score 4→8→11→12/100.
+- ✅ Guard ALERT ("!!" icon + music note + numeric prompt) fired on
+  the upper terrace — a soldier sprite visible on the roof edge.
+- ✅ KO → "DO YOU WANT TO RESTART?" → YES → respawn at spawn —
+  restart loop verified TWICE on camera.
+- ⚠️ Guard FIGHT not captured — the alerted soldier patrols the roof
+  line; blind D-pad inputs kept wall-hanging at the mid-terrace vine
+  (loop: run east → fall → auto-grab → climb → repeat). Long teleports
+  (6800,1080 street patrol) auto-fail via camera-lag OOB (al>camY+240
+  before the camera catches up) — hop-wise staging needed ~350px steps
+  but the jdb freeze (below) ate the attempts.
+- ⚠️ jdb suspend-leak wedged the app 3×: each attach's bp-hit suspends
+  GLThread; leftover suspend-count survives detach (sessions die
+  mid-suspend) → sim freezes, input dies, "tick" bp never fires.
+  Recovery: `resume <tid>` ×N in one session, or force-stop. The
+  one-shot edge.sh helper (bp→eval→clear→run in ~1.5s) avoids it.
+- 🔴 ANR dialog captured once in show2.mp4 (~t+95s) — a >5s held
+  suspend while input queued. Dismissed with Wait; NOT a game defect —
+  a jdb-usage artifact. Keep every suspended window <2s.
+
+## Artifacts (reports/)
+- `show1.mp4` (85s) — boot→splash→save-prompt stall (input-dead take,
+  superseded)
+- `show2.mp4` (207s) — YES/NO→title→menu→NEW GAME→briefing→dialog→
+  gameplay start (contains the ANR beat ~t95s)
+- `show3.mp4` (239s) — gameplay take: run/jump/climb/vase-smash/orbs/
+  alerts — THE SHOWCASE TAKE
+- `show4.mp4` (199s) — KO→restart→respawn + more traversal
+- `showcase-vase-smash.png` `showcase-jump.png` `showcase-alert.png`
+  `showcase-respawn.png` `showcase-strike.png`
+
+Status: `fa9fce4f-showcase-TAP-VERIFIED-goldenpath-traversal-smash-KOrestart-nofight`
+
+# Run-21 — m2 Florence guard-combat clip @ fa9fce4f (show5.mp4)
+
+Follow-up to Run-20's missing fight beat. emulator-5554, same apk.
+SELECT LEVEL unlocked via `kDa=8` + row `kBw=2` → jC=30 → briefing
+(FLORENCE / A.D. 1486 / KILL LUCREZIA & RESCUE CATERINA) → gameplay.
+
+## Verdict — real combat captured on video
+
+- ✅ Real approach: spawn → run east through the arched gallery,
+  orbs 0→4/100, checkpoint rings — then the spawn-adjacent soldier
+  (~x600 patrol, earlier than the x946 estimate).
+- ⚠️ The gallery's broken east edge drops into a wall pocket; the
+  x946 wall-cling guard perches on the wall's vine strip and cycles
+  top↔mid perches — never descends to ground for melee. His
+  wall-perch FSM makes him effectively un-fightable at ground level.
+- ⚠️ Positioning assist (labeled): two hop-wise jdb teleports
+  (753,1925)→(880,1900)→(968,1876) placed the player on the upper
+  roof beside the patrol soldier — same <350px cam-safe hops.
+- ✅ REAL FIGHT on camera: soldier alerted (sword drawn), player
+  sword strikes → HUGE blue slash arcs, enemy health bar overhead,
+  hit-stagger, orb drops bursting (score 4→8/100), soldier striking
+  BACK — two-direction damage, red screen flash on hits taken.
+- ✅ KO ending: the soldier's counterattacks killed the player →
+  "DO YOU WANT TO RESTART?" — real combat stakes, no staging.
+- ⚠️ jC=12 YES is awkward: pad.e(327712) edges get eaten by the
+  kJT held-bits flush / arm-then-confirm pattern; taps worked once
+  at dev(1025,590)=YES row. Reliable confirm: `menuItem(14)` (YES
+  row id) called directly in bp-context — jC 12→8 instantly.
+- ⚠️ Post-KO respawn loop: after the fight death, reloadCheckpoint
+  landed then immediately re-entered jC=12 with aB=0 — checkpoint
+  snap may have captured the lethal roof position (checkpoint ring
+  crossed mid-roof). Needs a look — respawn-after-fight-death may
+  insta-refail if the last checkpoint snap is on a hazard. Repro:
+  die to the roof soldier, YES, watch aB.
+- ℹ️ take-1 (show5-approach.mp4) covers boot→unlock→briefing→spawn→
+  first chase+wall-cling standoff; take-2 (show5-standoff.mp4) the
+  perch cat-and-mouse. The decisive fight is take-3 = show5.mp4.
+
+## Artifacts (reports/)
+- `show5.mp4` (179s) — briefing→spawn→run→gap→teleport→ROOF FIGHT
+  (slash arcs, health bar, orb drops, bidirectional damage)→KO→banner
+- `show5-approach.mp4` (239s) — approach/chase/wall-cling standoff
+- `show5-standoff.mp4` (198s) — perch standoff continued
+- `show5-roof-alert.png` — roof landing beside the alerted soldier
+- `show5-fight.png` / `show5-fight2.png` — slash-arc + toe-to-toe melee
+- `show5-ko.png` — restart banner after losing the exchange
+
+Status: `fa9fce4f-m2-COMBAT-ON-VIDEO-slasharc-healthbar-bidir-ko-teleportassist`
+
+# Run-22 — golden-path demo @ bdf117d3 on emulator-5554 (device screenrecord)
+
+Fresh `pm clear` boot on the slice-316..319 HEAD (tile map, aQ button
+transforms, sync meter, string-table index, S25 fall arm, S152 posted-perch
+verdict). Three device screenrecord takes, framebuffer-only landscape.
+
+## Verdict — full chain + real combat on camera; player loses the clinch
+
+- ✅ Cold boot → YES/NO → title → NEW GAME → EASY → EZIO card → story
+  intro (jC=20, auto-typewriter pages — exits via M_CYCLE/M_PAUSE when
+  kCu==5; my taps only rewind pages) → ROME/COLOSSEUM "KILL WOLFMEN"
+  briefing → hint pages → jC=21 intro dialog → SKIP pill → gameplay.
+- ✅ Traversal — run east w/ camera track, orbs 0→12/100, urns smashed
+  (score bumps), red "!!" alert icon at ~x1176, promenade→wall.
+- ⚠️ Wall/chain climb could not be completed blind — the east wall at
+  ~x1180 bounced every jump; route over it needs real platforming.
+- ⚠️ Labeled positioning assists: hop teleports (~300px steps, cam-safe)
+  up to the hedge terrace where the alerted soldier patrols (~x2150).
+- ✅ REAL COMBAT ×3 on camera: clinch melee vs the roof soldier —
+  blue slash arcs, sword-clash spark bursts, orange slash trails,
+  overhead enemy health bar, orb drop 1/100 mid-fight, red damage
+  flash on hits taken. Soldier counterattacks kill the player every
+  time — honest losses, no scripted outcome.
+- ✅ KO→"DO YOU WANT TO RESTART?"→YES→respawn loop ×3 — restart
+  replays the jC=21 intro dialog each time (authentic behavior);
+  SKIP pill returns to gameplay. m0 reload does NOT hit the Run-21
+  checkpoint-snap death loop (respawn = clean spawn record).
+- ⚠️ x1=90 jdb health assist set before fight #3 — player still lost
+  (soldier's clinch burst is lethal regardless; could not verify a
+  kill or a ledge-fall — the soldier stays rooted at the ledge lip,
+  S25 fall arm never triggered on camera).
+- ⚠️ Speech bubble: none fired this run (expected — m0 guards don't
+  speech-script; the claim-site bubble was verified in Run-19).
+- ✅ No crashes, no ANRs, no frozen states this run.
+
+## Artifacts (reports/)
+- `gd1-boot.mp4` (238s) — boot→YES/NO→title→NEW GAME→EASY→story intro
+- `gd2-goldenpath.mp4` (238s) — story→briefing→dialog→SKIP→spawn→run
+  east→urns→alert→wall→terrace clinch→KO #1
+- `gd3-combat-restart.mp4` (219s) — teleports→terrace fights #1-3→
+  KOs→restart dialog→respawns — THE COMBAT TAKE
+- `gd-spawn.png` `gd-alert.png` `gd-fight-arrival.png`
+  `gd-soldier-slash.png` `gd-ko.png` `gd-respawn.png` `gd-introdlg.png`
+
+Status: `bdf117d3-goldenpath-VERIFIED-combat3x-clinch-healthbar-slasharcs-KOx3-restartloop-nocrash`
+
+# Run-23 — ax5 speech-bubble ON DEVICE @ 2ff4ca0d (emulator-5554)
+
+Fresh pm-clear boot, mission 0 via SELECT LEVEL (kDa=8/kBw=0 unlock
+assists). Goal: real device screenshot of the BubbleDraw panel.
+
+## Verdict — BUBBLE RENDERED + CAPTURED on device
+
+- ✅ ax5 claim fired: staged Altaïr-vs-guard encounter rendered at the
+  spawn gallery — camera holds, SKIP strip live, guard + Altaïr sprites.
+- ✅ Speech bubble draws ON DEVICE: white rounded panel + black outline,
+  wedge tail pointing at the guard's head, wrapped centered text with
+  typewriter crawl — three pages captured:
+  p1 "WHO ARE YOU? YOU…" (q13), p2 "FROM ENTERING / THE UPPER" (q14),
+  p3 "LEAVE HERE AT…" (q16/h12) — the guard's exact script-327 strings.
+- ✅ On device video (bub2-claim-bubble.mp4 t~105-112): bubble visible
+  mid-sequence, then post-claim melee + red damage flash.
+- 🔴 Visual defect REPRODUCED on device (same as Run-19 desktop): the
+  typewriter's in-progress line renders clipped at the panel's bottom
+  edge — q14/bubble-video-frame shows "THE UPPER" half-buried under the
+  panel border while typing. Panel rect vs type-line Y is off.
+- ⚠️ Post-claim: the scripted release drops the player into melee with
+  the staged guard — he dies every pass (consistent w/ Run-19).
+- ⚠️ Trigger assist (labeled): the natural W zone [3650,721,3674,871]
+  is a balcony-shaft strip — the street below is a water kill-zone
+  (~x3400-3700, waterfall) — player teleport-hops died twice reaching
+  it. Instead moved the ENTITY to the player: `findByAw(234).ak=75,
+  al=880` — W re-derives from ak/al each tick (writing W[] directly is
+  overwritten) — the zone covered the player → claim fired naturally.
+- ⚠️ Checkpoint-snap: after the claim+death, reloadCheckpoint(true)
+  respawned with the entity S=8 but the W-move/claim would NOT refire
+  — the snap may have captured post-claim state (fresh process + full
+  mission re-entry re-armed it).
+
+## Artifacts (reports/)
+- `bub2-claim-bubble.mp4` (148s) — spawn → W-move → claim → bubble →
+  post-claim melee; bubble visible ~t105-112
+- `bub1-entry.mp4` (238s) — boot→menus→entry→teleport deaths (context)
+- `bubble-p1-who.png` — page 1 "WHO ARE YOU? YOU" typing
+- `bubble-p2-from.png` — page 2, type-line clip defect visible
+- `bubble-p3-leave.png` / `bubble-p3.png` — page 3 held
+- `bubble-video-frame.png` — video frame at t110
+- `bubble-cleared.png` / `bubble-postclaim-melee.png` — sequence end + melee
+
+Status: `2ff4ca0d-BUBBLE-ON-DEVICE-VERIFIED-3pages-tailwedge-typewriter-clipDefectReproduced`
+
+---
+
+## Run-24 — slice-324 dialogAdvance clip-fix verification (emulator-5554) — 5cd6e090
+
+Rebuild: `/tmp/headwt` checked out to `5cd6e090` (merge PR #364, includes
+`6153a235 fix(port): slice 324 — dialogAdvance uses real y-font metric`)
+→ `:android:assembleDebug` → `adb install -r` → `pm clear` cold boot.
+
+Method: same claim as Run-23 — BUT the correct entity-move recipe is now
+proven: `findByAw(234)` needs BOTH `ak/al` (activate the entity's tick —
+it is gated by position; at ak=3650 it never ticks near spawn) AND
+`W[0..3]` (the ax5's W is init-only in `initMissionLogic:2942` — NOT
+re-derived per tick; `eventBind` overlap-checks `e.W`). One jdb session
+set ak=75, al=880, W=[70,880,110,1000] over the spawn player (80,940) →
+claim fired on `run` → script 327 staged the Altaïr-vs-guard scene →
+guard's cQ bubble played 3 pages → released into melee → player KO'd.
+
+VERDICT — FIX VERIFIED: all 3 pages render their text fully INSIDE the
+white panel. Direct comparison on page 2 ("FROM ENTERING / THE UPPER"):
+Run-23 `bubble-p2-from.png` shows "THE UPPER" half-buried under the
+panel's bottom border; `fix324-p2-from.png` shows the same completed line
+with clear padding below — the panel grew upward ~14px as designed
+(`footerFont.linesHeight(n)` = n*J + (n-1)*K), wedge-tail anchor
+unchanged at the panel's bottom-right. Pages: p1 "WHO ARE YOU? YOU",
+p2 "FROM ENTERING / THE UPPER", p3 "LEAVE HERE AT" — all clean.
+
+## Artifacts
+- `fix324-claim-bubble.mp4` (149s) — full pass: gameplay → jdb move →
+  staging → all 3 bubble pages (t~9.5-13) → release melee → KO
+- `fix324-p1-who.png` / `fix324-p2-from.png` / `fix324-p3-leave.png` —
+  the 3 pages on the fixed build (video frames, native 2400x1080→1568)
+- `fix324-staging.png` — scripted encounter staging frame
+
+Status: `5cd6e090-slice324-CLIPFIX-VERIFIED-all3pages-insidepanel-panelgrewup-tailanchor-same`
+
+---
+
+## Run-25 — pure-input store demo (emulator-5554) — ce8a600c
+
+Build: ce8a600c (slice-325 merge) — code-identical to 5cd6e090 (the merge
+adds only docs/report files; APK unchanged).
+
+PURE INPUT — no jdb assists. Input bridge is touch-only (`Level0InputBridge`
+has no key handler — `input keyevent` never reaches the game; keyevent 61/96
+hit Android instead and switched to the launcher). Pure-input menu recipe,
+proven live:
+- boot legal screens: tap anywhere or wait the auto-advance timers
+- **YES/NO sound prompt (jC=23)**: row taps do NOT confirm — the real input
+  is the LEFT footer soft-key (pause-icon zone, `pointerDownIn(-5,198,
+  kCe+20,47)` → `padE(M_PAUSE)` ⊂ 327712 → the case-23 else-branch →
+  `stateL(18)`). Device tap ~dev(490,940).
+- main menu / difficulty / character card: menuQ row taps work — NEW GAME
+  dev(1240,543), EASY dev(1049,498), EZIO dev(1240,345)
+- story intro jC=20: exits via M_CYCLE = the ↩ back-arrow footer icon
+  (dev~1900,940) — any time, not just at end
+- jC=9 hint pages: taps advance; jC=21 intro dlgU=9: SKIP pill dev(1870,891)
+- pause menu RESTART → YES row dev(1200,580); restart replays jC=21
+
+**Coord map correction**: view render is `sc = min(sw/400, sh/240)` with
+INT math → scale=4, offsetX=400, offsetY=60 on 2400x1080 (not 4.5/300/0):
+devX = 400 + lx*4, devY = 60 + ly*4.
+
+Per-process pointer death: taps/keyevents can land on a dead input pipe
+(0-diff screencaps) — force-stop + relaunch fixes; verify pointer life with
+a probe tap + diff before committing a take.
+
+**Encode lag**: the first take ran ~2.5-3× stretched during the menu
+section on swiftshader (the YES/NO prompt held ~35s of video; the whole
+menu chain consumed ~145s of a 173s take). Gameplay takes run ~realtime.
+Deliverable built by cutting the boot-path segments from take-1 +
+realtime gameplay segments from take-3 into `store-demo.mp4` (108s).
+
+Content shown: legal → YES/NO → title → NEW GAME → EASY → EZIO →
+story → ROME/COLOSSEUM "KILL WOLFMEN" briefing → intro dialog → SKIP →
+spawn → run east w/ camera → orb chain → double-urn smash (orbs 4→8→12) →
+ledge gap jump → wall-cling/grabs → upper terrace → sentry "!!" alert →
+climb attempts at the guard's perch + sword swings. No jdb anywhere.
+
+HONEST GAPS: no landed melee exchange (the posted sentry holds his lip —
+blind input can't top the rail climb) and no guard bubble (claim site not
+reachable by pure input). The posted-perch behavior is consistent with the
+S152 verdict (fightable but doesn't leave his post).
+
+## Artifacts
+- `store-demo.mp4` (108s) — THE DELIVERABLE, tight cut, all screens + gameplay
+- `store-demo-raw-full.mp4` (173s) — take-1 raw (full chain, menu section slow)
+- `store-demo-raw-gameplay.mp4` (164s) — take-3 raw (realtime gameplay)
+- `store-spawn.png` / `store-urn-approach.png` / `store-balcony.png` /
+  `store-alert-climb.png` — marketing stills
