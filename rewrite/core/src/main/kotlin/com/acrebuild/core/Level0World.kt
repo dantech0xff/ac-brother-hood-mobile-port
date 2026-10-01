@@ -3013,8 +3013,15 @@ class Level0World(
         // `c(i,i9,i3,i4)` per drawn row (k.java:6117 — the b() loop's own
         // hit-test, proven); x comes from the same release point.
         val rects = menuRowRects()
+        // hit region = the drawn row ∩ the scroll viewport — rows clipped
+        // away by `menuScrollDy` are untouchable.
+        val viewTop = menuPanelRect()[1] + 10 + (if (menuPanelZ3()) 40 else 0)
         for (i in rects.indices) {
-            if (pointerDownIn(rects[i][0], rects[i][1], rects[i][2], rects[i][3]))
+            val r = rects[i]
+            if (r[1] + r[3] <= viewTop || r[1] >= 235) continue
+            val top = maxOf(r[1], viewTop)
+            val bot = minOf(r[1] + r[3], 235)
+            if (pointerDownIn(r[0], top, r[2], bot - top))
                 return i
         }
         return -1
@@ -3092,6 +3099,9 @@ class Level0World(
     /** `menuScrollDy` at drag start — a release after a moved drag must
      *  not resolve as a row tap. */
     private var menuDragStartDy = 0
+    /** Total |dy| the finger traveled during the drag — suppresses the
+     *  release tap even when the clamp keeps `menuScrollDy` unchanged. */
+    private var menuDragTravel = 0
     private var suppressReleaseTap = false
     /** Max scroll = last row bottom - 235 (5px bottom margin). Mirrors
      *  the raw `i9` walk without the scroll offset. */
@@ -4859,6 +4869,7 @@ class Level0World(
                     // `menuScrollDy`).
                     val pr = menuPanelRect()
                     menuDragStartDy = menuScrollDy
+                    menuDragTravel = 0
                     menuDragPrevY = if (jC in menuStates && menuScrollMax() > 0 &&
                         insideRect(e.x, e.y, pr[0], pr[1], pr[2], 235 - pr[1]))
                         e.y else -1
@@ -4870,6 +4881,7 @@ class Level0World(
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                     if (menuDragPrevY >= 0) {
+                        menuDragTravel += Math.abs(e.y - menuDragPrevY)
                         menuScrollDy = (menuScrollDy + menuDragPrevY - e.y)
                             .coerceIn(0, menuScrollMax())
                         menuDragPrevY = e.y
@@ -4887,7 +4899,7 @@ class Level0World(
                     // a moved drag scrolls — its release must not also
                     // fire the row tap under the finger.
                     if (menuDragPrevY >= 0) {
-                        if (menuScrollDy != menuDragStartDy)
+                        if (menuScrollDy != menuDragStartDy || menuDragTravel > 6)
                             suppressReleaseTap = true
                         menuDragPrevY = -1
                     }
