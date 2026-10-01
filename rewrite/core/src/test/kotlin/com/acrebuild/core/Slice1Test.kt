@@ -12086,16 +12086,18 @@ class Slice109Test {
         assertEquals(3, w.kCu, "elapsed >=49 ticks >= 3000ms → cu3")
     }
 
-    @Test fun `pause edge skips each logo dwell with z-23 sfx`() {
+    @Test fun `pause edge does NOT skip the logo dwells — unskippable`() {
+        // proven (k.java:4003-4054): R() cases 2/3 advance only on the
+        // 3000ms `du` timer — no input check exists in any arm. The
+        // port's earlier pause-skip was a non-verbatim nicety, removed.
         val w = world()
         w.stateL(0)
         w.tick(emptyList()); w.tick(emptyList())      // cu2
-        w.pad.queuePress(Pad.M_PAUSE)                 // v(262144) skip
-        w.tick(emptyList())
-        assertEquals(3, w.kCu)
         w.pad.queuePress(Pad.M_PAUSE)
         w.tick(emptyList())
-        assertEquals(4, w.kCu, "second logo also skipped")
+        assertEquals(2, w.kCu, "splash dwell ignores pause")
+        repeat(49) { w.tick(emptyList()) }            // ~3000ms elapse
+        assertEquals(3, w.kCu, "timer alone advances the dwell")
     }
 
     @Test fun `loading screen ignores pause then lands on jc23 prompt`() {
@@ -20068,10 +20070,19 @@ class Slice204Test {
         val w = floorWorld()
         val fsm = PlayerFsm(w)
         val p = mk(200, 100); p.S = 0; p.av = false
-        val held = mk(240, 100); held.aB = 1   // aB<=0 → az() releases ci
-        p.ci = held                            // in front, |dx|<120, |dy|<20
+        // `ci` clears unconditionally at az()'s head (fallback
+        // g.java:12917-12942) and rebinds via the L144+ scan — which only
+        // admits npcKind targets — so the held entity must be an ax11
+        // victim in the world list (aA=1 arms the interact offer past
+        // the L547 gate), not a free-standing local object.
+        val held = mk(240, 100).let { Entity(11, null).apply {
+            ak = it.ak; al = it.al; W[0] = it.W[0]; W[2] = it.W[2]
+            W[1] = it.W[1]; W[3] = it.W[3] } }
+        held.aB = 1; held.aA = 1
+        w.npcs.add(held)
         val pad = Pad(); pad.queuePress(Pad.M_UP); pad.commit(0)
         fsm.tick(p, pad)
+        assertEquals(held, p.ci, "L275 rebind — same-tick after the clear")
         assertFalse(p.cq, "g.f() → cq=0")
         assertTrue(p.S != 233 && p.S != 21 && p.S != 22,
             "carried hands suppress the jump")
