@@ -2345,10 +2345,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             else if (p.h(p.ak - g.ak, p.al - g.al) > 440 ||
                      Math.abs(p.al - g.al) >= 60) p.g = null
         }
-        // -- L37-L48: ci dies or moves behind → drop (facing flow is
-        //    decompiler-garbled in the original — !inFrontOf is the
-        //    consistent reading, `inferred`) ---------------------------
-        p.ci?.let { c -> if (c.aB <= 0 || !p.inFrontOf(c)) p.ci = null }
+        // -- L37-L48: `ci` cleared unconditionally each az() call
+        //    (fallback g.java:12917-12942, proven — both `av` branches
+        //    fall through to `ci = null`; the keep-branch is dead bytecode
+        //    noise). Rebinding happens in the L144+ k.bd[] scan, whose
+        //    own facing + dist<440 gates filter candidates. -------------
+        p.ci = null
         // -- L50-L63: ax11 Z[19]==1 targets must stay in front ------------
         p.g?.let { g -> if (g.ax == 11 && g.Z[19] == 1 && !p.inFrontOf(g)) p.g = null }
         // -- L65-L83: `i.at` — drop when dead, far, behind, or off-level --

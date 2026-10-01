@@ -1628,17 +1628,23 @@ class Level0Renderer {
             fillAr(0, 240 - world.kDz, 400, world.kDz, -16777216)
         }
 
-        // `i.bJ` flicker line (k.java:3239, inferred): `y.l(0)` +
-        // `y.a(cd, null, wrap(y,null,320), 200,50, 0,4,17,-1)` — a null-
-        // string wrapped draw; no visible glyph body. Early-return on the
-        // zeroing frame (`tailSkipFrame`) skips the aU bar.
+        // `i.bJ` flicker line (k.java:3239-3240, proven): `y.l(0)` +
+        // `y.a(cd, null, a(y,(String)null,320), 200,50, 0,4,17,-1)` —
+        // the transcription is verbatim, but `a(y,null,320)` wraps a
+        // null string (`b.a(str,320,false)` → NPE at str.length()).
+        // So on every LIVE i.bJ>0 frame the flicker arm throws and
+        // aborts the rest of b(z2) — the aU bar and the remainder of
+        // the proc never draw; on the zeroing frame the
+        // `i.bJ==i.bI && i.bL<=20 → i.bJ=0; return` arm aborts it
+        // outright (`tailSkipFrame`). Net effect: the aU bar draws
+        // only when i.bJ==0.
 
         // `aU` grab-QTE meter (k.java:3241-3253, proven): white outline
         // (120,215,125,11) + fill `(125*aU.aB)/800 - 1` px — red when
         // `aB>300 || j.g%3==0` else amber 0xFFBF00.
         val aU = world.kAU
         if (aU != null && (aU.P and 32) == 0 && world.iBy > 0 &&
-            !world.tailSkipFrame) {
+            world.iBJ == 0 && !world.tailSkipFrame) {
             outlineAr(120, 215, 125, 11, -1)
             val fw = (125 * aU.aB) / 800
             fillAr(121, 215, fw - 1, 10,
