@@ -468,3 +468,17 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - Medal viewer = jC=22 (kCc-driven, not kBA directly): options-mode needs
   kEx==3 + kCc[i]==2 for lit rows; win-mode shows kCc[i]==1 then taps
   through to jC=15 stats (itself trapped).
+
+### Run-28 notes (slice-328 verify)
+- jdb: `internal` Kotlin members aren't callable by name (name-mangled; even `foo$main` failed) — use the public surface (`set this.kBA[i]`, `print this.saveFlush()`) and verify semantics via file dump + `scoreAt(i)`.
+- Options drag-scroll: `input swipe 1200 900 1200 500 600` scrolls the bv4 8-row page; the scroll-offset-aware hit-test means row y depends on scroll amount — screenshot first, compute row centers from the image (~preview_y/706*1080), then tap.
+- jC=22 has TWO modes: kEx==3 → options-mode (BACK pill, M_CYCLE exit); kEx!=3 → win-mode viewer (tap-anywhere → next state). From pause-options you get win-mode (kEx=0) — tap advances to jC=15.
+- jC=24 credits exit lands on jC=6 ABOUT (chain, not a bug).
+
+### Run-29 notes (slice-329 audio verify)
+- jC=21 dialog dismiss depends on dlgU: full-screen u∈{0,4,5,7} advance on ANY tap (pointerStrip→M_CONTEXT); script dialogs u==9 need the skip gate `v(131072)` = the ↩ M_CYCLE footer zone (dev ~1900,940) — body taps do nothing.
+- `lastTouchX/Y == -1` between ticks is NORMAL (consume() resets each tick) — it is not proof of dead input; verify via a dispatch side-effect instead (jC/field change).
+- Stale jdb: an attached session left running holds the VM suspended → Android ANR dialog in ~2min. Before re-attaching always `pkill -f 'jd[b] -attach'` — note the bracket pattern: a literal `pkill -f jdb` matches your own shell's command line and kills itself (exit -1).
+- audioPlay "one Player" gate: kBF&&kBE && audioTrack inside hA[track]ms → every new z() dropped. Menu blips (z(23)) are silent while menu music is fresh — wait ~hA ms (virtual tickIndex*62) then re-tap.
+- Audio evidence: `logcat -s AcLevel0 AcSpike` → "audio: play track=N (e.e=N)" / "audio: play slot=N" / "audio: e.b() stop channel" / "audio: missing audio/" / "empty/unloaded". jdb reads: audioTrack, audioPlaying(), kBE (music<10), kBF (sfx>=10).
+- jC=23: row-tap only focuses (kBw); commit is the footer-left zone (pad.v(327712)=M_PAUSE|M_CONTEXT). kBw=-1 default commit → neither arm (flags keep init defaults).

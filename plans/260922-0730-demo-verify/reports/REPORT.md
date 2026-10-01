@@ -1560,3 +1560,32 @@ Nav paths exercised on real touch; unreachable screens jdb-driven
   — stamps were simulated, labeled).
 - MENU→OPTIONS: no OPTIONS row on the main menu — options only exists
   inside the pause menu (matches eA tables; orig may differ).
+
+## Run-28 — re-verify slice-328 @ b4c61796 (rare-menu fixes) — emulator-5554
+
+- Options drag-scroll: works; drag-release doesn't select; scrolled-row taps dispatch (CONTROL cycled, ACHIEVEMENTS opened). `fix328-options-scrolled.png`
+- jC=15 stats: NEXT pill armed → advanced to jC=30 (was trapped). `fix328-stats-next.png`
+- jC=3 options: ↩ footer armed → exits to jC=2 (was trapped). `fix328-jc3-footer.png`
+- ABOUT jC=6: credits roll renders top-down, V 1.2.1 splice, BACK exits. `fix328-about-credits.png`, `fix328-about-scroll1.png`
+- Credits jC=24: THE END + epilogue paragraphs render + roll. `fix328-credits-roll.png`
+- jC=22 kEx==3 medals: BACK pill armed → jC=3 (was cosmetic-only). `fix328-medals-back.png`
+- High score ≥256: LE-16 stamp → file bytes `210 0 4 0` @162 → relaunch → scoreAt(81)=1234 → HIGH SCORES shows LEVEL 1 = 1234, TOTAL = 1234. `fix328-hs-1234.png`
+- RESET wipe: YES now clears BOTH bytes (kBA[81]=0 AND kBA[82]=0 → scoreAt=0, no phantom). `fix328-post-reset.png`
+- Residuals: sound-prompt title still not drawn (d0(70)="SOUND SET" exists, title never renders); scrolled row labels bleed above title strip during scroll; row labels truncate ~13 chars (cosmetic).
+- Status: `b4c61796-slice328-ALL4FIXES-VERIFIED-scroll-footerABOUTcredits-scoreLE16-wipepair-residual-soundtitle-labelbleed`
+
+## Run-29 — re-verify slice-329 @ 523d00c9 (audio settings + label polarity) — emulator-5554
+
+- jC=23 title: "DO YOU WANT SOUND?" draws at y=80 (was blank — bU[19] fix verified). `snd-prompt-title.png`
+- YES arm: pill focus → footer commit → kBE/kBF=true, audioTrack=0, audioPlaying()=true; logcat `play track=0` + `play slot=0`. PASS
+- NO arm: kBE/kBF=false, no `play track=0`; silent nav (zero audio lines), mission music z(5) gated (audioTrack=-1 in gameplay). PASS
+- Labels: OFF↔flags-false / ON↔flags-true — polarity fix verified on screen both directions. `snd-options-off.png`, `snd-music-on.png`, `snd-sfx-on.png`
+- Toggles: MUSIC OFF→audioStop(`e.b()`); MUSIC ON→z(6)@jC14 (`play track=6`); SFX ON→audioStop+z(23) (`play track=23`). Neutral-row commit blips z(23) fire when channel free; suppressed while a track is inside its hA window — the "one Player" gate verified both ways. PASS
+- Mission music: fresh entry → `play track=5 (e.e=5)` + audioTrack=5 (kEE[0]=5 → music-5.ogg). Checkpoint restart does NOT re-fire (missionInit runs at entry only — code-consistent). PASS
+- Gameplay taps emit no SFX — only scripted aF records call audioTrackPlay (NpcFsm:1546); consistent.
+- RESET wipe: kBE/kBF UNCHANGED (ON on screen post-wipe), kAu=1, scoreAt=0. PASS. `snd-postwipe-on.png`
+- Scroll-clip intersect fix verified — scrolled rows no longer bleed above title strip.
+- NEW DEFECT (slice-329): long confirm banners clip LEFT — kEc=69 shows "…LY DELETED. ARE YOU SURE?", kEc=121 shows "…ME DATA HAS BEEN DELETED." Centered-cx (200-measure/2) goes negative for wide strings. `snd-wipe-banner-clip.png`, `snd-deleted-banner-clip.png`
+  - **Followup: fixed in slice-330 (f6bf3d98, PR #370) — ae() banner now wraps at w=200 (bW.a verbatim).**
+- Incidental: stale jdb suspend ~2min triggered an Android ANR dialog (tooling artifact, not app defect; recovered via relaunch).
+- Status: `523d00c9-slice329-AUDIO-VERIFIED-titleYES-NO-labels-toggles-track5-wipe-residual-bannerClipLong-fixedInSlice330`
