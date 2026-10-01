@@ -430,3 +430,41 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   ~realtime. For store clips, cut the slow menu segments or re-take.
 - Menu tap coords (2400x1080): NEW GAME (1240,543), EASY (1049,498),
   EZIO card (1240,345), jC=14 RESTART row then YES (1200,580).
+
+## Run-26 — save/resume verification recipe
+- **Persisted save**: `kBA` IntArray(160) → `world.saveFlush()` writes
+  little-endian shorts via `Command.PersistBA` → `SaveBridge`
+  `asbr-save.bin` (320B) in app files; `world.saveLoad()` runs on boot.
+  jdb-inject: `set this.kBA[14] = N` then `print this.saveFlush()`
+  (jdb has NO `call` verb — `print <method>()>` invokes it).
+- **jC=2 row hit-test ≠ button art**: row0's rect starts at panel.y+10
+  (view y55) — a tap on the visible button TOP (view ~y41) misses.
+  Rows: CONTINUE dev(1200,350); row1 dev(1200,544); NEW GAME(row2)
+  dev(1600,340) — col-2 rows start at x206 view.
+- **Real KO without combat**: jdb-set `player.al` deep (e.g. 1400) →
+  falls → cam-lag OOB → jC=12; YES tap dev(1200,580) respawns.
+- **Checkpoint verify**: `checkpoints.elementData[i]` (aw,ak,al);
+  `kBA[16]`=aw of last-fired; `checkpointSnap` Snapshot(ak,al,x1,gJ,gI)
+  is the respawn basis — restore is exact (1600,579 observed).
+- Verify dump of a persisted int: `run-as PKG od -A d -t u2 -j <2*i> -N 4
+  files/asbr-save.bin` (index i → byte offset 2i).
+
+## Run-27 — rare menus + hit-zone map
+- Pause HUD button: top-right "II" → view(354,0,46,37) → dev(1905,138).
+- Pause menu rows (panel 93,30): RESUME 280 / RESTART 412 / OPTIONS 544 /
+  HELP 676 / MAIN MENU 808 / EXIT 940 (dev y, x=1200).
+- MAIN MENU rows dev: CONTINUE(1200,350) / NEW-GAME-row1(1200,544) /
+  SELECT-LEVEL-row2(1600,340). YES/NO confirm rows (jC=28): YES
+  (1200,640), NO (1650,640).
+- OPTIONS page is ONE column of 8 at y96+33n (jc14) — rows ≥5 render
+  below the 240 canvas; input clamps to 239 → untappable (defect).
+- jC=3/jC=6/jC=15/jC=22(options-mode) are touch dead-ends — no footer
+  zone emits M_CYCLE/fire; jdb `print this.stateL(N)` escapes.
+- jC=4 difficulty chevrons: view x110-160/240-290, y15-95 → dev
+  (950/1450, 300). jC=5 page chevrons: view y=iK±15≈122 → dev(680/1720,560).
+- Score slots are BYTE pairs: scoreAt(i)=kBA[i]&255 | kBA[i+1]&255<<8 —
+  stamp high-byte in i+1 or values >255 truncate. jdb: `set this.kBA[81]=210`
+  + `set this.kBA[82]=4` shows 1234.
+- Medal viewer = jC=22 (kCc-driven, not kBA directly): options-mode needs
+  kEx==3 + kCc[i]==2 for lit rows; win-mode shows kCc[i]==1 then taps
+  through to jC=15 stats (itself trapped).

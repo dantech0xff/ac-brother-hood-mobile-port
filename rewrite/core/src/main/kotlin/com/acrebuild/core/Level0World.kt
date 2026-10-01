@@ -1508,7 +1508,10 @@ class Level0World(
         58 to "MISSION FAILED. YOU DIDN'T REACH THE ESCAPE LOCATION IN TIME!",
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
         69 to "DO YOU WANT TO DELETE YOUR DATA?",
+        62 to "MENU", 70 to "SOUND SET",
         71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
+        114 to "INCREDIBLE\nASSASSIN", 115 to "HARDCORE",
+        116 to "BLOOD KILLER",
         73 to "DO YOU WANT TO QUIT?", 78 to "ESCAPE TIME",
         122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
@@ -2639,12 +2642,19 @@ class Level0World(
         // a(d(0,16), d(0,62)|"") — typewriter next-mission line
         statsTypeNext = if (kAj < 7) 62 else -1
         typewriterStep(if (kAj < 7) "next-mission" else "")
+        // M() runs `a(d(0,16),aj<7?d(0,62):"")` INSIDE its tick
+        // (k.java:3392, proven) — jC==15 bypasses menuQ so the
+        // pill hit-zones arm here.
+        footerQ()
         if (pad.v(458784)) {                              // fire/advance
             z(23)
             if (jG <= 10) { jG = 10; return }
             // persist: best score + dB..dF stash + bA slots
+            // `a(bA,81+(au<<4)+(aj<<1),(short)i4)` (k.java:3403) — a
+            // short write at byte offset si; odd si lands the hi byte
+            // in the next slot (baShortPut — scores ≥256 kept whole).
             val si = 81 + (kAu shl 4) + (kAj shl 1)
-            if (i4 > kBA[si]) kBA[si] = i4
+            if (i4 > baShort(si)) baShortPut(si, i4)
             kDB = kAx; kDC = kAy; kDF = kAN; kDD = kAz
             kBA[32] = kAz; kBA[8] = kAu; kBA[44] = kAx
             kBA[46] = kAy; kBA[48] = kAN; kBA[36] = 0
@@ -2697,6 +2707,7 @@ class Level0World(
      *  faithful to any non-IGP device). */
     private fun bannerK(i: Int) {
         kBw = -1; kBv = i; kEy = kEA[i].size; kEd = 0
+        menuScrollDy = 0                            // menu rebuild → top
         when (i) {
             0 -> {
                 kEb = 0
@@ -2822,6 +2833,10 @@ class Level0World(
                 medalRowDim[i3] = kCc[i3] != 2
             }
             medalRowCount = 3
+            // ah() runs `a("",d(0,17))` INSIDE its tick
+            // (k.java:6450-6452, proven) — jC==22 bypasses menuQ so
+            // the BACK pill hit-zone arms here.
+            footerQ()
             if (pad.v(131072)) {
                 z(30); bannerK(4); kBw = -1; stateL(3); return
             }
@@ -3030,6 +3045,44 @@ class Level0World(
      *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
      *  center split `(bv!=4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
      *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
+    /** Port-added touch-drag scroll for menus whose row stack
+     *  overflows the 240px canvas — shipped quirk: the orig lays
+     *  eA[4]'s 8 option rows in ONE column (`(bv!=4&&j.c!=14)` excludes
+     *  them from the two-column split, k.java:5942-5947 proven) so rows
+     *  5-7 land below the canvas and are keypad-only; the touch-only
+     *  port needs a scroll affordance to reach ACHIEVEMENTS/ABOUT/RESET.
+     *  `menuScrollDy` is subtracted from the `i9` walk in both
+     *  `menuRowRects` and the renderer's panel draw; 0 keeps the
+     *  verbatim layout. */
+    var menuScrollDy = 0
+    /** y of the last MOVE while a panel drag is active (-1 = none). */
+    private var menuDragPrevY = -1
+    /** `menuScrollDy` at drag start — a release after a moved drag must
+     *  not resolve as a row tap. */
+    private var menuDragStartDy = 0
+    private var suppressReleaseTap = false
+    /** Max scroll = last row bottom - 235 (5px bottom margin). Mirrors
+     *  the raw `i9` walk without the scroll offset. */
+    fun menuScrollMax(): Int {
+        val pr = menuPanelRect()
+        var i9 = pr[1] + 10
+        if (menuPanelZ3()) i9 += 40
+        val i12 = i9
+        val i10 = menuRowCount()
+        var bottom = i9
+        for (i13 in 0 until i10) {
+            val i4 = menuI4(i13)
+            if (i13 == 1 && jC == 2) i9 += 13
+            if (i9 + i4 > bottom) bottom = i9 + i4
+            if ((kBv != 4 && jC != 14) || jC == 19) {
+                var i16 = i10 / 2
+                if (i10 % 2 == 0) i16--
+                if (i13 == i16 && i13 < i10 - 1) i9 = i12 - (i4 + 3)
+            }
+            i9 += i4 + 3
+        }
+        return (bottom - 235).coerceAtLeast(0)
+    }
     fun menuRowRects(): List<IntArray> {
         val out = ArrayList<IntArray>()
         val pr = menuPanelRect()
@@ -3037,6 +3090,7 @@ class Level0World(
         val i3 = pr[2]
         var i9 = pr[1] + 10
         if (menuPanelZ3()) i9 += 40
+        i9 -= menuScrollDy.coerceIn(0, menuScrollMax())
         val i12 = i9
         val i10 = menuRowCount()
         for (i13 in 0 until i10) {
@@ -3100,6 +3154,15 @@ class Level0World(
         23, 28 -> if (kEc == 121) Pair("", d0(17))
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        // case 3 `a(d(0,79),(bv==0||bv==3)?"":d(0,17))` (k.java:833,
+        // proven) — options menu OK/BACK footer.
+        3 -> Pair(d0(79), if (kBv == 0 || kBv == 3) "" else d0(17))
+        // M() `aj<7 ? a(d(0,16),d(0,62)) : a(d(0,16),"")`
+        // (k.java:3392-3395, proven) — win-stats NEXT/MENU footer.
+        15 -> Pair(d0(16), if (kAj < 7) d0(62) else "")
+        // ah() ex==3 `a("",d(0,17))` (k.java:6450, proven) — medal
+        // browse BACK footer.
+        22 -> Pair("", d0(17))
         // case 6 `if (!dx) a("",d(0,17))` (:851-853) — ABOUT's BACK
         // footer shows only on the non-dx variant.
         6 -> if (!kDx) Pair("", d0(17)) else Pair(null, null)
@@ -3246,7 +3309,7 @@ class Level0World(
                         if (kFG) { kFF = 29; stateL(29) }
                         else {
                             kBA[69] = 0; kAu = 1
-                            for (i in 0 until 24) kBA[81 + (i shl 1)] = 0
+                            for (i in 0 until 24) baShortPut(81 + (i shl 1), 0)
                             kEc = 121
                         }
                         kFG = false; saveFlush()
@@ -3360,11 +3423,23 @@ class Level0World(
         }
     }
 
-    /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
-     *  `bA` save array; `kBA` stores one byte per slot so this is
-     *  `kBA[i] | kBA[i+1]<<8`. */
-    fun scoreAt(i: Int): Int =
-        ((kBA[i] and 255) or ((kBA[i + 1] and 255) shl 8)).toShort().toInt()
+    /** The port's `kBA` is index-preserving: slot n holds the value at
+     *  original byte index n (`bA` is `byte[512]`, k.java:291 — the
+     *  `a(bA,i,short)` accessors address BYTES, so a short op at byte
+     *  offset i spans slots i and i+1 as lo/hi).
+     * `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read at
+     *  byte offset i of the `bA` record. */
+    private fun baShort(i: Int): Int =
+        ((kBA[i] and 0xFF) or ((kBA[i + 1] and 0xFF) shl 8)).toShort().toInt()
+    /** `a(bA, i, short)` — LE-16 short write at byte offset i; the
+     *  score table's odd offsets (81+…) land the hi byte in the next
+     *  slot — a plain `kBA[si]=v` silently truncated scores ≥256. */
+    internal fun baShortPut(i: Int, v: Int) {
+        kBA[i] = v and 0xFF; kBA[i + 1] = (v ushr 8) and 0xFF
+    }
+    /** High-score table entry at byte offset `81+(au<<4)+(aj<<1)`
+     *  (k.java:3403) — `a(bA, i)` byte-offset read. */
+    fun scoreAt(i: Int): Int = baShort(i)
 
     /** `F()` (k.java:2338-2408, proven) — the jc4 high-scores screen:
      *  `a(30,d(0,5))` title bar (renderer), `cU` difficulty page with
@@ -3723,6 +3798,10 @@ class Level0World(
     private fun menuJc6() {
         kCb = true
         scrollPanel(d0(77) ?: "", 50, 155, 390, true)
+        // case 6 runs `a("",d(0,17))` INSIDE its tick when !dx
+        // (k.java:851-853, proven) — jC==6 is a direct dispatch case
+        // (not menuStates) so the BACK pill hit-zone arms here.
+        footerQ()
         if (pad.v(Pad.M_CYCLE) && !kDx) { stateL(3); z(30) }
     }
 
@@ -4741,6 +4820,15 @@ class Level0World(
                     }
                     pointerDown = true
                     kCj = e.x; kCk = e.y
+                    // panel-drag arm for the bv4 overflow scroll: a DOWN
+                    // inside the menu panel starts tracking — the drag
+                    // delta scrolls the rows (port-added affordance, see
+                    // `menuScrollDy`).
+                    val pr = menuPanelRect()
+                    menuDragStartDy = menuScrollDy
+                    menuDragPrevY = if (jC in menuStates && menuScrollMax() > 0 &&
+                        insideRect(e.x, e.y, pr[0], pr[1], pr[2], 235 - pr[1]))
+                        e.y else -1
                 }
                 InputQueue.Type.MOVE -> {                     // pointerDragged
                     val iJ = resolvePadZone(e.x, e.y)
@@ -4748,6 +4836,11 @@ class Level0World(
                     if (iJ in 0..4) kJT = kJT or (1 shl iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
+                    if (menuDragPrevY >= 0) {
+                        menuScrollDy = (menuScrollDy + menuDragPrevY - e.y)
+                            .coerceIn(0, menuScrollMax())
+                        menuDragPrevY = e.y
+                    }
                 }
                 InputQueue.Type.UP, InputQueue.Type.CANCEL -> {// pointerReleased
                     kCh = e.x; kCi = e.y
@@ -4758,6 +4851,13 @@ class Level0World(
                                                                  // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
+                    // a moved drag scrolls — its release must not also
+                    // fire the row tap under the finger.
+                    if (menuDragPrevY >= 0) {
+                        if (menuScrollDy != menuDragStartDy)
+                            suppressReleaseTap = true
+                        menuDragPrevY = -1
+                    }
                 }
             }
         }
@@ -4765,6 +4865,10 @@ class Level0World(
         lastMoveX = kCj; lastMoveY = kCk                       // k.J/k.K
         if (kCl) { kCj = -1; kCk = -1; kCl = false }
         lastTouchX = kCh; lastTouchY = kCi                     // k.H/k.I
+        if (suppressReleaseTap) {
+            lastTouchX = -1; lastTouchY = -1
+            suppressReleaseTap = false
+        }
         kCh = -1; kCi = -1
     }
 
