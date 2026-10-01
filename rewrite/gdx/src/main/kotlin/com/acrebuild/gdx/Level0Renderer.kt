@@ -583,8 +583,15 @@ class Level0Renderer {
             drawText(title, 200, 120, 3, pack = 91)
         }
         if (world.kDw >= 21) {
+            // `b(bW,0,dy,200,33,380,205,0,1)` (k.java:1350/1359,
+            // proven): bW font, `j.a(cd,0,33,400,205)` clip,
+            // wrapped draw at y=fd.
             clipScissor(0, 33, 400, 205)
-            drawText(world.kDy ?: "", 200, world.kFd, 3, pack = 91)
+            val str = world.kDy ?: ""
+            fontW.l(0)
+            val u = fontW.wrap(str, 380)
+            fontW.drawWrapped(str, u, 200, world.kFd, 0, 200, 1, -1)
+            { g, gx, gy, pal -> drawObject(91, g, gx, gy, 0, 0, pal) }
             clipScissor(0, 0, 400, 240)
         }
     }
@@ -844,9 +851,21 @@ class Level0Renderer {
                          offsetY + (Level0World.VIEW_H - y - h) * scale,
                          w * scale, h * scale)
     }
+    /** Scrollable-menu viewport — when armed, `clipReset` restores this
+     *  scissor instead of disabling the test (the row loop's inner
+     *  clip/reset pairs then stay inside the scroll window). */
+    private var clipViewport: IntArray? = null
     private fun clipReset() {
         batch.flush()
-        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+        val v = clipViewport
+        if (v != null) {
+            Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+            Gdx.gl.glScissor(offsetX + v[0] * scale,
+                             offsetY + (Level0World.VIEW_H - v[1] - v[3]) * scale,
+                             v[2] * scale, v[3] * scale)
+        } else {
+            Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+        }
     }
 
     /** `a(i,i2,i3,z2,z3)` (k.java:5872, proven) — ornamental band:
@@ -978,6 +997,16 @@ class Level0Renderer {
         fillAr(x, y, w, 10, 805306368)
         if (z2) fillAr(x + 95, y - 2, 13, 2, -2013265920)
         if (z3) { fillAr(x, i9, w, 40, 805306368); i9 += 40 }
+        // Port-added bv4 overflow scroll (`menuScrollDy`, world-side):
+        // shift the row window and clip rows to the region below the
+        // title strip — the verbatim layout is the dy==0 case.
+        val scrolling = world.menuScrollMax() > 0
+        if (scrolling) {
+            i9 -= world.menuScrollDy
+            clipViewport = intArrayOf(0, i9 + world.menuScrollDy, 400,
+                                      235 - (i9 + world.menuScrollDy))
+            clipReset()
+        }
         val i12 = i9
         var i = x
         for (i13 in 0 until i10) {
@@ -1066,6 +1095,7 @@ class Level0Renderer {
             }
             i9 += i4 + 3
         }
+        if (scrolling) { clipViewport = null; clipReset() }
     }
 
     /** `b.java:915` composite-sprite draw for one tile cell. */
@@ -1174,9 +1204,16 @@ class Level0Renderer {
     private fun aboutScreen(world: Level0World) {
         fontW.l(1)
         world.d0(7)?.let { drawText(it, 200, 24, 3, pack = 91) }
-        clipScissor(0, 50, 400, 105)
+        // `b(y,1,d(0,77),200,50,390,155,0,1)` (k.java:847, proven): y
+        // font (pack-92), `j.a(cd,0,50,400,155)` clip, 390-wide wrapped
+        // draw at y=fd. The earlier plain drawText packed fontW +
+        // block-vcenter — the wrapped roll needs fontY and top-down fd.
+        clipScissor(0, 50, 400, 155)
+        val str = world.d0(77) ?: ""
         fontY.l(1)
-        drawText(world.d0(77) ?: "", 200, world.kFd, 3, pack = 91)
+        val u = fontY.wrap(str, 390)
+        fontY.drawWrapped(str, u, 200, world.kFd, 0, 200, 1, -1)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
         clipScissor(0, 0, 400, 240)
     }
 
