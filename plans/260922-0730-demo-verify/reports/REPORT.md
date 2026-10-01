@@ -1589,3 +1589,12 @@ Nav paths exercised on real touch; unreachable screens jdb-driven
   - **Followup: fixed in slice-330 (f6bf3d98, PR #370) — ae() banner now wraps at w=200 (bW.a verbatim).**
 - Incidental: stale jdb suspend ~2min triggered an Android ANR dialog (tooling artifact, not app defect; recovered via relaunch).
 - Status: `523d00c9-slice329-AUDIO-VERIFIED-titleYES-NO-labels-toggles-track5-wipe-residual-bannerClipLong-fixedInSlice330`
+
+## Run-30 — task-41 high-score entry + persistence via REAL stats arm @ f6bf3d98/APK (aadfeac5 docs-HEAD, slice-330 build) — emulator-5554
+
+- Entry path = the REAL persist arm, not a raw field write: jdb `stateL(15)` (labeled assist — jC=15 needs a win context), seeded `kAp[0]=15` (kills) → real formula i4 = 15×kDH[0]=1500 → `statsScore=1500` on screen (`hs-stats-1500.png` — MISSION COMPLETE rows + SCORE 1,500).
+- NEXT pill tap → `pad.v(458784)` fire → jG>10 → `baShortPut(81,1500)` + `kBA[14]=1` (next-mission advance) + PersistBA → logcat `save: e(true) → 320B /ASBR`; file dump `run-as od`: bytes `220 0 5 0` @162 (=LE-16 1500 — the >256 slot proves the slice-328 byte-pair fix end-to-end through the real arm).
+- force-stop → fresh process → `scoreAt(81)=1500` (file persistence, not memory) → real nav CONTINUE→browse→EZIO→briefing→dialog-skip→gameplay→pause→options→scroll→HIGH SCORES → **LEVEL 1 = 1500, TOTAL = 1500** (`hs-1500-relaunch.png`).
+- Wipe: options↩→scroll→RESET→YES → kEc=121 → `scoreAt(81)=0` + file `0 0 0 0` @162 → force-stop → relaunch → `scoreAt(81)=0` → jC=4 (assist) → **table empty, all rows + TOTAL show "-"** (`hs-empty-after-wipe.png`).
+- Bonus: slice-330 banner-wrap verified on the wipe-confirm — "THE GAME DATA WILL BE / PERMANENTLY DELETED. / ARE YOU SURE?" wraps 3 lines, no left-clip (`hs-wipe-wrapped-banner.png` — Run-29 defect closed on-device).
+- Status: `aadfeac5-hs-REALARM-persist-VERIFIED-1500LE16-file-relaunch-display-TOTAL-wipePairClear-emptyAfterRelaunch`
