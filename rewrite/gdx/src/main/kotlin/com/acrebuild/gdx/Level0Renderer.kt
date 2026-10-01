@@ -843,13 +843,24 @@ class Level0Renderer {
         }
     }
 
-    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. */
+    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. When
+     *  `clipViewport` is armed (scrollable menu), the rect INTERSECTS
+     *  the viewport — a scrolled row's own clip still covers its band,
+     *  so without intersection it draws above the title strip. */
     private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
+        var (cx, cy, cw, ch) = intArrayOf(x, y, w, h)
+        val v = clipViewport
+        if (v != null) {
+            val x2 = minOf(cx + cw, v[0] + v[2]); cx = maxOf(cx, v[0])
+            val y2 = minOf(cy + ch, v[1] + v[3]); cy = maxOf(cy, v[1])
+            cw = (x2 - cx).coerceAtLeast(0); ch = (y2 - cy).coerceAtLeast(0)
+            if (cw == 0 || ch == 0) { cw = 0; ch = 0 }
+        }
         batch.flush()
         Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
-        Gdx.gl.glScissor(offsetX + x * scale,
-                         offsetY + (Level0World.VIEW_H - y - h) * scale,
-                         w * scale, h * scale)
+        Gdx.gl.glScissor(offsetX + cx * scale,
+                         offsetY + (Level0World.VIEW_H - cy - ch) * scale,
+                         cw * scale, ch * scale)
     }
     /** Scrollable-menu viewport — when armed, `clipReset` restores this
      *  scissor instead of disabling the test (the row loop's inner
