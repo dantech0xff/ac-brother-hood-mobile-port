@@ -1769,12 +1769,17 @@ class Level0Renderer {
             menuPanel(world, pr[0], pr[1], pr[2],
                       world.menuPanelZ2(), world.menuPanelZ3())
             if (world.jC == 23 || world.jC == 28) {
-                // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,...)` (:6221)
-                // — centered bW title; the eC==121 arm draws at y=120.
+                // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,0,100,3,-1)`
+                // (:6221; eC==121 arm at :6207, y=120, no bW.l(1)) —
+                // *wrapped* centered block at w=200 (long banners wrap to
+                // multiple lines; a single centered line clips off-canvas).
                 world.d0(world.kEc)?.let { t ->
-                    fontW.l(1)
-                    val cx = 200 - fontW.measure(t).first() / 2
-                    drawText(t, cx, if (world.kEc == 121) 120 else 80, 3)
+                    if (world.kEc != 121) fontW.l(1)
+                    val u = fontW.wrap(t, 200)
+                    fontW.drawWrapped(
+                        t, u, 200, if (world.kEc == 121) 120 else 80,
+                        0, 100, 3, -1,
+                    ) { g, gx, gy, pal -> drawObject(91, g, gx, gy, 0, 0, pal) }
                 }
             }
             if (world.menuVisible) {
