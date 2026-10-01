@@ -157,7 +157,10 @@ class Level0World(
     /** `j.c∈{13,31}` — the win screen: `k.l(13)` lands on 31 when
      *  `kBx >= 0` (k.java:2280-2285, proven); 13 only sticks when bx<0.
      *  Same freeze contract as `failed`; confirm (`v(65568)`,
-     *  k.java:1804) → reload(), our only level (`inferred` milestone). */
+     *  k.java:1804, proven) applies to the 31-banner only → `l(13)`.
+     *  The retry/exit choices live on j.c==13 — menu items 14/15 via
+     *  `v(327712)`: item 14 reloads (`a(true)`), item 15 exits
+     *  (`W();l(2)`). */
     val won get() = jC == 13 || jC == 31
 
     /** ax2 checkpoint record (i.java:13477 aY). `aw` = record id,
@@ -251,7 +254,9 @@ class Level0World(
      *  multipliers {100,200,300} for kills / collects. */
     val kDH = intArrayOf(100, 200, 300)
     val kDI = intArrayOf(100, 200, 300)
-    // -- M() win-stats surface (k.java:3280-3445, inferred render state)
+    // -- M() win-stats surface (k.java:3280-3448, proven — title
+    //    a(i2,d(0,60)), 5 label rows d(0,38+i3) gated j.g>i3*2, value
+    //    draws at x305/306, footer proc a(d(0,16),d(0,62)|""))
     var statsTitleY = 0
     var statsScore = 0
     var statsTimeSec = 0
@@ -277,9 +282,10 @@ class Level0World(
     var medalRowCount = 0                   // drawn slots
     var screenFadeAlpha = 0                 // j.h fade (10-j.g)*25
 
-    /** `j.c(i,0)` (j.java:1202, proven head) — thousands-grouped digits:
-     *  `<1000` raw, else separator groups (`,` inferred — the locale
-     *  switch decompiled oddly). */
+    /** `j.c(i,0)` (j.java:1202-1267, proven) — thousands-grouped
+     *  digits: `<1000` raw, else zero-padded thousands groups joined
+     *  by the `str` separator arg (the separator switch is on a dead
+     *  constant in all three passes — `,` is the shipped glyph). */
     fun fmtJ(i: Int): String = if (i in -999..999) i.toString()
         else "%,d".format(i)
     /** `i.av()` (i.java:7813 proven): first RESERVED slot (P&128 != 0);
@@ -413,7 +419,8 @@ class Level0World(
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
     override val bh3: Boolean get() = kAj in kBh.indices && kBh[kAj] == 3
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
-     *  `inferred` — orig's u is written by script ops). */
+     *  the orig's u is written by script ops — `k.b(IIII)` at
+     *  k.java:349-372 assigns `u = slot` (the panel kind), proven). */
     var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
@@ -504,9 +511,10 @@ class Level0World(
         }
     }
 
-    /** `k.c(x,y,w,h)` — view-space touch-rect test. The original reads the
-     *  J2ME pointer state; the port maps it onto the last touch coords
-     *  (inferred — pointer plumbing predates the input queue). */
+    /** `k.c(x,y,w,h)` (k.java:519-521 + :537-539, proven): view-space
+     *  touch-rect test — `b(H,I,x,y,w,h)`, inclusive bounds, false only
+     *  when the release point is (-1,-1). The port maps H/I onto the
+     *  last touch coords. */
     override fun touchRect(x: Int, y: Int, w: Int, h: Int): Boolean =
         lastTouchX in x..x + w && lastTouchY in y..y + h
 
@@ -738,6 +746,9 @@ class Level0World(
         Entity.grabLatch = false; Entity.gq = false //   g.q, g.r(stub),
         Entity.gf = null                            //   g.A, g.F
         kAD = null                                  // k.aD
+        volPaintRect = null                         // k.aQ (i.java:1888 —
+                                                    //   ax35 arms also null
+                                                    //   it at sub-op 17/L219)
         kBv = 0                                     // k.bv
         kC = null; kD = null; kE = null             // k.C/D/E (kD/kE also
         kAi = false                                 //   cleared at :704)
@@ -819,7 +830,9 @@ class Level0World(
             // pool in the original — the port split it into waypointPool
             // (runners) + waypoints (director/pursuers); both must load.
             // the 0/25 player-slot record becomes `aS`, not a bb[] npc
-            // (inferred — `k.aS` is built from it, not spawned twice).
+            // (proven — k.java:4647-4648 builds `new g(sArr)` = the
+            // player class and :4684-4689 assigns `aS = gVar`; later
+            // 0/25 records are dropped entirely, fallback :17201-17225).
             if (f[0] == 0 || f[0] == 25) continue
             if (f.size < 7) continue
             // Retype head (i.java:2640-2651, proven): ax11 records whose
@@ -1383,9 +1396,10 @@ class Level0World(
      *  `kAj+1 in fP` gates the checkpoint-save offer ([m1-2],[m3-5],
      *  [m6-7],[m8]); af() also counts unlocked rows `kDa > fP[i]`. */
     val kFP = intArrayOf(0, 2, 5, 7)
-    /** renderer's `fK` row-anim rearm flag — af() nav `fK.a(21,1)`:
-     *  set to a state index, renderer arms+resets to -1 (`inferred`
-     *  plumbing — the orig draws+animates in one proc). */
+    /** renderer's `fK` row-anim rearm flag — af() nav `fK.a(21,1)`
+     *  (proven: fK lazily built from A[2] at k.java:5930-5933, nav
+     *  arms :6303/:6325; the port splits draw vs tick so the rearm
+     *  rides this one-shot — `a(anim,repeats)` semantics a.java:53-97). */
     var menuFkArm = -1
     var kEy = 0                        // k.ey — eA[bv].length
     var kEd = 0                        // k.eD — banner ticker
@@ -1442,12 +1456,14 @@ class Level0World(
                                        //  by the f-loop (f.java:1857-1863); set
                                        //  by `f.a(d(0,24),0)` call sites, cleared
                                        //  on stateL away from jC==27
-    var kDM = false                    // k.dM — resume flag
-                                     // (inferred distinct from mount cm)
+    var kDM = false                    // k.dM — tilemap offscreen-cache
+                                     // (dJ 420×260) dirty flag: set → the
+                                     //  buffer repaints fully this frame
 
-    /** `bU[]` (k.java:5166-5175) — the global UI string table `d(0,n)`.
-     *  Strings from `docs/gameplay-mining/string-corpus.md` (proven where
-     *  listed); guesses marked `inferred`. */
+    /** `bU[]` (k.java:141, :450-451, :3979-3991, proven) — the
+     *  global UI string table: `d(0,n) → bU[n]` while other packs go
+     *  to `j.g(n)`; filled `bU[i] = j.g(i)` from the '/14' pack.
+     *  Strings from `docs/gameplay-mining/string-corpus.md`. */
     private val bU = mapOf(
         0 to "MAIN MENU", 1 to "NEW GAME", 2 to "CONTINUE",
         3 to "SELECT LEVEL", 4 to "OPTIONS", 5 to "HIGH SCORES",
@@ -1455,12 +1471,19 @@ class Level0World(
         10 to "LEVEL", 11 to "RESUME", 12 to "RESTART",
         13 to "ARE YOU SURE YOU WANT TO EXIT?",
         14 to "YES", 15 to "NO", 16 to "NEXT", 17 to "BACK", 18 to "SKIP",
+        19 to "DO YOU WANT SOUND?", 20 to "ON", 21 to "OFF",
         22 to "SOUND", 23 to "TOTAL", 24 to "LOADING",
         25 to "DO YOU WANT TO RESTART?",
+        26 to "YOUR MAX TEMPERATURE^GAUGE HAS INCREASED.",
+        29 to "GET FREE SKIN", 30 to "THE CODE IS:",
+        31 to "PLEASE WAIT...",
         27 to "IN AN ATTACK ON THE AUDITORE FAMILY VILLA, RODRIGO'S SON, CESARE, HAS KILLED EZIO'S BELOVED UNCLE, MARIO, AND STOLEN THE DANGEROUS AND POWERFUL APPLE OF EDEN. VOWING TO AVENGE HIS UNCLE AND RECOVER THE APPLE, EZIO SEEKS THE AID OF HIS FRIEND, NICCOLÒ MACCHIAVELLI, WHO INFORMS HIM THAT HE WON'T BE ABLE TO GET TO CESARE WITHOUT HELP FROM LOCALS...",
         28 to "THE END",
         32 to "SLOT 1", 33 to "SLOT 2", 34 to "SLOT 3",
         35 to "EASY", 36 to "NORMAL", 37 to "HARD",
+        44 to "YOU GOT A POTION.",
+        45 to "YOU FOUND A MEMORY BLOCK! COLLECT \\34\\0 OF THEM TO EXPAND YOUR LIFEBAR.",
+        46 to "MEMORY BLOCK COMPLETED^LIFE EXPANDED!",
         47 to "TOUCH THE AREA TO THE ASSASSIN'S LEFT/RIGHT: MOVE\n\nTOUCH THE AREA ABOVE THE ASSASSIN: JUMP\n\nTOUCH THE AREA BELOW THE ASSASSIN: CROUCH\n\nTOUCH THE ASSASSIN: ATTACK/HOOK\n\nTOUCH THE WEAPON ICON: CHANGE WEAPON",
         48 to "FIND THE HEALTH POTION TO RECOVER LIFE.",
         49 to "THE GAME CAN ALSO BE PLAYED ENTIRELY WITH THE VIRTUAL PAD.\n\nCORRESPONDING CONTROLS\n\nTOUCH THE ASSASSIN = ATTACK ICON\nTOUCH THE AREA TO THE ASSASSIN'S LEFT = VIRTUAL PAD LEFT\nTOUCH THE AREA TO THE ASSASSIN'S RIGHT = VIRTUAL PAD RIGHT\nTOUCH THE AREA ABOVE THE ASSASSIN = VIRTUAL PAD UP OR JUMP ICON\nTOUCH THE AREA BELOW THE ASSASSIN = VIRTUAL PAD DOWN",
@@ -1475,7 +1498,10 @@ class Level0World(
               "NONE MAY FIND IT OR USE ITS POWER. BUT WHAT EZIO " +
               "DOESN'T KNOW IS THAT SPYING EYES ARE FOLLOWING HIS " +
               "EVERY MOVEMENT...",
+        61 to "BOSS",
+        64 to "WEAPON RECHARGED",
         66 to "DID YOU LIKE THIS GAME? CHECK OUT OTHER GAMELOFT GAMES!",
+        67 to "LOAD MEMORY", 68 to "TOUCH THE MAP TO SELECT",
         // `bU[77]` splice (:3988-3991, proven): `$VVV` → `GloftASBR.b`
         // = MIDlet-Version JAD property = "1.2.7" (MANIFEST.MF, proven).
         77 to ("\\0ASSASSIN'S CREED BROTHERHOOD\nV \$VVV\n\n© 2010 UBISOFT ENTERTAINMENT.\nALL RIGHTS RESERVED. ASSASSIN'S CREED, UBISOFT AND THE UBISOFT LOGO ARE TRADEMARKS OF UBISOFT ENTERTAINMENT IN THE U.S. AND/OR OTHER COUNTRIES. PUBLISHED AND DEVELOPED BY GAMELOFT UNDER LICENSE FROM UBISOFT ENTERTAINMENT.\nSOFTWARE © 2010 GAMELOFT.\nALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER COUNTRIES.\n\nINFO AND CUSTOMER CARE:\nWWW.GAMELOFT.COM\nSUPPORT@GAMELOFT.COM\n\n\\0EXECUTIVE PRODUCERS\n\\1CHARLOTTE LAVERGNE\nMARTIAL VALERY\n\n\\0PRODUCERS\n\\1LUO JUN JIE\nMA LIN\n\n\\0GAME DESIGN\n\\1CAI QIAN\nSHI YAO\nPAN XIN\nLI YI NAN\nJIANG WEI\nWANG JI\nZHANG3 LEI\n\n\\0GRAPHICS\n\\1LI MIN\nZOU XU BIN\nCHEN ZI GUANG\nYAN BO\nYANG CHAO\nDAI SI TONG\nLIU LU\nXU XIANG\nZENG XIN\nLI YU AN\nZHONG HONG YU\nLIANG XIAO BAI\n\n\\0PROGRAMMERS\n\\1WEN YAN BIN\nSHI FENG\nZHOU CHAO FENG\nZHAO YU\n\n\\0SOUND DIRECTOR\n\\1ARNAUD GALAND\n\n\\0SOUND DESIGNER\n\\1EMANUEL BURCEA\n\n\\0LOCALIZATION MANAGER\n\\1ALEXIS GREEN-PAINCHAUD\n\n\\0LOCALIZATION COORDINATORS\n\\1ALICJA BUFFA\nFRED LEUNG\n\n\\0LOCALIZATION\n\\1KASPER HARTMAN\nOWEN WEISS\nTIMOTHY LECLAIR\nMARIKO MCDONALD\n\n\\0QA MANAGER\n\\1DU JING\n\n\\0QA LEAD\n\\1HENG XIN\n\n\\0QUALITY ASSURANCE\n\\1HU YI WEI\nZHU JIAN\nDONG MIN YOU\nLIU HAI\nLIU XING\nMU RANG\nZHANG XIANG\nYUAN GUANG SHENG\nWANG YUE\nXU PEI\nJIANG HAN\nKAN LIANG\nHUANG PENG\nYANG YUE SHENG\nPENG HONG\nTANG JIAN WEI\nZENG WEI XUAN\nLI RUO FAN\nXIAO KAI JIE\nLI2 JIE\nHE JUN\nHUANG HAI TAO\nJIA YI\nTANG LI\nXIAO QIAN\n\n\\0SOUND QA MANAGER\\1\nULRICH FRANTZ\n\n\\0SOUND QA TESTERS\\1\nNICOLAS TROVATO\nMARIA COLONA\n\n\\0STUDIO MANAGERS\\1\nYU FEI\nLI KAI JUN\n").replace("\$VVV", "1.2.7"),
@@ -1491,12 +1517,37 @@ class Level0World(
         57 to "MISSION FAILED. THE GUARDS HAVE SOUNDED THE ALARM!",
         58 to "MISSION FAILED. YOU DIDN'T REACH THE ESCAPE LOCATION IN TIME!",
         59 to "MISSION FAILED", 60 to "MISSION COMPLETE",
-        69 to "DO YOU WANT TO DELETE YOUR DATA?",
+        69 to "THE GAME DATA WILL BE PERMANENTLY DELETED. ARE YOU SURE?",
+        62 to "MENU", 70 to "SOUND SET",
         71 to "DIFFICULTY", 72 to "IN-GAME SOUND?", 79 to "OK",
-        73 to "DO YOU WANT TO QUIT?", 78 to "ESCAPE TIME",
+        74 to "SEIZE HIM!", 75 to "STOP HIM!", 76 to "BLOCK HIS PATH!",
+        80 to "GET FREE SKIN",
+        81 to "THANK YOU FOR BUYING ASSASSIN'S CREED 2. AS A SPECIAL THANKS, YOU CAN NOW PLAY WITH AN EXCLUSIVE VERIZON EZIO SKIN ON THE XBOX 360 OR PS3 VERSIONS OF THE GAME.",
+        82 to "THERE WAS AN ISSUE WITH YOUR NETWORK CONNECTION. YOU NEED TO ACCESS THE NETWORK ONCE TO GET YOUR EXTRA CONTENT FOR YOUR XBOX 360 OR PS3. PLEASE TRY AGAIN LATER.",
+        85 to "HINT", 86 to "VIBRATION",
+        88 to "HIGH", 89 to "MEDIUM", 90 to "LOW",
+        91 to "ASSASSINATION COMPLETE",
+        92 to "RUN", 93 to "UP", 94 to "JUMP",
+        95 to "THIS GAME IS NOT SUPPORTED IN LANDSCAPE MODE. PLEASE TURN YOUR HANDSET TO PORTRAIT MODE.",
+        96 to "TOUCH THE TOP AREA TO HIT THE SPRING. TOUCH THE LOCK TO MOVE THE LATCH WHEN THE SPRING IS UP.",
+        100 to "HIGH", 101 to "MEDIUM", 102 to "LOW",
+        104 to "AC BROTHERHOOD",
+        106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
+        109 to "NOBLEMAN",
+        110 to "CONGRATULATIONS!\n\nYOU UNLOCKED A NEW HERO!",
+        111 to "CHECKPOINT", 112 to "ACHIEVEMENT", 113 to "ACHIEVEMENTS",
+        114 to "INCREDIBLE\nASSASSIN", 115 to "HARDCORE",
+        116 to "BLOOD KILLER",
+        117 to "QUICK PLAY", 118 to "KILL HIM!",
+        119 to "ASSASSIN'S CREED BROTHERHOOD", 120 to "NEW",
+        121 to "THE GAME DATA HAS BEEN DELETED.",
+        123 to "MODE", 124 to "VIRTUAL PAD", 125 to "STYLE BOX",
+        126 to "WHICH CONTROL MODE WOULD YOU LIKE TO USE? YOU CAN ALSO CHANGE IT IN THE OPTIONS MENU.",
+        73 to "ARE YOU SURE YOU WANT TO GO TO THE MAIN MENU?",
+        78 to "ESCAPE TIME",
         122 to "CATCH TIME",
         83 to "MUSIC", 84 to "SFX", 87 to "RESET GAME",
-        97 to "CONTROL", 103 to "PLAYER LIST",
+        97 to "CONTROL", 103 to "VIP ZONE", 105 to "PLAYER LIST",
         63 to "ALSO AVAILABLE ON THE\n PLAYSTATION®3 SYSTEM.\n " +
               "ASSASSIN'S CREED IS AVAILABLE ON THE\n PSP® " +
               "(PLAYSTATION®PORTABLE) SYSTEM.\n WWW.ASSASSINSCREED.COM ",
@@ -1611,11 +1662,14 @@ class Level0World(
         if (gate > 0 && kAj != 7) kAp[0]++
     }
     /** `i.a(ax,clip,S,az)` (i.java:3644-3657, proven): `Entity(ax,
-     *  clips[clip])` + `i(S)` + `az` — callers re-pin ak/al. */
-    override fun spawnStatic(ax: Int, clipIdx: Int, s: Int, az: Int): Entity? {
+     *  clips[clip])` + `i(S)` + `az`, inheriting the caller's ak/al/av
+     *  (`src`, may be null in harness calls). */
+    override fun spawnStatic(ax: Int, clipIdx: Int, s: Int, az: Int,
+                             src: Entity?): Entity? {
         val e = Entity(ax, clips[clipIdx])
         e.aw = -1; e.au = 0
         e.setAnim(s); e.az = az
+        if (src != null) { e.ak = src.ak; e.al = src.al; e.av = src.av }
         return e
     }
     override var kAD: Entity? = null           // k.aD — HUD fuse entity
@@ -1675,8 +1729,11 @@ class Level0World(
     override var kDd = false                   // k.dd
     override var gR = false                    // g.r — grab-QTE lock
     override var kBj = 0                       // k.bJ — grab-QTE lose latch
-    /** `k.J`/`k.K` — the held touch point; port aliases the last DOWN
-     *  point `lastTouchX/Y` (inferred — J2ME tracks them separately). */
+    /** `k.J`/`k.K` — the held touch point (k.java:486-517, proven:
+     *  `cj/ck` written by all three pointer handlers; `J=cj;K=ck` per
+     *  tick). The port aliases the last DOWN point `lastMoveX/Y` —
+     *  `k.J` is the live held/drag point, separate from release-edge
+     *  `k.H/k.I`. */
     override var kJ: Int get() = lastMoveX; set(v) { lastMoveX = v }
     override var kK: Int get() = lastMoveY; set(v) { lastMoveY = v }
     override var kAn = false                   // k.an fade flag
@@ -1702,25 +1759,42 @@ class Level0World(
     /** The `i.bJ==i.bI && i.bL<=20` early-return in b(z2) (k.java:3231-
      *  3238) — skips the aU-bar draw for the frame that zeroes i.bJ. */
     var tailSkipFrame = false
-    /** `k.aQ` — ax35 vol-paint recorder (debug `Image` in the original;
-     *  ported as the last-painted rect, `inferred`). */
+    /** `k.aQ` — ax35 eagle-view vol-paint rect (a live HUD `Image`
+     *  overlay in the original, painted every armed frame — not debug;
+     *  ported as the last-painted rect consumed by `minimap`). Nulled at
+     *  i.D() (:741 above), and inside the ax35 arms (sub-op 17/L219). */
     override var volPaintRect: IntArray? = null
     override var bubbleDraw: BubbleDraw? = null      // ad() draw channel
-    /** `k.a(k.y, text, 120)` (inferred): greedy word wrap at ~6px/char
-     *  (20 chars/line); returns the line table — [0] = line count,
-     *  [1..n] = per-line start char offsets. */
+    /** `k.a(k.y, text, 120)` (proven, k.java:463-476 + b.java:1618): the
+     *  wrap runs on a pixel budget of REAL glyph advances vs widthPx (not
+     *  ~6px/char); the result is the verbatim `U[]` — `U[0]` = line
+     *  count, then `{endIndex, width}` pairs at U[1],U[2], U[3],U[4], …
+     *  Spaces immediately before `. ! ? , :` are non-breaking — the
+     *  orig rewrites them ` `→`%` in the wrap's working copy (drawn text
+     *  unchanged). Font-less harness keeps the ~6px estimate, same U
+     *  shape. */
     override fun wrapDialogText(text: String, widthPx: Int): IntArray {
+        val copy = StringBuilder(text.length)
+        for (i in text.indices) {
+            val c = text[i]
+            copy.append(if (c == ' ' && i + 1 < text.length &&
+                text[i + 1] in ".!?,:") '%' else c)
+        }
+        val f = footerFont
+        if (f != null) return f.wrap(copy.toString(), widthPx)
+        // Fallback estimate — same U shape: [0]=count then (end,width).
         val per = (widthPx / 6).coerceAtLeast(1)
-        val starts = ArrayList<Int>(); var pos = 0; var lines = 0
+        val pairs = ArrayList<Int>(); var pos = 0; var prev = 0; var lines = 0
         while (pos < text.length) {
-            starts += pos; lines++
+            lines++
             val end = minOf(pos + per, text.length)
             pos = if (end < text.length) {
                 val sp = text.lastIndexOf(' ', end - 1)
                 if (sp > pos) sp + 1 else end
             } else end
+            pairs += pos; pairs += (pos - prev) * 6; prev = pos
         }
-        return intArrayOf(lines) + starts.toIntArray()
+        return intArrayOf(lines) + pairs.toIntArray()
     }
     /** `k.y.k(n)` (b.java:1609, proven): real y-font line metric
      *  `n*J + (n-1)*K` — the ad() bubble panel's height input; the
@@ -2390,8 +2464,9 @@ class Level0World(
      *     `aV.S∉{4,5}`: `w()==1` → the `j.f`-even milestone font blit
      *     (`z[9].a(cd,38,0,360,120,…)` → `goalTicker` → renderer
      *     `drawFrame(9,38)`); `w()==2` → `bx=56; l(13); bw=0` —
-     *     the scripted win. The `j.c∈{13,31}` skip maps to `won`;
-     *     screen 31 has no analog yet (inferred).
+     *     the scripted win. The `j.c∈{13,31}` skip maps to `won` —
+     *     screen 31 IS ported (jC==31 remap :2474, `won` :161, the
+     *     case-31 banner arm :3902-3907).
      *  2. Claimer step — `C.cd[2] && C.cd[1] && C.ab()` → `C.aa()`:
      *     one claim-script step per tick on the fast-forwarded claimer
      *     (L161-L167).
@@ -2599,12 +2674,19 @@ class Level0World(
         // a(d(0,16), d(0,62)|"") — typewriter next-mission line
         statsTypeNext = if (kAj < 7) 62 else -1
         typewriterStep(if (kAj < 7) "next-mission" else "")
+        // M() runs `a(d(0,16),aj<7?d(0,62):"")` INSIDE its tick
+        // (k.java:3392, proven) — jC==15 bypasses menuQ so the
+        // pill hit-zones arm here.
+        footerQ()
         if (pad.v(458784)) {                              // fire/advance
             z(23)
             if (jG <= 10) { jG = 10; return }
             // persist: best score + dB..dF stash + bA slots
+            // `a(bA,81+(au<<4)+(aj<<1),(short)i4)` (k.java:3403) — a
+            // short write at byte offset si; odd si lands the hi byte
+            // in the next slot (baShortPut — scores ≥256 kept whole).
             val si = 81 + (kAu shl 4) + (kAj shl 1)
-            if (i4 > kBA[si]) kBA[si] = i4
+            if (i4 > baShort(si)) baShortPut(si, i4)
             kDB = kAx; kDC = kAy; kDF = kAN; kDD = kAz
             kBA[32] = kAz; kBA[8] = kAu; kBA[44] = kAx
             kBA[46] = kAy; kBA[48] = kAN; kBA[36] = 0
@@ -2657,6 +2739,7 @@ class Level0World(
      *  faithful to any non-IGP device). */
     private fun bannerK(i: Int) {
         kBw = -1; kBv = i; kEy = kEA[i].size; kEd = 0
+        menuScrollDy = 0                            // menu rebuild → top
         when (i) {
             0 -> {
                 kEb = 0
@@ -2782,6 +2865,10 @@ class Level0World(
                 medalRowDim[i3] = kCc[i3] != 2
             }
             medalRowCount = 3
+            // ah() runs `a("",d(0,17))` INSIDE its tick
+            // (k.java:6450-6452, proven) — jC==22 bypasses menuQ so
+            // the BACK pill hit-zone arms here.
+            footerQ()
             if (pad.v(131072)) {
                 z(30); bannerK(4); kBw = -1; stateL(3); return
             }
@@ -2865,9 +2952,11 @@ class Level0World(
     /** `k.x()`→`e.a()` (e.java:32, proven): a slot is still within its
      *  `h.a[e]` duration window. */
     override fun musicActive() = audioPlaying()
-    /** `a(z2)` (structured :5139) — level (re)load: `e.b(); V(); d(z2)`.
-     *  `a(true)` = restart-from-checkpoint-ish, `a(false)` = continue.
-     *  Maps to our `reload()` (`inferred`). */
+    /** `a(z2)` (structured :5139, proven): `z2=false` → full mission
+     *  reload `X();I(aj)` — the restart-confirm arm; `z2=true` →
+     *  checkpoint restore (`d(true)` image, no `I(aj)`). The sequence
+     *  also runs `e.b()` twice and the g-field + C/D/aD sweep after `d(z2)`.
+     *  Maps onto `reloadCheckpoint`'s two arms below. */
     override fun resetLevel(full: Boolean) { reloadCheckpoint(full) }
     /** `a(z2)` (k.java:5173, proven): `false` = `a(false)` full
      *  reload (`X();I(aj)` + `V();d(z2)`); `true` = `a(true)`
@@ -2880,7 +2969,8 @@ class Level0World(
      *  dispatch. `v(131072)` = back key (our `M_CYCLE` — no zone emitter
      *  yet); `v(327712)` = confirm-complex — `M_CONTEXT` OR a tap on a
      *  menu row (the orig's touch row-hit in the draw loop sets `bw` +
-     *  `E(32)`; folded into `menuRowAt` here, `inferred` mechanism). */
+     *  `E(32)`; folded into `menuRowAt` here — same mechanism, the
+     *  tap lands as a queued confirm). */
     private fun menuQ(pressY: Int) {
         footerQ()                            // a(str,str2) rects → E()
         // ---- back arm: `v(131072)` ------------------------------------
@@ -2923,24 +3013,33 @@ class Level0World(
         // `c(i,i9,i3,i4)` per drawn row (k.java:6117 — the b() loop's own
         // hit-test, proven); x comes from the same release point.
         val rects = menuRowRects()
+        // hit region = the drawn row ∩ the scroll viewport — rows clipped
+        // away by `menuScrollDy` are untouchable.
+        val viewTop = menuPanelRect()[1] + 10 + (if (menuPanelZ3()) 40 else 0)
         for (i in rects.indices) {
-            if (pointerDownIn(rects[i][0], rects[i][1], rects[i][2], rects[i][3]))
+            val r = rects[i]
+            if (r[1] + r[3] <= viewTop || r[1] >= 235) continue
+            val top = maxOf(r[1], viewTop)
+            val bot = minOf(r[1] + r[3], 235)
+            if (pointerDownIn(r[0], top, r[2], bot - top))
                 return i
         }
         return -1
     }
 
     // -- b(x,y,w,z2,z3) menu panel geometry (k.java:5903-6150, proven) ---
-    /** Panel Y: jc12/13 → `b(93,67,214,true,true)` (:1108); jc14 →
-     *  bv3/4 → `b(93,86)` else `b(93,30)` (:1124-1129); other screens use
-     *  the same 67 (`inferred` — call sites unmined). */
+    /** Panel Y (proven — each screen carries its own y: 45/47/86/30/
+     *  120/46 below; the else→67 arm covers jc12/13's `b(93,67,214)`
+     *  (:1108) and matches jc31's `j.d(93,67,214,126)` panel (:1456);
+     *  no other screen calls the panel proc). */
     fun menuPanelY(): Int = menuPanelRect()[1]
     /** Panel rect (x,y,w) verbatim per screen (:1108-1138, :1957-1964,
      *  :2948-2950, :6218): jc12/13 `b(93,67,214,true,true)`; jc14 bv3
-     *  `b(93,67)` / bv4 `b(93,86)` / else `b(93,30)` (:1124-1129);
+     *  `b(93,67,214,true,true)` / bv4 `b(93,86,214,true)` / else
+     *  `b(93,30,214,true)` (:1127-1135);
      *  jc2 `d(93,45,214)` (case-2 arm); jc3 + jc19 `d(14,47,180)`
      *  (:833, :1180); jc23/28 via ae() `d(93,120,214)` (:6221); jc29
-     *  `d(93,86,214)` (:1440); other states `inferred` (93,67,214). */
+     *  `d(93,86,214)` (:1440); else (93,67,214) — proven coverage. */
     fun menuPanelRect(): IntArray = when (jC) {
         2 -> intArrayOf(93, 45, 214)
         3 -> intArrayOf(14, 47, 180)    // `d(14,47,180)` (k.java:833)
@@ -2952,8 +3051,9 @@ class Level0World(
         else -> intArrayOf(93, 67, 214)
     }
     /** z3 = the 40px title strip: verbatim true for jc12/13 (`b(…,true,
-     *  true)`); jc14 goes through the 4-arg `b()` → z3=false (:1124);
-     *  other screens `inferred` true. */
+     *  true)`) and jc14 only when bv==3 (its `b(93,67,true,true)` arm);
+     *  every other screen's `d()/b()` call passes z3=false
+     *  (k.java:5864-5870, proven). */
     /** z2 = bordered/filled variant: `b(...,true,·)` for jc12/13/14;
      *  `d(i,i2,i3)`→`b(...,false,false)` for jc19/23/28/29 (:5863-5868). */
     fun menuPanelZ2(): Boolean = jC == 12 || jC == 13 || jC == 14
@@ -2984,6 +3084,47 @@ class Level0World(
      *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
      *  center split `(bv!=4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
      *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
+    /** Port-added touch-drag scroll for menus whose row stack
+     *  overflows the 240px canvas — shipped quirk: the orig lays
+     *  eA[4]'s 8 option rows in ONE column (`(bv!=4&&j.c!=14)` excludes
+     *  them from the two-column split, k.java:5942-5947 proven) so rows
+     *  5-7 land below the canvas and are keypad-only; the touch-only
+     *  port needs a scroll affordance to reach ACHIEVEMENTS/ABOUT/RESET.
+     *  `menuScrollDy` is subtracted from the `i9` walk in both
+     *  `menuRowRects` and the renderer's panel draw; 0 keeps the
+     *  verbatim layout. */
+    var menuScrollDy = 0
+    /** y of the last MOVE while a panel drag is active (-1 = none). */
+    private var menuDragPrevY = -1
+    /** `menuScrollDy` at drag start — a release after a moved drag must
+     *  not resolve as a row tap. */
+    private var menuDragStartDy = 0
+    /** Total |dy| the finger traveled during the drag — suppresses the
+     *  release tap even when the clamp keeps `menuScrollDy` unchanged. */
+    private var menuDragTravel = 0
+    private var suppressReleaseTap = false
+    /** Max scroll = last row bottom - 235 (5px bottom margin). Mirrors
+     *  the raw `i9` walk without the scroll offset. */
+    fun menuScrollMax(): Int {
+        val pr = menuPanelRect()
+        var i9 = pr[1] + 10
+        if (menuPanelZ3()) i9 += 40
+        val i12 = i9
+        val i10 = menuRowCount()
+        var bottom = i9
+        for (i13 in 0 until i10) {
+            val i4 = menuI4(i13)
+            if (i13 == 1 && jC == 2) i9 += 13
+            if (i9 + i4 > bottom) bottom = i9 + i4
+            if ((kBv != 4 && jC != 14) || jC == 19) {
+                var i16 = i10 / 2
+                if (i10 % 2 == 0) i16--
+                if (i13 == i16 && i13 < i10 - 1) i9 = i12 - (i4 + 3)
+            }
+            i9 += i4 + 3
+        }
+        return (bottom - 235).coerceAtLeast(0)
+    }
     fun menuRowRects(): List<IntArray> {
         val out = ArrayList<IntArray>()
         val pr = menuPanelRect()
@@ -2991,6 +3132,7 @@ class Level0World(
         val i3 = pr[2]
         var i9 = pr[1] + 10
         if (menuPanelZ3()) i9 += 40
+        i9 -= menuScrollDy.coerceIn(0, menuScrollMax())
         val i12 = i9
         val i10 = menuRowCount()
         for (i13 in 0 until i10) {
@@ -3028,6 +3170,11 @@ class Level0World(
      *  assets → footer labels still returned, dims fall back to 36. */
     val footerFont: FontClip? = charmap?.let { cm ->
         clips[92]?.let { FontClip(it, FontClip.loadCharmap(cm), 4) } }
+    /** `bW` font (clip-91 + the same charmap) — the menu/credits font.
+     *  jc24/25's text-panel procs measure with bW, NOT y
+     *  (k.java:5627-5693 audited — the `iK`/`fd` scroll metric). */
+    val menuFont: FontClip? = charmap?.let { cm ->
+        clips[91]?.let { FontClip(it, FontClip.loadCharmap(cm), 4) } }
     /** `a(str,str2)` left-label width (:2276-2281): `y.a(str,null)` →
      *  `ce = b.d + 30` when str==d(0,16), else `ce = 36`. */
     fun footerLeftDim(str: String): Int =
@@ -3049,6 +3196,15 @@ class Level0World(
         23, 28 -> if (kEc == 121) Pair("", d0(17))
                  else Pair(d0(79), if (kBv == 0 || jC == 23 || jC == 13) "" else d0(17))
         29 -> Pair(null, if (kBv == 0 || kBv == 3) "" else d0(17))
+        // case 3 `a(d(0,79),(bv==0||bv==3)?"":d(0,17))` (k.java:833,
+        // proven) — options menu OK/BACK footer.
+        3 -> Pair(d0(79), if (kBv == 0 || kBv == 3) "" else d0(17))
+        // M() `aj<7 ? a(d(0,16),d(0,62)) : a(d(0,16),"")`
+        // (k.java:3392-3395, proven) — win-stats NEXT/MENU footer.
+        15 -> Pair(d0(16), if (kAj < 7) d0(62) else "")
+        // ah() ex==3 `a("",d(0,17))` (k.java:6450, proven) — medal
+        // browse BACK footer.
+        22 -> Pair("", d0(17))
         // case 6 `if (!dx) a("",d(0,17))` (:851-853) — ABOUT's BACK
         // footer shows only on the non-dx variant.
         6 -> if (!kDx) Pair("", d0(17)) else Pair(null, null)
@@ -3094,8 +3250,9 @@ class Level0World(
         var pal = 0
         when (kEA[kBv][iM]) {
             32, 33, 34 -> pal = 3
-            83 -> strD += ": " + (d0(if (kBE) 21 else 20) ?: "")
-            84 -> strD += ": " + (d0(if (kBF) 21 else 20) ?: "")
+            // `bE ? ff[1] : ff[0]` with ff={21,20} (:306,:6055) → ON/OFF
+            83 -> strD += ": " + (d0(if (kBE) 20 else 21) ?: "")
+            84 -> strD += ": " + (d0(if (kBF) 20 else 21) ?: "")
             97 -> strD += ": " + (d0(35 + kAu) ?: "")
             103 -> pal = 3
             123 -> strD += ": " + (d0(124 + (if (cm == 1) 0 else 1)) ?: "")
@@ -3195,7 +3352,7 @@ class Level0World(
                         if (kFG) { kFF = 29; stateL(29) }
                         else {
                             kBA[69] = 0; kAu = 1
-                            for (i in 0 until 24) kBA[81 + (i shl 1)] = 0
+                            for (i in 0 until 24) baShortPut(81 + (i shl 1), 0)
                             kEc = 121
                         }
                         kFG = false; saveFlush()
@@ -3250,15 +3407,19 @@ class Level0World(
     }
 
     /** The `a()`-proc's frozen-state menu frame (k.java:1775-1800,
-     *  proven): `j.i()→j.t=0` input flush skipped (`inferred` — we run
-     *  the menu every frozen tick); 12/13 → `L(ey)` nav + `Q()`; 31 →
-     *  stats (`bx<0→l(13)`; `v(65568)` → `l(13);bx=-1`). Returns true
-     *  when the tick was consumed by a menu screen. */
+     *  proven — the j.c switch at k.java:796-1478 routes every menu
+     *  state here; `j.i()→j.t=0` input flush is folded into the held-
+     *  pad flush at the 12/13 head, and the world genuinely doesn't
+     *  tick behind menus — j.java:197-213's single thread runs only
+     *  `k.a()` per frame, so the sim arms are unreachable while jC
+     *  is a menu state); 12/13 → `L(ey)` nav + `Q()`; 31 → stats
+     *  (`bx<0→l(13)`; `v(65568)` → `l(13);bx=-1`). Returns true when
+     *  the tick was consumed by a menu screen. */
     /** `a()`'s "others→menus" arm (k.java:1000-1070, proven): every
      *  non-play screen whose proc is the generic `L(ey);Q()` menu frame
      *  — states entered through `l()` + `K(bv)` (level select, options,
-     *  score tables...). The world doesn't tick behind them (`inferred`
-     *  — orig suspends sim on menu screens). */
+     *  score tables...). The world doesn't tick behind them — the
+     *  frame driver runs `k.a()` alone (j.java:197-213, proven). */
     private val menuStates = intArrayOf(-1, 0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 14, 18, 19, 20, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34)
 
     /** `a(bVar, str, w)` (k.java:463-479, proven) — the wrap helper:
@@ -3305,11 +3466,23 @@ class Level0World(
         }
     }
 
-    /** `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read on the
-     *  `bA` save array; `kBA` stores one byte per slot so this is
-     *  `kBA[i] | kBA[i+1]<<8`. */
-    fun scoreAt(i: Int): Int =
-        ((kBA[i] and 255) or ((kBA[i + 1] and 255) shl 8)).toShort().toInt()
+    /** The port's `kBA` is index-preserving: slot n holds the value at
+     *  original byte index n (`bA` is `byte[512]`, k.java:291 — the
+     *  `a(bA,i,short)` accessors address BYTES, so a short op at byte
+     *  offset i spans slots i and i+1 as lo/hi).
+     * `a(bA, i)` (k.java:5372, proven) — LE-16 signed-short read at
+     *  byte offset i of the `bA` record. */
+    private fun baShort(i: Int): Int =
+        ((kBA[i] and 0xFF) or ((kBA[i + 1] and 0xFF) shl 8)).toShort().toInt()
+    /** `a(bA, i, short)` — LE-16 short write at byte offset i; the
+     *  score table's odd offsets (81+…) land the hi byte in the next
+     *  slot — a plain `kBA[si]=v` silently truncated scores ≥256. */
+    internal fun baShortPut(i: Int, v: Int) {
+        kBA[i] = v and 0xFF; kBA[i + 1] = (v ushr 8) and 0xFF
+    }
+    /** High-score table entry at byte offset `81+(au<<4)+(aj<<1)`
+     *  (k.java:3403) — `a(bA, i)` byte-offset read. */
+    fun scoreAt(i: Int): Int = baShort(i)
 
     /** `F()` (k.java:2338-2408, proven) — the jc4 high-scores screen:
      *  `a(30,d(0,5))` title bar (renderer), `cU` difficulty page with
@@ -3349,9 +3522,9 @@ class Level0World(
             }
             footerQ(); return
         }
-        // `eB>0 && j.c!=23 → d(0,eB)` (:6215) — the subline lookup; its
-        // result feeds an unported draw slot (inferred — decompiled
-        // statement discards it).
+        // `eB>0 && j.c!=23 → d(0,eB)` (:6215) — a dead lookup: the
+        // bytecode evaluates the fetch and discards the result (no
+        // consumer, no draw slot).
         footerQ()
         menuL(kEy); menuQ(pressY)
     }
@@ -3362,25 +3535,20 @@ class Level0World(
      *  Splash clips, font/string/audio loads and the `e(false)` save
      *  read are create()-time here, so cases 0/1/4/5 collapse to their
      *  `cu++` transitions; what survives is the observable frame:
-     *  `bX` logo anim 0 for 3000ms (pause-key skips → `z(23)`), anim 1
-     *  + `d(0,63)` legal text for 3000ms (also skippable), then the
-     *  `d(0,65)` copyright/loading text for 5000ms (not skippable) →
-     *  `l(23)` sound prompt. Timers map wall-clock `System
-     *  .currentTimeMillis() - du` onto `jG` ticks — `>= 3000ms` ⇔
-     *  `jG - kDu >= 49` (⌈3000/62⌉), `>= 5000ms` ⇔ `>= 81`
-     *  (`inferred` — same semantics, deterministic clock). */
+     *  `bX` logo anim 0 for 3000ms, anim 1 + `d(0,63)` legal text for
+     *  3000ms, then the `d(0,65)` copyright/loading text for 5000ms →
+     *  `l(23)` sound prompt. The original's cases 2/3 have NO input
+     *  check — all three splashes are unskippable, timers only (proven;
+     *  an earlier draft added a pause-skip — removed, it was a parity
+     *  deviation). Timers map wall-clock `System.currentTimeMillis() - du`
+     *  onto `jG` ticks — `>= 3000ms` ⇔ `jG - kDu >= 49` (⌈3000/62⌉),
+     *  `>= 5000ms` ⇔ `>= 81` (same semantics, deterministic clock). */
     private fun bootR() {
         when (kCu) {
             0 -> { kCu = 1; kDu = jG }
             1 -> kCu = 2
-            2 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
-                kCu = 3; kDu = jG
-                if (pad.v(Pad.M_PAUSE)) z(23)
-            }
-            3 -> if (jG - kDu >= 49 || pad.v(Pad.M_PAUSE)) {
-                kCu = 4; kDu = jG
-                if (pad.v(Pad.M_PAUSE)) z(23)
-            }
+            2 -> if (jG - kDu >= 49) { kCu = 3; kDu = jG }
+            3 -> if (jG - kDu >= 49) { kCu = 4; kDu = jG }
             4 -> kCu = 5
             5 -> {
                 kCu = 6                      // S() preload frame — orig
@@ -3534,7 +3702,8 @@ class Level0World(
      *  `fd = 240` wrap-restart (dx → the l(25)/l(1) ending hook);
      *  `fe>0 && fd >= h5` → bounce fe=-1. jc24 stops scrolling at
      *  `fd < -iK + 160` and arms dw=30 instead. iK = text block height
-     *  (`y.a(str,null)` → b.e; ours = linesHeight — inferred).
+     *  measured with the bW menu font (`bW.a(str,null)` → b.e — proven;
+     *  jc24/25 use bW, not y).
      *  Returns fd for the renderer's draw-y. */
     private fun scrollPanel(str: String, y3: Int, h5: Int, w4: Int, wrap: Boolean): Int {
         if (pad.v(Pad.M_DOWN)) {
@@ -3547,7 +3716,10 @@ class Level0World(
         }
         if (kFe == 0) kFe = -1
         if (!wrap && kFe >= 0) kFe = -1
-        val f = footerFont
+        // bW is the proven metric font; when clip-91 didn't load (harness
+        // worlds, pack failure) fall back to the y font — iK=0 would make
+        // `fd < y3` true and wrap-restart the panel every tick.
+        val f = menuFont ?: footerFont
         val iK = if (f == null) 0 else {
             if (wrap) f.linesHeight(f.wrap(str, w4)[0])
             else f.linesHeight(str.split('\n').size)
@@ -3600,17 +3772,16 @@ class Level0World(
     /** `k.a()` case 25 (k.java:1388-1420, proven) — post-credits outro.
      *  dx=false entry → `dx=true; l(6); z(0)` (redirects to ABOUT).
      *  dx=true entry → `!Z() → l(2)`. The epilogue tail — dw fade-out,
-     *  the d(0,66)/d(0,9) `a()` panels, `v(65568)||j() → l(27)` + the
-     *  eJ/bA[10] stamp + `f.a(d(0,24),0)` store intent — runs only
-     *  when Z() (the IGP check) is true: dead on this non-IGP port,
-     *  ported verbatim. */
+     *  the d(0,66)/d(0,9) `a()` panels (the 9-arg draw-only overload
+     *  k.java:4114 — no sim side, so nothing to tick), `v(65568)||j()`
+     *  → l(27) + the eJ/bA[10] stamp + `f.a(d(0,24),0)` store intent —
+     *  runs only when Z() (the IGP check) is true: dead on this
+     *  non-IGP port, ported verbatim. */
     private fun menuJc25() {
         if (!kDx) { kDx = true; stateL(6); z(0); return }
         if (!menuShopCheck()) { stateL(2); return }       // !Z() → l(2)
         // --- epilogue tail (IGP devices only in the original) --------
         if (kDw > 0) kDw -= 20
-        scrollPanel(d0(66) ?: "", 80, 220, 400, false)
-        scrollPanel(d0(9) ?: "", 160, 260, 400, false)
         if (pad.v(Pad.M_CONTEXT) || pointerStrip()) {
             enterIgp()                                  // `f.a(d(0,24),0)` (:1410)
             stateL(27)
@@ -3670,6 +3841,10 @@ class Level0World(
     private fun menuJc6() {
         kCb = true
         scrollPanel(d0(77) ?: "", 50, 155, 390, true)
+        // case 6 runs `a("",d(0,17))` INSIDE its tick when !dx
+        // (k.java:851-853, proven) — jC==6 is a direct dispatch case
+        // (not menuStates) so the BACK pill hit-zone arms here.
+        footerQ()
         if (pad.v(Pad.M_CYCLE) && !kDx) { stateL(3); z(30) }
     }
 
@@ -3876,11 +4051,12 @@ class Level0World(
             // fallback (`kAl && M_CONTEXT → reload`) is its live behavior.
             7, 26, 32, 33, 34 -> { }
             27 -> menuJc27()                         // case 27 (:1422-1435)
-            11 -> { jC = -1                            // case 11 (:1104, proven)
-                    // j.c==-1 = `A.notifyDestroyed()` (j.java:218, proven)
-                    // — the EXIT path quits the MIDlet. `inferred`
-                    // adaptation: emit Command.QuitApp once; the gdx
-                    // launcher exits the app on drain.
+            11 -> { jC = -1                            // case 11 (:1104-1106,
+                    // proven) — j.c==-1 exits `while(c>=0)` →
+                    // `A.notifyDestroyed()` (j.java:197-218, proven):
+                    // the EXIT path quits the MIDlet. Port adaptation:
+                    // emit Command.QuitApp once; the gdx launcher
+                    // exits the app on drain.
                     pendingCommands += Command.QuitApp }
             -1 -> { /* j.c==-1 — suspended/dead state; consumes ticks */ }
             // `k.a()` case 23 (k.java:1310-1324, proven): confirm
@@ -3995,9 +4171,10 @@ class Level0World(
         visX0 = vx0; visY0 = vy0; visX1 = vx1; visY1 = vy1
     }
 
-    /** `k.ah?.I()` (i.java:14444): tick the scroll-wall holder — our
-     *  synthetic kAh has no per-tick fn; the equivalent is the ax37
-     *  bounds refresh (inferred mapping). */
+    /** `k.ah?.I()` (i.java:14444-14446, proven): tick the scroll-wall
+     *  holder inside `bi()`'s door-arrival path — `k.ah` is written
+     *  only by `k.a(this)` under `al()`; our equivalent is the ax37
+     *  bounds refresh. */
     override fun refreshScrollBounds() = fireScrollTriggers()
     /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
      *  else `ee[aj]` when != -1. */
@@ -4686,6 +4863,16 @@ class Level0World(
                     }
                     pointerDown = true
                     kCj = e.x; kCk = e.y
+                    // panel-drag arm for the bv4 overflow scroll: a DOWN
+                    // inside the menu panel starts tracking — the drag
+                    // delta scrolls the rows (port-added affordance, see
+                    // `menuScrollDy`).
+                    val pr = menuPanelRect()
+                    menuDragStartDy = menuScrollDy
+                    menuDragTravel = 0
+                    menuDragPrevY = if (jC in menuStates && menuScrollMax() > 0 &&
+                        insideRect(e.x, e.y, pr[0], pr[1], pr[2], 235 - pr[1]))
+                        e.y else -1
                 }
                 InputQueue.Type.MOVE -> {                     // pointerDragged
                     val iJ = resolvePadZone(e.x, e.y)
@@ -4693,6 +4880,12 @@ class Level0World(
                     if (iJ in 0..4) kJT = kJT or (1 shl iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
+                    if (menuDragPrevY >= 0) {
+                        menuDragTravel += Math.abs(e.y - menuDragPrevY)
+                        menuScrollDy = (menuScrollDy + menuDragPrevY - e.y)
+                            .coerceIn(0, menuScrollMax())
+                        menuDragPrevY = e.y
+                    }
                 }
                 InputQueue.Type.UP, InputQueue.Type.CANCEL -> {// pointerReleased
                     kCh = e.x; kCi = e.y
@@ -4703,6 +4896,13 @@ class Level0World(
                                                                  // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
+                    // a moved drag scrolls — its release must not also
+                    // fire the row tap under the finger.
+                    if (menuDragPrevY >= 0) {
+                        if (menuScrollDy != menuDragStartDy || menuDragTravel > 6)
+                            suppressReleaseTap = true
+                        menuDragPrevY = -1
+                    }
                 }
             }
         }
@@ -4710,6 +4910,10 @@ class Level0World(
         lastMoveX = kCj; lastMoveY = kCk                       // k.J/k.K
         if (kCl) { kCj = -1; kCk = -1; kCl = false }
         lastTouchX = kCh; lastTouchY = kCi                     // k.H/k.I
+        if (suppressReleaseTap) {
+            lastTouchX = -1; lastTouchY = -1
+            suppressReleaseTap = false
+        }
         kCh = -1; kCi = -1
     }
 

@@ -2344,7 +2344,8 @@ class NpcFsm(val world: LevelCellSource) {
      *  player is grounded (S<=43) and overlapping the volume, clamp their
      *  `ak` to its edge (dead ±1 `ag` nudge kept verbatim, L63 zeroes it).
      *  Guards that can't fire here omitted; `aS.y()` → `hitWall()`
-     *  false (inferred). */
+     *  false (proven — S12→S12 arm calls `aS.y()` at i.java:970;
+     *  y()==hitWall at i.java:2318-2339). */
     private fun pushOut(e: Entity, p: Entity, w: LevelCellSource) {
         if (e.S == 139) return
         if (e.S == 18 && p.S != 12) return           // L16-21: player S12
@@ -3378,8 +3379,8 @@ class NpcFsm(val world: LevelCellSource) {
     // Horizontal travel is owned by the claim script — `ab()`→`aa()`
     // runs `k.by` ops each tick while a claim is bound (runClaimScript
     // ported, slice 43b; e.g. op25 drives `ak`). If the level's bound
-    // scripts don't advance it, the gondola parks (inferred — bx()
-    // itself never writes `ak` except the S1 reset).
+    // scripts don't advance it, the gondola parks (proven — i.java:17189
+    // bx() writes `ak` only in the S1 reset arm, i.java:17316-17318).
     // `ah`/`aj` are the *vertical* departure-fall speed+gravity: once
     // moving, `M()` probes the side cell until a wall ends the fall and
     // `i(1)` resets the gondola to (Z[6], Z[1]).
@@ -4702,6 +4703,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
             if (e.S == 5 || e.S == 4 || e.S == 40) {
                 e.ah = 0; e.ag = 0
                 w.iCk?.let { it.P = it.P or 128; it.P = it.P or 32 }
+                // L169-171 (proven): S∈{5,4,40} fall-off → ck P|=128+32
             } else {
                 e.ah = 0; e.ag = 0
                 if (w.iBy == 3) e.setAnim(38) else e.setAnim(2)
@@ -5059,7 +5061,9 @@ fun NpcFsm.initAx35(e: Entity, f: List<Int>, w: LevelCellSource) {
  *  signature): rasterizes the `ak+Z[0], al+Z[1], Z[2]xZ[3]` rect plus
  *  overlapping ax{11,73,35,79} entities into the `k.aQ` debug Image.
  *  The r14 flag is dead (never read) — the port records the painted
- *  rect (`inferred`: `k.aQ`'s only reader is a HUD blit). */
+ *  rect (proven: i.java:17732-17735 — `k.aQ = {ak+Z[0], al+Z[1],
+ *  Z[2], Z[3]}` written into the shared hudRect slot the k.c(k.y)
+ *  HUD blit reads). */
 private fun ax35VolPaint(e: Entity, w: LevelCellSource) {
     w.volPaintRect = intArrayOf(e.ak + e.Z[0], e.al + e.Z[1],
         e.Z[2], e.Z[3])
@@ -6306,10 +6310,13 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
                 e.W[3] = ((e.O + r011) + r05 - r07) shr 8           // L73
                 if (Entity.overlapStrict(r06, e.W)) {               // a(r06,W)
                     // L76-88: pick the grab segment r04 on the arc.
-                    // inferred: `r93==0` (j.b(0)=0 — post-release `bP=0`,
-                    // the aG==4 latch zeroes it at L99) makes the original
-                    // divide by zero — a latent J2ME ArithmeticException.
-                    // Guarded as a segment-miss so the rope keeps growing.
+                    // r93==0 (j.b(0)=0 — post-release `bP=0`, the aG==4
+                    // latch zeroes it at L99) makes the original divide
+                    // by zero — a latent J2ME ArithmeticException
+                    // (proven: the aG==4 L147→L440 path is reachable
+                    // only when `cI==0`, i.java:17775-17792, so this
+                    // arm runs pre-release while bP>0 — the port still
+                    // guards the divide as a segment-miss).
                     val r93 = (3072 * Trig.sin(r09)) shr 8
                     if (r93 != 0) {
                         var r8 = (p.O - e.O) / r93
@@ -8242,17 +8249,15 @@ private val BU73 = intArrayOf(300, 400, 500)
 private val BW73 = intArrayOf(80, 80, 80)
 private val IH73 = intArrayOf(20, 20, 20)
 
-/** `case 73 → L120 → (Z[0]!=1 && ax==73) → L134` (i.java:2727/3038-3088,
- *  proven): every shipped ax73 record carries r8[10]=0 → `Z=int[1]`
- *  minimal — here `Z` is fixed IntArray(22), so "minimal" = Z[0]=r8[4]
- *  with the rest 0. That reproduces the J2ME OOB→0 reads the S152 ambush
- *  arm relies on (inferred reconciliation — the original would AIOOBE on
- *  Z[14] for a true 1-element Z, so shipped records must never arm the
- *  Z[14] paths; zeroed fields give exactly that). */
 /** ax73 heavy-guard record init — the shared ax11/ax73 ctor case
- *  (i.java:2230-2273, proven): full int[22] block incl. the `aB<<=1`
- *  (`Z[0]==1 || ax==73`) arm and the Z[13] claim-script bind, then
- *  `ax==73 → Z[8]=0` (:2259). initSoldier carries every byte. */
+ *  (i.java:2230-2273, proven): cases 11/73 share ONE init —
+ *  `Z = new int[22]` (:2234), `Z[14]=sArr[4]` (:2235), `Z[0]=sArr[10]`
+ *  (:2236), `aB<<=1` when `Z[0]==1 || ax==73` (:2256-2258), the Z[13]
+ *  claim-script bind, then `ax==73 → Z[8]=0` (:2260). No `int[1]` path
+ *  exists for ax73 (int[1] is only cases 47/50, i.java:2640-2651) — and
+ *  shipped ax73 records carry sArr[4]=0 → `Z[14]=0`, sArr[5]∈{152,190},
+ *  which is what legitimately arms the S152 Z[14] check at i.java:7423
+ *  inside aJ. initSoldier carries every byte. */
 fun NpcFsm.initAx73(e: Entity, f: List<Int>) {
     initSoldier(e, f, world)
     e.Z[8] = 0                                             // :2259
@@ -9646,11 +9651,12 @@ private fun ax64S1(e: Entity, w: LevelCellSource, p: Entity) {
 private fun ax64S2(e: Entity, w: LevelCellSource, p: Entity) {
     e.ag = p.ag; e.ah = p.ah; e.al = p.al          // mirror (L263)
     val m = p.ae
-    // L266-269 (proven 3-way, i.java:15726-15731; marker's clip check
-    // relaxed to ax14 — our markers spawn on clip9, `inferred`):
-    //   m == null || m.ax != 14  → release + re-spawn the marker
-    //   m.S == 0                  → continue the hold
-    //   else (S != 0)             → L300 despawn tail
+    // L263-L300 (proven 3-way, simple/i.java:15665-15730): mirror, then
+    //   ae == null                → L269 release + re-spawn the marker
+    //   ae.aa != k.z[74]          → L269 (same release+respawn)
+    //   ae.S == 0                 → L271 continue the hold
+    //   else (ae.S != 0)          → L300 despawn tail (ax64S345)
+    // (Marker's clip check relaxed to ax14 — our markers spawn on clip9.)
     when {
         m != null && m.ax == 14 && m.S != 0 -> { ax64S345(e, w, p); return }
         m == null || m.ax != 14 -> {

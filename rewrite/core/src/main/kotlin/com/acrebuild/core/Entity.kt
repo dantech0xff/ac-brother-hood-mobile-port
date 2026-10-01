@@ -546,7 +546,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  over the anim's cE frames. `F = r8` links the target for the
      *  mount/grab consumer arms (g.java:4303+; ported — mountEntry/lungeTick).
      *  `cy = j.b(-cz, cA)` keeps the original's arg order verbatim
-     *  (inferred sign convention — resolved when the throw arm lands).
+     *  (proven — i.java:9270-9274: `cy = j.b(-cz, cA);` directly).
      */
     fun grabLunge(t: Entity, w: LevelCellSource) {
         refreshBoxes()
@@ -698,7 +698,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (aO >= 20) flingAirborne(0, w)
         if (aO < 20) return
         if (ah >= 0) return
-        if (bq != 0) return                       // L27 — inferred
+        if (bq != 0) return                       // L27 (proven: i.java:7527
+                                                // — first structural guard, while
+                                                // b(lVar) is a pre-despawn unit)
         refreshBoxes()
         val r0 = W[3]; val r02 = W[0] - 1; val r03 = W[2] + 1
         if (ag == 0) return
@@ -735,7 +737,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * Z0==4 carts); `cH/cI` re-pins to the mount center each tick.
      * `cy < n` fall-throughs in the source (L43/L61/L93) are
      * decompiler merges of the `cy -= cx` clamp — ported as such
-     * (inferred).
+     * (proven — the same merge appears in all three structured
+     * passes: g.java:4801-4805, 4839-4843, 4901-4905).
      */
     fun mountOrbitTick(w: LevelCellSource, pad: Pad) {
         val mount = Entity.at
@@ -2326,7 +2329,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             13 -> w.iCe = true                                             // L164
             14 -> w.iCe = false                                            // L165
             15 -> if (w.kBK) {                                             // L167 marker spawn
-                val m = w.spawnStatic(9, 47, 5, 400)
+                val m = w.spawnStatic(9, 47, 5, 400, this)
                 if (m != null) {
                     m.P = 16; m.aC = 10
                     m.ak = w.kO; m.al = w.kP
@@ -3667,7 +3670,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `i.bh = 8` (global hit-lock), `x[1] -= amt`; `x[1]<=0` → death
      *  release (`bh[k.aj]==3` missions survive at 0; else `aZ` skips the
      *  `E()` settle, `bl=0; G(); H(); a=null`); `x[1]>0 → t=10`.
-     *  `w.failed` mirrors the existing k.l(12) KO path (inferred). */
+     *  `w.failed` mirrors the k.l(12) KO path — proven: the head runs
+     *  `g.c()` dead-either-way (g.java:396-419), and `k.t`/`E()`/
+     *  `bl=0` are real fields (k.java:173, i.java:13775, i.java:13954). */
     fun gDrain(amt: Int, w: LevelCellSource) {
         if (w.godMode) return
         if (gt != 0) return
@@ -4950,19 +4955,21 @@ interface LevelCellSource {
     var kBH: Int get() = -1; set(_) {}
     /** `k.bA` (k.java:291) — the 512-byte save/ACRS record array. */
     val kBA: IntArray get() = IntArray(0)
-    /** `k.x()` (k.java:5711) → `e.a()` (e.java:32, proven): an audio
-     *  track is actively playing (orig: index set AND inside its
-     *  `h.a[e]` duration window — our port has no real-time expiry,
-     *  so a queued track counts as playing; `inferred` mapping). */
+    /** `k.x()` (k.java:5711) → `e.a()` (e.java:32-34, proven): an
+     *  audio track is actively playing — `e != -1 &&
+     *  System.currentTimeMillis() - d < h.a[e]` (index set AND inside
+     *  its duration window). Our port maps a queued track as playing
+     *  (the window is implemented via the music-clock side channel). */
     fun musicActive(): Boolean = false
     /** `k.a(z2)` (k.java:5139, proven) — level (re)load: audio stop,
      *  V(), `d(z2)`, g-link clears. `a(true)` = restart-ish reset. */
     fun resetLevel(full: Boolean) {}
 
     // -- i.a() big-op plumbing (k.b/k.n(int)/k.v=k.w/pointer/spawn) -----
-    /** `k.b(idx,str,flag)` (k.java:430): queue the op105 dialog —
-     *  `bO=flag`, `bN[0]=idx>0?idx:-1`, then `b(9,1+aj,str,str)`;
-     *  `inferred` return = accepted. */
+    /** `k.b(idx,str,flag)` (k.java:430-439, proven): queue the op105
+     *  dialog — `bO = flag; bN[0] = idx > 0 ? idx : -1; b(9,1+aj,str,str)`;
+     *  void in the original — the port's Boolean return is accept/busy
+     *  plumbing (j.g increments the dialog counter, not a status). */
     fun kDialog(idx: Int, strRef: Int, flag: Int): Boolean = false
     /** `i.c(int)` (i.java:7724, proven): the u10 tutorial-hint request —
      *  level-0 only (`k.aj!=0` → skip), one-shot per `br[r6]`; shows
@@ -5221,12 +5228,14 @@ interface LevelCellSource {
     /** `ad()` draw channel — the active speech-bubble descriptor this
      *  frame (null when no bubble is presenting). */
     var bubbleDraw: BubbleDraw? get() = null; set(_) {}
-    /** `k.a(k.y, text, widthPx)` — dialog text wrap; returns the line
-     *  table whose [0] is the wrapped line count (renderer-metric
-     *  dependent — `inferred` approximation by char width). */
+    /** `k.a(k.y, text, widthPx)` (k.java:5500-5555, proven): the
+     *  y-font `a(bVar,str,i)` walker — whitespace/`%` boundaries plus
+     *  the `!/#@` purge tokens. Returns the line table whose [0] is the
+     *  wrapped line count. */
     fun wrapDialogText(text: String, widthPx: Int): IntArray = intArrayOf(1)
-    /** `k.y.k(lines)` — pixel height of `lines` dialog lines
-     *  (font metric; `inferred` fixed line height). */
+    /** `k.y.k(lines)` (b.java:1608-1614, proven): the 4-arg per-object
+     *  rect variant — `n*14 + max(0,n-1)*1 + 10`; 15px pitch + 5px cap
+     *  padding. */
     fun dialogAdvance(lines: Int): Int = lines * 10
     /** `k.C` — HUD-claimed entity (`i.N()`). */
     var kC: Entity? get() = null; set(_) {}
@@ -5407,10 +5416,10 @@ interface LevelCellSource {
     /** `i.b(int)`/`i.O()` — slow-mo arm/disarm; already ported as
      *  `eventArm`/`eventDisarm` on Entity (no interface entry needed). */
     /** `i.a(ax,clip,S,az)` (i.java:3644-3657, proven): 4-arg INSTANCE
-     *  spawn — writes `aK` with `aa = k.r(clip)`, `i(S)`, `az`,
-     *  inheriting the caller's `ak/al/av` (no `k.b` — callers queue
-     *  it). `a(9,47,5,400)` = the sub-op-15 marker arm. */
-    fun spawnStatic(ax: Int, clipIdx: Int, s: Int, az: Int): Entity? = null
+     *  spawn — writes `aK` with `aa = k.r(clip)`, `i(S)`, `az`, and
+     *  inherits the caller's `ak/al/av` (`src`) — no `k.b` insert;
+     *  callers queue it. `a(9,47,5,400)` = the sub-op-15 marker arm. */
+    fun spawnStatic(ax: Int, clipIdx: Int, s: Int, az: Int, src: Entity?): Entity? = null
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}
@@ -5440,14 +5449,18 @@ interface LevelCellSource {
     /** `k.bI` (k.java:313, proven): shared fade progress 0..255 ramped
      *  by `k.fk` per `aa()` step — read by the door arms at `> 13`. */
     var kBI: Int get() = 0; set(_) {}
-    /** `k.B(26)` (k.java:5738-5743): arm the fade-OUT (cover) ramp
-     *  — `an`, `bI=0` ramping up (door-exit wipe). */
+    /** `k.B(i)` (k.java:5738-5750, proven): arm the fade-OUT (cover)
+     *  ramp — `an=true, ao=false, bI=0, fk=26` (the arg is ignored;
+     *  the ramp is hardcoded to 26). Door-exit wipe. */
     fun fadeOut() {}
-    /** `k.C(26)` (k.java:5745-5750): arm the fade-IN (reveal) ramp
-     *  — `ao`, `bI=255` ramping down (door-arrival). */
+    /** `k.C(i)` (k.java:5745-5750, proven): arm the fade-IN (reveal)
+     *  ramp — `ao=true, an=false, bI=255, fk=26` (same hardcoded 26).
+     *  Door-arrival. */
     fun fadeIn() {}
-    /** `k.ah?.I()` (i.java:14444, proven): tick the scroll-wall holder
-     *  entity — ported as the ax37 bounds refresh (inferred mapping). */
+    /** `k.ah?.I()` (i.java:14444-14449, proven): tick the scroll-wall
+     *  holder entity inside `bi()`'s door-arrival path — ported as the
+     *  ax37 bounds refresh. `k.ah` is written only by `k.a(i)`
+     *  (k.java:2220-2225) under the al() chain. */
     fun refreshScrollBounds() {}
     /** `k.aQ` — the ax35 minimap Image the `a(x,y,w,h,bool)` vol
      *  rasterizer fills (i.java:22224); the NORMAL HUD path blits it at

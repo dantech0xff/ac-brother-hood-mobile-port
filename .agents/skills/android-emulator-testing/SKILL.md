@@ -430,3 +430,60 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
   ~realtime. For store clips, cut the slow menu segments or re-take.
 - Menu tap coords (2400x1080): NEW GAME (1240,543), EASY (1049,498),
   EZIO card (1240,345), jC=14 RESTART row then YES (1200,580).
+
+## Run-26 — save/resume verification recipe
+- **Persisted save**: `kBA` IntArray(160) → `world.saveFlush()` writes
+  little-endian shorts via `Command.PersistBA` → `SaveBridge`
+  `asbr-save.bin` (320B) in app files; `world.saveLoad()` runs on boot.
+  jdb-inject: `set this.kBA[14] = N` then `print this.saveFlush()`
+  (jdb has NO `call` verb — `print <method>()>` invokes it).
+- **jC=2 row hit-test ≠ button art**: row0's rect starts at panel.y+10
+  (view y55) — a tap on the visible button TOP (view ~y41) misses.
+  Rows: CONTINUE dev(1200,350); row1 dev(1200,544); NEW GAME(row2)
+  dev(1600,340) — col-2 rows start at x206 view.
+- **Real KO without combat**: jdb-set `player.al` deep (e.g. 1400) →
+  falls → cam-lag OOB → jC=12; YES tap dev(1200,580) respawns.
+- **Checkpoint verify**: `checkpoints.elementData[i]` (aw,ak,al);
+  `kBA[16]`=aw of last-fired; `checkpointSnap` Snapshot(ak,al,x1,gJ,gI)
+  is the respawn basis — restore is exact (1600,579 observed).
+- Verify dump of a persisted int: `run-as PKG od -A d -t u2 -j <2*i> -N 4
+  files/asbr-save.bin` (index i → byte offset 2i).
+
+## Run-27 — rare menus + hit-zone map
+- Pause HUD button: top-right "II" → view(354,0,46,37) → dev(1905,138).
+- Pause menu rows (panel 93,30): RESUME 280 / RESTART 412 / OPTIONS 544 /
+  HELP 676 / MAIN MENU 808 / EXIT 940 (dev y, x=1200).
+- MAIN MENU rows dev: CONTINUE(1200,350) / NEW-GAME-row1(1200,544) /
+  SELECT-LEVEL-row2(1600,340). YES/NO confirm rows (jC=28): YES
+  (1200,640), NO (1650,640).
+- OPTIONS page is ONE column of 8 at y96+33n (jc14) — rows ≥5 render
+  below the 240 canvas; input clamps to 239 → untappable (defect).
+- jC=3/jC=6/jC=15/jC=22(options-mode) are touch dead-ends — no footer
+  zone emits M_CYCLE/fire; jdb `print this.stateL(N)` escapes.
+- jC=4 difficulty chevrons: view x110-160/240-290, y15-95 → dev
+  (950/1450, 300). jC=5 page chevrons: view y=iK±15≈122 → dev(680/1720,560).
+- Score slots are BYTE pairs: scoreAt(i)=kBA[i]&255 | kBA[i+1]&255<<8 —
+  stamp high-byte in i+1 or values >255 truncate. jdb: `set this.kBA[81]=210`
+  + `set this.kBA[82]=4` shows 1234.
+- Medal viewer = jC=22 (kCc-driven, not kBA directly): options-mode needs
+  kEx==3 + kCc[i]==2 for lit rows; win-mode shows kCc[i]==1 then taps
+  through to jC=15 stats (itself trapped).
+
+### Run-28 notes (slice-328 verify)
+- jdb: `internal` Kotlin members aren't callable by name (name-mangled; even `foo$main` failed) — use the public surface (`set this.kBA[i]`, `print this.saveFlush()`) and verify semantics via file dump + `scoreAt(i)`.
+- Options drag-scroll: `input swipe 1200 900 1200 500 600` scrolls the bv4 8-row page; the scroll-offset-aware hit-test means row y depends on scroll amount — screenshot first, compute row centers from the image (~preview_y/706*1080), then tap.
+- jC=22 has TWO modes: kEx==3 → options-mode (BACK pill, M_CYCLE exit); kEx!=3 → win-mode viewer (tap-anywhere → next state). From pause-options you get win-mode (kEx=0) — tap advances to jC=15.
+- jC=24 credits exit lands on jC=6 ABOUT (chain, not a bug).
+
+### Run-29 notes (slice-329 audio verify)
+- jC=21 dialog dismiss depends on dlgU: full-screen u∈{0,4,5,7} advance on ANY tap (pointerStrip→M_CONTEXT); script dialogs u==9 need the skip gate `v(131072)` = the ↩ M_CYCLE footer zone (dev ~1900,940) — body taps do nothing.
+- `lastTouchX/Y == -1` between ticks is NORMAL (consume() resets each tick) — it is not proof of dead input; verify via a dispatch side-effect instead (jC/field change).
+- Stale jdb: an attached session left running holds the VM suspended → Android ANR dialog in ~2min. Before re-attaching always `pkill -f 'jd[b] -attach'` — note the bracket pattern: a literal `pkill -f jdb` matches your own shell's command line and kills itself (exit -1).
+- audioPlay "one Player" gate: kBF&&kBE && audioTrack inside hA[track]ms → every new z() dropped. Menu blips (z(23)) are silent while menu music is fresh — wait ~hA ms (virtual tickIndex*62) then re-tap.
+- Audio evidence: `logcat -s AcLevel0 AcSpike` → "audio: play track=N (e.e=N)" / "audio: play slot=N" / "audio: e.b() stop channel" / "audio: missing audio/" / "empty/unloaded". jdb reads: audioTrack, audioPlaying(), kBE (music<10), kBF (sfx>=10).
+- jC=23: row-tap only focuses (kBw); commit is the footer-left zone (pad.v(327712)=M_PAUSE|M_CONTEXT). kBw=-1 default commit → neither arm (flags keep init defaults).
+
+### Run-30 notes (task-41 real stats-arm persistence)
+- Real score entry without a win: `stateL(15)` + `set this.kAp[i]` seeds — kAp[0]=kills (×kDH[kAu]={100,200,300}), kAp[3]=silent-kills (×kDI), kAp[1]=deaths (−300 cap 4), kAp[4]/[5]=bonus/time — i4 recomputes each proc → `statsScore`. Persist needs jG>10 (reveal elapsed or one `v(458784)` tap to skip), then the NEXT/footer tap writes `baShortPut(81+(kAu<<4)+(kAj<<1), i4)` + kBA[14]=kAj+1 + PersistBA in the same arm.
+- File check: `run-as PKG od -A d -t u1 -j 162 -N 4 files/asbr-save.bin` → slot 81 pair at byte 162 (=2×81); LE-16 → lo,hi. Logcat "save: e(true) → 320B /ASBR" confirms PersistBA drain.
+- jC=15 footer: NEXT pill dev ~(566,940) = the v(458784) edge; arm also reads v(327712) confirm → routes stateL(30) when kEgFlags set.

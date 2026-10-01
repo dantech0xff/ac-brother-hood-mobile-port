@@ -583,8 +583,15 @@ class Level0Renderer {
             drawText(title, 200, 120, 3, pack = 91)
         }
         if (world.kDw >= 21) {
+            // `b(bW,0,dy,200,33,380,205,0,1)` (k.java:1350/1359,
+            // proven): bW font, `j.a(cd,0,33,400,205)` clip,
+            // wrapped draw at y=fd.
             clipScissor(0, 33, 400, 205)
-            drawText(world.kDy ?: "", 200, world.kFd, 3, pack = 91)
+            val str = world.kDy ?: ""
+            fontW.l(0)
+            val u = fontW.wrap(str, 380)
+            fontW.drawWrapped(str, u, 200, world.kFd, 0, 200, 1, -1)
+            { g, gx, gy, pal -> drawObject(91, g, gx, gy, 0, 0, pal) }
             clipScissor(0, 0, 400, 240)
         }
     }
@@ -836,17 +843,40 @@ class Level0Renderer {
         }
     }
 
-    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. */
+    /** `j.a(g,x,y,w,h,true)` — GL scissor, world→viewport coords. When
+     *  `clipViewport` is armed (scrollable menu), the rect INTERSECTS
+     *  the viewport — a scrolled row's own clip still covers its band,
+     *  so without intersection it draws above the title strip. */
     private fun clipScissor(x: Int, y: Int, w: Int, h: Int) {
+        var (cx, cy, cw, ch) = intArrayOf(x, y, w, h)
+        val v = clipViewport
+        if (v != null) {
+            val x2 = minOf(cx + cw, v[0] + v[2]); cx = maxOf(cx, v[0])
+            val y2 = minOf(cy + ch, v[1] + v[3]); cy = maxOf(cy, v[1])
+            cw = (x2 - cx).coerceAtLeast(0); ch = (y2 - cy).coerceAtLeast(0)
+            if (cw == 0 || ch == 0) { cw = 0; ch = 0 }
+        }
         batch.flush()
         Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
-        Gdx.gl.glScissor(offsetX + x * scale,
-                         offsetY + (Level0World.VIEW_H - y - h) * scale,
-                         w * scale, h * scale)
+        Gdx.gl.glScissor(offsetX + cx * scale,
+                         offsetY + (Level0World.VIEW_H - cy - ch) * scale,
+                         cw * scale, ch * scale)
     }
+    /** Scrollable-menu viewport — when armed, `clipReset` restores this
+     *  scissor instead of disabling the test (the row loop's inner
+     *  clip/reset pairs then stay inside the scroll window). */
+    private var clipViewport: IntArray? = null
     private fun clipReset() {
         batch.flush()
-        Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+        val v = clipViewport
+        if (v != null) {
+            Gdx.gl.glEnable(GL20.GL_SCISSOR_TEST)
+            Gdx.gl.glScissor(offsetX + v[0] * scale,
+                             offsetY + (Level0World.VIEW_H - v[1] - v[3]) * scale,
+                             v[2] * scale, v[3] * scale)
+        } else {
+            Gdx.gl.glDisable(GL20.GL_SCISSOR_TEST)
+        }
     }
 
     /** `a(i,i2,i3,z2,z3)` (k.java:5872, proven) — ornamental band:
@@ -978,6 +1008,16 @@ class Level0Renderer {
         fillAr(x, y, w, 10, 805306368)
         if (z2) fillAr(x + 95, y - 2, 13, 2, -2013265920)
         if (z3) { fillAr(x, i9, w, 40, 805306368); i9 += 40 }
+        // Port-added bv4 overflow scroll (`menuScrollDy`, world-side):
+        // shift the row window and clip rows to the region below the
+        // title strip — the verbatim layout is the dy==0 case.
+        val scrolling = world.menuScrollMax() > 0
+        if (scrolling) {
+            i9 -= world.menuScrollDy
+            clipViewport = intArrayOf(0, i9 + world.menuScrollDy, 400,
+                                      235 - (i9 + world.menuScrollDy))
+            clipReset()
+        }
         val i12 = i9
         var i = x
         for (i13 in 0 until i10) {
@@ -1066,6 +1106,7 @@ class Level0Renderer {
             }
             i9 += i4 + 3
         }
+        if (scrolling) { clipViewport = null; clipReset() }
     }
 
     /** `b.java:915` composite-sprite draw for one tile cell. */
@@ -1174,9 +1215,16 @@ class Level0Renderer {
     private fun aboutScreen(world: Level0World) {
         fontW.l(1)
         world.d0(7)?.let { drawText(it, 200, 24, 3, pack = 91) }
-        clipScissor(0, 50, 400, 105)
+        // `b(y,1,d(0,77),200,50,390,155,0,1)` (k.java:847, proven): y
+        // font (pack-92), `j.a(cd,0,50,400,155)` clip, 390-wide wrapped
+        // draw at y=fd. The earlier plain drawText packed fontW +
+        // block-vcenter — the wrapped roll needs fontY and top-down fd.
+        clipScissor(0, 50, 400, 155)
+        val str = world.d0(77) ?: ""
         fontY.l(1)
-        drawText(world.d0(77) ?: "", 200, world.kFd, 3, pack = 91)
+        val u = fontY.wrap(str, 390)
+        fontY.drawWrapped(str, u, 200, world.kFd, 0, 200, 1, -1)
+        { g, gx, gy, pal -> drawObject(92, g, gx, gy, 0, 0, pal) }
         clipScissor(0, 0, 400, 240)
     }
 
@@ -1628,17 +1676,23 @@ class Level0Renderer {
             fillAr(0, 240 - world.kDz, 400, world.kDz, -16777216)
         }
 
-        // `i.bJ` flicker line (k.java:3239, inferred): `y.l(0)` +
-        // `y.a(cd, null, wrap(y,null,320), 200,50, 0,4,17,-1)` — a null-
-        // string wrapped draw; no visible glyph body. Early-return on the
-        // zeroing frame (`tailSkipFrame`) skips the aU bar.
+        // `i.bJ` flicker line (k.java:3239-3240, proven): `y.l(0)` +
+        // `y.a(cd, null, a(y,(String)null,320), 200,50, 0,4,17,-1)` —
+        // the transcription is verbatim, but `a(y,null,320)` wraps a
+        // null string (`b.a(str,320,false)` → NPE at str.length()).
+        // So on every LIVE i.bJ>0 frame the flicker arm throws and
+        // aborts the rest of b(z2) — the aU bar and the remainder of
+        // the proc never draw; on the zeroing frame the
+        // `i.bJ==i.bI && i.bL<=20 → i.bJ=0; return` arm aborts it
+        // outright (`tailSkipFrame`). Net effect: the aU bar draws
+        // only when i.bJ==0.
 
         // `aU` grab-QTE meter (k.java:3241-3253, proven): white outline
         // (120,215,125,11) + fill `(125*aU.aB)/800 - 1` px — red when
         // `aB>300 || j.g%3==0` else amber 0xFFBF00.
         val aU = world.kAU
         if (aU != null && (aU.P and 32) == 0 && world.iBy > 0 &&
-            !world.tailSkipFrame) {
+            world.iBJ == 0 && !world.tailSkipFrame) {
             outlineAr(120, 215, 125, 11, -1)
             val fw = (125 * aU.aB) / 800
             fillAr(121, 215, fw - 1, 10,
@@ -1715,12 +1769,17 @@ class Level0Renderer {
             menuPanel(world, pr[0], pr[1], pr[2],
                       world.menuPanelZ2(), world.menuPanelZ3())
             if (world.jC == 23 || world.jC == 28) {
-                // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,...)` (:6221)
-                // — centered bW title; the eC==121 arm draws at y=120.
+                // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,0,100,3,-1)`
+                // (:6221; eC==121 arm at :6207, y=120, no bW.l(1)) —
+                // *wrapped* centered block at w=200 (long banners wrap to
+                // multiple lines; a single centered line clips off-canvas).
                 world.d0(world.kEc)?.let { t ->
-                    fontW.l(1)
-                    val cx = 200 - fontW.measure(t).first() / 2
-                    drawText(t, cx, if (world.kEc == 121) 120 else 80, 3)
+                    if (world.kEc != 121) fontW.l(1)
+                    val u = fontW.wrap(t, 200)
+                    fontW.drawWrapped(
+                        t, u, 200, if (world.kEc == 121) 120 else 80,
+                        0, 100, 3, -1,
+                    ) { g, gx, gy, pal -> drawObject(91, g, gx, gy, 0, 0, pal) }
                 }
             }
             if (world.menuVisible) {

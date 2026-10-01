@@ -1420,3 +1420,181 @@ S152 verdict (fightable but doesn't leave his post).
 - `store-demo-raw-gameplay.mp4` (164s) — take-3 raw (realtime gameplay)
 - `store-spawn.png` / `store-urn-approach.png` / `store-balcony.png` /
   `store-alert-climb.png` — marketing stills
+
+---
+
+# Run-26 — save/resume semantics verify (531dfb6c)
+
+status: `531dfb6c-SAVE-RESUME-VERIFIED-ckptInMemory-quitLosesCkpt-NOGAMErow-ckptRespawn-CONTINUE-m2spawn`
+APK rebuilt+installed from `/home/ubuntu/repos/ac-brother-hood-mobile-port`
+devin/land HEAD 531dfb6c (`:android:assembleDebug` → android-debug.apk).
+emulator-5554, jdb tcp:8888, GLThread 42/48/47. jdb assists labeled;
+all save/resume mechanics observed are the real FSM.
+
+## Step 1 — checkpoint arms (kBA[16] + checkpointSnap)
+m0 gameplay → teleport to (1570,570) → walked right into checkpoints[0]
+(aw98 @1594,546). jdb: `kBA[16] = 98`, `checkpointSnap =
+Snapshot(aw=98, ak=1590, al=579, x1=30, gJ=5, gI=1, br=[t,t,t])`.
+Shot: `save-ckpt-fired.png`.
+
+## Step 2 — force-stop → relaunch → NO continue + level spawn
+`am force-stop` → relaunch → YES/NO → title → menu: row0 = **NEW GAME**
+(`save-menu-newgame.png` — no CONTINUE; `menuHasSave()`=false with
+bA[14]==0,bA[15]==0). NEW GAME → EASY → EZIO → story→SKIP→briefing→SKIP:
+player at **(80,940) = level spawn**, NOT the checkpoint (`save-spawn-level.png`).
+Mid-mission checkpoint position LOST on process quit — matches design
+(checkpointSnap is in-memory; the on-disk record is kBA only).
+
+## Step 3 — in-process KO → YES → respawn at checkpoint snap
+Re-armed checkpoint (snap @1600,579) → dropped player into the void
+(real OOB death) → jC=12 restart prompt → YES tap → respawn at
+**(1600,579) — exactly the snap**, jC=8 (`save-respawn-ckpt.png` shows
+the checkpoint-terrace architecture, not the spawn slab). In-process
+checkpoint resume works on device.
+
+## Step 4 — CONTINUE arm + mission-resume (simulated save state)
+jdb `set this.kBA[14]=2` + `print this.saveFlush()` → logcat
+`save: e(true) → 320B /ASBR`, file `asbr-save.bin` 320B on disk
+(kBA=IntArray(160)×2B — the port's bA record; dump shows idx14=2,
+idx16=98). force-stop → relaunch → saveLoad restores kBA → menu row0 =
+**CONTINUE** (`save-menu-continue.png`). Tap dev(1200,350)=row0 →
+jC=30 EZIO browse → jC=9 **FLORENCE / A.D. 1486 / KILL LUCREZIA & RESCUE
+CATERINA** briefing (`save-continue-florence-briefing.png`) → TOUCH→
+intro→SKIP → jC=8 gameplay at **(60,1840) = m2 fresh spawn**,
+checkpointSnap=null (`save-continue-m2-spawn.png`). No crash.
+
+## Verdict vs documented semantics
+- RMS=bA only (320B here) → quit loses mid-mission checkpoint BY DESIGN: CONFIRMED.
+- CONTINUE appears iff bA[15]==1||bA[14]>0: CONFIRMED both directions
+  (0,0 → NEW GAME row0; 14=2 → CONTINUE row0).
+- CONTINUE = mission-resume at story/fresh spawn, never mid-mission: CONFIRMED.
+- In-process checkpoint respawn restores the snap exactly: CONFIRMED.
+- NOTE: kBA[16] (checkpoint ptr) is persisted in the record but unused
+  on mission entry — reloadCheckpoint resets kBA[16]=0/checkpointSnap=null.
+- Menu recipe correction: jC=2 row0 rect is view(93,55,214,35) →
+  dev(1200,350), not the button's visual top edge — tap inside the rect.
+
+---
+
+# Run-27 — rare menus + high-score persistence (531dfb6c)
+
+status: `531dfb6c-MENUS-VERIFIED-HSrender-cycle-wipe-PLUS-4defects-trapScreens-stringGaps-scoreByte-pair`
+Same APK as Run-26 (HEAD still 531dfb6c). emulator-5554, jdb tcp:8888.
+Nav paths exercised on real touch; unreachable screens jdb-driven
+(labeled). All render/dispatch observed is real game FSM.
+
+## Reachable-by-touch (verified end-to-end)
+- Pause menu (jC=14): all 6 rows render, row taps dispatch.
+  `menu-pause.png`. Pause button = dev(1905,138) top-right HUD II.
+- OPTIONS (jC=14 bv4 in-pause): 8 rows, single column — see DEFECT 1.
+  `menu-options-overflow.png` (jc3 variant, same layout).
+- HIGH SCORES (jC=4): title bar, ◀ EASY ▶ chevron zone
+  view(110-160/240-290,15-95) → dev(950/1450,~300); cycles
+  EASY→NORMAL→HARD (kCU). `menu-highscores-empty.png`,
+  `menu-highscores-normal.png`. Back ↩ footer → jC=3.
+- HELP (jC=5): 6-page scroller, chevrons at view y=iK±15
+  (iK≈122 → dev ~560) x305-355/45-95 → dev(1720/680,560). Pages
+  1/6→2/6→1/6 verified; back ↩ → caller state (pause). `menu-help-p1.png`,
+  `menu-help-p2.png`.
+- Wipe-confirm (jC=28 eC=69): NEW GAME with save → "WANT TO DELETE
+  YOUR DATA?" YES/NO + ↩. `menu-wipe-confirm.png`. NO → menuP (save
+  intact, kBA[14]=2 kept).
+- NEW GAME→YES wipe: clears progress (kBA[14]=0→stateL(29) difficulty)
+  but PRESERVES score slots — matches code (score-clear lives only in
+  the kFG=false RESET arm). `menu-difficulty-after-wipe.png`.
+- Medal browse jC=30: reached via CONTINUE — mission cards
+  (EZIO/EXECUTIONER). `menu-medal-browse.png`.
+- Post-wipe screen: eC=121 "GAME DATA HAS BEEN DELETED." renders;
+  ghost YES/NO rows remain visible (minor draw quirk).
+  `menu-data-deleted.png`.
+- Sound prompt jC=23 (fresh pm-clear boot): YES/NO pills + pause icon
+  render — but the question title is BLANK (see DEFECT 4).
+  `menu-sound-prompt.png`.
+
+## DEFECTS FOUND (all device-verified)
+1. **Options rows 5-7 unreachable on touch** — kEA[4] stacks 8 rows
+   single-column at view y96/129/…/327; rows ≥5 are below the 240-high
+   canvas and the input bridge clamps ly≤239 → ACHIEVEMENTS, ABOUT,
+   RESET GAME can never be tapped. (Orig keypad could select them.)
+   jC=3 standalone variant same overflow (rows from y77).
+2. **jC=3 options is a dead-end trap** — menuFooter() gives jC=3
+   (null,null) → no footer icons; M_CYCLE (131072) can only be posted
+   by footer zones → no exit without killing the app.
+3. **jC=6 ABOUT renders title only — credits text invisible** — d0(77)
+   holds the full credits (jdb-verified, scrolls kFd 60→-545), the
+   aboutScreen draw emits them clipped (0,50,400,105), but NOTHING
+   paints on device (empty panel). Also BACK inert: menuJc6() never
+   calls footerQ() → M_CYCLE unreachable → trap.
+   `menu-about-blank.png`.
+4. **Missing strings** — d0(70) sound-prompt title, d0(114-116) medal
+   names all null → sound prompt shows pills w/o question; achievement
+   rows show icons w/o labels. `menu-sound-prompt.png`,
+   `menu-achievements-medals.png`.
+5. **jC=15 mission-complete stats is a touch trap** — NEXT pill drawn
+   by renderer footer but winStatsM() takes pad.v(458784); no footer
+   zone emitter → stuck (screens rendered: `menu-mission-complete.png`).
+6. **jC=22 achievements options-mode BACK inert** — kEx==3 branch sets
+   hintBack cosmetic label; exit needs pad.v(131072) — unreachable.
+   (Win-mode exits by any tap → jC=15 → which is also trapped.)
+7. **Score >255 truncation on stamp** — the real persist arm writes
+   `kBA[si] = i4` (raw int) into a BYTE slot; scoreAt reads LE-16 pair
+   (si|si+1<<8, each &255). Stamped 1234 → HIGH SCORES shows **210**
+   (=0xD2). Byte-pair write 210/4 → shows 1234 correctly → defect is
+   in the stamp arm, not the display. `hs-truncated-210.png` vs
+   `hs-score-1234.png`.
+8. **RESET GAME wipe leaves phantom scores** — clear loop only zeroes
+   `kBA[81+2i]` (low bytes) → kBA[82]=4 residue → HIGH SCORES shows
+   **1024** after a full data wipe. `hs-phantom-1024.png`.
+
+## High-score persistence
+- Stamped kBA[81]=1234 (simulated) + saveFlush → file written →
+  force-stop+relaunch → kBA[81]=1234 restored by saveLoad (jdb) →
+  HIGH SCORES renders persisted value (210-truncated, then 1234 with
+  byte-pair stamp). Persistence path itself = PASS.
+- Wipe: NEW GAME→YES preserves scores (semantic verified);
+  RESET GAME→YES "clears" but leaves high-byte phantoms (DEFECT 8).
+
+## Unreached / honest gaps
+- REAL mission win → real stats persist arm never exercised (the
+  jC=15 screen is touch-trapped; a real win was out of reach this run
+  — stamps were simulated, labeled).
+- MENU→OPTIONS: no OPTIONS row on the main menu — options only exists
+  inside the pause menu (matches eA tables; orig may differ).
+
+## Run-28 — re-verify slice-328 @ b4c61796 (rare-menu fixes) — emulator-5554
+
+- Options drag-scroll: works; drag-release doesn't select; scrolled-row taps dispatch (CONTROL cycled, ACHIEVEMENTS opened). `fix328-options-scrolled.png`
+- jC=15 stats: NEXT pill armed → advanced to jC=30 (was trapped). `fix328-stats-next.png`
+- jC=3 options: ↩ footer armed → exits to jC=2 (was trapped). `fix328-jc3-footer.png`
+- ABOUT jC=6: credits roll renders top-down, V 1.2.1 splice, BACK exits. `fix328-about-credits.png`, `fix328-about-scroll1.png`
+- Credits jC=24: THE END + epilogue paragraphs render + roll. `fix328-credits-roll.png`
+- jC=22 kEx==3 medals: BACK pill armed → jC=3 (was cosmetic-only). `fix328-medals-back.png`
+- High score ≥256: LE-16 stamp → file bytes `210 0 4 0` @162 → relaunch → scoreAt(81)=1234 → HIGH SCORES shows LEVEL 1 = 1234, TOTAL = 1234. `fix328-hs-1234.png`
+- RESET wipe: YES now clears BOTH bytes (kBA[81]=0 AND kBA[82]=0 → scoreAt=0, no phantom). `fix328-post-reset.png`
+- Residuals: sound-prompt title still not drawn (d0(70)="SOUND SET" exists, title never renders); scrolled row labels bleed above title strip during scroll; row labels truncate ~13 chars (cosmetic).
+- Status: `b4c61796-slice328-ALL4FIXES-VERIFIED-scroll-footerABOUTcredits-scoreLE16-wipepair-residual-soundtitle-labelbleed`
+
+## Run-29 — re-verify slice-329 @ 523d00c9 (audio settings + label polarity) — emulator-5554
+
+- jC=23 title: "DO YOU WANT SOUND?" draws at y=80 (was blank — bU[19] fix verified). `snd-prompt-title.png`
+- YES arm: pill focus → footer commit → kBE/kBF=true, audioTrack=0, audioPlaying()=true; logcat `play track=0` + `play slot=0`. PASS
+- NO arm: kBE/kBF=false, no `play track=0`; silent nav (zero audio lines), mission music z(5) gated (audioTrack=-1 in gameplay). PASS
+- Labels: OFF↔flags-false / ON↔flags-true — polarity fix verified on screen both directions. `snd-options-off.png`, `snd-music-on.png`, `snd-sfx-on.png`
+- Toggles: MUSIC OFF→audioStop(`e.b()`); MUSIC ON→z(6)@jC14 (`play track=6`); SFX ON→audioStop+z(23) (`play track=23`). Neutral-row commit blips z(23) fire when channel free; suppressed while a track is inside its hA window — the "one Player" gate verified both ways. PASS
+- Mission music: fresh entry → `play track=5 (e.e=5)` + audioTrack=5 (kEE[0]=5 → music-5.ogg). Checkpoint restart does NOT re-fire (missionInit runs at entry only — code-consistent). PASS
+- Gameplay taps emit no SFX — only scripted aF records call audioTrackPlay (NpcFsm:1546); consistent.
+- RESET wipe: kBE/kBF UNCHANGED (ON on screen post-wipe), kAu=1, scoreAt=0. PASS. `snd-postwipe-on.png`
+- Scroll-clip intersect fix verified — scrolled rows no longer bleed above title strip.
+- NEW DEFECT (slice-329): long confirm banners clip LEFT — kEc=69 shows "…LY DELETED. ARE YOU SURE?", kEc=121 shows "…ME DATA HAS BEEN DELETED." Centered-cx (200-measure/2) goes negative for wide strings. `snd-wipe-banner-clip.png`, `snd-deleted-banner-clip.png`
+  - **Followup: fixed in slice-330 (f6bf3d98, PR #370) — ae() banner now wraps at w=200 (bW.a verbatim).**
+- Incidental: stale jdb suspend ~2min triggered an Android ANR dialog (tooling artifact, not app defect; recovered via relaunch).
+- Status: `523d00c9-slice329-AUDIO-VERIFIED-titleYES-NO-labels-toggles-track5-wipe-residual-bannerClipLong-fixedInSlice330`
+
+## Run-30 — task-41 high-score entry + persistence via REAL stats arm @ f6bf3d98/APK (aadfeac5 docs-HEAD, slice-330 build) — emulator-5554
+
+- Entry path = the REAL persist arm, not a raw field write: jdb `stateL(15)` (labeled assist — jC=15 needs a win context), seeded `kAp[0]=15` (kills) → real formula i4 = 15×kDH[0]=1500 → `statsScore=1500` on screen (`hs-stats-1500.png` — MISSION COMPLETE rows + SCORE 1,500).
+- NEXT pill tap → `pad.v(458784)` fire → jG>10 → `baShortPut(81,1500)` + `kBA[14]=1` (next-mission advance) + PersistBA → logcat `save: e(true) → 320B /ASBR`; file dump `run-as od`: bytes `220 0 5 0` @162 (=LE-16 1500 — the >256 slot proves the slice-328 byte-pair fix end-to-end through the real arm).
+- force-stop → fresh process → `scoreAt(81)=1500` (file persistence, not memory) → real nav CONTINUE→browse→EZIO→briefing→dialog-skip→gameplay→pause→options→scroll→HIGH SCORES → **LEVEL 1 = 1500, TOTAL = 1500** (`hs-1500-relaunch.png`).
+- Wipe: options↩→scroll→RESET→YES → kEc=121 → `scoreAt(81)=0` + file `0 0 0 0` @162 → force-stop → relaunch → `scoreAt(81)=0` → jC=4 (assist) → **table empty, all rows + TOTAL show "-"** (`hs-empty-after-wipe.png`).
+- Bonus: slice-330 banner-wrap verified on the wipe-confirm — "THE GAME DATA WILL BE / PERMANENTLY DELETED. / ARE YOU SURE?" wraps 3 lines, no left-clip (`hs-wipe-wrapped-banner.png` — Run-29 defect closed on-device).
+- Status: `aadfeac5-hs-REALARM-persist-VERIFIED-1500LE16-file-relaunch-display-TOTAL-wipePairClear-emptyAfterRelaunch`
