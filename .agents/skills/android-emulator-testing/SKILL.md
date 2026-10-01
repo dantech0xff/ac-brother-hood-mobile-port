@@ -482,3 +482,8 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - audioPlay "one Player" gate: kBF&&kBE && audioTrack inside hA[track]ms → every new z() dropped. Menu blips (z(23)) are silent while menu music is fresh — wait ~hA ms (virtual tickIndex*62) then re-tap.
 - Audio evidence: `logcat -s AcLevel0 AcSpike` → "audio: play track=N (e.e=N)" / "audio: play slot=N" / "audio: e.b() stop channel" / "audio: missing audio/" / "empty/unloaded". jdb reads: audioTrack, audioPlaying(), kBE (music<10), kBF (sfx>=10).
 - jC=23: row-tap only focuses (kBw); commit is the footer-left zone (pad.v(327712)=M_PAUSE|M_CONTEXT). kBw=-1 default commit → neither arm (flags keep init defaults).
+
+### Run-30 notes (task-41 real stats-arm persistence)
+- Real score entry without a win: `stateL(15)` + `set this.kAp[i]` seeds — kAp[0]=kills (×kDH[kAu]={100,200,300}), kAp[3]=silent-kills (×kDI), kAp[1]=deaths (−300 cap 4), kAp[4]/[5]=bonus/time — i4 recomputes each proc → `statsScore`. Persist needs jG>10 (reveal elapsed or one `v(458784)` tap to skip), then the NEXT/footer tap writes `baShortPut(81+(kAu<<4)+(kAj<<1), i4)` + kBA[14]=kAj+1 + PersistBA in the same arm.
+- File check: `run-as PKG od -A d -t u1 -j 162 -N 4 files/asbr-save.bin` → slot 81 pair at byte 162 (=2×81); LE-16 → lo,hi. Logcat "save: e(true) → 320B /ASBR" confirms PersistBA drain.
+- jC=15 footer: NEXT pill dev ~(566,940) = the v(458784) edge; arm also reads v(327712) confirm → routes stateL(30) when kEgFlags set.
