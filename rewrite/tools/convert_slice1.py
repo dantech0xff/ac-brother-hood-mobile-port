@@ -47,6 +47,8 @@ import struct
 import sys
 from pathlib import Path
 
+from PIL import Image
+
 ROOT = Path(__file__).resolve().parents[2]
 RES = ROOT / "reconstructed-project" / "resources"
 SPR = RES / "sprites-decoded"
@@ -188,6 +190,51 @@ def clip_remaps(clip_id, object_count):
     return tables
 
 
+# k.eo[] (k.java:8455, proven) + apply loop (k.java:6444-6450, proven):
+# after clip load the engine mutates listed palettes via `b.h(src, alpha)`
+# (b.java:2486-2502, proven) — the alpha-palette's RED channel becomes the
+# src palette's alpha byte (glow sprites encode luminance as alpha; an
+# opaque-black background then draws alpha-0). b.h SKIPS a src entry whose
+# RGB is the 0xFF00FF chroma key or whose alpha byte is already 0, so the
+# key and any stored-transparent entries are preserved. Equal here: rewrite
+# each -palette-<src>- module PNG pixel's alpha from the matching
+# -palette-<alpha>- PNG's red channel, except pixels that are key-magenta
+# or already transparent. Pairs are (srcPalette, alphaPalette) per clip.
+EO_ALPHA_MASKS = {
+    44: [(0, 1)], 46: [(0, 1)], 50: [(0, 0)], 15: [(1, 2)], 13: [(1, 2)],
+    40: [(1, 2)], 49: [(1, 2)], 54: [(0, 1), (7, 1)], 69: [(0, 1)],
+    57: [(0, 0)], 58: [(0, 0)],
+}
+
+CHROMA_KEY = (255, 0, 255)
+
+
+def apply_eo_alpha_masks(mod_dir):
+    for src_png in sorted(mod_dir.glob("*-palette-*-*.png")):
+        for src, alpha in CURRENT_EO:
+            tag = f"-palette-{src:02d}-"
+            if tag not in src_png.name:
+                continue
+            alpha_png = mod_dir / src_png.name.replace(
+                tag, f"-palette-{alpha:02d}-")
+            if not alpha_png.exists():
+                print(f"  eo[] skip {src_png.name}: no {alpha_png.name}")
+                continue
+            with Image.open(src_png) as ci, Image.open(alpha_png) as ai:
+                ci = ci.convert("RGBA")
+                ai = ai.convert("RGBA")
+                assert ci.size == ai.size, (src_png.name, alpha_png.name)
+                sp, ap = ci.load(), ai.load()
+                w, h = ci.size
+                for y in range(h):
+                    for x in range(w):
+                        r, g, b, a = sp[x, y]
+                        if a == 0 or (r, g, b) == CHROMA_KEY:
+                            continue
+                        sp[x, y] = (r, g, b, ap[x, y][0])
+                ci.save(src_png)
+
+
 def pack_clip(pack, entry_dir, out_dir, clip_id, remap=True):
     meta_path = SPR / pack / entry_dir / "metadata.json"
     meta = json.loads(meta_path.read_text())
@@ -283,6 +330,12 @@ def pack_clip(pack, entry_dir, out_dir, clip_id, remap=True):
     (out_dir / "modules").mkdir(parents=True, exist_ok=True)
     for name in all_pngs:
         shutil.copy2(SPR / pack / entry_dir / name, out_dir / "modules" / name)
+    global CURRENT_EO
+    # eo[] indexes the pack-3 z[] clip space (k.java:6444-6450) — same
+    # numeric ids in pack-15 tilesets must not be masked.
+    CURRENT_EO = EO_ALPHA_MASKS.get(clip_id, ()) if pack == "pack-3" else ()
+    if CURRENT_EO:
+        apply_eo_alpha_masks(out_dir / "modules")
     (out_dir / "clip.acpk").write_bytes(bytes(blob))
     (out_dir / "meta.json").write_text(json.dumps({
         "source": f"{pack}/{entry_dir}",
