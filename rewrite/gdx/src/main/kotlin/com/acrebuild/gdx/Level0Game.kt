@@ -17,9 +17,11 @@ import com.badlogic.gdx.Gdx
  * The original loop (j.java:189-219, proven) is self-clocked: one tick
  * plus one repaint per iteration, then `Thread.sleep(max(1, B-elapsed))`
  * with B=62 — it never bursts catch-up ticks; a slow frame dilates the
- * sim instead. Mirrored here: at most one tick per render frame, the
- * elapsed-since-last-tick timer reset to zero (the remainder is the
- * absorbed "sleep overshoot" the original also discards).
+ * sim instead. Mirrored here: at most one tick per render frame. The
+ * sub-tick remainder is kept — discarding it quantizes the tick onto
+ * the vsync cadence (every 4th frame at 60fps = 66.7ms ticks, ~7%
+ * slow) — while backlog credit is clamped to one tick so a lag spike
+ * buys at most one early tick, never a burst.
  */
 class Level0Game : ApplicationAdapter() {
 
@@ -27,7 +29,23 @@ class Level0Game : ApplicationAdapter() {
         const val TAG = "AcLevel0"
         const val SEED = 0xACB0C0DEL
         const val TICK_MS = 62L
-        private const val TICK_US = TICK_MS * 1000L
+        internal const val TICK_US = TICK_MS * 1000L
+
+        /** Advance the µs tick accumulator by [deltaUs]; returns the new
+         *  accumulator after resolving at most one pending tick, and
+         *  whether a tick fires this frame. Remainder-keep holds the
+         *  62ms cadence on a vsync-quantized frame clock; the clamp
+         *  caps catch-up credit at a single tick (self-clocked
+         *  semantics: the original's post-tick sleep absorbs overshoot
+         *  the same way, it just can't under-run). */
+        internal fun tickAccStep(accUs: Long, deltaUs: Long): Pair<Long, Boolean> {
+            val acc = accUs + deltaUs
+            return if (acc >= TICK_US) {
+                minOf(acc - TICK_US, TICK_US) to true
+            } else {
+                acc to false
+            }
+        }
     }
 
     private lateinit var world: Level0World
@@ -174,18 +192,19 @@ class Level0Game : ApplicationAdapter() {
     override fun render() {
         // µs accumulator — ms-truncating `deltaTime` lost ~0.3-0.7ms per
         // frame (~40ms/s), which periodically landed a tick one vsync
-        // late = the visible micro-hitch. One tick per frame max: the
-        // original sleeps to 62ms after each tick and cannot fast-forward
-        // either, so any overshoot beyond one tick is dropped.
-        accumulatorUs += (Gdx.graphics.deltaTime * 1_000_000f).toLong()
-        if (accumulatorUs >= TICK_US) {
+        // late = the visible micro-hitch. Remainder-keep holds the 62ms
+        // cadence; the clamp caps credit at one tick (no catch-up
+        // bursts, matching the self-clocked original).
+        val step = tickAccStep(accumulatorUs,
+            (Gdx.graphics.deltaTime * 1_000_000f).toLong())
+        accumulatorUs = step.first
+        if (step.second) {
             val events = inputQueue.drainTo(inputQueue.headSequence())
             try {
                 world.tick(events)
             } catch (t: Throwable) {
                 Gdx.app.error(TAG, "tick failed, quarantining", t)
             }
-            accumulatorUs = 0
         }
         // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
         // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
