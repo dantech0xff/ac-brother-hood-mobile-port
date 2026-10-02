@@ -13,8 +13,15 @@ import com.badlogic.gdx.Gdx
 
 /**
  * game-app role: lifecycle + fixed-step driver for the slice-1 port —
- * level 0 tiles/entities/player locomotion on the original 62 ms tick
- * (≤4 catch-up ticks per frame, same contract as TickEngine).
+ * level 0 tiles/entities/player locomotion on the original 62 ms tick.
+ * The original loop (j.java:189-219, proven) is self-clocked: one tick
+ * plus one repaint per iteration, then `Thread.sleep(max(1, B-elapsed))`
+ * with B=62 — it never bursts catch-up ticks; a slow frame dilates the
+ * sim instead. Mirrored here: at most one tick per render frame. The
+ * sub-tick remainder is kept — discarding it quantizes the tick onto
+ * the vsync cadence (every 4th frame at 60fps = 66.7ms ticks, ~7%
+ * slow) — while backlog credit is clamped to one tick so a lag spike
+ * buys at most one early tick, never a burst.
  */
 class Level0Game : ApplicationAdapter() {
 
@@ -22,7 +29,23 @@ class Level0Game : ApplicationAdapter() {
         const val TAG = "AcLevel0"
         const val SEED = 0xACB0C0DEL
         const val TICK_MS = 62L
-        const val MAX_CATCHUP = 4
+        internal const val TICK_US = TICK_MS * 1000L
+
+        /** Advance the µs tick accumulator by [deltaUs]; returns the new
+         *  accumulator after resolving at most one pending tick, and
+         *  whether a tick fires this frame. Remainder-keep holds the
+         *  62ms cadence on a vsync-quantized frame clock; the clamp
+         *  caps catch-up credit at a single tick (self-clocked
+         *  semantics: the original's post-tick sleep absorbs overshoot
+         *  the same way, it just can't under-run). */
+        internal fun tickAccStep(accUs: Long, deltaUs: Long): Pair<Long, Boolean> {
+            val acc = accUs + deltaUs
+            return if (acc >= TICK_US) {
+                minOf(acc - TICK_US, TICK_US) to true
+            } else {
+                acc to false
+            }
+        }
     }
 
     private lateinit var world: Level0World
@@ -31,7 +54,7 @@ class Level0Game : ApplicationAdapter() {
     private val firstPackTilesetDir = "level0"
     private val save = SaveBridge("asbr-save.bin")
     private val audio = AudioBridge()
-    private var accumulatorMs = 0L
+    private var accumulatorUs = 0L
 
     /** `I(aj)` pack provider (k.java:5244, proven): one mission pack
      *  = level ACLV + `k.d(1+aj)` strings + `j.e(7)` scripts — the
@@ -167,19 +190,21 @@ class Level0Game : ApplicationAdapter() {
     }
 
     override fun render() {
-        accumulatorMs += (Gdx.graphics.deltaTime * 1000f).toLong()
-        var ticks = 0
-        while (accumulatorMs >= TICK_MS && ticks < MAX_CATCHUP) {
+        // µs accumulator — ms-truncating `deltaTime` lost ~0.3-0.7ms per
+        // frame (~40ms/s), which periodically landed a tick one vsync
+        // late = the visible micro-hitch. Remainder-keep holds the 62ms
+        // cadence; the clamp caps credit at one tick (no catch-up
+        // bursts, matching the self-clocked original).
+        val step = tickAccStep(accumulatorUs,
+            (Gdx.graphics.deltaTime * 1_000_000f).toLong())
+        accumulatorUs = step.first
+        if (step.second) {
             val events = inputQueue.drainTo(inputQueue.headSequence())
             try {
                 world.tick(events)
             } catch (t: Throwable) {
                 Gdx.app.error(TAG, "tick failed, quarantining", t)
-                accumulatorMs = 0
-                break
             }
-            accumulatorMs -= TICK_MS
-            ticks++
         }
         // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
         // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
@@ -212,7 +237,6 @@ class Level0Game : ApplicationAdapter() {
                 else -> Unit
             }
         }
-        if (accumulatorMs >= TICK_MS) accumulatorMs = 0 // drop backlog
         renderer.render(world)
     }
 
@@ -223,7 +247,7 @@ class Level0Game : ApplicationAdapter() {
     }
 
     override fun resume() {
-        accumulatorMs = 0
+        accumulatorUs = 0
         world.resumeAudio()                      // bG>=0 → z(bG)/fi (k.java:5795)
         super.resume()
     }
