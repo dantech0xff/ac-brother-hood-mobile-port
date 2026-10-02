@@ -12892,6 +12892,37 @@ class Slice117Test {
         assertEquals(20, w.kFF)
         assertEquals(30, w.jC, "l(30)")
     }
+
+    @Test fun `jc29 difficulty row tap applies bw before the au write`() {
+        val w = world()
+        w.kBA[69] = 0                                      // HARD locked
+        w.stateL(29)
+        w.tick(emptyList())
+        // The draw loop writes bw on the row hit BEFORE the confirm arm
+        // reads it — a tap on NORMAL must persist au=1, not the stale
+        // bw=-1 (which snaps to EASY) left over from bannerK(2).
+        val r = w.menuRowRects()[1]                        // NORMAL row
+        val cx = r[0] + r[2] / 2; val cy = r[1] + r[3] / 2
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
+            InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
+        assertEquals(1, w.kAu, "tapped NORMAL row → au=1")
+        assertEquals(30, w.jC)
+    }
+
+    @Test fun `jc19 cancelled tap does not confirm a row`() {
+        val w = world()
+        w.autoDismissDialog = false
+        w.kBw = -1; w.kDa = 8; w.stateL(19)                 // armMissionSelect
+        w.tick(emptyList())
+        w.kAj = -1                                         // canary
+        // DOWN on row 5 then the OS cancels the gesture — un-hold must
+        // still run but no release point exists to confirm with.
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 250, 100)))
+        w.tick(listOf(InputQueue.Event(1, InputQueue.Type.CANCEL, 250, 100)))
+        assertEquals(19, w.jC, "cancelled gesture must not confirm")
+        assertEquals(-1, w.kAj, "no aj write on cancel")
+    }
 }
 
 // =========================================================================

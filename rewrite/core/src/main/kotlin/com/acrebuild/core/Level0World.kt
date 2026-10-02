@@ -2991,6 +2991,7 @@ class Level0World(
         val rowTap = if (pressY >= 0 || lastTouchX >= 0) menuRowAt(pressY) else -1
         if (pad.v(Pad.M_CONTEXT) || rowTap >= 0) {
             kCb = true
+            if (rowTap >= 0) kBw = rowTap            // row hit → `bw=i13`+E(32)
             if (kBv == 2) {
                 kAu = if (kBw < 0) 0 else kBw
                 z(23)
@@ -2998,7 +2999,6 @@ class Level0World(
                 kBA[16] = 0                          // a(bA,16,short 0) — verbatim
                 saveFlush(); kFF = 20; stateL(30); return
             }
-            if (rowTap >= 0) kBw = rowTap            // row hit → `bw=i13`+E(32)
             if (kBw == -1) { kBw = 0; return }
             val iM = menuM(kBv, kBw)
             if (kEA[kBv][iM] != 83 && kEA[kBv][iM] != 84) z(23)
@@ -4923,6 +4923,12 @@ class Level0World(
                                                                  // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
+                    // A cancelled gesture un-holds but must not confirm
+                    // — it has no release point, so every release-coord
+                    // consumer (rowTap, pointerStrip, footer pills)
+                    // sees the same -1 a drag-suppressed release gets.
+                    if (e.type == InputQueue.Type.CANCEL)
+                        suppressReleaseTap = true
                     // a moved drag scrolls — its release must not also
                     // fire the row tap under the finger.
                     if (menuDragPrevY >= 0) {
