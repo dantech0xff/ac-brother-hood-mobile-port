@@ -92,12 +92,15 @@ class Slice328Test {
         assertEquals("" to "BACK", w.menuFooter() as Pair<*, *>)
     }
 
-    // -- bv4 overflow scroll ----------------------------------------------
+    // -- overflow scroll (defensive affordance) ---------------------------
+    // With the verbatim split only bv==4 menus go two-column — those fit
+    // (8 rows → 2×4) — so no shipped menu overflows; the machinery is
+    // exercised here on an artificial tall single-column menu.
 
     @Test
-    fun `bv4 options menu overflows the canvas`() {
+    fun `tall single-column menu overflows the canvas`() {
         val w = world(aj = 0)
-        w.stateL(3); w.kBv = 4; w.kEy = 8
+        w.stateL(3); w.kBv = 0; w.kEy = 8
         assertTrue(w.menuScrollMax() > 0,
                    "8 single-column rows pass 235px — scroll needed")
     }
@@ -105,7 +108,7 @@ class Slice328Test {
     @Test
     fun `menuScrollDy shifts row rects and clamps at max`() {
         val w = world(aj = 0)
-        w.stateL(3); w.kBv = 4; w.kEy = 8
+        w.stateL(3); w.kBv = 0; w.kEy = 8
         val base = w.menuRowRects().map { it[1] }
         val max = w.menuScrollMax()
         w.menuScrollDy = max

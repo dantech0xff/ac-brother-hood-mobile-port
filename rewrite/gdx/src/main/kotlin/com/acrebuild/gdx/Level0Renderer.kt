@@ -662,6 +662,16 @@ class Level0Renderer {
 
     /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
      *  rotated `white` quad (screen-space y-down → rotate by −dy). */
+    /** jC states whose screen proc runs `f(false)` — the clip-97 anim-1
+     *  light-gradient `A[1]` backdrop (k.java:7940-7947 + per-case reach:
+     *  jc1 L500, jc2 L225, jc3 L253, jc4 F()→a(int,String), jc6 L178,
+     *  jc10 ag() :8149, jc15 L480→M()→a(int,String), jc19 L104, jc20
+     *  L122, jc22 ah() :8189, jc23/28 ae() :7950, jc25 L481, jc29 L510,
+     *  jc30 af() :7992, jc31 L466. NOT jc5/9/14/17/24 — those draw
+     *  `b(true)`/`b(false)` (world) or a dim overlay instead). */
+    private val MENU_BACKDROP_STATES = intArrayOf(
+        1, 2, 3, 4, 6, 10, 15, 19, 20, 22, 23, 25, 28, 29, 30, 31)
+
     private fun drawLine(x0: Int, y0: Int, x1: Int, y1: Int, argb: Int) {
         val dx = x1 - x0; val dy = y1 - y0
         if (dx == 0 && dy == 0) { fillAr(x0, y0, 1, 1, argb); return }
@@ -1097,7 +1107,7 @@ class Level0Renderer {
                 (world.jG % 10) > 5) {
                 drawFrame(12, 1, 0, i14 + 86, i9 + (i4 shr 1) - 7, 0)
             }
-            if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
+            if ((world.kBv == 4 && world.jC != 14) || world.jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {
@@ -1358,13 +1368,11 @@ class Level0Renderer {
         for (i32 in 0 until world.drawCount) {
             val e = world.drawList[i32]!!
             if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(world, e.ad!!, camX, camY)
-            if (e.ax == 21 && e.S == 1 && e.ad != null) {
-                if (world.kC == null || world.dlgU != 9) e.ad!!.P = e.ad!!.P and 64.inv()
-                e.ad!!.advanceAnim()
-            }
+            // `s()` advances live in drawStylePass (once per tick,
+            // k.java:3696-3745) — never per rendered frame.
             drawEntity(world, e, camX, camY)
             if (e.ad != null && (e.ax == 76 || e.ax == 29)) {
-                drawEntity(world, e.ad!!, camX, camY); e.ad!!.advanceAnim()
+                drawEntity(world, e.ad!!, camX, camY)
             }
             // `iVar2.ag() → iVar2.ah()` (k.java:2920-2921, proven): the
             // per-entity ghost-trail draw, after the entity's own blit.
@@ -1372,7 +1380,7 @@ class Level0Renderer {
             val kE = world.kE
             if (e.ax == 0 && kE != null && (kE.P and 128) == 0 &&
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
-                drawEntity(world, kE, camX, camY); kE.advanceAnim()
+                drawEntity(world, kE, camX, camY)
             }
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
             // `i.ad()` draws inline in the entity pass — the descriptor
@@ -1760,6 +1768,17 @@ class Level0Renderer {
             if (world.kFS >= 0)                               // fS tip (:1037)
                 drawText(world.tipStr, 390, 40, 10, pack = 92)
         }
+
+        // `f(false)` (k.java:7940-7947, proven): `A[1].a(cd,1,0,0,...)` —
+        // the pack-2 clip-1 anim-1 light-gradient backdrop drawn at the
+        // head of every menu-state screen proc (jc14/19/20/24/25/29 in
+        // `a()`, jc15 via `a(int,String)`, jc17/22/23/28/30 via
+        // ag/ah/ae/af/G). Opaque — replaces whatever the world pass left.
+        if (world.jC in MENU_BACKDROP_STATES) drawFrame(97, 1, 0, 0, 0, 0)
+        // jc2 main menu — L225 also blits `A[1].a(cd,3,0,200,4,0,0,0)`
+        // (k.java:1322): the clip-97 anim-3 88×34 crest ornament centred
+        // above the panel.
+        if (world.jC == 2) drawFrame(97, 3, 0, 200, 4, 0, 0)
 
         // menu screens — k.L462/Q() (k.java:1108-1138, :6218-6227,
         // :5903-6150, proven): `b(x,y,w,z2,z3)` panel + `bW` prompt/title +

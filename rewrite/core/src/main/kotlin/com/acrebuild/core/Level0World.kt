@@ -1558,12 +1558,7 @@ class Level0World(
               "UNDER LICENSE FROM UBISOFT ENTERTAINMENT. SOFTWARE © 2010 " +
               "GAMELOFT. ALL RIGHTS RESERVED. GAMELOFT AND THE GAMELOFT " +
               "LOGO ARE TRADEMARKS OF GAMELOFT IN THE US AND/OR OTHER " +
-              "COUNTRIES.",
-        104 to "AC BROTHERHOOD", 105 to "PLAYER LIST",
-        106 to "EZIO", 107 to "EXECUTIONER", 108 to "DOCTOR",
-        109 to "NOBLEMAN", 111 to "CHECKPOINT", 113 to "ACHIEVEMENTS",
-        117 to "NEW GAME",
-        121 to "THE GAME DATA HAS BEEN DELETED.", 123 to "CONTROL STYLE")
+              "COUNTRIES.")
     /** `d(0,n)` = `bU[n]` (k.java:486, proven). */
     fun d0(n: Int): String? = bU[n]
 
@@ -2286,10 +2281,12 @@ class Level0World(
      *  the visibility arms — `(P&128)==0 || ax==10 || ax==51` gate;
      *  `aw==205 && S==34` force-draw; `v()`-in-play + `bh3||ay==-1` gate
      *  (ax14 `S==38` → `az=301` + `ae` child when `(ae.P&128)==0` →
-     *  `d(ae)` + `ae.s()`); else `P&16` arms: ax15 `S==9||S==10`, ax9
-     *  `S==5`, ax14 `S==74`, ax66. Player appended last via the same
-     *  `aS` block. */
-    fun buildDrawList() {
+     *  `d(ae)` + `ae.s()` — the NPC's linked FX steps once per tick too;
+     *  `advanceLinkedFx` mirrors that `s()` only on the tick-side call —
+     *  the renderer's per-frame call must never advance); else `P&16`
+     *  arms: ax15 `S==9||S==10`, ax9 `S==5`, ax14 `S==74`, ax66. Player
+     *  appended last via the same `aS` block. */
+    fun buildDrawList(advanceLinkedFx: Boolean = false) {
         drawCount = 0
         for (i31 in npcs.indices) {
             val e = npcs[i31]
@@ -2302,7 +2299,11 @@ class Level0World(
                         drawInsert(e)
                         val ae = e.ae
                         if (ae != null && (ae.P and 128) == 0) {
-                            drawInsert(ae); ae.advanceAnim()
+                            drawInsert(ae)
+                            if (advanceLinkedFx)       // `d(r018.ae); r018.ae.s()`
+                                ae.advanceAnim()       // (k.java:3659-3666) — every
+                                                     // visible NPC's linked FX,
+                                                     // not only the player's
                         }
                     }
                 } else if ((e.P and 16) != 0) {
@@ -2319,35 +2320,58 @@ class Level0World(
             drawInsert(player)
             val ae = player.ae
             if (ae != null && (ae.P and 128) == 0) {
-                drawInsert(ae); ae.advanceAnim()
+                drawInsert(ae)
             }
         }
     }
 
     /**
-     * `k.I()`'s SECOND `bd[]` pass (k.java:10032-10150, proven): after
-     * `buildDrawList`, each entry gets `ad.F()` (excluding ax76/ax29)
-     * then `F()`; the player-side `ae` link was already handled inside
-     * the build itself. While `E.P&128==0` and (`j.c==8` or the
-     * `j.c==21 && u==8` dialog overlay) the `k.E` companion also gets
-     * `F()` + `s()`. Runs once per tick — the FX primitive collectors
-     * drain at render; `i.e--`/`g.t--`/counters/sparkles all live on
-     * this path per the source.
+     * `b(boolean)` draw-pass FX/advance mirror (k.java:3696-3745, proven):
+     * runs once per tick — the original's draw loop runs once per game
+     * loop (`repaint();serviceRepaints()` then the sleep pad, j.java
+     * :206-213), so every `s()` below fires ~once per 62ms, NOT per
+     * rendered frame. The render loop must never advance these anims
+     * itself — doing so plays `k.E`/ad/ae clips ~4x too fast (the
+     * choppy-slash artifact).
+     *   - `aS.P&128==0 && aS.ae.P&128==0` → `aS.ae.s()` (player's `ae`)
+     *   - per bd[] entry: `ad.F()` (non-76/29 children); ax21 `S==1` →
+     *     `C==null` clears `ad.P&=-65` and `ad.s()`, `C!=null` only when
+     *     `u==9`; `F()`; ax76/29 `ad.F()`+`ad.s()`; ax0 → `k.E` `F()`+`s()`
+     *     gated `E.P&128==0 && (j.c==8 || (j.c==21 && u==8))`.
      */
     fun drawStylePass() {
         fxLines.clear(); fxRects.clear(); fxOutlines.clear()
         fxPrompts.clear()
         fxDots.clear(); fxBubbles.clear(); fxBubbleText.clear()
-        buildDrawList()
+        buildDrawList(advanceLinkedFx = true)          // tick-side `s()` mirror
+        if ((player.P and 128) == 0) {                   // L224-L230: aS.ae.s()
+            val ae = player.ae
+            if (ae != null && (ae.P and 128) == 0) ae.advanceAnim()
+        }
         for (i in 0 until drawCount) {
             val e = drawList[i] ?: break
             e.ad?.let { if (it.ax != 76 && it.ax != 29) it.drawStyleF(this) }
+            if (e.ax == 21 && e.S == 1) {                // L243-L251
+                val ad = e.ad
+                if (ad != null && (kC == null || dlgU == 9)) {
+                    if (kC == null) ad.P = ad.P and 64.inv()
+                    ad.advanceAnim()
+                }
+            }
             e.drawStyleF(this)
-        }
-        if ((player.P and 128) == 0 &&
-            (jC == 8 || (jC == 21 && dlgU == 8))) {
-            kE?.drawStyleF(this)
-            kE?.advanceAnim()
+            e.ad?.let { ad ->                            // L257-L258
+                if (e.ax == 76 || e.ax == 29) {
+                    ad.drawStyleF(this); ad.advanceAnim()
+                }
+            }
+            if (e.ax == 0) {                             // L263-L276: k.E
+                val ke = kE
+                if (ke != null && (ke.P and 128) == 0 &&
+                    (jC == 8 || (jC == 21 && dlgU == 8))) {
+                    ke.drawStyleF(this)
+                    ke.advanceAnim()
+                }
+            }
         }
     }
 
@@ -3019,7 +3043,8 @@ class Level0World(
         // the b() draw loop hits every row in order and each hit writes
         // `bw` (k.java:7699-7704) — where two-column rects overlap (col-2
         // starts at x=206 but col-1 rows run 214 wide on d(93,…,214)
-        // panels, so rows overlap x=206..307) the LAST drawn row wins.
+        // panels, so rows overlap x=206..307) the LAST drawn row wins —
+        // single-column menus just stack with no x overlap.
         var hit = -1
         for (i in rects.indices) {
             val r = rects[i]
@@ -3042,13 +3067,17 @@ class Level0World(
      *  `b(93,67,214,true,true)` / bv4 `b(93,86,214,true)` / else
      *  `b(93,30,214,true)` (:1127-1135);
      *  jc2 `d(93,45,214)` (case-2 arm); jc3 + jc19 `d(14,47,180)`
-     *  (:833, :1180); jc23/28 via ae() `d(93,120,214)` (:6221); jc29
-     *  `d(93,86,214)` (:1440); else (93,67,214) — proven coverage. */
+     *  (:833, :1180 — both become (93,47,214) via the arg-drop below);
+     *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
+     *  (:1440); else (93,67,214) — proven coverage. */
+    /** `d(r6,r7,r8)` → `b(r6,r7,r8,false,false)` → `b(93,r7,214,true,
+     *  false)` (k.java:7570-7576, proven): the 4-arg `b` DROPS the first
+     *  and third args — every `d()` panel is always (93, r7, 214). */
     fun menuPanelRect(): IntArray = when (jC) {
         2 -> intArrayOf(93, 45, 214)
-        3 -> intArrayOf(14, 47, 180)    // `d(14,47,180)` (k.java:833)
+        3 -> intArrayOf(93, 47, 214)    // `d(14,47,180)` → (93,47,214)
         14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
-        19 -> intArrayOf(14, 47, 180)
+        19 -> intArrayOf(93, 47, 214)   // `d(14,47,180)` → (93,47,214)
         23, 28 -> intArrayOf(93, 120, 214)
         29 -> intArrayOf(93, 86, 214)
         30 -> intArrayOf(93, 46, 214)   // af() `d(93,46,214)` (:6254)
@@ -3086,17 +3115,19 @@ class Level0World(
         else i + (i3 shr 1)
     /** Row rect list mirroring b()'s `i9` walk: `i9 = y+10` (+40 under
      *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
-     *  center split `(bv!=4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
-     *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
+     *  center split `(bv==4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
+     *  moves the rest to x=206 restarting at `i12` — L153
+     *  (`bv != 4 → goto L157`, `j.c == 14 → L157`) skips the split, so
+     *  ONLY bv==4 menus (and jc19) lay their rows in two columns
+     *  (:7706-7720, proven); every other menu stacks vertically. */
     /** Port-added touch-drag scroll for menus whose row stack
-     *  overflows the 240px canvas — shipped quirk: the orig lays
-     *  eA[4]'s 8 option rows in ONE column (`(bv!=4&&j.c!=14)` excludes
-     *  them from the two-column split, k.java:5942-5947 proven) so rows
-     *  5-7 land below the canvas and are keypad-only; the touch-only
-     *  port needs a scroll affordance to reach ACHIEVEMENTS/ABOUT/RESET.
-     *  `menuScrollDy` is subtracted from the `i9` walk in both
-     *  `menuRowRects` and the renderer's panel draw; 0 keeps the
-     *  verbatim layout. */
+     *  overflows the 240px canvas — defensive affordance: with the
+     *  verbatim split no shipped menu overflows (eA[4]'s 8 rows go
+     *  2×4, everything else ≤6 rows), but the drag machinery stays
+     *  armed only while `menuScrollMax() > 0` so it never eats a tap
+     *  on a non-scrolling menu. `menuScrollDy` is subtracted from
+     *  the `i9` walk in both `menuRowRects` and the renderer's panel
+     *  draw; 0 keeps the verbatim layout. */
     var menuScrollDy = 0
     /** y of the last MOVE while a panel drag is active (-1 = none). */
     private var menuDragPrevY = -1
@@ -3120,7 +3151,7 @@ class Level0World(
             val i4 = menuI4(i13)
             if (i13 == 1 && jC == 2) i9 += 13
             if (i9 + i4 > bottom) bottom = i9 + i4
-            if ((kBv != 4 && jC != 14) || jC == 19) {
+            if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) i9 = i12 - (i4 + 3)
@@ -3143,7 +3174,7 @@ class Level0World(
             val i4 = menuI4(i13)
             if (i13 == 1 && jC == 2) i9 += 13
             out.add(intArrayOf(i, i9, i3, i4))
-            if ((kBv != 4 && jC != 14) || jC == 19) {
+            if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {

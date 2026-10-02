@@ -9356,11 +9356,11 @@ class Slice78Test {
         val w = world()
         w.stateL(12)
         val npcCount = w.npcs.size
-        // verbatim b() layout: 2-row dialogs split columns — NO sits in
-        // the right-column rect (206,117,214,30) (k.java:5962-6000, proven)
+        // verbatim b() layout: the 2-row dialog stacks — NO is the
+        // second rect (93,150,214,30) (k.java:7706-7720, proven)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)                // W() teardown + l(2)
         assertEquals(-1, w.kBx)
         assertTrue(w.npcs.size < npcCount)   // teardown cleared entities
@@ -9369,7 +9369,7 @@ class Slice78Test {
     @Test fun `YES row tap dispatches restart directly`() {
         val w = world()
         w.stateL(12)
-        // YES is the left-column rect (93,117,214,30)
+        // YES is the top rect (93,117,214,30)
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
             InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
@@ -9421,11 +9421,11 @@ class Slice78Test {
         assertEquals("CONTINUE", w.menuRows()[0].first)
     }
 
-    @Test fun `Y() falls back to NEW GAME id117 with no save`() {
+    @Test fun `Y() falls back to QUICK PLAY id117 with no save`() {
         val w = world()
         w.stateL(2)
         assertEquals(117, w.kEA[0][0])
-        assertEquals("NEW GAME", w.menuRows()[0].first)
+        assertEquals("QUICK PLAY", w.menuRows()[0].first)
     }
 
     @Test fun `MAIN MENU item pushes state and YES pops it back`() {
@@ -10136,14 +10136,16 @@ class Slice84Test {
  *  (k.java:5868-6150 + a.java, proven). */
 class Slice86Test {
 
-    @Test fun `two rows split columns side by side`() {
+    @Test fun `two rows stack vertically — bv3 skips the col split`() {
         val w = world()
         w.stateL(12)
         val r = w.menuRowRects()
         assertEquals(2, r.size)
-        // verbatim: YES left column, NO right column, SAME top row
+        // verbatim: jc12 arms eC=25 + K(3) (k.java:2287-2289) — bv!=4
+        // takes `goto L157` at L153 (:7706-7708) so the x=206 split
+        // never runs; YES/NO stack on the row pitch (30 + 3).
         assertEquals(listOf(93, 117, 214, 30), r[0].toList())
-        assertEquals(listOf(206, 117, 214, 30), r[1].toList())
+        assertEquals(listOf(93, 150, 214, 30), r[1].toList())
     }
 
     @Test fun `jc19 rows render LEVEL n`() {
@@ -10165,18 +10167,16 @@ class Slice86Test {
     @Test fun `menuRowAt hits the verbatim rects`() {
         val w = world()
         w.stateL(12)
-        // release inside right column → row 1
-        w.lastTouchX = 350; w.lastTouchY = 120
-        assertEquals(1, w.menuRowAt(120))
-        // inside left column → row 0; the two columns overlap at
-        // x=206..307 (col-1 rows are 214 wide, col-2 starts at x=206) —
-        // the draw loop's per-row `c()` hit writes bw each pass, so the
-        // LAST drawn row wins on the overlap.
-        w.lastTouchX = 150; w.lastTouchY = 120
-        assertEquals(0, w.menuRowAt(120))
-        w.lastTouchX = 250; w.lastTouchY = 120
-        assertEquals(1, w.menuRowAt(120))
+        // YES row (93,117,214,30), NO row (93,150,214,30) — stacked.
+        w.lastTouchX = 150; w.lastTouchY = 132
+        assertEquals(0, w.menuRowAt(132))
+        w.lastTouchX = 150; w.lastTouchY = 165
+        assertEquals(1, w.menuRowAt(165))
+        // past the 214-wide row right edge → miss
+        w.lastTouchX = 350; w.lastTouchY = 165
+        assertEquals(-1, w.menuRowAt(165))
         // above the panel → miss
+        w.lastTouchX = 150; w.lastTouchY = 100
         w.lastTouchX = 150; w.lastTouchY = 100
         assertEquals(-1, w.menuRowAt(100))
         w.lastTouchX = -1; w.lastTouchY = -1
@@ -10252,7 +10252,7 @@ class Slice87Test {
         assertEquals(listOf(93, 30, 214), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ3())
         w.stateL(19)
-        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
+        assertEquals(listOf(93, 47, 214), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ2())                     // d() → z2=false
     }
 
@@ -10335,8 +10335,8 @@ class Slice88Test {
         assertEquals(12, w.jC)
         // next frames dispatch normally (NO row → menu)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 
@@ -10349,8 +10349,8 @@ class Slice88Test {
         assertEquals(0, w.kJT)
         assertEquals(12, w.jC)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 }
@@ -12089,17 +12089,16 @@ class Slice108Test {
         assertEquals(18, w.jC)
     }
 
-    @Test fun `jc23 column overlap is last-wins — NO's drawn half picks NO`() {
+    @Test fun `jc23 YES NO rows stack vertically — tap NO picks NO`() {
         val w = world()
         w.stateL(23)
         w.kBE = true; w.kBF = true            // pre-set to observe the clear
-        // YES (93..307) and NO (206..420) rects overlap at x=206..307 —
-        // the draw loop's per-row `c()` hit writes bw each pass, so the
-        // LAST drawn row (NO) wins on the overlap.
+        // bv=3 → no col split: YES (93,130,214,30), NO (93,163,214,30).
+        // Tap center of NO → bw=1 → audio off.
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 250, 145),
-            InputQueue.Event(1, InputQueue.Type.UP, 250, 145)))
-        assertFalse(w.kBE); assertFalse(w.kBF, "overlap → bw=1 → audio off")
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 178),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 178)))
+        assertFalse(w.kBE); assertFalse(w.kBF, "NO row → bw=1 → audio off")
         assertEquals(18, w.jC)
     }
 }
@@ -12568,8 +12567,9 @@ class Slice115Test {
         val w = world()
         armMissionSelect(w)
         w.tick(emptyList())
-        // panel d(14,47,180): j.c==19 keeps the two-column split
-        // (k.java:5942-5947) — rows 0-3 at x=14, rows 4-7 at x=206,
+        // panel d(14,47,180) → (93,47,214) via the arg-drop: j.c==19
+        // keeps the two-column split (k.java:5942-5947) — rows 0-3 at
+        // x=93, rows 4-7 at x=206,
         // each 30px from y=57. Tap row 5 at (250,100): the draw-loop
         // hit-test `c(i,i9,i3,i4)` → `bw=i13; E(32)` (:7699-7704) →
         // the case-19 `v(327712)` confirms with bw=5.
@@ -21504,6 +21504,83 @@ class Slice239Test {
         assertEquals(99, e.az, "entry's own F() ran via the pass")
         assertEquals(-1, marker.remapTable,
             "ax29 ad-link is F()-excluded — remapTable untouched")
+    }
+
+    // -- slice 340 — draw-pass `s()` runs once per TICK, never per
+    //    rendered frame (k.java:3696-3745 + the j.java:206-213 loop):
+    //    advancing `k.E`/`ad`/`ae` clips at ~60fps played them ~4x too
+    //    fast — the choppy-slash artifact. `drawStylePass()` is the
+    //    tick-side mirror; `buildDrawList()` (the render-side call)
+    //    must never advance. `a` counts advanceAnim invocations.
+
+    @Test fun `drawStylePass advances kE once per tick, builder never`() {
+        val w = world()
+        val ke = w.kE ?: return                      // clip46 in world()
+        ke.P = ke.P and -129                         // E.P&128==0 gate
+        ke.S = 0; ke.T = 0; ke.U = 0; ke.a = 0
+        w.drawStylePass()
+        assertEquals(1, ke.a, "k.E s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ke.a, "render-side builder never advances")
+        w.drawStylePass()
+        assertEquals(2, ke.a)
+    }
+
+    @Test fun `drawStylePass advances player ae once, builder never`() {
+        val w = world()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        w.player.ae = ae
+        w.player.P = w.player.P and -129             // aS.P&128==0 gate
+        w.drawStylePass()
+        assertEquals(1, ae.a, "aS.ae s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ae.a, "builder never advances")
+    }
+
+    // -- slice 342 — review finding: the in-play arm also steps each
+    //    visible NPC's linked `ae` (k.java:3659-3666 `d(r018.ae);
+    //    r018.ae.s()`) — not just the player's. Without it a visible
+    //    NPC-owned FX anim (e.g. a wisp trail) steps ~4x too slow.
+
+    @Test fun `drawStylePass advances a visible NPC ae once, builder never`() {
+        val w = world()
+        val e = ent(11, w)
+        e.Z[8] = 888                                 // ax11 in-play
+        e.setPositionPx(w.kO + 200, w.kP + 120)
+        e.refreshBoxes()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        e.ae = ae
+        w.drawStylePass()
+        assertEquals(1, ae.a, "visible NPC ae s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ae.a, "render-side builder never advances")
+        w.drawStylePass()
+        assertEquals(2, ae.a)
+    }
+
+    @Test fun `drawStylePass skips ae advance for an off-play NPC`() {
+        val w = world()
+        val e = ent(11, w)
+        e.setPositionPx(w.kO - 4000, w.kP - 4000)    // off camera → v() false
+        e.refreshBoxes()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        e.ae = ae
+        w.drawStylePass()
+        assertEquals(0, ae.a, "off-play NPC ae never enters the arm")
+    }
+
+    // -- slice 341 — `bU` mapOf held a duplicate-key tail block; Kotlin
+    //    last-wins clobbered 117→"NEW GAME" (should be "QUICK PLAY" per
+    //    pack-14 entry-000 idx117) and 123→"CONTROL STYLE" (should be
+    //    "MODE"). jc2's first row was mislabelled. Pin the verbatim
+    //    values so a stray second block can't regress them.
+
+    @Test fun `bU row labels match pack-14 entry-000 verbatim`() {
+        val w = world()
+        assertEquals("QUICK PLAY", w.d0(117))
+        assertEquals("MODE", w.d0(123))
+        assertEquals("NEW GAME", w.d0(1))
+        assertEquals("THE GAME DATA HAS BEEN DELETED.", w.d0(121))
     }
 }
 
