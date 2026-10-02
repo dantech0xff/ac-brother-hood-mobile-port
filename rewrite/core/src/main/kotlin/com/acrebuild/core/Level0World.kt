@@ -2988,9 +2988,10 @@ class Level0World(
             kFE = 255; kFo = 3; bannerK(4); kBw = -1; stateL(3); return
         }
         // ---- confirm arm: `v(327712)` ---------------------------------
-        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        val rowTap = if (pressY >= 0 || lastTouchX >= 0) menuRowAt(pressY) else -1
         if (pad.v(Pad.M_CONTEXT) || rowTap >= 0) {
             kCb = true
+            if (rowTap >= 0) kBw = rowTap            // row hit → `bw=i13`+E(32)
             if (kBv == 2) {
                 kAu = if (kBw < 0) 0 else kBw
                 z(23)
@@ -2998,7 +2999,6 @@ class Level0World(
                 kBA[16] = 0                          // a(bA,16,short 0) — verbatim
                 saveFlush(); kFF = 20; stateL(30); return
             }
-            if (rowTap >= 0) kBw = rowTap            // row hit → `bw=i13`+E(32)
             if (kBw == -1) { kBw = 0; return }
             val iM = menuM(kBv, kBw)
             if (kEA[kBv][iM] != 83 && kEA[kBv][iM] != 84) z(23)
@@ -3629,7 +3629,7 @@ class Level0World(
         // `c(i,i9,i3,i4)` row hit inside d()'s draw loop → `bw=i13;
         // E(32)` (k.java:7699-7704, proven): the row tap selects AND
         // confirms — L104's `v(327712)` then fires with bw=the tap.
-        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        val rowTap = if (pressY >= 0 || lastTouchX >= 0) menuRowAt(pressY) else -1
         if (pad.v(327712) || rowTap >= 0) {          // M_PAUSE|M_CONTEXT
             if (rowTap >= 0) kBw = rowTap
             if (kBw == -1) kBw = 0
@@ -4010,7 +4010,7 @@ class Level0World(
         footerQ()
         // `v(327712)` = M_CONTEXT ∪ M_PAUSE (262144+65536+32) OR a tap
         // on a row (draw-loop E(32) arm — rowTap covers it, proven).
-        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        val rowTap = if (pressY >= 0 || lastTouchX >= 0) menuRowAt(pressY) else -1
         if (pad.v(327712) || rowTap >= 0) {           // `v(327712)` (:6269)
             if (rowTap in 0 until kFQ) { kBw = rowTap; kBL = rowTap }
             if (kFF == 20) stateL(20) else stateL(9)
@@ -4087,7 +4087,7 @@ class Level0World(
             // tap must surface as `bw` here rather than go through
             // menuQ's menuItem dispatch.
             23 -> {
-                val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+                val rowTap = if (pressY >= 0 || lastTouchX >= 0) menuRowAt(pressY) else -1
                 if (!pad.v(327712) && rowTap < 0) menuAe(pressY)
                 else {
                     if (rowTap >= 0) kBw = rowTap
@@ -4923,6 +4923,12 @@ class Level0World(
                                                                  // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
+                    // A cancelled gesture un-holds but must not confirm
+                    // — it has no release point, so every release-coord
+                    // consumer (rowTap, pointerStrip, footer pills)
+                    // sees the same -1 a drag-suppressed release gets.
+                    if (e.type == InputQueue.Type.CANCEL)
+                        suppressReleaseTap = true
                     // a moved drag scrolls — its release must not also
                     // fire the row tap under the finger.
                     if (menuDragPrevY >= 0) {
