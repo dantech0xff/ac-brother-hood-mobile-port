@@ -12077,6 +12077,18 @@ class Slice108Test {
         assertEquals(18, w.jC, "confirm → l(18)")
     }
 
+    @Test fun `jc23 YES row tap spanning two ticks still confirms on release`() {
+        val w = world()
+        w.stateL(23)
+        w.kBE = false; w.kBF = false
+        // A tap that releases on a later tick than its DOWN: the arm
+        // must hit-test the release point on the UP tick as well.
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 150, 145)))
+        w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, 150, 145)))
+        assertTrue(w.kBE && w.kBF, "YES row release → bw=0 → bE=bF=true")
+        assertEquals(18, w.jC)
+    }
+
     @Test fun `jc23 column overlap is last-wins — NO's drawn half picks NO`() {
         val w = world()
         w.stateL(23)
@@ -12567,6 +12579,20 @@ class Slice115Test {
         assertEquals(5, w.kAj, "row 5 tap → bw=5 → aj=5 (:1186)")
         assertEquals(19, w.kFF, "fF=19 return marker")
         assertEquals(30, w.jC, "eg[aj] → l(30)")
+    }
+
+    @Test fun `jc19 row tap spanning two ticks still confirms on release`() {
+        val w = world()
+        armMissionSelect(w)
+        w.tick(emptyList())
+        // A real tap (~50-150ms) straddles the 62ms tick boundary — the
+        // rowTap arm hit-tests the release point so it must run on the
+        // UP tick too, not only on the DOWN tick.
+        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 250, 100)))
+        w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, 250, 100)))
+        assertEquals(5, w.kAj, "row 5 release → bw=5 → aj=5")
+        assertEquals(19, w.kFF)
+        assertEquals(30, w.jC)
     }
 
     @Test fun `jc19 rows are eA-bv with city sub-labels`() {
