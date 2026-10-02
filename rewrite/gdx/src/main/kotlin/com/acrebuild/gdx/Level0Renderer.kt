@@ -1107,7 +1107,7 @@ class Level0Renderer {
                 (world.jG % 10) > 5) {
                 drawFrame(12, 1, 0, i14 + 86, i9 + (i4 shr 1) - 7, 0)
             }
-            if ((world.kBv != 4 && world.jC != 14) || world.jC == 19) {
+            if ((world.kBv == 4 && world.jC != 14) || world.jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {

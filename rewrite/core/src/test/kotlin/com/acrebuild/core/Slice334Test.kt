@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Slice 334 — Devin Review fixes on the bv4 scroll affordance.
+ * Slice 334 — Devin Review fixes on the menu scroll affordance.
  *
  * The port-added `menuScrollDy` drag had two real defects (both
  * port-side, the J2ME original had no touch scroll):
@@ -21,7 +21,9 @@ class Slice334Test {
 
     private fun scrollableMenu(): Level0World {
         val w = world(aj = 0)
-        w.stateL(3); w.kBv = 4; w.kEy = 8
+        // artificial tall single-column menu — verbatim bv==4 splits
+        // 2-column so it can't overflow; an 8-row bv!=4 stack does.
+        w.stateL(3); w.kBv = 0; w.kEy = 8
         assertTrue(w.menuScrollMax() > 0, "fixture must overflow the canvas")
         return w
     }
@@ -58,7 +60,9 @@ class Slice334Test {
         val tx = r1[0] + 5; val ty = r1[1] + 2
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, tx, ty),
                       InputQueue.Event(1, InputQueue.Type.UP, tx, ty)))
-        assertEquals(1, w.kBw, "stationary tap selects row 1")
+        // no drag → release point survives suppression → row-1's
+        // menuItem fires (kBv=0 row 1 = eA[0][1] = NEW GAME → l(29))
+        assertEquals(29, w.jC, "stationary tap resolves to the row's item")
     }
 
     @Test

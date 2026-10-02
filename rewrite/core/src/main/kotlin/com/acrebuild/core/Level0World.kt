@@ -3037,7 +3037,8 @@ class Level0World(
         // the b() draw loop hits every row in order and each hit writes
         // `bw` (k.java:7699-7704) — where two-column rects overlap (col-2
         // starts at x=206 but col-1 rows run 214 wide on d(93,…,214)
-        // panels, so rows overlap x=206..307) the LAST drawn row wins.
+        // panels, so rows overlap x=206..307) the LAST drawn row wins —
+        // single-column menus just stack with no x overlap.
         var hit = -1
         for (i in rects.indices) {
             val r = rects[i]
@@ -3108,17 +3109,19 @@ class Level0World(
         else i + (i3 shr 1)
     /** Row rect list mirroring b()'s `i9` walk: `i9 = y+10` (+40 under
      *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
-     *  center split `(bv!=4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
-     *  moves the rest to x=206 restarting at `i12` (:5977-6148). */
+     *  center split `(bv==4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
+     *  moves the rest to x=206 restarting at `i12` — L153
+     *  (`bv != 4 → goto L157`, `j.c == 14 → L157`) skips the split, so
+     *  ONLY bv==4 menus (and jc19) lay their rows in two columns
+     *  (:7706-7720, proven); every other menu stacks vertically. */
     /** Port-added touch-drag scroll for menus whose row stack
-     *  overflows the 240px canvas — shipped quirk: the orig lays
-     *  eA[4]'s 8 option rows in ONE column (`(bv!=4&&j.c!=14)` excludes
-     *  them from the two-column split, k.java:5942-5947 proven) so rows
-     *  5-7 land below the canvas and are keypad-only; the touch-only
-     *  port needs a scroll affordance to reach ACHIEVEMENTS/ABOUT/RESET.
-     *  `menuScrollDy` is subtracted from the `i9` walk in both
-     *  `menuRowRects` and the renderer's panel draw; 0 keeps the
-     *  verbatim layout. */
+     *  overflows the 240px canvas — defensive affordance: with the
+     *  verbatim split no shipped menu overflows (eA[4]'s 8 rows go
+     *  2×4, everything else ≤6 rows), but the drag machinery stays
+     *  armed only while `menuScrollMax() > 0` so it never eats a tap
+     *  on a non-scrolling menu. `menuScrollDy` is subtracted from
+     *  the `i9` walk in both `menuRowRects` and the renderer's panel
+     *  draw; 0 keeps the verbatim layout. */
     var menuScrollDy = 0
     /** y of the last MOVE while a panel drag is active (-1 = none). */
     private var menuDragPrevY = -1
@@ -3142,7 +3145,7 @@ class Level0World(
             val i4 = menuI4(i13)
             if (i13 == 1 && jC == 2) i9 += 13
             if (i9 + i4 > bottom) bottom = i9 + i4
-            if ((kBv != 4 && jC != 14) || jC == 19) {
+            if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) i9 = i12 - (i4 + 3)
@@ -3165,7 +3168,7 @@ class Level0World(
             val i4 = menuI4(i13)
             if (i13 == 1 && jC == 2) i9 += 13
             out.add(intArrayOf(i, i9, i3, i4))
-            if ((kBv != 4 && jC != 14) || jC == 19) {
+            if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {

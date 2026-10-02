@@ -9356,11 +9356,11 @@ class Slice78Test {
         val w = world()
         w.stateL(12)
         val npcCount = w.npcs.size
-        // verbatim b() layout: 2-row dialogs split columns — NO sits in
-        // the right-column rect (206,117,214,30) (k.java:5962-6000, proven)
+        // verbatim b() layout: the 2-row dialog stacks — NO is the
+        // second rect (93,150,214,30) (k.java:7706-7720, proven)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)                // W() teardown + l(2)
         assertEquals(-1, w.kBx)
         assertTrue(w.npcs.size < npcCount)   // teardown cleared entities
@@ -9369,7 +9369,7 @@ class Slice78Test {
     @Test fun `YES row tap dispatches restart directly`() {
         val w = world()
         w.stateL(12)
-        // YES is the left-column rect (93,117,214,30)
+        // YES is the top rect (93,117,214,30)
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 150, 120),
             InputQueue.Event(1, InputQueue.Type.UP, 150, 120)))
@@ -10136,14 +10136,16 @@ class Slice84Test {
  *  (k.java:5868-6150 + a.java, proven). */
 class Slice86Test {
 
-    @Test fun `two rows split columns side by side`() {
+    @Test fun `two rows stack vertically — bv3 skips the col split`() {
         val w = world()
         w.stateL(12)
         val r = w.menuRowRects()
         assertEquals(2, r.size)
-        // verbatim: YES left column, NO right column, SAME top row
+        // verbatim: jc12 arms eC=25 + K(3) (k.java:2287-2289) — bv!=4
+        // takes `goto L157` at L153 (:7706-7708) so the x=206 split
+        // never runs; YES/NO stack on the row pitch (30 + 3).
         assertEquals(listOf(93, 117, 214, 30), r[0].toList())
-        assertEquals(listOf(206, 117, 214, 30), r[1].toList())
+        assertEquals(listOf(93, 150, 214, 30), r[1].toList())
     }
 
     @Test fun `jc19 rows render LEVEL n`() {
@@ -10165,18 +10167,16 @@ class Slice86Test {
     @Test fun `menuRowAt hits the verbatim rects`() {
         val w = world()
         w.stateL(12)
-        // release inside right column → row 1
-        w.lastTouchX = 350; w.lastTouchY = 120
-        assertEquals(1, w.menuRowAt(120))
-        // inside left column → row 0; the two columns overlap at
-        // x=206..307 (col-1 rows are 214 wide, col-2 starts at x=206) —
-        // the draw loop's per-row `c()` hit writes bw each pass, so the
-        // LAST drawn row wins on the overlap.
-        w.lastTouchX = 150; w.lastTouchY = 120
-        assertEquals(0, w.menuRowAt(120))
-        w.lastTouchX = 250; w.lastTouchY = 120
-        assertEquals(1, w.menuRowAt(120))
+        // YES row (93,117,214,30), NO row (93,150,214,30) — stacked.
+        w.lastTouchX = 150; w.lastTouchY = 132
+        assertEquals(0, w.menuRowAt(132))
+        w.lastTouchX = 150; w.lastTouchY = 165
+        assertEquals(1, w.menuRowAt(165))
+        // past the 214-wide row right edge → miss
+        w.lastTouchX = 350; w.lastTouchY = 165
+        assertEquals(-1, w.menuRowAt(165))
         // above the panel → miss
+        w.lastTouchX = 150; w.lastTouchY = 100
         w.lastTouchX = 150; w.lastTouchY = 100
         assertEquals(-1, w.menuRowAt(100))
         w.lastTouchX = -1; w.lastTouchY = -1
@@ -10335,8 +10335,8 @@ class Slice88Test {
         assertEquals(12, w.jC)
         // next frames dispatch normally (NO row → menu)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 
@@ -10349,8 +10349,8 @@ class Slice88Test {
         assertEquals(0, w.kJT)
         assertEquals(12, w.jC)
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 350, 120),
-            InputQueue.Event(1, InputQueue.Type.UP, 350, 120)))
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 }
@@ -12089,17 +12089,16 @@ class Slice108Test {
         assertEquals(18, w.jC)
     }
 
-    @Test fun `jc23 column overlap is last-wins — NO's drawn half picks NO`() {
+    @Test fun `jc23 YES NO rows stack vertically — tap NO picks NO`() {
         val w = world()
         w.stateL(23)
         w.kBE = true; w.kBF = true            // pre-set to observe the clear
-        // YES (93..307) and NO (206..420) rects overlap at x=206..307 —
-        // the draw loop's per-row `c()` hit writes bw each pass, so the
-        // LAST drawn row (NO) wins on the overlap.
+        // bv=3 → no col split: YES (93,130,214,30), NO (93,163,214,30).
+        // Tap center of NO → bw=1 → audio off.
         w.tick(listOf(
-            InputQueue.Event(0, InputQueue.Type.DOWN, 250, 145),
-            InputQueue.Event(1, InputQueue.Type.UP, 250, 145)))
-        assertFalse(w.kBE); assertFalse(w.kBF, "overlap → bw=1 → audio off")
+            InputQueue.Event(0, InputQueue.Type.DOWN, 200, 178),
+            InputQueue.Event(1, InputQueue.Type.UP, 200, 178)))
+        assertFalse(w.kBE); assertFalse(w.kBF, "NO row → bw=1 → audio off")
         assertEquals(18, w.jC)
     }
 }
