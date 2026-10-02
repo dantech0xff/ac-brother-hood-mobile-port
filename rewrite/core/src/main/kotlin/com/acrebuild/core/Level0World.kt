@@ -3619,10 +3619,15 @@ class Level0World(
      *  `v(327712)` confirm: `bw==-1→0; aj=bw; a(bA,16,0); eg[aj] →
      *  fF=19;l(30);z(23)` — `eg[]` all-true, no writer (dead lock).
      *  `v(131072)` → `l(2);z(30)`. `v(16388/33024)` → `L(da);aj=bw`. */
-    private fun menuJc19() {
+    private fun menuJc19(pressY: Int) {
         kEy = kDa
         footerQ()                                    // a(d(0,79),d(0,17)) — OK/BACK pills
-        if (pad.v(327712)) {                         // M_PAUSE|M_CONTEXT
+        // `c(i,i9,i3,i4)` row hit inside d()'s draw loop → `bw=i13;
+        // E(32)` (k.java:7699-7704, proven): the row tap selects AND
+        // confirms — L104's `v(327712)` then fires with bw=the tap.
+        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        if (pad.v(327712) || rowTap >= 0) {          // M_PAUSE|M_CONTEXT
+            if (rowTap >= 0) kBw = rowTap
             if (kBw == -1) kBw = 0
             kAj = kBw
             kBA[16] = 0                              // a(bA,16,(short)0)
@@ -4077,7 +4082,7 @@ class Level0World(
                   }
             28 -> menuAe(pressY)                     // ae() (:6204, proven)
             1 -> menuJc1()                          // case 1 (:800-811, proven)
-            19 -> menuJc19()                        // case 19 (:1178-1206, proven)
+            19 -> menuJc19(pressY)                    // case 19 (:1178-1206, proven)
             18 -> menuJc18()                         // case 18 (:1146, proven)
             30 -> menuAf(pressY)                       // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
@@ -5015,14 +5020,24 @@ class Level0World(
                             if (pad.v(Pad.M_CONTEXT)) {       // :956-961
                                 dlgD(dlgV + 1); kCz = true; z(23)
                             }
-                        } else if (!pad.v(Pad.M_CONTEXT) || dlgU == 8) {
-                            if (dlgU == 8) {                  // :962-973
-                                val x6 = kDlgX; kDlgX = x6 - 1
-                                if (x6 <= 0) {
-                                    kDlgX = 48
-                                    dlgD(dlgV + 1)
-                                    if (pad.v(Pad.M_CONTEXT)) z(23)
-                                }
+                        } else {
+                            // 3568-3601 (k.java): a press edge on
+                            // u∈{1,2,3,6,9} jumps straight to the 3604
+                            // advance; u8 instead ticks its x countdown
+                            // every advance-block tick and expiry falls
+                            // through to the same arm.
+                            var advance = false
+                            if (pad.v(Pad.M_CONTEXT) && dlgU != 8) {
+                                advance = true
+                            } else if (dlgU == 8) {
+                                val x6 = kDlgX; kDlgX = x6 - 1   // 3592-3598
+                                advance = x6 <= 0                // 3601
+                            }
+                            if (advance) {
+                                // 3604-3629: x=48; D(v+1); v(65568) → z(23)
+                                kDlgX = 48
+                                dlgD(dlgV + 1)
+                                if (pad.v(Pad.M_CONTEXT)) z(23)
                             }
                         }
                         if (dlgV == dlgW) {                   // :975-1007

@@ -4971,20 +4971,21 @@ class Slice43cTest {
         assertTrue(e.cd[0], "cd[0]=true halt")
         assertTrue(w.dialogModal, "k.b accept → k.l(21)")
         assertEquals(1, w.bO); assertEquals(3, w.bN0); assertEquals(42, w.dialogLine)
-        // case-21 u==9 semantics (k.java:944-1017): a press edge while
-        // typing only forces `bT=-1` (reveal); u==9 has NO page-advance
-        // arm, so `v<w` presses stay put — the claim script steps `v` to
-        // `w` itself, and `v==w` → `C.Z(); l(8)`.
+        // case-21 u==9 semantics (bytecode 3466-3632 — the jadx
+        // linearization hides it): a press edge while typing only
+        // forces `bT=-1` (reveal); a press once revealed falls into
+        // the SHARED advance arm `x=48; D(v+1)` (3604-3629) reached
+        // via 3568-3581 (`v(65568) && u!=8 → 3604`). With v+1==w the
+        // terminal `v==w && u==9 → C.Z(); l(8)` fires the same tick.
         w.autoDismissDialog = false
         w.kC = e
         w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
         assertTrue(w.dialogModal, "press while typing reveals, not dismisses")
         assertEquals(-1, w.dlgBT)
         w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
-        assertTrue(w.dialogModal, "u==9 v<w press is inert (:956-974)")
-        w.dlgV = w.dlgW                          // script stepped v to w
-        w.tick(emptyList())
-        assertFalse(w.dialogModal)
+        assertFalse(w.dialogModal,
+            "revealed press → D(v+1): v 0→1=w → C.Z(); l(8) (:3604/:985)")
+        assertEquals(1, w.dlgV)
         assertFalse(e.cd[0], "Z() resumed the claim")
         // the same press does not leak a gameplay edge
         assertEquals(0, w.pad.edge)
@@ -11848,14 +11849,12 @@ class Slice103Test {
         w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
         assertTrue(w.dialogModal, "press while typing reveals only (:955)")
         assertEquals(-1, w.dlgBT)
-        // u==9 has no D(v+1) arm — a revealed press while v<w does
-        // nothing (:975); reaching v==w exits via `C.Z(); l(8)` (:985-989)
-        // — no cd[1] write on this path (that's the suppressed tail only).
+        // the revealed press runs the shared advance arm `x=48; D(v+1)`
+        // (bytecode 3604-3629 — u∈{1,2,3,6,9} all reach it); v 0→1=w
+        // → `C.Z(); l(8)` on the same tick.
         w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
-        assertTrue(w.dialogModal, "u==9 v<w press is inert")
-        w.dlgV = w.dlgW
-        w.tick(emptyList())
-        assertFalse(w.dialogModal, "v==w && u==9 → C.Z(); l(8) (:985-989)")
+        assertFalse(w.dialogModal,
+            "revealed press → D(v+1) → v==w → C.Z(); l(8) (:3604/:985-989)")
         assertFalse(e.cd[0], "C.Z() resumed the claim")
         assertEquals(0, w.pad.edge)
     }
@@ -12363,11 +12362,20 @@ class Slice114Test {
         assertEquals(8, w.jC, "v==w && u==9 → C.Z(); l(8) (:985-989)")
     }
 
-    @Test fun `u9 multi-page fire press is inert - no advance arm exists`() {
+    @Test fun `u9 multi-page press advances a page then retypes it`() {
         val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
         w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())
-        assertEquals(21, w.jC, "v<w → the v==w dispatch cannot fire")
-        assertEquals(0, w.dlgV, "u==9 has no D(v+1) arm (:944-1017)")
+        assertEquals(1, w.dlgV, "press && u!=8 → x=48; D(v+1) (:3604)")
+        assertEquals(0, w.dlgBT, "D() → A() → z() — the new page retypes")
+        assertEquals(21, w.jC)
+    }
+
+    @Test fun `u9 reveal-then-advance reaches the last page and exits`() {
+        val w = armDialog(world(), 9, 0, 2, "p1", "p2", "p3")
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())     // v=1, retyping
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())     // reveal (bT=-1)
+        w.pad.e(Pad.M_CONTEXT); w.tick(emptyList())     // v=2=w → exit
+        assertEquals(8, w.jC, "v==w && u==9 → C.Z(); l(8)")
     }
 
     @Test fun `u8 auto-advances pages on the 48-frame countdown`() {
@@ -12510,6 +12518,23 @@ class Slice115Test {
         w.tick(emptyList())
         w.pad.e(Pad.M_CYCLE); w.tick(emptyList())    // v(131072) BACK
         assertEquals(2, w.jC, "v(131072) → l(2);z(30)")
+    }
+
+    @Test fun `jc19 row tap selects and confirms the tapped mission`() {
+        val w = world()
+        armMissionSelect(w)
+        w.tick(emptyList())
+        // panel d(14,47,180): j.c==19 keeps the two-column split
+        // (k.java:5942-5947) — rows 0-3 at x=14, rows 4-7 at x=206,
+        // each 30px from y=57. Tap row 5 at (250,100): the draw-loop
+        // hit-test `c(i,i9,i3,i4)` → `bw=i13; E(32)` (:7699-7704) →
+        // the case-19 `v(327712)` confirms with bw=5.
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 250, 100),
+            InputQueue.Event(1, InputQueue.Type.UP, 250, 100)))
+        assertEquals(5, w.kAj, "row 5 tap → bw=5 → aj=5 (:1186)")
+        assertEquals(19, w.kFF, "fF=19 return marker")
+        assertEquals(30, w.jC, "eg[aj] → l(30)")
     }
 
     @Test fun `jc19 rows are eA-bv with city sub-labels`() {
