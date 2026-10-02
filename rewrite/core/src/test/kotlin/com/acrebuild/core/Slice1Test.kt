@@ -10266,7 +10266,10 @@ class Slice87Test {
 
     @Test fun `footer left pill tap runs its rect`() {
         val w = world()
-        w.stateL(14)
+        w.stateL(14); w.kBv = 2
+        // bv==2 → a(d(0,16),d(0,17)): NEXT is a real pill
+        // (r10==d(0,79) → L23 skip — an "OK" left has NO zone, so this
+        //  test needs NEXT: k.java:2909-2912).
         // left rect (-5,198,ce+20,47), ce=36 → (-5,198,56,47): tap x=20
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 20, 210),
@@ -10284,8 +10287,9 @@ class Slice87Test {
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
             InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
-        // both pills draw → both dims assigned; the right rect was hit
-        assertEquals(36, w.kCe)
+        // left is "OK" (bv!=2) → L23 skips the arm: ce keeps the -1
+        // reset (k.java:2907-2912); right pill assigned + hit.
+        assertEquals(-1, w.kCe)
         assertEquals(36, w.kCf)
         w.lastTouchX = -1; w.lastTouchY = -1
     }

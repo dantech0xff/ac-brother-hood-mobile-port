@@ -3222,11 +3222,17 @@ class Level0World(
     private fun footerQ() {
         val fl = menuFooter()
         val left = fl.first
-        if (left != null && left != "" && jC != 21 && jC != 8) {
-            kCe = footerLeftDim(left)
+        // `a()` resets `ce/cf = -1` at entry (k.java:2907-2908); an "OK"
+        // left (`r10 == d(0,79) → goto L23`) skips the pill AND the
+        // hit-test entirely — the zone is inert (jc14-else/19/23/28/3/30).
+        // jc21/8 still hit-test via `goto L20` with ce=-1 (a 19px sliver).
+        kCe = -1
+        if (left != null && left != "" && left != d0(79)) {
+            if (jC != 21 && jC != 8) kCe = footerLeftDim(left)
             if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
         }
         val right = fl.second
+        kCf = -1
         if (!right.isNullOrEmpty()) {
             kCf = footerRightDim(right)
             if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47)) {

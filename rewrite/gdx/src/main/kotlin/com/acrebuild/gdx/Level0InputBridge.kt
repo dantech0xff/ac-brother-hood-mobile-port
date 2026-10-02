@@ -14,6 +14,21 @@ class Level0InputBridge(
     private val renderer: Level0Renderer,
 ) : InputAdapter() {
 
+    /** Whether the current gesture began inside the letterboxed view.
+     *  Taps/drags that start in the black bars must NOT register — the
+     *  original canvas filled the whole screen so out-of-view input has
+     *  no analog; clamping them to the view edge produced phantom edge
+     *  taps (a right-bar tap landed at x=399 → footer/action zones).
+     *  A gesture that STARTS in-view keeps tracking while the finger
+     *  strays into the bars (clamped to the nearest edge). */
+    private var gestureInView = false
+
+    private fun inView(sx: Int, sy: Int): Boolean =
+        sx >= renderer.offsetX &&
+            sx < renderer.offsetX + Level0World.VIEW_W * renderer.scale &&
+            sy >= renderer.offsetY &&
+            sy < renderer.offsetY + Level0World.VIEW_H * renderer.scale
+
     private fun toLogical(sx: Int, sy: Int): Pair<Int, Int> {
         val lx = (sx - renderer.offsetX) / renderer.scale
         val ly = (sy - renderer.offsetY) / renderer.scale
@@ -22,23 +37,31 @@ class Level0InputBridge(
     }
 
     override fun touchDown(sx: Int, sy: Int, pointer: Int, button: Int): Boolean {
+        gestureInView = inView(sx, sy)
+        if (!gestureInView) return true
         val (x, y) = toLogical(sx, sy)
         queue.post(InputQueue.Type.DOWN, x, y)
         return true
     }
 
     override fun touchDragged(sx: Int, sy: Int, pointer: Int): Boolean {
+        if (!gestureInView) return true
         val (x, y) = toLogical(sx, sy)
         queue.post(InputQueue.Type.MOVE, x, y)
         return true
     }
 
     override fun touchUp(sx: Int, sy: Int, pointer: Int, button: Int): Boolean {
-        queue.post(InputQueue.Type.UP, toLogical(sx, sy).first, toLogical(sx, sy).second)
+        if (!gestureInView) return true
+        gestureInView = false
+        val (x, y) = toLogical(sx, sy)
+        queue.post(InputQueue.Type.UP, x, y)
         return true
     }
 
     override fun touchCancelled(sx: Int, sy: Int, pointer: Int, button: Int): Boolean {
+        if (!gestureInView) return true
+        gestureInView = false
         val (x, y) = toLogical(sx, sy)
         queue.post(InputQueue.Type.CANCEL, x, y)
         return true
