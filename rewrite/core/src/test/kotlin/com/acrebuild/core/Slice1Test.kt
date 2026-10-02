@@ -21537,6 +21537,38 @@ class Slice239Test {
         assertEquals(1, ae.a, "builder never advances")
     }
 
+    // -- slice 342 — review finding: the in-play arm also steps each
+    //    visible NPC's linked `ae` (k.java:3659-3666 `d(r018.ae);
+    //    r018.ae.s()`) — not just the player's. Without it a visible
+    //    NPC-owned FX anim (e.g. a wisp trail) steps ~4x too slow.
+
+    @Test fun `drawStylePass advances a visible NPC ae once, builder never`() {
+        val w = world()
+        val e = ent(11, w)
+        e.Z[8] = 888                                 // ax11 in-play
+        e.setPositionPx(w.kO + 200, w.kP + 120)
+        e.refreshBoxes()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        e.ae = ae
+        w.drawStylePass()
+        assertEquals(1, ae.a, "visible NPC ae s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ae.a, "render-side builder never advances")
+        w.drawStylePass()
+        assertEquals(2, ae.a)
+    }
+
+    @Test fun `drawStylePass skips ae advance for an off-play NPC`() {
+        val w = world()
+        val e = ent(11, w)
+        e.setPositionPx(w.kO - 4000, w.kP - 4000)    // off camera → v() false
+        e.refreshBoxes()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        e.ae = ae
+        w.drawStylePass()
+        assertEquals(0, ae.a, "off-play NPC ae never enters the arm")
+    }
+
     // -- slice 341 — `bU` mapOf held a duplicate-key tail block; Kotlin
     //    last-wins clobbered 117→"NEW GAME" (should be "QUICK PLAY" per
     //    pack-14 entry-000 idx117) and 123→"CONTROL STYLE" (should be

@@ -2281,10 +2281,12 @@ class Level0World(
      *  the visibility arms — `(P&128)==0 || ax==10 || ax==51` gate;
      *  `aw==205 && S==34` force-draw; `v()`-in-play + `bh3||ay==-1` gate
      *  (ax14 `S==38` → `az=301` + `ae` child when `(ae.P&128)==0` →
-     *  `d(ae)` + `ae.s()`); else `P&16` arms: ax15 `S==9||S==10`, ax9
-     *  `S==5`, ax14 `S==74`, ax66. Player appended last via the same
-     *  `aS` block. */
-    fun buildDrawList() {
+     *  `d(ae)` + `ae.s()` — the NPC's linked FX steps once per tick too;
+     *  `advanceLinkedFx` mirrors that `s()` only on the tick-side call —
+     *  the renderer's per-frame call must never advance); else `P&16`
+     *  arms: ax15 `S==9||S==10`, ax9 `S==5`, ax14 `S==74`, ax66. Player
+     *  appended last via the same `aS` block. */
+    fun buildDrawList(advanceLinkedFx: Boolean = false) {
         drawCount = 0
         for (i31 in npcs.indices) {
             val e = npcs[i31]
@@ -2298,6 +2300,10 @@ class Level0World(
                         val ae = e.ae
                         if (ae != null && (ae.P and 128) == 0) {
                             drawInsert(ae)
+                            if (advanceLinkedFx)       // `d(r018.ae); r018.ae.s()`
+                                ae.advanceAnim()       // (k.java:3659-3666) — every
+                                                     // visible NPC's linked FX,
+                                                     // not only the player's
                         }
                     }
                 } else if ((e.P and 16) != 0) {
@@ -2337,7 +2343,7 @@ class Level0World(
         fxLines.clear(); fxRects.clear(); fxOutlines.clear()
         fxPrompts.clear()
         fxDots.clear(); fxBubbles.clear(); fxBubbleText.clear()
-        buildDrawList()
+        buildDrawList(advanceLinkedFx = true)          // tick-side `s()` mirror
         if ((player.P and 128) == 0) {                   // L224-L230: aS.ae.s()
             val ae = player.ae
             if (ae != null && (ae.P and 128) == 0) ae.advanceAnim()
