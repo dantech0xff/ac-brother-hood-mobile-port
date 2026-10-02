@@ -954,15 +954,18 @@ class Level0Renderer {
      *  right pill at (395-cf,235), `y` text when str2==d(0,18) else the
      *  A[2] arrow `zD?29:24`. Hit-test lives in world.footerQ. */
     private fun footer(world: Level0World, left: String?, right: String?) {
-        if (left != null && left != "" && world.jC != 21 && world.jC != 8) {
+        // `r10 == d(0,79) → goto L23`: an "OK" left draws nothing at
+        // all (k.java:2909-2912). jc21/8 reach only the L20 hit-test
+        // (`goto L20`), never the pill. The left pill + its label draw
+        // solely for d(0,16) (NEXT) — non-NEXT labels fall to L15/L20
+        // (ce=36, hit-test only, no pill — k.java:2917-2928).
+        if (left != null && left == world.d0(16) && world.jC != 21 && world.jC != 8) {
             val ce = world.footerLeftDim(left)
             world.kCe = ce
             softPill(5, 235, ce,
                      world.pointerMoveIn(-5, 198, ce + 20, 47))
-            if (left == world.d0(16)) {
-                fontY.l(0)
-                drawText(left, 5 + (ce shr 1), 222, 3, pack = 92)
-            }
+            fontY.l(0)
+            drawText(left, 5 + (ce shr 1), 222, 3, pack = 92)
         }
         if (!right.isNullOrEmpty()) {
             val cf = world.footerRightDim(right)

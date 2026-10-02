@@ -3016,15 +3016,19 @@ class Level0World(
         // hit region = the drawn row ∩ the scroll viewport — rows clipped
         // away by `menuScrollDy` are untouchable.
         val viewTop = menuPanelRect()[1] + 10 + (if (menuPanelZ3()) 40 else 0)
+        // the b() draw loop hits every row in order and each hit writes
+        // `bw` (k.java:7699-7704) — where two-column rects overlap (col-2
+        // starts at x=206 but col-1 rows run 214 wide on d(93,…,214)
+        // panels, so rows overlap x=206..307) the LAST drawn row wins.
+        var hit = -1
         for (i in rects.indices) {
             val r = rects[i]
             if (r[1] + r[3] <= viewTop || r[1] >= 235) continue
             val top = maxOf(r[1], viewTop)
             val bot = minOf(r[1] + r[3], 235)
-            if (pointerDownIn(r[0], top, r[2], bot - top))
-                return i
+            if (pointerDownIn(r[0], top, r[2], bot - top)) hit = i
         }
-        return -1
+        return hit
     }
 
     // -- b(x,y,w,z2,z3) menu panel geometry (k.java:5903-6150, proven) ---
@@ -3222,11 +3226,17 @@ class Level0World(
     private fun footerQ() {
         val fl = menuFooter()
         val left = fl.first
-        if (left != null && left != "" && jC != 21 && jC != 8) {
-            kCe = footerLeftDim(left)
+        // `a()` resets `ce/cf = -1` at entry (k.java:2907-2908); an "OK"
+        // left (`r10 == d(0,79) → goto L23`) skips the pill AND the
+        // hit-test entirely — the zone is inert (jc14-else/19/23/28/3/30).
+        // jc21/8 still hit-test via `goto L20` with ce=-1 (a 19px sliver).
+        kCe = -1
+        if (left != null && left != "" && left != d0(79)) {
+            if (jC != 21 && jC != 8) kCe = footerLeftDim(left)
             if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
         }
         val right = fl.second
+        kCf = -1
         if (!right.isNullOrEmpty()) {
             kCf = footerRightDim(right)
             if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47)) {
@@ -3613,10 +3623,15 @@ class Level0World(
      *  `v(327712)` confirm: `bw==-1→0; aj=bw; a(bA,16,0); eg[aj] →
      *  fF=19;l(30);z(23)` — `eg[]` all-true, no writer (dead lock).
      *  `v(131072)` → `l(2);z(30)`. `v(16388/33024)` → `L(da);aj=bw`. */
-    private fun menuJc19() {
+    private fun menuJc19(pressY: Int) {
         kEy = kDa
         footerQ()                                    // a(d(0,79),d(0,17)) — OK/BACK pills
-        if (pad.v(327712)) {                         // M_PAUSE|M_CONTEXT
+        // `c(i,i9,i3,i4)` row hit inside d()'s draw loop → `bw=i13;
+        // E(32)` (k.java:7699-7704, proven): the row tap selects AND
+        // confirms — L104's `v(327712)` then fires with bw=the tap.
+        val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+        if (pad.v(327712) || rowTap >= 0) {          // M_PAUSE|M_CONTEXT
+            if (rowTap >= 0) kBw = rowTap
             if (kBw == -1) kBw = 0
             kAj = kBw
             kBA[16] = 0                              // a(bA,16,(short)0)
@@ -4063,15 +4078,27 @@ class Level0World(
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
             // `l(18)` → title. 327712 = pause|context union.
-            23 -> if (!pad.v(327712)) menuAe(pressY)
-                  else {
-                      if (kBw == 0) { kBE = true; kBF = true; z(0) }
-                      else if (kBw == 1) { kBE = false; kBF = false }
-                      stateL(18)
-                  }
+            // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
+            // enables sound+sfx, bw==1 disables both; either way
+            // `l(18)` → title. Same L102 shape as jc19's L104: the b()
+            // draw loop's per-row `c()` hit arms `bw=i13` + `E(32)`
+            // (k.java:7699-7704) and YES/NO's action lives in this
+            // else-branch — `menuItem` has no `kEc==19` arm — so a row
+            // tap must surface as `bw` here rather than go through
+            // menuQ's menuItem dispatch.
+            23 -> {
+                val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+                if (!pad.v(327712) && rowTap < 0) menuAe(pressY)
+                else {
+                    if (rowTap >= 0) kBw = rowTap
+                    if (kBw == 0) { kBE = true; kBF = true; z(0) }
+                    else if (kBw == 1) { kBE = false; kBF = false }
+                    stateL(18)
+                }
+            }
             28 -> menuAe(pressY)                     // ae() (:6204, proven)
             1 -> menuJc1()                          // case 1 (:800-811, proven)
-            19 -> menuJc19()                        // case 19 (:1178-1206, proven)
+            19 -> menuJc19(pressY)                    // case 19 (:1178-1206, proven)
             18 -> menuJc18()                         // case 18 (:1146, proven)
             30 -> menuAf(pressY)                       // af() (:6230, proven)
             in menuStates -> { menuL(kEy); menuQ(pressY) }
@@ -5009,14 +5036,24 @@ class Level0World(
                             if (pad.v(Pad.M_CONTEXT)) {       // :956-961
                                 dlgD(dlgV + 1); kCz = true; z(23)
                             }
-                        } else if (!pad.v(Pad.M_CONTEXT) || dlgU == 8) {
-                            if (dlgU == 8) {                  // :962-973
-                                val x6 = kDlgX; kDlgX = x6 - 1
-                                if (x6 <= 0) {
-                                    kDlgX = 48
-                                    dlgD(dlgV + 1)
-                                    if (pad.v(Pad.M_CONTEXT)) z(23)
-                                }
+                        } else {
+                            // 3568-3601 (k.java): a press edge on
+                            // u∈{1,2,3,6,9} jumps straight to the 3604
+                            // advance; u8 instead ticks its x countdown
+                            // every advance-block tick and expiry falls
+                            // through to the same arm.
+                            var advance = false
+                            if (pad.v(Pad.M_CONTEXT) && dlgU != 8) {
+                                advance = true
+                            } else if (dlgU == 8) {
+                                val x6 = kDlgX; kDlgX = x6 - 1   // 3592-3598
+                                advance = x6 <= 0                // 3601
+                            }
+                            if (advance) {
+                                // 3604-3629: x=48; D(v+1); v(65568) → z(23)
+                                kDlgX = 48
+                                dlgD(dlgV + 1)
+                                if (pad.v(Pad.M_CONTEXT)) z(23)
                             }
                         }
                         if (dlgV == dlgW) {                   // :975-1007
