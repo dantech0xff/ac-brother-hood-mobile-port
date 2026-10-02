@@ -9421,11 +9421,11 @@ class Slice78Test {
         assertEquals("CONTINUE", w.menuRows()[0].first)
     }
 
-    @Test fun `Y() falls back to NEW GAME id117 with no save`() {
+    @Test fun `Y() falls back to QUICK PLAY id117 with no save`() {
         val w = world()
         w.stateL(2)
         assertEquals(117, w.kEA[0][0])
-        assertEquals("NEW GAME", w.menuRows()[0].first)
+        assertEquals("QUICK PLAY", w.menuRows()[0].first)
     }
 
     @Test fun `MAIN MENU item pushes state and YES pops it back`() {
@@ -10252,7 +10252,7 @@ class Slice87Test {
         assertEquals(listOf(93, 30, 214), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ3())
         w.stateL(19)
-        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
+        assertEquals(listOf(93, 47, 214), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ2())                     // d() → z2=false
     }
 
@@ -12568,8 +12568,9 @@ class Slice115Test {
         val w = world()
         armMissionSelect(w)
         w.tick(emptyList())
-        // panel d(14,47,180): j.c==19 keeps the two-column split
-        // (k.java:5942-5947) — rows 0-3 at x=14, rows 4-7 at x=206,
+        // panel d(14,47,180) → (93,47,214) via the arg-drop: j.c==19
+        // keeps the two-column split (k.java:5942-5947) — rows 0-3 at
+        // x=93, rows 4-7 at x=206,
         // each 30px from y=57. Tap row 5 at (250,100): the draw-loop
         // hit-test `c(i,i9,i3,i4)` → `bw=i13; E(32)` (:7699-7704) →
         // the case-19 `v(327712)` confirms with bw=5.
@@ -21504,6 +21505,51 @@ class Slice239Test {
         assertEquals(99, e.az, "entry's own F() ran via the pass")
         assertEquals(-1, marker.remapTable,
             "ax29 ad-link is F()-excluded — remapTable untouched")
+    }
+
+    // -- slice 340 — draw-pass `s()` runs once per TICK, never per
+    //    rendered frame (k.java:3696-3745 + the j.java:206-213 loop):
+    //    advancing `k.E`/`ad`/`ae` clips at ~60fps played them ~4x too
+    //    fast — the choppy-slash artifact. `drawStylePass()` is the
+    //    tick-side mirror; `buildDrawList()` (the render-side call)
+    //    must never advance. `a` counts advanceAnim invocations.
+
+    @Test fun `drawStylePass advances kE once per tick, builder never`() {
+        val w = world()
+        val ke = w.kE ?: return                      // clip46 in world()
+        ke.P = ke.P and -129                         // E.P&128==0 gate
+        ke.S = 0; ke.T = 0; ke.U = 0; ke.a = 0
+        w.drawStylePass()
+        assertEquals(1, ke.a, "k.E s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ke.a, "render-side builder never advances")
+        w.drawStylePass()
+        assertEquals(2, ke.a)
+    }
+
+    @Test fun `drawStylePass advances player ae once, builder never`() {
+        val w = world()
+        val ae = Entity(14, w.clipFor(46) ?: return).apply { P = 0 }
+        w.player.ae = ae
+        w.player.P = w.player.P and -129             // aS.P&128==0 gate
+        w.drawStylePass()
+        assertEquals(1, ae.a, "aS.ae s() once per tick pass")
+        w.buildDrawList()
+        assertEquals(1, ae.a, "builder never advances")
+    }
+
+    // -- slice 341 — `bU` mapOf held a duplicate-key tail block; Kotlin
+    //    last-wins clobbered 117→"NEW GAME" (should be "QUICK PLAY" per
+    //    pack-14 entry-000 idx117) and 123→"CONTROL STYLE" (should be
+    //    "MODE"). jc2's first row was mislabelled. Pin the verbatim
+    //    values so a stray second block can't regress them.
+
+    @Test fun `bU row labels match pack-14 entry-000 verbatim`() {
+        val w = world()
+        assertEquals("QUICK PLAY", w.d0(117))
+        assertEquals("MODE", w.d0(123))
+        assertEquals("NEW GAME", w.d0(1))
+        assertEquals("THE GAME DATA HAS BEEN DELETED.", w.d0(121))
     }
 }
 
