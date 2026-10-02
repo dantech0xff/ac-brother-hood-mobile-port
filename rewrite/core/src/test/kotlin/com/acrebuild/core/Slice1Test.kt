@@ -10168,11 +10168,14 @@ class Slice86Test {
         // release inside right column → row 1
         w.lastTouchX = 350; w.lastTouchY = 120
         assertEquals(1, w.menuRowAt(120))
-        // inside left column → row 0; overlap zone (x 206..307) → row 0 wins
+        // inside left column → row 0; the two columns overlap at
+        // x=206..307 (col-1 rows are 214 wide, col-2 starts at x=206) —
+        // the draw loop's per-row `c()` hit writes bw each pass, so the
+        // LAST drawn row wins on the overlap.
         w.lastTouchX = 150; w.lastTouchY = 120
         assertEquals(0, w.menuRowAt(120))
         w.lastTouchX = 250; w.lastTouchY = 120
-        assertEquals(0, w.menuRowAt(120))
+        assertEquals(1, w.menuRowAt(120))
         // above the panel → miss
         w.lastTouchX = 150; w.lastTouchY = 100
         assertEquals(-1, w.menuRowAt(100))
@@ -12057,6 +12060,35 @@ class Slice108Test {
         w.pad.queuePress(0)
         w.tick(emptyList())
         assertEquals(23, w.jC, "no confirm → ae() only, stays on jc23")
+    }
+
+    @Test fun `jc23 YES row tap surfaces bw to the L102 else — audio on`() {
+        val w = world()
+        w.stateL(23)
+        w.kBE = false; w.kBF = false          // pre-clear to observe the set
+        // panel d(93,120,214): YES row at (93,130,214,30) — the b() loop's
+        // per-row `c()` hit arms `bw=i13` + `E(32)` (k.java:7699-7704) and
+        // YES/NO's action lives in the dispatch else (menuItem has no
+        // kEc==19 arm), so the tap must reach the else as `bw`.
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 150, 145),
+            InputQueue.Event(1, InputQueue.Type.UP, 150, 145)))
+        assertTrue(w.kBE && w.kBF, "YES row tap → bw=0 → bE=bF=true")
+        assertEquals(18, w.jC, "confirm → l(18)")
+    }
+
+    @Test fun `jc23 column overlap is last-wins — NO's drawn half picks NO`() {
+        val w = world()
+        w.stateL(23)
+        w.kBE = true; w.kBF = true            // pre-set to observe the clear
+        // YES (93..307) and NO (206..420) rects overlap at x=206..307 —
+        // the draw loop's per-row `c()` hit writes bw each pass, so the
+        // LAST drawn row (NO) wins on the overlap.
+        w.tick(listOf(
+            InputQueue.Event(0, InputQueue.Type.DOWN, 250, 145),
+            InputQueue.Event(1, InputQueue.Type.UP, 250, 145)))
+        assertFalse(w.kBE); assertFalse(w.kBF, "overlap → bw=1 → audio off")
+        assertEquals(18, w.jC)
     }
 }
 

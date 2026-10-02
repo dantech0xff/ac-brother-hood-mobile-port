@@ -3016,15 +3016,19 @@ class Level0World(
         // hit region = the drawn row ∩ the scroll viewport — rows clipped
         // away by `menuScrollDy` are untouchable.
         val viewTop = menuPanelRect()[1] + 10 + (if (menuPanelZ3()) 40 else 0)
+        // the b() draw loop hits every row in order and each hit writes
+        // `bw` (k.java:7699-7704) — where two-column rects overlap (col-2
+        // starts at x=206 but col-1 rows run 214 wide on d(93,…,214)
+        // panels, so rows overlap x=206..307) the LAST drawn row wins.
+        var hit = -1
         for (i in rects.indices) {
             val r = rects[i]
             if (r[1] + r[3] <= viewTop || r[1] >= 235) continue
             val top = maxOf(r[1], viewTop)
             val bot = minOf(r[1] + r[3], 235)
-            if (pointerDownIn(r[0], top, r[2], bot - top))
-                return i
+            if (pointerDownIn(r[0], top, r[2], bot - top)) hit = i
         }
-        return -1
+        return hit
     }
 
     // -- b(x,y,w,z2,z3) menu panel geometry (k.java:5903-6150, proven) ---
@@ -4074,12 +4078,24 @@ class Level0World(
             // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
             // YES → `bE=bF=true; z(0)`, bw==1 NO → both false, then
             // `l(18)` → title. 327712 = pause|context union.
-            23 -> if (!pad.v(327712)) menuAe(pressY)
-                  else {
-                      if (kBw == 0) { kBE = true; kBF = true; z(0) }
-                      else if (kBw == 1) { kBE = false; kBF = false }
-                      stateL(18)
-                  }
+            // (327712 = M_PAUSE|M_CONTEXT) bypasses ae() — bw==0
+            // enables sound+sfx, bw==1 disables both; either way
+            // `l(18)` → title. Same L102 shape as jc19's L104: the b()
+            // draw loop's per-row `c()` hit arms `bw=i13` + `E(32)`
+            // (k.java:7699-7704) and YES/NO's action lives in this
+            // else-branch — `menuItem` has no `kEc==19` arm — so a row
+            // tap must surface as `bw` here rather than go through
+            // menuQ's menuItem dispatch.
+            23 -> {
+                val rowTap = if (pressY >= 0) menuRowAt(pressY) else -1
+                if (!pad.v(327712) && rowTap < 0) menuAe(pressY)
+                else {
+                    if (rowTap >= 0) kBw = rowTap
+                    if (kBw == 0) { kBE = true; kBF = true; z(0) }
+                    else if (kBw == 1) { kBE = false; kBF = false }
+                    stateL(18)
+                }
+            }
             28 -> menuAe(pressY)                     // ae() (:6204, proven)
             1 -> menuJc1()                          // case 1 (:800-811, proven)
             19 -> menuJc19(pressY)                    // case 19 (:1178-1206, proven)
