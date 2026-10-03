@@ -27015,8 +27015,14 @@ class Slice289Test {
                 // the ax10-S36 bound-catch carrier @x6439 lowers the player
                 // down the shaft — keep its bind while inside the descent
                 // column, release it elsewhere.
+                // Phase 2 (G12): the last block-top hop now clips the
+                // zone's top-left corner (W x6439-6479, y379-539); the
+                // ride ends at its bottom edge (al > g.o → i(318), g.java
+                // :1860-1864) in a freeze that only a DOWN press releases
+                // (case 318 `k.v(33024) → a(ah)`, g.java:1829-1835).
+                // Press it: the drop comes down on the y719 floor.
                 p.S == 315 || p.S == 318 ->
-                    if (p.ak in 6300..6600) 0 else Pad.M_DOWN
+                    if (p.S == 315 && p.ak in 6300..6600) 0 else Pad.M_DOWN
                 // x6520-6580 40px step on the y719 floor: hop west over it
                 p.aZ && p.al in 700..790 && p.ak in 6560..6660 ->
                     Pad.M_UP or Pad.M_LEFT
@@ -27131,6 +27137,14 @@ class Slice289Test {
                 // x8560 street edge -> x8760 face: hold the vault till the
                 // edge so the ~200px arc reaches the S6 block's hang zone
                 p.aZ && p.al > 1000 && p.ak < 8540 -> Pad.M_RIGHT
+                // Phase 2 (G12): the ax40 gondola uid181 @x8882 binds the
+                // player in the entity pass, then ticks again as his `ac`
+                // link right after aS.I() (k.java:2589-2591) — an UP
+                // pressed on the boarding frame is its bx() hop-off
+                // (`k.v(16388)`, i.java:16150) and the S157 fling drops
+                // into the pit. Run into it on RIGHT alone from the y979
+                // ledge.
+                p.aZ && p.al in 960..1000 && p.ak in 8840..8900 -> Pad.M_RIGHT
                 p.aZ -> Pad.M_RIGHT + Pad.M_UP
                 else -> Pad.M_RIGHT
             }
@@ -27287,6 +27301,19 @@ class Slice289Test {
                 // homes onto it, then the S238 release dives over the gap.
                 p.ga?.aw == 240 && p.ak < 13300 -> Pad.M_RIGHT
                 p.ga != null -> Pad.M_RIGHT + Pad.M_UP
+                // Phase 2 (G12): cross the lip (x12380-12960, y939) on the
+                // ground — S5 landings and foe-free stretches too. A hop
+                // lifts the camera (cB keeps the head box 40px inside the
+                // view, k.java:1954-1955: camY ~778), and the ax50
+                // pouncers uid224/225 (W tops y789/783) then sit wholly
+                // inside k.ac, see the player (l() L77 `b(W, k.ac)`,
+                // simple/i.java:2396-2405) and drain 5 per pounce (T==3
+                // `k.aS.a(4,…)`, i.java:7785). The hop-run took five of
+                // those plus a guard strike — dead from x1=30. Grounded,
+                // cB = al-150 (k.java:1947-1948) holds camY at ~790 and
+                // both stay blind.
+                p.al in 900..960 && p.ak in 12380..12960 && (p.aZ || p.S == 5) ->
+                    if (foe != null) Pad.M_RIGHT + Pad.M_CONTEXT else Pad.M_RIGHT
                 // attack-through: CONTEXT held ONLY while a gap foe is in
                 // range — the S67/68/69 combo staggers it at point-blank so
                 // its tumble→pin chain never starts and the launch-pad
@@ -27367,11 +27394,18 @@ class Slice289Test {
             // pole-2 uid289@(15199,610): press ~(15100-15160,665-700) —
             // probe-verified landing (15359-15386,699) on the east rim.
             val pole = Entity.at
+            // Phase 2 (G12): the player's I() integrates BEFORE g.e()
+            // (i.java:3889-3922), so the press is read one step further
+            // down the arc than the position seen here — test the windows
+            // on that next point (N+ag, O+ah), or the pole-1 press lands
+            // in the water.
+            val nx = ((p.ak shl 8) + (p.N and 255) + p.ag) shr 8
+            val ny = ((p.al shl 8) + (p.O and 255) + p.ah) shr 8
             val poleSwing = pole != null && pole.ax == 72 && (
-                (pole.aw == 283 && p.ak - pole.ak in -135..-45 &&
-                    p.al - pole.al in 114..135) ||
-                (pole.aw == 289 && p.ak - pole.ak in -110..-35 &&
-                    p.al - pole.al in 55..95))
+                (pole.aw == 283 && nx - pole.ak in -135..-45 &&
+                    ny - pole.al in 114..135) ||
+                (pole.aw == 289 && nx - pole.ak in -110..-35 &&
+                    ny - pole.al in 55..95))
             val mask = when {
                 poleSwing -> Pad.M_CONTEXT + Pad.M_RIGHT + Pad.M_UP
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
