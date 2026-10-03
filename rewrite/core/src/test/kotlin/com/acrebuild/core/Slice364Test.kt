@@ -116,9 +116,9 @@ class Slice364Test {
         e.setPositionPx(w.camX + 200, w.camY + 120)               // au = 0
         intArrayOf(e.ak - 10, e.al - 10, e.ak + 10, e.al + 10).copyInto(e.W)
         intArrayOf(w.camX + 5_000, 0, w.camX + 5_010, 10).copyInto(e.Y)
-        assertTrue(e.wasHitRecently(w), "v() @251 i.a(k.ac, W) — not Y")
+        assertTrue(e.inPlayV(w), "v() @251 i.a(k.ac, W) — not Y")
         intArrayOf(e.ak, e.al, e.ak, e.al).copyInto(e.W)          // point W
-        assertFalse(e.wasHitRecently(w), "a point W is off-camera for i.a")
+        assertFalse(e.inPlayV(w), "a point W is off-camera for i.a")
     }
 
     @Test fun `v() generic arm rejects a point Y`() {
@@ -126,9 +126,9 @@ class Slice364Test {
         val e = Entity(67, null)
         e.setPositionPx(w.camX + 200, w.camY + 120)
         intArrayOf(e.ak, e.al, e.ak, e.al).copyInto(e.Y)
-        assertFalse(e.wasHitRecently(w), "v() @331 i.a(k.ac, Y): point Y")
+        assertFalse(e.inPlayV(w), "v() @331 i.a(k.ac, Y): point Y")
         intArrayOf(e.ak - 10, e.al - 10, e.ak + 10, e.al + 10).copyInto(e.Y)
-        assertTrue(e.wasHitRecently(w))
+        assertTrue(e.inPlayV(w))
     }
 
     @Test fun `k-m rope camera tests containment, not overlap`() {

@@ -1295,7 +1295,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             ag = 0; ah = 0; al -= world.kX
             world.iBe = true
             setAnim(34)
-        } else if (!yOverlapsCam(world) && al > world.kP + 240) { // L1f7
+        } else if (!inPlayV(world) && al > world.kP + 240) {      // L1f7 — B() @504 v()
             world.stateL(12)
         } else if (aT >= 10 && aV >= 10) {                        // L214
             if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
@@ -1356,16 +1356,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
             r10++
         }
         return false                                              // L72→0
-    }
-
-    /** `i.v()` player arm (i.java:2155-2160 L144, proven): entity types
-     *  not whitelisted fall to `a(k.ac, Y)` — the Y box vs the camera
-     *  active rect (same predicate `flightAliveV` uses for `g.n()`).
-     *  That is `i.a(int[],int[])` (v() offset 331), so a point `Y` never
-     *  overlaps (slice 364 — was an inline plain overlap). */
-    private fun yOverlapsCam(world: LevelCellSource): Boolean {
-        val ac = world.kAc ?: return true
-        return overlapStrict(ac, Y)
     }
 
     /**
@@ -2346,7 +2336,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 }
             }
             16 -> { cd[8] = cd[8] xor true; cb?.let { it[3] = 20 } }       // L169
-            17 -> w.kAQ = null                                             // L174
+            17 -> w.volPaintRect = null                                    // L174 aa() @1714 k.aQ = null
             18 -> w.kAv = true                                             // L175
             19 -> { cd[9] = false; cg = null; ch = null }                  // L176 i.cg/ch
             20 -> lockInput(w)                                             // L150 k.o()
@@ -3249,62 +3239,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
             S == 217 || S == 298 || (S in 259..266) || S == 20 || S == 49 ||
             S == 243
 
-    /**
-     * `i.u()` (i.java:700, proven): recompute `au` = normalized distance
-     * from the view center (k.O+200, k.P+120). Arms: aG==4 → /400,/240;
-     * ax67&&bk[Z0]==49 → /400,/240; ax67&&bk[Z0]==27 → /800,/240;
-     * generic → /400,/120. (ax21's L14 arm duplicates the aG==4 body.)
-     */
-    fun updateAu(world: LevelCellSource) {
-        var dx = ak - (world.kO + 200); if (dx < 0) dx = -dx
-        var dy = al - (world.kP + 120); if (dy < 0) dy = -dy
-        au = when {
-            aG == 4 -> dx / 400 + dy / 240
-            ax == 67 && NpcFsm.decorClip(Z[0]) == 49 -> dx / 400 + dy / 240
-            ax == 67 && NpcFsm.decorClip(Z[0]) == 27 -> dx / 800 + dy / 240
-            else -> dx / 400 + dy / 120
-        }
-    }
-
-    /**
-     * `i.v()` (i.java:730, proven) — "on-screen / recently-active" check:
-     * typed early-true arms, then `u(); au>i → false`; else for ax67 and
-     * other non-listed types `a(k.ac, this.Y)` — the Y bounds quad against
-     * the camera view rect. ax14's arm (S76/W-null/`a(player.W,W)`) is
-     * transcribed too for the pickup path.
-     */
-    fun wasHitRecently(world: LevelCellSource): Boolean {
-        if (ax == 49) return true
-        if (ax == 29 && S == 24 && T >= 54) return true
-        if (ax == 10 || ax == 40 || ax == 60) {
-            if (P and 16 != 0) return true     // L21
-        }
-        if (ax == 27 && S == 6 && Z[1] > 0) return true
-        if (ax == 21 && S >= 2) return true    // L35
-        updateAu(world)
-        if (au > i) return false               // offscreen score
-        if (ax == 60) return true
-        if (ax == 11 && Z[8] == 888) return true
-        // Slice 364: each test below is one of v()'s four `i.a(int[],int[])`
-        // calls (bytecode v() offsets 251/265/320/331) and reads the same
-        // boxes through `overlapStrict` — point boxes never count.
-        // Known non-overlap divergences (follow-up, slice 364 plan): v()
-        // gates the @251 arm on `k.bh[k.aj]==3` (offsets 206-214), not
-        // `inPlay` (= !k.al), and also sends ax78 S3 to the @320 W arm
-        // (offsets 296-313); `inPlayV` is the faithful v().
-        if (ax == 14) {                        // L51 ax14 arm
-            if (S == 76) return true
-            if (W.contentEquals(ZERO_RECT)) return true
-            if (world.inPlay || S == 69 || S == 70 || S == 71)
-                return overlapStrict(world.camRect, W)   // @251 i.a(k.ac, W)
-            return overlapStrict(world.playerRect(), W)  // @265 i.a(aS.W, W)
-        }
-        // L73: ax∈{37,10,60} → a(k.ac, W); else a(k.ac, Y)
-        if (ax == 37 || ax == 10 || ax == 60)
-            return overlapStrict(world.camRect, W)       // @320 i.a(k.ac, W)
-        return overlapStrict(world.camRect, Y)           // @331 i.a(k.ac, Y) — ax67 lands here
-    }
-
     companion object {
         /** `i.j(i)` (i.java:5926, proven): static dead check — null →
          *  true; ax ∈ {11,17,29,27} → the member's `P()` (side-effect
@@ -3361,6 +3295,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val WEAPON_H = intArrayOf(50, 50, 50)
         /** `i.K[]` (i.java:22322, proven) — ax32 wall-break damage (bc()). */
         val WEAPON_K = intArrayOf(6, 4, 2)
+        /** bc() @425-494 (proven): the ax67 decor states a thrown prop
+         *  can break — `S ∈ {19,21,23,32,35,38,41,43}` → `i(S+1)`. */
+        val AX67_BC_STATES = intArrayOf(19, 21, 23, 32, 35, 38, 41, 43)
         /** `k.bh[]` (k.java:8437, proven) — per-mission behavior flag;
          *  `bh[k.aj] == 3` picks the S16 settle arm (missions 1/4). */
         val MISSION_BH = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
@@ -3726,21 +3663,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
 
-    /** `i.u()`+`i.v()` (i.java:700/730, ax16 subset, proven): view-proximity
-     *  score `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120` — the marker
-     *  survives while `au > i`. */
-    fun markerVisible(w: LevelCellSource): Boolean {
-        au = kotlin.math.abs(ak - (w.kO + 200)) / 400 +
-            kotlin.math.abs(al - (w.kP + 120)) / 120
-        return au > i
-    }
-
     /**
-     * `i.bd()` (i.java:14538, proven): the marker's rest sweep — X-overlap
-     *  neighbors: ax19 `S==2 → i(3)`; while THIS flies (`S==17`), ax17
-     *  (`S!=69`) and — when the sweeper is ax23 — any `S!=79` take
-     *  `aB -= H[au]`; death → ax17 `i(129)`/ax23 `i(79)`, alive →
-     *  `i(68)`/`i(73)`. */
+     * `i.bd()` (i.java:14538; bytecode bd() @0-229, proven): the marker's
+     *  rest sweep — X-overlap neighbors: ax19 `S==2 → i(3)`; while THIS
+     *  flies (`S==17`), ax17 (`S!=69`) and — when the sweeper is ax23 —
+     *  any `S!=79` take `aB -= H[au]`; death → ax17 `i(129)`/ax23
+     *  `i(79)`, alive → `i(68)`/`i(73)`. The one bd() port: since slice
+     *  371 `ba()` (@738) calls it too (its private copy tested
+     *  `r0.ax==23 && r0.S==79` for the sweeper-is-ax23 arm @100-115). The
+     *  self-skip is inert (an ax16/ax24 sweeper matches no arm). */
     fun sweepNeighbors(w: LevelCellSource): Boolean {
         var r6 = false
         for (r0 in w.npcs) {
@@ -3767,80 +3698,113 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.bc()` (i.java:14396, proven): the flight-impact sweep — X-overlap
-     *  neighbors by type. Own `af` (thrower) is protected: `af.ax` in the
-     *  prop family skips matching `r0.ax` (e.g. af==54 → ax54s skipped).
-     *  `d(8,…)` floatie spawns = `spawnDebris24` (ported slice 125). `cF` is the i-STATIC
-     *  gauge-full flag (i.java:184) — ax32 `S∈[21,27]` (armed walls) only
-     *  break on full-gauge throws; when unset the scan ABORTS. */
+     * `i.bc()` — the ONE port of the flight-impact sweep (bytecode
+     *  i.javap.txt bc() @0-865, proven). Per `k.bd[]` neighbor `r3`
+     *  (`r3.W`/`this.X` null → next, @18-32) the type arms run in this
+     *  order, EACH with its own `i.a(…, X)` test:
+     *  - ax54 (@35-181): own `af.ax ∈ {54,30}` → next; `r3.ad != null &&
+     *    i.a(ad.W, X)` (@86) → `ad.i(2)` + `d(8, ad.ak, ad.al)` +
+     *    `r3.i(10)` + `k.e(0, aw)` + `i(9)`, hit, END (@142) — the `ad`
+     *    alone is enough; else `i.a(r3.W, X)` (@153) → `r3.i(10)` +
+     *    `k.e` + `i(9)`, hit, END (@181).
+     *  - ax30 (@184-329): `af.ax ∈ {54,30,56}` → next; overlap (@237) →
+     *    `aB -= 20`, `cG = 6`; `aB <= 0` → `cG = 0`, `i(10)`, `k.e`,
+     *    `i(9)`, `ad.i(2)` + `d(8,…)`; hit, END.
+     *  - ax56 (@332-413): `af.ax ∈ {54,56,30}` → next; overlap (@385) →
+     *    `i(10)`, `k.e`, `i(9)`, hit, END.
+     *  - ax67 S∈{19,21,23,32,35,38,41,43} + overlap (@416-508): `S != 9`
+     *    → `aB--`; `aB <= 0` → `i(S+1)`; `i(9)`; hit, END (@555).
+     *  - ax24 S19 + overlap (@558-587): `i(20)` + `i(9)`, hit, END (@604).
+     *  - ax32 with `l & 1` (@607-857): `S ∈ [21,27] && !cF` → END — the
+     *    abort runs BEFORE any overlap test (@625-646); `S == 20` → next;
+     *    overlap (@666) → `aB > 0` → `aB -= K[k.au]` + the `p`-switch
+     *    anims; hit, next (no END).
+     *  `k.e(0, aw)` is the `ap[0]` kill tally = `countKill`; `d(8,x,y)` =
+     *  `spawnFloatie`. There is no self-skip in the original (no arm can
+     *  match the ax16/ax24 sweepers at their call states).
+     *  Slice 371: the port hoisted `i.a(r3.W, X)` above the dispatch
+     *  (losing the ax54 `ad`-only hit and gating the ax32 abort on an
+     *  overlap), kept scanning after ax67/ax24 hits, and `ba()` ran a
+     *  second copy (`projSweepBc`: double ax54 kill on `ad`+`W`, ax30
+     *  `i(9)` even on a survivor) — both callers now land here.
+     *  `af` is the thrower `k.aS` at every call (bb() @322, ba() @683, the
+     *  S6 puff's `af = aS`); a null `af` would NPE in the original
+     *  (@45/@194/@341) — the port skips that prop arm instead (inferred).
+     *  Iteration domain: `k.bd[]` is the last paint's draw list; the port
+     *  scans `npcs` (systemic, see the slice 371 plan). */
     fun sweepNeighborsB(w: LevelCellSource): Boolean {
-        var r6 = false
+        var r1 = false
         val afAx = af?.ax
-        scan@ for (r0 in w.npcs) {
-            if (r0 === this) continue
-            if (!overlapStrict(r0.W, X)) continue
-            when (r0.ax) {
-                54 -> {
-                    if (afAx == 54 || afAx == 30) continue
-                    r0.ad?.let { a ->
-                        if (overlapStrict(a.W, X)) {
+        for (r3 in w.npcs) {
+            when {
+                r3.ax == 54 -> {                                       // @35
+                    if (afAx == null || afAx == 54 || afAx == 30) continue
+                    val ad = r3.ad
+                    if (ad != null && overlapStrict(ad.W, X)) {        // @86
+                        ad.setAnim(2)
+                        spawnFloatie(w, 8, ad.ak, ad.al)               // d(8,…)
+                        r3.setAnim(10); w.countKill(r3.aw); setAnim(9)
+                        return true                                    // @142
+                    }
+                    if (overlapStrict(r3.W, X)) {                      // @153
+                        r3.setAnim(10); w.countKill(r3.aw); setAnim(9)
+                        return true                                    // @181
+                    }
+                }
+                r3.ax == 30 -> {                                       // @184
+                    if (afAx == null || afAx == 54 || afAx == 30 || afAx == 56) continue
+                    if (!overlapStrict(r3.W, X)) continue              // @237
+                    r3.aB -= 20; r3.cGCount = 6
+                    if (r3.aB <= 0) {
+                        r3.cGCount = 0; r3.setAnim(10)
+                        w.countKill(r3.aw); setAnim(9)
+                        r3.ad?.let { a ->
                             a.setAnim(2)
-                            spawnDebris24(w, 8, a.ak, a.al)   // d(8, ak, al)
+                            spawnFloatie(w, 8, a.ak, a.al)             // d(8,…)
                         }
                     }
-                    r0.setAnim(10); w.statTally(r0.aw); setAnim(9); r6 = true
-                    break@scan
+                    return true                                        // @329
                 }
-                30 -> {
-                    if (afAx == 54 || afAx == 30 || afAx == 56) continue
-                    r0.aB -= 20; r0.cGCount = 6
-                    if (r0.aB <= 0) {
-                        r0.cGCount = 0; r0.setAnim(10)
-                        w.statTally(r0.aw); setAnim(9)
-                        r0.ad?.let { a ->
-                            a.setAnim(2)
-                            spawnDebris24(w, 8, a.ak, a.al) // d(8, ak, al)
+                r3.ax == 56 -> {                                       // @332
+                    if (afAx == null || afAx == 54 || afAx == 56 || afAx == 30) continue
+                    if (!overlapStrict(r3.W, X)) continue              // @385
+                    r3.setAnim(10); w.countKill(r3.aw); setAnim(9)
+                    return true                                        // @413
+                }
+                r3.ax == 67 && r3.S in AX67_BC_STATES &&
+                    overlapStrict(r3.W, X) -> {                        // @416-508
+                    if (S != 9) r3.aB--
+                    if (r3.aB <= 0) r3.setAnim(r3.S + 1)
+                    setAnim(9)
+                    return true                                        // @555
+                }
+                r3.ax == 24 && r3.S == 19 && overlapStrict(r3.W, X) -> { // @558-587
+                    r3.setAnim(20); setAnim(9)
+                    return true                                        // @604
+                }
+                r3.ax == 32 && (r3.l and 1) != 0 -> {                  // @607-622
+                    if (r3.S in 21..27 && !w.cFFlag) return r1         // @625-646 abort
+                    if (r3.S == 20) continue                           // @649
+                    if (!overlapStrict(r3.W, X)) continue              // @666
+                    if (r3.aB > 0) {
+                        r3.aB -= WEAPON_K[w.weaponSlot]
+                        when (r3.pv) {                                 // @701 p-switch
+                            0 -> if (r3.aB <= 0) { r3.setAnim(15); r3.cGCount = 0 }
+                                else r3.cGCount = 6
+                            2 -> if (r3.aB <= 0) { r3.setAnim(19); r3.cGCount = 0 }
+                                else r3.cGCount = 6
+                            3 -> if (r3.aB <= 0) { r3.setAnim(25); r3.cGCount = 0 }
+                                else r3.cGCount = 6
+                            4 -> if (r3.aB <= 0) { r3.setAnim(36); r3.cGCount = 0 }
+                                else r3.cGCount = 6
+                            else -> {}
                         }
                     }
-                    r6 = true; break@scan
+                    r1 = true                                          // @856
                 }
-                56 -> {
-                    if (afAx == 54 || afAx == 56 || afAx == 30) continue
-                    r0.setAnim(10); w.statTally(r0.aw); setAnim(9); r6 = true
-                    break@scan
-                }
-                67 -> {
-                    if (r0.S in intArrayOf(19, 21, 23, 32, 35, 38, 41, 43)) {
-                        if (S != 9) r0.aB--          // L71-L78: S9 → skip dec
-                        if (r0.aB <= 0) r0.setAnim(r0.S + 1)
-                        setAnim(9); r6 = true
-                    }
-                }
-                24 -> {
-                    if (r0.S == 19) { r0.setAnim(20); setAnim(9); r6 = true }
-                }
-                32 -> {
-                    if ((r0.l and 1) == 0) continue  // `l` parity gate
-                    if (r0.S in 21..27) { if (!w.cFFlag) break@scan }  // L87
-                    if (r0.S == 20) continue
-                    if (r0.aB > 0) r0.aB -= WEAPON_K[w.weaponSlot]
-                    when (r0.pv) {                 // L97 p-switch
-                        0 -> if (r0.aB <= 0) { r0.setAnim(15); r0.cGCount = 0 }
-                            else r0.cGCount = 6
-                        2 -> if (r0.aB <= 0) { r0.setAnim(19); r0.cGCount = 0 }
-                            else r0.cGCount = 6
-                        3 -> if (r0.aB <= 0) { r0.setAnim(25); r0.cGCount = 0 }
-                            else r0.cGCount = 6
-                        4 -> if (r0.aB <= 0) { r0.setAnim(36); r0.cGCount = 0 }
-                            else r0.cGCount = 6
-                        else -> {}
-                    }
-                    r6 = true
-                }
-                else -> {}
             }
         }
-        return r6
+        return r1
     }
 
     // ================= mission-director helpers (i.java:18003+) =============
@@ -3887,7 +3851,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `i.u()` (i.java:700, proven): off-screen distance score into `au` —
      *  `|ak-(k.O+200)|/400 + |al-(k.P+120)|/240` for ax13/ax21 (and ax67
      *  riding `k.bk[Z[0]]==49`), `r6/400+r7/120` otherwise, ax67-on-27 →
-     *  `r6/800+r7/240`. Same shape as `markerVisible` (ax16 → /120 arm). */
+     *  `r6/800+r7/240` (bytecode i.javap.txt u() @0-175, proven). */
     fun offscreenScore(world: LevelCellSource) {
         var r6 = ak - (world.kO + 200); if (r6 < 0) r6 = -r6
         var r7 = al - (world.kP + 120); if (r7 < 0) r7 = -r7
@@ -3900,12 +3864,36 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
     }
 
-    /** `i.v()` (i.java:730, proven): "is-in-play" predicate — ax49 → true;
-     *  ax29 `S==24 && T>=54` → true; ax10/40/60 `P&16` → true; ax27 `S==6
-     *  && Z[1]>0` → true; ax21 `S>=2` → true else falls to the score arm;
-     *  `u()` → `au > i` → false (out of play); in-range → ax60 true,
-     *  ax11 `Z[8]==888` true, ax14 `S==76`/`W==null`/`aS.W` overlap,
-     *  ax37/10/60/78(S==3) → `a(k.ac,W)`, else `a(k.ac,Y)`. */
+    /** `i.v()` — THE port of v() (bytecode i.javap.txt v() @0-336,
+     *  proven). Every ported bytecode call site of `v:()Z` (39 in
+     *  i/g/k; only k.b(boolean) @4137, in the unported debug entity
+     *  overlay, has no port) lands here: slice 371 folded the divergent
+     *  copies into it —
+     *  `wasHitRecently` (its `u()` copy dropped the ax13 gate on the
+     *  `aG==4` arm and the ax21 arm, its ax14 arm read `!k.al` for
+     *  `k.bh[k.aj]==3`, its W arm missed ax78 S3), `yOverlapsCam` /
+     *  `flightAliveV` (only the `a(k.ac, Y)` tail, no `u()`/`au>i`),
+     *  `markerVisible` (returned `au > i`, i.e. the inverse) and
+     *  `ax64Alive` (`au<=i → true` without the camera test).
+     *
+     *  ax49 → true; ax29 `S==24 && T>=54` → true; ax10/40/60 `P&16` →
+     *  true; ax27 `S==6 && Z[1]>0` → true; ax21 `S>=2` → true; then
+     *  `u()` (writes `au`) → `au > i` → false; ax60 → true; ax11
+     *  `Z[8]==888` → true; ax14: `S==76` → true, `W==null` → true
+     *  (@197-205), `k.bh[k.aj]==3 || S∈69..71` → `a(k.ac, W)` (@206-251)
+     *  else `a(aS.W, W)` (@265); ax37/10/60/(ax78 && S==3) →
+     *  `a(k.ac, W)` (@269-320); else `a(k.ac, Y)` (@331). Every overlap
+     *  is `i.a(int[],int[])` = `overlapStrict` (point boxes never count).
+     *
+     *  `W == null`: an ax14's `W` is only allocated by the record ctor
+     *  (`i(short[])` @7269) — `t()` returns before its allocation for
+     *  ax14 (@40-53), so the runtime-spawned markers (`a(14,9,n,302)`
+     *  in `a(III)V` / `aW()`, `k.c(x,y,aw)`'s `k.N`) keep `W == null`,
+     *  and `p()` nulls it. The port's arrays are never null: those
+     *  entities carry the all-zero `W` (`spawnPickup`/`spawnChildFx`
+     *  leave it untouched, `deactivate()` zero-fills it) — the same
+     *  stand-in `aX()`'s head uses. No record ax14 has a zero `W`
+     *  (`f[9]`/`f[10]` > 0 on every shipped record). */
     fun inPlayV(world: LevelCellSource): Boolean {
         if (ax == 49) return true
         if (ax == 29 && S == 24 && T >= 54) return true
@@ -3914,22 +3902,20 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         if (ax == 27 && S == 6 && Z[1] > 0) return true
         if (ax == 21 && S >= 2) return true
-        offscreenScore(world)
+        offscreenScore(world)                                    // @128 u()
         if (au > i) return false
         if (ax == 60) return true
         if (ax == 11 && Z[8] == 888) return true
-        // every overlap here is `i.a(int[],int[])` — `overlapStrict`
-        // (point boxes never count), as in structured/i.java:619-636
         if (ax == 14) {
             if (S == 76) return true
-            if (W.isEmpty()) return true
+            if (W.contentEquals(ZERO_RECT)) return true          // @197 W == null
             if (world.missionBh() == 3 || S == 69 || S == 70 || S == 71)
-                return overlapStrict(world.camRect, W)
-            return overlapStrict(world.playerRect(), W)
+                return overlapStrict(world.camRect, W)           // @251
+            return overlapStrict(world.playerRect(), W)          // @265
         }
         if (ax == 37 || ax == 10 || ax == 60 || (ax == 78 && S == 3))
-            return overlapStrict(world.camRect, W)
-        return overlapStrict(world.camRect, Y)
+            return overlapStrict(world.camRect, W)               // @320
+        return overlapStrict(world.camRect, Y)                   // @331
     }
 
     /** `i.f(int)` static (i.java:18023, proven): one-shot phase gate —
@@ -4029,20 +4015,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         r0.setAnim(anim)
         w.queueInsert(r0)
         return r0
-    }
-
-    /** `i.d(int,int,int)` (i.java:16745, proven): spawn an ax24
-     *  clip-40 debris spark — `a(24,40,anim,201)`, `av=false`, position
-     *  `(x,y)` with N/O matching, zeroed velocity, queued via `k.b`. */
-    fun spawnDebris24(w: LevelCellSource, anim: Int, x: Int, y: Int) {
-        val e = Entity(24, w.clipFor(40))
-        e.av = false
-        e.N = x shl 8; e.O = y shl 8
-        e.ak = x; e.al = y
-        e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
-        e.setAnim(anim); e.az = 201
-        e.refreshBoxes()
-        w.queueInsert(e)
     }
 
     /** `i.d(int,x,y,az)` (i.java:11076, proven): ax61/clip71 child —
@@ -5032,7 +5004,8 @@ interface LevelCellSource {
      *  (k.java:1959-1965: camA = ak-200+af, camB = al-120+ag). */
     var camAf: Int get() = 0; set(_) {}
     var camAg: Int get() = 0; set(_) {}
-    /** `k.bh[k.aj] == 3` — in-play phase (v()'s ax14 arm L61). */
+    /** `!k.al` — the world-run condition (`i.I()` entity gate). Not the
+     *  `k.bh[k.aj]==3` test v()/aX() make — that is `missionBh() == 3`. */
     val inPlay: Boolean get() = true
     /** `k.aS.W` — the player's hitbox (v()'s ax14 tail). */
     fun playerRect(): IntArray = IntArray(4)
@@ -5374,9 +5347,8 @@ interface LevelCellSource {
     var kAd: Int get() = 0; set(_) {}
     /** `k.aV` — vehicle/mount entity singleton (Z[0] arms, `ad` ax43 link). */
     var kAV: Entity? get() = null; set(_) {}
-    /** `k.aQ` — script-owned entity ref (sub-op 17 clears). */
-    var kAQ: Entity? get() = null; set(_) {}
-    /** `k.av` — script flag (sub-op 18 sets). */
+    /** `k.av` — script flag (sub-op 18 sets). (`k.aQ`, which sub-op 17
+     *  clears, is the eagle-view Image = `volPaintRect`.) */
     var kAv: Boolean get() = false; set(_) {}
     /** `k.aT` — follow-target kind flag (sub-op 8 writes by ax). */
     var kAT: Boolean get() = false; set(_) {}

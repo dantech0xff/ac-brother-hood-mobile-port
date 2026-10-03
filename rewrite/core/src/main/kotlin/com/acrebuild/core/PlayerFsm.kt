@@ -1648,7 +1648,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // clear it — the |ak-at.ak| band check at L1980 is dead code,
             // both exits leave r104 true for Z[0]==4)
             if (p.aZ || p.mountableState()) {
-                if (t.wasHitRecently(world)) {
+                if (t.inPlayV(world)) {                     // g.e() @13806 i.at.v()
                     var r104 = true
                     if (t.ax == 72 && t.Z[0] == 1 &&
                         p.h(t.ak - p.ak, t.al - p.W[1]) >= t.Z[3]) r104 = false
@@ -2489,7 +2489,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (!pathA) {
                 // -- L279: ax72 mount arm only ------------------------------
                 if (e.ax != 72) continue
-                if (p.gJ and 4 == 0 || !p.mountableState() || !e.wasHitRecently(world) ||
+                // g.az() @1591: `bd[i].v()` — the one v() port
+                if (p.gJ and 4 == 0 || !p.mountableState() || !e.inPlayV(world) ||
                     e.Z[0] == 3) continue
                 if (p.av && e.ak - p.ak >= 0) continue
                 if (!p.av && e.ak - p.ak <= 0) continue
@@ -2563,7 +2564,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         if (world.kAJ == 1) world.sfx(9) else { val t = world.kEE[world.kAj]; if (t != -1) world.sfx(t) }
         if (world.iBe) {
             world.kX = 0
-            if (p.animFinished() || !flightAliveV(p)) { world.stateL(12); return }
+            // g.n() @17-46: `if (r() || !v()) k.l(12); return` — the full
+            // v() (@35), `u()`/`au>i` guard included (slice 371).
+            if (p.animFinished() || !p.inPlayV(world)) { world.stateL(12); return }
             return
         }
         // `i.bh--` (n():5615) runs in tick() for both modes — not repeated.
@@ -2606,14 +2609,16 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 }
             }
             2, 24 -> {                                          // L325-L328
+                // g.n() @2117-2160 (bytecode, proven): `ag>>=1; ah>>=1;
+                // r6=r7=false; if (r() || !v()) k.l(12)` then → @2262
+                // (L346). `!v()` falls through to the SAME `k.l(12)` at
+                // @2155 — the simple decompile wires that fall-through
+                // into L137 (the S3 arm), which the port had copied
+                // (slice 371). v() is the full port (@2149).
                 p.ag = p.ag shr 1; p.ah = p.ah shr 1
                 zFlags[0] = false; zFlags[1] = false
-                if (p.animFinished()) world.stateL(12)            // r() → l(12)
-                else if (!flightAliveV(p)) {                      // !v() → L137→L139
-                    p.av = false
-                    glideTail(p, pad, zFlags)
-                }
-                // v() → L346: arm skipped verbatim
+                if (p.animFinished() || !p.inPlayV(world)) world.stateL(12)
+                // v() → @2262 (L346): arm skipped verbatim
             }
             3 -> {                                              // L137
                 if (p.animFinished()) p.setAnim(4) else p.av = false
@@ -2797,17 +2802,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         wisp.bR = false
         world.iAK = wisp
         world.queueInsert(wisp)                                // k.b(aK)
-    }
-
-    /** `i.v()` ax25 tail (i.java:597-640, proven subset) — the flying
-     *  player stays "alive" while its `Y` box overlaps the camera rect
-     *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The `u()`/`au>i`
-     *  screen-score guard is `offscreenScore`/`inPlayV` on Entity.
-     *  `a(k.ac, Y)` is `i.a(int[],int[])` (v() offset 331): a point `Y`
-     *  never overlaps (slice 364 — was an inline plain overlap). */
-    private fun flightAliveV(p: Entity): Boolean {
-        val ac = world.kAc ?: return true
-        return Entity.overlapStrict(ac, p.Y)
     }
 
     companion object {

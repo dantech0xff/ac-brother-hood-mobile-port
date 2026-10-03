@@ -1241,9 +1241,12 @@ class Level0WorldTest {
         val edge = if (w.player.ak - ((e.W[0] + e.W[2]) shr 1) >= 0) 20 else 380
         assertEquals(w.camX + edge, ae.ak)
         assertEquals(e.al, ae.al)
-        // next tick drains the insert buffer
+        // `aS.a(71,…)` = `a(III)V` (bytecode @0-82): no `k.b` insert — the
+        // pickup lives only in `aS.ae`, never in `bb[]`/`npcs`, even after
+        // the next tick's drain (slice 371; this asserted the old insert).
+        assertFalse(w.pendingInsert.contains(ae))
         w.tick(emptyList())
-        assertTrue(w.npcs.contains(ae))
+        assertFalse(w.npcs.contains(ae))
     }
 
     @Test fun `kind-5 S28 shove arm pushes player out of W`() {
@@ -1359,7 +1362,9 @@ class Level0WorldTest {
     }
 
     @Test fun `ax14 linked waits then counts down aC to removal`() {
-        val w = world()
+        // the countdown arm is aX()'s `k.bh[k.aj]==3` arm (bytecode aX()
+        // @101-109, slice 371) — not `!k.al`: run it on a bh3 mission
+        val w = world(); w.kAj = 1                     // MISSION_BH[1]==3
         // link target with aw=55 — prepend so k.q's firstOrNull finds it
         // before any level-0 entity that may share the aw value
         val target = Entity(11, w.clips[7]).apply { aw = 55 }
@@ -1377,7 +1382,7 @@ class Level0WorldTest {
     }
 
     @Test fun `ax14 linked waits while target P&32 (held) or P&128`() {
-        val w = world()
+        val w = world(); w.kAj = 1                     // aX() @101 bh3 arm
         val target = Entity(11, w.clips[7]).apply { aw = 55; P = 32 }
         w.npcs.add(0, target)
         val e = recordPickup(w, listOf(14, 15, 500, 500, 0, 69, 0, -30, -40, 60, 80, 55, 7))
@@ -8018,17 +8023,28 @@ class Slice65Test {
         assertEquals(5, e.Z[8], "Z[8] untouched outside S7")
     }
 
+    // `aS.a(n,x,y)` (`a(III)V` @0-82) never `k.b`-inserts the marker
+    // (slice 371) — it only exists as `aS.ae`, so a same-tick spawn +
+    // release is observed at the `spawnPickup` call, not the insert
+    // buffer.
+    private class SpawnSpy(private val inner: Level0World) : LevelCellSource by inner {
+        val spawned = ArrayList<Entity>()
+        override fun spawnPickup(anim: Int, x: Int, y: Int): Entity =
+            inner.spawnPickup(anim, x, y).also { spawned += it }
+    }
+
     @Test fun `stalk — below-right arms, picks S66, releases same tick`() {
         val w = world()
         val e = ax64At(w, 260, 150, anim = 7)   // stalk head runs only in S7
         w.player.setPositionPx(200, 100)
         w.player.setAnim(0)                     // vulnerable anim set
         w.pad.commit(0)
-        w.npcFsm.tickAx64(e, w, w.player)
+        val spy = SpawnSpy(w)
+        w.npcFsm.tickAx64(e, spy, w.player)
         // L39-43: right+below → anim 66 + bl=512; then the verbatim L76
         // tail releases the just-spawned S66 on ak>p.ak → 1-tick flicker
         // (the marker blink is the visible prompt).
-        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 66 },
+        assertTrue(spy.spawned.any { it.ax == 14 && it.S == 66 },
             "S66 marker spawned")
         assertEquals(512, e.bl, "bl latch mask for anim 66")
         assertNull(w.player.ae, "L76 tail released the just-picked marker")
@@ -8040,8 +8056,9 @@ class Slice65Test {
         w.player.setPositionPx(200, 100)
         w.player.setAnim(0)
         w.pad.commit(0)
-        w.npcFsm.tickAx64(e, w, w.player)
-        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 60 },
+        val spy = SpawnSpy(w)
+        w.npcFsm.tickAx64(e, spy, w.player)
+        assertTrue(spy.spawned.any { it.ax == 14 && it.S == 60 },
             "S60 marker spawned")
         assertEquals(128, e.bl)
         assertNull(w.player.ae, "L53-67 released the matched-side marker")
@@ -15107,7 +15124,7 @@ class Slice141Test {
 
 class Slice142Test {
     class S142World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
-        override var kAQ: Entity? = null
+        override var volPaintRect: IntArray? = null      // k.aQ (Image)
         override fun findByAw(aw: Int): Entity? =
             if (aw == -1) null
             else if (player.aw == aw) player
@@ -15125,10 +15142,14 @@ class Slice142Test {
         return p
     }
 
+    // S47 nulls `k.aQ` — the ONE `static Image aQ` (k.javap.txt:2850,
+    // aV() @538 `putstatic k.aQ:Image`), i.e. the eagle-view inset the
+    // port keeps as `volPaintRect` (slice 371 — this asserted a write-only
+    // `kAQ: Entity?` duplicate that had no reader).
     @Test fun `S47 clears the claim slot every tick L219`() {
-        val w = S142World(); w.kAQ = w.player
+        val w = S142World(); w.volPaintRect = intArrayOf(1, 2, 3, 4)
         NpcFsm(w).tickTrigger(trig(47), w, w.player, Pad())
-        assertNull(w.kAQ)
+        assertNull(w.volPaintRect)
     }
 
     // S48/S49 test the LINKED target's own Y: `i.a(r8.Y, W)` with
@@ -28878,7 +28899,7 @@ class Slice306Test {
             w.pad.e(if (p.ak < 780) Pad.M_RIGHT else 0)
             w.tick(emptyList())
             if (t % 5 == 0 || Entity.at != null)
-                println("PROBE t=$t p=(${p.ak},${p.al}) S=${p.S} mountable=${p.mountableState()} at=${Entity.at?.ax}#${Entity.at?.aw} hit=${wheel.wasHitRecently(w)} au=${wheel.au} i=${wheel.i} los=${p.losBlocked(wheel, w)}")
+                println("PROBE t=$t p=(${p.ak},${p.al}) S=${p.S} mountable=${p.mountableState()} at=${Entity.at?.ax}#${Entity.at?.aw} hit=${wheel.inPlayV(w)} au=${wheel.au} i=${wheel.i} los=${p.losBlocked(wheel, w)}")
             if (Entity.at != null) break
         }
     }

@@ -47,10 +47,11 @@ and lands with unit tests that would have caught it.
 | `setAnim` is `i.i(int)`; `enterStateMasked` x snaps are `i.a(int,int)`'s chain (found in Phase 2) | done (Phase 2 branch) | [361](../261003-1500-slice361-setanim-i-i/plan.md) |
 | ax44 door `bv()`: last frame's box, mode-1 polarity, resolve-tick promotion, `i.a`, crush arms (found in Phase 2) | done (Phase 2 branch) | [362](../261003-1600-slice362-ax44-door-bv/plan.md) |
 | below-the-camera kill is `i.B()`'s (flying player only) (found in Phase 2) | done (Phase 2 branch) | [363](../261003-1700-slice363-below-camera-kill-flying-only/plan.md) |
-| every `i.a(int[],int[])` port rejects point boxes (140 sites) (found in Phase 2; follow-ups open) | done (Phase 2 branch) | [364](../261003-1800-slice364-overlap-ia/plan.md) |
+| every `i.a(int[],int[])` port rejects point boxes (140 sites) (found in Phase 2; follow-ups closed by 371) | done (Phase 2 branch) | [364](../261003-1800-slice364-overlap-ia/plan.md) |
 | `g.e()` arm exits: post-tail only after L353d, `az()` in the head (found in Phase 2; follow-ups F1-F11 open) | done (Phase 2 branch) | [365](../261003-1900-slice365-ge-exits/plan.md) |
 | soldier melee gate reads `i.ab()` (running claim suppresses `aB()`) (found in Phase 3) | done (Phase 2 branch) | [367](../261003-2200-slice367-claim-ab-melee-gate/plan.md) |
 | soft keys: claim SKIP pill hit-test (m0 intro skippable), `ce/cf` wheel margins, pause icon on release (found in Phase 3) | done (Phase 2 branch) | [368](../261003-2230-slice368-soft-keys-back/plan.md) |
+| slice-364 follow-ups: one `v()` port (`u()` ax13 gate, `bh[aj]==3`, ax78 S3, ax14 `W==null`; runtime ax14 markers leave `npcs`), one `bc()` (ad-only ax54, ax32 abort first, ax67/ax24 END), aV() S50 else-arms, l() S117, S47/op37[17] clear `k.aQ` = `volPaintRect`, g.n() S2/S24 `!v()` → `l(12)` (found in Phase 2; follow-ups open) | done (Phase 2 branch) | [371](../261003-2300-slice371-npc-followups/plan.md) |
 | draw-pass state steps once per frame in the world: `i.ad()` bubbles (one call site), row band, jc20 `eZ` (found in Phase 4 renderer audit) | done (Phase 2 branch) | [373](../261004-0010-slice373-draw-pass-state/plan.md) |
 | dialog typewriter + the jC 21 frame's `b(false)` `F()` pass in the world; renderer drops duplicated `F()` writes | done (Phase 2 branch) | [374](../261004-0030-slice374-dialog-frame-pass/plan.md) |
 | `b(true)` runs the draw-list build + `F()` pass behind pause/death/end screens, not only its head | done (Phase 2 branch) | [375](../261004-0100-slice375-btrue-world-pass/plan.md) |

@@ -342,7 +342,11 @@ class Level0World(
     // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870-902, proven) --------
     // Singleton ax14 entity S54 on clip9 (r(9)); later k.c calls just move
     // it. k.k(aw) removes it on tag match (or any when tag==-1); the
-    // original plays out via N.p() — port removes on the drain.
+    // original plays out via N.p(). `k.c(III)` (k.javap.txt @0-96) stores
+    // it in the static `k.N` only — no `k.b` insert: it is never a
+    // `bb[]` member (slice 371; it was queued into `npcs`). Its tick
+    // (`k.I()` @810-1000) and draw (`k.b(boolean)` @4521) are separate
+    // paths, unported here (see the slice 371 plan).
     override var marker: Entity? = null
     private var markerTag = -1       // k.cq
     override fun setMarker(x: Int, y: Int, tag: Int) {
@@ -351,7 +355,7 @@ class Level0World(
             val e = Entity(14, clips[9]).apply {
                 setAnim(54); az = 302; au = 0; setPositionPx(x, y)
             }
-            marker = e; markerTag = tag; pendingInsert += e   // k.b(aK)
+            marker = e; markerTag = tag                       // k.N = …
         } else m.setPositionPx(x, y)
     }
     override fun clearMarker(tag: Int) {
@@ -378,9 +382,11 @@ class Level0World(
     /** `k.ac` — camera view rect [x1,y1,x2,y2] (v() on-screen check). */
     override val camRect: IntArray get() =
         intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
-    /** `k.bh[k.aj]==3` — gameplay phase (mission-fail screen is phase 12). */
     /** `k.al == false` (i.I() entity gate): the real world-run condition
-     *  — false on states {12,13,16,17,31} and {21 when dlgU∉{8,9}}. */
+     *  — false on states {12,13,16,17,31} and {21 when dlgU∉{8,9}}. NOT
+     *  `k.bh[k.aj]==3` (that is `missionBh() == 3`): v() @206-214 and
+     *  aX() @101-109 test `bh[aj]==3`, and since slice 371 no gameplay
+     *  path reads `inPlay` (tests use it as the `!k.al` readout). */
     override val inPlay: Boolean get() = !kAl
     /** `k.cm` — the `k()` touch-controls flag (k.java:159 `cm = 1` +
      *  :549 `cm == 1`; cheat op 123 toggles `cm = 1 - cm`, k.java:3937).
@@ -470,6 +476,12 @@ class Level0World(
      * caller pos/facing (overridden to (x,y), av=false by i.a()), `t()` —
      * which early-returns for ax14 leaving the zero-W `aX()` guard.
      * NOTE: no `P|=512` — that's the 7-arg particle spawner's flag.
+     * No `k.b` insert either (bytecode `a(III)V` @0-82 and `a(IIII)V`
+     * @0-90 never call it): the marker lives only in its owner's `ae` —
+     * drawn and stepped by `k.b(boolean)`'s `ae` path (@1650-1682, the
+     * player's at L224-L230), never a `bb[]`/`npcs` member. Slice 371:
+     * it was queued here, so with the faithful v() `W == null` arm a
+     * released (`G()` → `p()`) marker kept drawing from `npcs`.
      */
     override fun spawnPickup(anim: Int, x: Int, y: Int): Entity {
         val e = Entity(14, clips[9]).apply {
@@ -478,7 +490,6 @@ class Level0World(
             setPositionPx(x, y); av = false
             refreshBoxes()          // t() early-returns for ax14 → W zero
         }
-        pendingInsert += e                        // k.b(aK)
         return e
     }
 
@@ -740,8 +751,10 @@ class Level0World(
         Entity.gf = null                            //   g.A, g.F
         kAD = null                                  // k.aD
         volPaintRect = null                         // k.aQ (i.java:1888 —
-                                                    //   ax35 arms also null
-                                                    //   it at sub-op 17/L219)
+                                                    //   D() @388; also nulled
+                                                    //   by the ax35 arms, aV()
+                                                    //   S47 @538, aa() op37[17]
+                                                    //   @1715)
         kBv = 0                                     // k.bv
         kC = null; kD = null; kE = null             // k.C/D/E (kD/kE also
         kAi = false                                 //   cleared at :704)
@@ -776,7 +789,7 @@ class Level0World(
         iBe = false                                 // i.be
         kAL = -1; kAJ = 0; kAM = -1; kAq = 0        // k.aL/aJ/aM/aq
         Entity.gE = false                           // g.E
-        kAQ = null; kAv = false                     // k.aQ, k.av
+        kAv = false                                 // k.av (k.aQ = volPaintRect, nulled above)
         iCg = null; iCh = null                      // i.cg, i.ch
         kDz = 120                                   // k.dz (k.r() tail)
         kN()                                        // k.n(-1) — wall release
@@ -1326,7 +1339,6 @@ class Level0World(
      *  all entries 5 → `g.g(5)` at every mission start. */
     val kF0Do = intArrayOf(5, 5, 5, 5, 5, 5, 5, 5, 5)
     override var kAV: Entity? = null             // k.aV
-    override var kAQ: Entity? = null             // k.aQ
     override var kAv = false                     // k.av
     override var kAT = false                     // k.aT
     override var kAL = 0                         // k.aL
@@ -2476,18 +2488,19 @@ class Level0World(
      *  1 = anchor inside the (ac2, ac2+200) band past the camera right
      *  edge while offscreen, 2 = anchor >200px beyond it (win), 3 =
      *  anchor at/behind the right edge. Both interior `v()` re-evals are
-     *  verbatim — `v()` is pure, so `return 1`/`return 2` hinge on a
-     *  `wasHitRecently` re-eval flipping mid-check (decompiler artifact;
-     *  kept for fidelity).
+     *  verbatim (w() @1/@38/@63) — `v()` only rewrites `au` from the
+     *  same inputs, so `return 1`/`return 2` hinge on a re-eval flipping
+     *  mid-check (never; kept for fidelity). Slice 371: the one `v()`
+     *  port (`inPlayV`), not the old divergent `wasHitRecently`.
      */
     private fun iW(e: Entity): Int {
-        if (e.wasHitRecently(this)) return 0                           // L5
+        if (e.inPlayV(this)) return 0                                  // @1 v()
         val ac2 = camRect[2]                                           // k.ac[2]=O+400
         if (e.ak > ac2 && e.ak < ac2 + 200) {                          // in band
-            return if (e.wasHitRecently(this)) 3 else 1                // L7 tail
+            return if (e.inPlayV(this)) 3 else 1                       // @38 v()
         }
         if (e.ak > ac2 + 200)                                          // L15→L17
-            return if (e.wasHitRecently(this)) 3 else 2                // L22 / 2
+            return if (e.inPlayV(this)) 3 else 2                       // @63 v()
         return 3
     }
 
@@ -4456,7 +4469,10 @@ class Level0World(
     override var gP = 0                            // g.p kill-bonus flag
     /** `k.c(int,int,int)` (k.java:870, proven): the ax14/clip9/S54/az302
      *  prompt marker — created once then repositioned every call; `cq` is
-     *  bound to the requesting entity's uid. */
+     *  bound to the requesting entity's uid. Stored in `k.N` only — the
+     *  bytecode (k.javap.txt `c(III)V` @0-96) has no `k.b` insert, so it
+     *  is not an `npcs` member (slice 371). Its `k.I()` tick (@810-1000)
+     *  and `k.b(boolean)` draw (@4521) are unported. */
     override fun showPrompt(x: Int, y: Int, aw: Int) {
         if (kN == null) {
             kN = Entity(14, clips[9]).apply {
@@ -4465,7 +4481,6 @@ class Level0World(
                 setPositionPx(x, y); av = false
                 refreshBoxes()
             }
-            pendingInsert += kN!!
             kCq = aw
         }
         kN?.setPositionPx(x, y)
@@ -5252,10 +5267,12 @@ class Level0World(
                         for (m in npcs) {
                             if (m.ay == kAk) {
                                 kDR = m.aG
-                                // `bb[i4].v()` — the result is discarded
-                                // (proven dead-read); only its internal
-                                // `u()` side-effect matters.
-                                m.recomputeAu(camX, camY, ::kBk)
+                                // `bb[i4].v()` (k.I() @318) — the result is
+                                // discarded; only its internal `u()` write
+                                // matters, and only when no v() early arm
+                                // (ax49, ax21 S>=2, …) returns before it —
+                                // so the full v() port runs (slice 371).
+                                m.inPlayV(this)
                             }
                         }
                     }

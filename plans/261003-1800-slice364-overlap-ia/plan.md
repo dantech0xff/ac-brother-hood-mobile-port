@@ -287,7 +287,9 @@ timing edits (Slice245/281/282/288/289/291/297/303/304/306/309 all pass).
 ## Discrepancies found along the way (not fixed here — follow-ups)
 
 All proven from bytecode; none is a point-box issue, so they stay out of
-this slice.
+this slice. **All seven are resolved by slice 371**
+(`plans/261003-2300-slice371-npc-followups/plan.md`) — item 7 turned
+out to matter visually: `k.aQ` is the eagle-view inset (`volPaintRect`).
 
 1. **aV() S50 lost its else-arms** (`NpcFsm.kt:2157-2176`): offsets
    7737-7745 (`g.a` rope S1/S4 but no overlap → `G()` + `g.C = true`) and

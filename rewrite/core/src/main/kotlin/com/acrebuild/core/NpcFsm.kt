@@ -1236,7 +1236,7 @@ class NpcFsm(val world: LevelCellSource) {
             // invisible zone clears BOTH globals — verbatim quirk: with
             // several S0 zones the last-ticked loser wins the wipe.
             0 -> {
-                if (Entity.overlapStrict(player.W, e.W) && e.wasHitRecently(w)) {
+                if (Entity.overlapStrict(player.W, e.W) && e.inPlayV(w)) {   // @1469 v()
                     if (e.pv != 0) w.camAf = e.pv                    // L5c7
                     if (e.aG == 0) return                          // → L1ec7
                     w.camAg = e.aG                                 // L5d7
@@ -1260,7 +1260,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.Z[0] == 2) {                                 // L13c5
                     if (e.Z[2] == 0) return                        // → L1ec7
                     val gate = w.findByAw(e.Z[2])                  // k.q(Z[2])
-                    if (gate != null && gate.wasHitRecently(w)) return
+                    if (gate != null && gate.inPlayV(w)) return       // @5095 v()
                 }
                 val t = w.findByAw(e.Z[1])                         // L13ed k.q
                 if (t != null) {
@@ -1293,7 +1293,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.Z[0] == 2) {                                 // L14cb
                     if (e.Z[2] == 0) return                        // → L1ec7
                     val gate = w.findByAw(e.Z[2])
-                    if (gate != null && gate.wasHitRecently(w)) return
+                    if (gate != null && gate.inPlayV(w)) return       // @5357 v()
                 }
                 val t = w.findByAw(e.Z[1])                         // L14f3
                 if (t != null) {
@@ -1303,10 +1303,14 @@ class NpcFsm(val world: LevelCellSource) {
                 w.removeEntity(e); return                          // L1526
             }
             // `aV()` small linked-entity triggers (proven):
-            // S47 = L219: clears the global claim slot every tick (k.aQ
-            // = the `i`-typed claim owner, NOT the Image aQ at k.java:79
-            // — JADX letter collision).
-            47 -> { w.kAQ = null; return }                         // L219
+            // S47 = L219 (bytecode aV() @537-541): `k.aQ = null` every
+            // tick. `k.aQ` is the ONE `public static Image aQ`
+            // (k.javap.txt:2850) — the ax35 eagle-view HUD inset that
+            // `a(IIIIZ)` paints and `k.b(boolean)` @5228 blits; the
+            // port's `k.aQ` is `volPaintRect`. Slice 371: this cleared a
+            // write-only `kAQ: Entity?` duplicate (the old note's "i-typed
+            // claim owner" does not exist), so the inset survived.
+            47 -> { w.volPaintRect = null; return }                // L219
             // S48 = L166: when the o-uid TARGET's own `Y` overlaps the
             // zone, copy `p` (record f13 = "boss speed") onto its aG and
             // remove. Debug print "Set Boss Speed=" omitted (proven-dead
@@ -2157,24 +2161,38 @@ class NpcFsm(val world: LevelCellSource) {
                     e.dropAeLink()                                     // L1850
                 }
             }
-            50 -> {                                             // L852 rope-dismount
+            // `aV()` S50 rope-dismount zone (bytecode i.javap.txt aV()
+            // @7562-7750, proven). Three exits: (a) `g.a` is an ax43 rope
+            // in S1/S4 and `i.a(aS.W, W)` (@7609) → marker `a(7,…)` pinned
+            // above the player, `g.C = false` (the rope's own 16388
+            // release in bw() @231 is muted while inside), and on the
+            // `k.v(16388)` edge the jump-off; (b) rope but no overlap →
+            // `G()` + `g.C = true` (@7737-7745); (c) no rope → `G()`
+            // (@7746-7750). Slice 371: (b)/(c) were missing — leaving the
+            // zone never dropped the marker nor re-armed `g.C`.
+            50 -> {
                 val ga = player.ga
                 if (ga != null && ga.ax == 43 &&
-                    (ga.S == 1 || ga.S == 4)) {                  // L854/L860
-                    if (Entity.overlapStrict(player.W, e.W)) {
+                    (ga.S == 1 || ga.S == 4)) {                  // @7562-7596
+                    if (Entity.overlapStrict(player.W, e.W)) {   // @7609
                         e.spawnMarker(world, 7, player.ak, player.al - 50)
                         e.ae?.let { it.ak = player.ak; it.al = player.al - 50 }
-                        player.cFlag = false                     // g.C = false
-                        if (world.padHeld(16388)) {              // k.v(16388) edge
-                            e.releaseAe()
+                        player.cFlag = false                     // @7666 g.C = false
+                        if (world.padHeld(16388)) {              // @7672 k.v(16388) edge
+                            e.releaseAe()                        // G()
                             player.ag = if (player.av) -3328 else 3328
                             player.ah = -6656
                             player.setAnim(243)
                             player.ga = null
-                            player.cFlag = true                  // g.C = true
+                            player.cFlag = true                  // @7729 g.C = true
                             world.removeEntity(e)
                         }
+                    } else {
+                        e.releaseAe()                            // @7738 G()
+                        player.cFlag = true                      // @7742 g.C = true
                     }
+                } else {
+                    e.releaseAe()                                // @7747 G()
                 }
             }
             51 -> {                                             // L874/L880 cv register
@@ -3656,7 +3674,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // L46: r02 = player side vs prop centerline
                 val r02 = player.ak - ((e.W[0] + e.W[2]) shr 1)
                 if (Entity.overlapStrict(e.X, player.W) &&
-                    !e.wasHitRecently(world)) {
+                    !e.inPlayV(world)) {             // bB() @432 v()
                     val ae = player.ae
                     if (ae == null) {
                         player.releaseAe()               // aS.G() then a(71)
@@ -3734,11 +3752,12 @@ class NpcFsm(val world: LevelCellSource) {
      *   always allocated, so the all-zero W stands in for null.
      * - `a(aS.Y,W) && !aS.f()` → `aF=1`, `P&~128` (armed + unhidden).
      * - `S==107` → follow the player (`ak/al = aS.ak/al`).
-     * - linked (`o!=-1`, resolved via `k.q` = scan by `aw`): in-play waits
-     *   `bZ>=aE`, then unhides, `ah=k.Y`, `aC=15` countdown → `k.c(this)`;
-     *   waits while target `P&32` (held) or `P&128` (hidden). Off-play:
-     *   hide when the player leaves (`P|=128`), consume when `r5.S==j`
-     *   and `aA!=1`.
+     * - linked (`o!=-1`, resolved via `k.q` = scan by `aw`): on a
+     *   `k.bh[k.aj]==3` mission (bytecode aX() @101-109 — NOT `!k.al`,
+     *   slice 371) waits `bZ>=aE`, then unhides, `ah=k.Y`, `aC=15`
+     *   countdown → `k.c(this)`; waits while target `P&32` (held) or
+     *   `P&128` (hidden). Other missions: hide when the player leaves
+     *   (`P|=128`), consume when `r5.S==j` and `aA!=1`.
      * - unlinked: once armed (`aF==1`), player leaving W → `aA==1` hides
      *   (`P|=128`), otherwise `k.c(this)` — the pickup is collected.
      */
@@ -3752,7 +3771,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.S == 107) { e.ak = player.ak; e.al = player.al }
         val r5 = if (e.oId != -1) world.findByAw(e.oId) else null
         if (r5 != null) {
-            if (world.inPlay) {
+            if (world.missionBh() == 3) {                    // @101-109 k.bh[k.aj]==3
                 if (e.bZ < e.aE) return                      // L17 wait arm
                 e.P = e.P and -129
                 e.ah = world.kY
@@ -3925,7 +3944,10 @@ class NpcFsm(val world: LevelCellSource) {
                     e.W[3] > player.W[1]) {
                     e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 }
-                if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)
+                // bb() @1223-1243: `S==23 && !v() → k.c(this)` — the full
+                // v() (slice 371: `markerVisible` returned `au > i`, the
+                // inverse, and skipped the `a(k.ac, Y)` camera test).
+                if (e.S == 23 && !e.inPlayV(world)) world.removeEntity(e)
             }
             // L152 — anim end → k.c
             25 -> if (e.animFinished()) world.removeEntity(e)
@@ -7010,103 +7032,6 @@ private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
     w.queueInsert(child)
 }
 
-/** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
- *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
- *  semantics; `d(8,…)`/`d(9,…)` floatie spawns → `spawnFloatie`. */
-private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
-    var hit = false
-    for (r0 in w.npcs) {
-        if (e.X == null) break
-        when (r0.ax) {
-            54 -> {                                        // L26-fallback arm
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30) continue
-                r0.ad?.let { if (Entity.overlapStrict(it.W, e.X)) {
-                    it.setAnim(2)
-                    e.spawnFloatie(w, 8, it.ak, it.al)          // d(8,…)
-                    w.countKill(r0.aw); r0.setAnim(10)
-                    hit = true } }
-                if (Entity.overlapStrict(r0.W, e.X)) { r0.setAnim(10)
-                    w.countKill(r0.aw); hit = true }
-                if (hit) { e.setAnim(9); return true }
-            }
-            30 -> {
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30 ||
-                    e.af!!.ax == 56) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                r0.aB -= 20; r0.cGCount = 6
-                if (r0.aB <= 0) {
-                    r0.cGCount = 0; r0.setAnim(10); w.countKill(r0.aw)
-                    r0.ad?.let { it.setAnim(2)
-                        e.spawnFloatie(w, 8, it.ak, it.al) }    // d(8,…)
-                }
-                e.setAnim(9); hit = true; return true
-            }
-            56 -> {
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 56 ||
-                    e.af!!.ax == 30) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                r0.setAnim(10); w.countKill(r0.aw)
-                e.setAnim(9); hit = true; return true
-            }
-            67 -> {
-                if (r0.S != 19 && r0.S != 21 && r0.S != 23 && r0.S != 32 &&
-                    r0.S != 35 && r0.S != 38 && r0.S != 41 && r0.S != 43) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                if (e.S != 9) r0.aB--
-                if (r0.aB <= 0) r0.setAnim(r0.S + 1)
-                e.setAnim(9); hit = true
-            }
-            24 -> {
-                if (r0.S != 19 || !Entity.overlapStrict(r0.W, e.X)) continue
-                r0.setAnim(20); e.setAnim(9); hit = true
-            }
-            32 -> {
-                if ((r0.l and 1) == 0) continue
-                if (r0.S in 21..27 && !w.cFFlag) break         // L87 cF gate → abort sweep
-                if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
-                if (r0.aB > 0) {
-                    r0.aB -= Entity.WEAPON_K[w.weaponSlot]
-                    when (r0.pv) {
-                        0 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(15); r0.cGCount = 0 }
-                        2 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(19); r0.cGCount = 0 }
-                        3 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(25); r0.cGCount = 0 }
-                        4 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(36); r0.cGCount = 0 }
-                    }
-                }
-                hit = true
-            }
-        }
-    }
-    return hit
-}
-
-/** `i.bd()` (i.java:14538, proven): non-flying sweep — ax19 S2→i(3),
- *  ax17/ax23 damage `H[k.au]` via `aB` with death anims. */
-private fun NpcFsm.projSweepBd(e: Entity, w: Level0World): Boolean {
-    var hit = false
-    for (r0 in w.npcs) {
-        if (e.X == null) break
-        if (!Entity.overlapStrict(r0.W, e.X)) continue
-        if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); hit = true }
-        if (e.S != 17) continue
-        when (r0.ax) {
-            17 -> { if (r0.S != 69) {
-                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
-                if (r0.aB <= 0) r0.setAnim(129) else r0.setAnim(68)
-                hit = true } }
-            23 -> { if (r0.S == 79) {
-                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
-                if (r0.aB <= 0) r0.setAnim(79) else r0.setAnim(73)
-                hit = true } }
-        }
-    }
-    return hit
-}
-
 /** `i.ba()` (i.java:13742, proven transcription). */
 fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
     val inFlight = (e.S in 0..4) || (e.S in 22..28)      // L7/L15 gate
@@ -7147,7 +7072,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
             // the S9 impact anim on reaching it (or when bc() hits).
             if (e.al <= e.ap) e.setAnim(9)
             e.ap += w.kX
-            if (projSweepBc(e, w)) e.setAnim(9)
+            if (e.sweepNeighborsB(w)) e.setAnim(9)          // ba() @1367 bc()
         }
         7 -> { val r = e.aC - 1; e.aC = r; if (r < 0) e.setAnim(9) }  // L166
         8 -> if (e.animFinished()) { w.removeEntity(e); return }    // L87
@@ -7156,11 +7081,11 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
             e.refreshBoxes()                             // L69 t()
             if (Entity.MISSION_BH[w.kAj] == 3) {
                 e.ah = 0; e.ag = 0
-                if (e.af == p) projSweepBc(e, w)
+                if (e.af == p) e.sweepNeighborsB(w)          // ba() @693 bc()
                 else if (e.X != null && Entity.overlapStrict(e.X, p.W))
                     p.applyHit(38, 0, e, w)              // L75
             } else {
-                projSweepBd(e, w)                        // L79 bd()
+                e.sweepNeighbors(w)                      // L79 ba() @738 bd()
                 if (e.X != null && Entity.overlapStrict(e.X, p.W))
                     p.applyHit(4, 0, e, w)
             }
@@ -8493,11 +8418,6 @@ private fun strikePlayer73(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-/** `i.v()` ax73 fallthrough (i.java:730-785 L85, proven): "active" iff
- *  the support box overlaps the camera rect. */
-private fun onscreen73(e: Entity, w: LevelCellSource): Boolean =
-    w.kAc?.let { Entity.overlapStrict(it, e.Y) } ?: false
-
 /** `i.aF()` (i.java:9192, proven): TRAILING-side ledge probe — a crate
  *  edge (s.ax==51) within 20px of ak on either side, or the cell behind
  *  the facing direction is neither 20 (void) nor 5. */
@@ -9467,17 +9387,6 @@ private fun ax64Barrage(e: Entity, p: Entity, w: LevelCellSource) {
     w.sfx(16)                                        // L139: k.A(16)
 }
 
-/** `u()` (i.java:700) + `v()` (i.java:730) reduced to the ax64 path
- *  (proven gates that apply; ax64 hits none of the special-cases):
- *  `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120`; alive while `au<=i` or
- *  the `Y` foot box overlaps the `k.ac` view rect. */
-private fun ax64Alive(e: Entity, w: LevelCellSource): Boolean {
-    e.au = abs(e.ak - (w.kO + 200)) / 400 + abs(e.al - (w.kP + 120)) / 120
-    if (e.au <= e.i) return true
-    val view = w.kAc ?: return false
-    return Entity.overlapStrict(view, e.Y)
-}
-
 /** `bl()` — the ax64 harrier FSM (i.java:15391-15897). Head arm runs only
  *  at S7; then the S-switch. */
 fun NpcFsm.tickAx64(e: Entity, w: LevelCellSource, p: Entity) {
@@ -9744,7 +9653,10 @@ private fun ax64S7(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.runnerG) e.ag = 0                        // L252: bound → still
     if (e.Z[8] < 0) e.ah = w.kY shr 1              // L255
     if (e.al > w.kP - 20) e.ah = w.kY              // L258
-    if (!ax64Alive(e, w)) w.removeEntity(e)        // L261→L306: v()==false
+    // bl() @2498-2505 → @2966: `!v() → k.c(this)` — the full v(): `u()`,
+    // `au > i → false`, else `a(k.ac, Y)` (slice 371: the old `ax64Alive`
+    // returned true on `au <= i` without the camera test).
+    if (!e.inPlayV(w)) w.removeEntity(e)           // L261→L306: v()==false
 }
 
 // ============================================================ ax74 = bN()
@@ -10461,17 +10373,20 @@ internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             else if (Math.abs(e.al - p.al) / 20 > 1) false
             else {
                 // L22-L52: player riding an ax69 (`af`) — af.Z[0]==0 +
-                // player S∈{250,150} → blind; own S117 only PRIMES r0
-                // (the af.S checks below and L54 can overwrite it —
-                // faithful). af.S∈{7,1} → blind; af.S==6 → the zone
-                // rect vs af.W; else falls to L54.
+                // player S∈{250,150} → blind (@193-218); af.Z[0]==0 + own
+                // S117 → seen, straight to the @713 LOS tail (@221-231
+                // `iconst_1; goto 713` — slice 371: the af.S checks and
+                // L54 never run; structured i.java:1664-1666 has this exit
+                // but garbles the other states' fall-through to @234).
+                // af.S∈{7,1} → blind; af.S==6 → the zone rect vs af.W;
+                // else falls to L54.
                 val af = p.af
                 var resolved = false
                 var r0 = false
                 if (af != null && af.ax == 69) {
                     if (af.Z[0] == 0) {
                         if (p.S == 250 || p.S == 150) resolved = true
-                        else if (e.S == 117) r0 = true
+                        else if (e.S == 117) { resolved = true; r0 = true }
                     }
                     if (!resolved) {
                         if (af.S == 7 || af.S == 1) { resolved = true; r0 = false }
