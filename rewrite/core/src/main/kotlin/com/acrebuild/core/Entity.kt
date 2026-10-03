@@ -3589,6 +3589,21 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 av = attacker != null && attacker.ak < ak
                 ag = if (av) 512 else -512
             }
+            // L96 (simple/i.java:4733-4758; bytecode i.javap.txt:18662-18697
+            // offset 799, proven): the clip-27 prop bump (ax67 `bB()`, flight
+            // missions m1/m4). Unlike op38, every gate exits — `S==3`, then
+            // `g.a()` (which drains when it passes), then `o()` — and only
+            // then `g.b = r13; aB = 3; i(3)`, facing + ±512 push.
+            40 -> {
+                if (S == 3) return
+                if (!playerDamageable(g, world)) return   // g.a()
+                if (!oState()) return                      // o()
+                world.playerLinkB = attacker               // g.b = r13
+                aB = 3
+                setAnim(3)
+                av = attacker != null && attacker.ak < ak
+                ag = if (av) 512 else -512
+            }
         }
     }
 

@@ -30,7 +30,8 @@ and lands with unit tests that would have caught it.
 | 1.1 ax47/ax50 FSM swap (G1) | done | [346](../261003-0723-slice346-ax47-ax50-fsm-pairing/plan.md) |
 | G9 ax46 S5/S6 re-pin missing (found re-validating 346) | done | [347](../261003-0730-slice347-ax46-fire-cycle-repin/plan.md) |
 | 1.6b `l()` containment for ax17/23/50 (G8, found in 346) | pending | — |
-| 1.2–1.7 | pending | — |
+| 1.2 `applyHit` op 40 (G2) | done | [348](../261003-0747-slice348-applyhit-op40/plan.md) |
+| 1.3–1.7 | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
@@ -67,14 +68,15 @@ is in.
      ceiling-grab → S80 + claim; S120 quadrant pick → S121–128 pounce).
 - Data impact: 12 sentinels (m0 4, m2 2, m3 3, m5 3), 8 pouncers (m3 3, m5 5).
 
-### 1.2 `applyHit` op 40 (G2) — proven
+### 1.2 `applyHit` op 40 (G2) — proven · done (slice 348)
 
 - Original `structured/i.java:3615-3624`: `if (S != 3 && g.a() && o())`
   → `g.b = attacker; aB = 3; i(3); av = attacker.ak < ak; ag = av ? 512 : -512`.
 - Port caller: ax67 clip-27 springboard, `NpcFsm.kt:3591`; `applyHit` has no
   `40` arm (`Entity.kt:3493+`). Model the arm on the existing op 38 arm
   (`Entity.kt:3581-3590`: `playerDamageable` = `g.a()`, `oState()` = `o()`,
-  `world.playerLinkB` = `g.b`) but keep op 40's own guard (`S != 3` only).
+  `world.playerLinkB` = `g.b`) but keep op 40's own gates — `S != 3`,
+  `g.a()`, `o()`, each one exits (op38 only skips `i(3)` on `o()`).
 - Count the affected springboard records per pack and record it in the slice plan.
 - Tests: guard matrix (S==3, not damageable, `o()` false) and the positive
   arm (S3, aB=3, facing, ±512, link set).
