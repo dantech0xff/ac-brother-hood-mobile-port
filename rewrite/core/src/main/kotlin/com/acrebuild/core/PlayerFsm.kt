@@ -261,9 +261,13 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 p.aj = 1536
                 if (p.animFinished()) p.flingAirborne(0, world)
             }
-            // g.java L1ce4 (proven) — S19/S36 air variants: `cv=1` then
+            // g.java L1ce4 (proven) — S18/S19/S36 air variants: `cv=1` then
             // the shared L1ce8 air-family tail (same body as airFamily).
-            19, 36 -> {
+            // The g.e() switch sends 18/19/23/36 to offset 7396 = L1ce4
+            // (g.javap.txt:2537-2555, :5344-5346); S23 arms cv inside
+            // airFamily. S18 — the S17 wall-kick flight — had no arm until
+            // slice 349 and fell into the default fling.
+            18, 19, 36 -> {
                 p.cv = true
                 airFamily(p, pad)
             }
@@ -378,7 +382,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             // g.java L2b66/L2b69/L2f63 (proven) — S59/S65/S164/S211:
             // bare `goto L353d` — no arm, no L351e settle; only the
             // shared tail runs. Empty arm so `else` can't fling them.
-            59, 65, 164, 211 -> { }
+            // S371 (slice 349): the Cesare grab hold after S370 —
+            // `371 → 2223: goto 13629` (= L353d; g.javap.txt:2890, :2924),
+            // the same bare tail; ax61's S12 arm owns the release.
+            59, 65, 164, 211, 371 -> { }
             // g.java L1320 (proven) — S209 vehicle ride: no mount →
             // a(0) fling. `al` rides the mount (ax66 S11/S12 → own al,
             // else W[1]+1); last-frame on ax60 snaps ak; on anim end

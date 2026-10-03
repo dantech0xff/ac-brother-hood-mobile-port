@@ -31,7 +31,9 @@ and lands with unit tests that would have caught it.
 | G9 ax46 S5/S6 re-pin missing (found re-validating 346) | done | [347](../261003-0730-slice347-ax46-fire-cycle-repin/plan.md) |
 | 1.6b `l()` containment for ax17/23/50 (G8, found in 346) | pending | — |
 | 1.2 `applyHit` op 40 (G2) | done | [348](../261003-0747-slice348-applyhit-op40/plan.md) |
-| 1.3–1.7 | pending | — |
+| 1.3 player S18 arm (G3) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
+| 1.4 player S371 arm (G4) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
+| 1.5–1.7 | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
@@ -81,7 +83,7 @@ is in.
 - Tests: guard matrix (S==3, not damageable, `o()` false) and the positive
   arm (S3, aB=3, facing, ±512, link set).
 
-### 1.3 Player S18 arm (G3) — proven
+### 1.3 Player S18 arm (G3) — proven · done (slice 349)
 
 - `g.e()` switch: 18/19/23/36 → offset 7396 (`L1ce4`: `cv=1`, then the
   `L1ce8` air tail) — `bytecode/g.javap.txt:2537-2555`, `:5344-5346`.
@@ -90,7 +92,7 @@ is in.
 - Tests: S17 wall-kick → S18 gets `aj=1536`, `cv/cp/ct/cw`, the `T==1`
   launch impulse, and lands through the air tail instead of the default fling.
 
-### 1.4 Player S371 arm (G4) — proven
+### 1.4 Player S371 arm (G4) — proven · done (slice 349)
 
 - Bytecode: `371 → 2223: goto 13629` (`L353d`, bare tail) —
   `g.javap.txt:2890`, `:2924`; same as 59/65/164/211/297.
