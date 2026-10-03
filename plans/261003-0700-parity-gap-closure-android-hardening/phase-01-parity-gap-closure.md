@@ -33,7 +33,8 @@ and lands with unit tests that would have caught it.
 | 1.2 `applyHit` op 40 (G2) | done | [348](../261003-0747-slice348-applyhit-op40/plan.md) |
 | 1.3 player S18 arm (G3) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
 | 1.4 player S371 arm (G4) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
-| 1.5–1.7 | pending | — |
+| 1.6 jC=28 ghost rows (G6) | done | [351](../261003-0827-slice351-ae-121-no-panel/plan.md) |
+| 1.5, 1.7 | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
@@ -120,7 +121,7 @@ is in.
   continue with the other items.
 - Impact: 176 ax11 records (m0 49, m2 41, m3 27, m5 27, m6 28, m7 4).
 
-### 1.6 jC=28 ghost rows (G6) — confirm, then fix
+### 1.6 jC=28 ghost rows (G6) — proven · done (slice 351)
 
 - Confirm in `k.java:6204-6228` that the `eC==121` arm of `ae()` draws no
   menu panel/rows; if so, stop `panelVisible` (`Level0World.kt:3095-3097`)

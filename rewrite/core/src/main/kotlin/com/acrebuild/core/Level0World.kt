@@ -3095,6 +3095,13 @@ class Level0World(
     val panelVisible: Boolean
         get() = menuVisible || jC == 2 || jC == 3 || jC == 14 ||
             jC == 19 || jC == 23 || jC == 28 || jC == 29 || jC == 30
+    /** The `b()/d()` panel + rows actually draw: `ae()`'s `eC==121` arm
+     *  (k.java:6206-6218, proven) draws only the wrapped message at y=120
+     *  and the `a("",d(0,17))` footer, then returns — no `d(93,120,214)`
+     *  panel, no `L(ey)` rows (slice 351: the YES/NO rows ghosted on the
+     *  "GAME DATA HAS BEEN DELETED" screen). */
+    val menuPanelDrawn: Boolean
+        get() = panelVisible && !((jC == 23 || jC == 28) && kEc == 121)
     fun menuPanelZ3(): Boolean = when {
         jC == 14 -> kBv == 3        // `b(93,67,214,true,true)` only there
         jC == 12 || jC == 13 -> true

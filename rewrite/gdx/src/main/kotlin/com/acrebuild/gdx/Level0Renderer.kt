@@ -1797,8 +1797,11 @@ class Level0Renderer {
         if (world.jC == 6) aboutScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
-            menuPanel(world, pr[0], pr[1], pr[2],
-                      world.menuPanelZ2(), world.menuPanelZ3())
+            // ae()'s eC==121 arm skips the panel and rows (:6206-6218).
+            if (world.menuPanelDrawn) {
+                menuPanel(world, pr[0], pr[1], pr[2],
+                          world.menuPanelZ2(), world.menuPanelZ3())
+            }
             if (world.jC == 23 || world.jC == 28) {
                 // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,0,100,3,-1)`
                 // (:6221; eC==121 arm at :6207, y=120, no bW.l(1)) —
