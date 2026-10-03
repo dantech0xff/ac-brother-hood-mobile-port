@@ -39,8 +39,15 @@ corrected game and refreshes the device evidence that stopped at slice 330.
   (`:core:test` 1689/1689) — verdicts in
   [`reports/capstone-revalidation.md`](./reports/capstone-revalidation.md).
   Re-validation found four more parity bugs (slices 360–363), fixed.
-- Step 3 (connect the stitched legs) and steps 4–7 (Run-31 write-up,
-  device Run-32/33) are open; the device steps need an emulator host.
+- Step 3 (connect the stitched legs) and steps 5–6 (device Run-32/33) are
+  open; the device steps need an emulator host. Step 3 waits for slices
+  369–371 to land (they change player/NPC behaviour and slice 370 re-routes
+  bots).
+- Step 4 done: Run-31 had no archived artifacts; `REPORT.md` now records it
+  as UNRECORDED with what the slice-337 commit message says, and lists the
+  queued Run-32/33 checks.
+- Step 7 (part): `REPORT.md` frontmatter refreshed (it described Run 2);
+  the run sections themselves are appended when Run-32/33 happen.
 
 ## Implementation Steps
 

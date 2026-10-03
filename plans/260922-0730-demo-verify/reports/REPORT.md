@@ -1,10 +1,13 @@
 ---
-title: Golden-path verification — devin/land (10a200ec → eb6516f5)
+title: Device verification log — the Kotlin+LibGDX port on emulator-5554
 phase: demo-verify
-status: 46329a09-all-8-missions-load-render-no-crash-m5-spawn-wedge
-build: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
+status: run-30-last-recorded; run-31-unrecorded; run-32/33-pending-emulator-host
+build: per run (each section names its commit/APK); last recorded APK = slice-330 build (aadfeac5 docs-HEAD)
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
-date: 2026-09-24
+date: 2026-10-03 (header refreshed; runs dated in their sections, Run 2 = 2026-09-24)
+early_title: "Golden-path verification — devin/land (10a200ec → eb6516f5)"
+early_status: 46329a09-all-8-missions-load-render-no-crash-m5-spawn-wedge
+early_builds: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
 ---
 
 # Run 2 — devin/land @ eb6516f5 (slice 207 boot fix + slice 208 g.a unification) — STOCK build
@@ -1598,3 +1601,32 @@ Nav paths exercised on real touch; unreachable screens jdb-driven
 - Wipe: options↩→scroll→RESET→YES → kEc=121 → `scoreAt(81)=0` + file `0 0 0 0` @162 → force-stop → relaunch → `scoreAt(81)=0` → jC=4 (assist) → **table empty, all rows + TOTAL show "-"** (`hs-empty-after-wipe.png`).
 - Bonus: slice-330 banner-wrap verified on the wipe-confirm — "THE GAME DATA WILL BE / PERMANENTLY DELETED. / ARE YOU SURE?" wraps 3 lines, no left-clip (`hs-wipe-wrapped-banner.png` — Run-29 defect closed on-device).
 - Status: `aadfeac5-hs-REALARM-persist-VERIFIED-1500LE16-file-relaunch-display-TOTAL-wipePairClear-emptyAfterRelaunch`
+
+## Run-31 — slice-337 menu/UI audit — emulator-5554 (UNRECORDED)
+
+Back-filled 2026-10-03 (Phase 2 step 4 of
+`plans/261003-0700-parity-gap-closure-android-hardening/`). This run happened
+but nothing was archived: no screenshots, logcat or video exist under
+`reports/`. The only record is the slice-337 commit message (`26940489`,
+2026-10-02) and the slice docstring (`Slice337Test.kt:9`):
+
+- Found on device: an "OK" left soft key drew a phantom pill fragment and
+  armed a phantom back zone (jc14-else/19/23/28/3/30); taps in the letterbox
+  bars were clamped onto the view edge (right bar → x=399 → footer/action
+  zones).
+- Re-checked on device after the fix (per the commit): the jc23 footer strip
+  renders empty; a touchDown at screen x=2300 (right bar) posts nothing,
+  x=500 (in view) posts seq=1.
+- Slices 337b/337c/338–343 (menu press-advance, row taps, per-pointer
+  tracking, menu chrome and strip widths) have no device record at all; they
+  are queued for Run-32.
+- Status: `26940489-slice337-menu-audit-UNRECORDED-commit-message-only`
+
+## Pending device runs (2026-10-03)
+
+Device evidence stops here. Queued for the next emulator host (no `/dev/kvm`
+in the cloud container): Run-32 (menus, slices 337–343) and Run-33
+(gameplay, Phase 1 slices 346–368: sentinels/pouncers, ax11 attack variety,
+S17→S18 wall-kick, springboard hit, Cesare grab QTE, the m0 intro SKIP pill
+and BACK key, pause icon on release). Checklist:
+`plans/261003-0700-parity-gap-closure-android-hardening/phase-02-capstone-revalidation-device-evidence.md`.
