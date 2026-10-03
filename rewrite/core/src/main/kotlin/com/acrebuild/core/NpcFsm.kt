@@ -2299,12 +2299,12 @@ class NpcFsm(val world: LevelCellSource) {
                         // L14: zone exit releases our claim (k.m()) and
                         // clears the marker popup (k.k(aw)).
                         if (world.claimed === e) {
-                            world.clearClaim(); world.clearMarker(e.aw)
+                            world.clearClaim(); world.clearPrompt(e.aw)
                         }
                     } else {
                         // in k.M: bid prio 5 (k.a) + marker popup (k.c).
                         world.claim(e, 5, e.W)
-                        world.setMarker(e.ak, e.al - 85, e.aw)
+                        world.showPrompt(e.ak, e.al - 85, e.aw)
                     }
                     pushOut(e, player, world) // L18: a() solid-side helper
                 }

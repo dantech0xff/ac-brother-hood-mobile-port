@@ -1370,6 +1370,9 @@ class Level0Renderer {
                 drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
+        // `k.N` — the tap prompt (k.java:3077-3079 `N.F()`), drawn after
+        // the entity loop; it is never a draw-list member (slice 383).
+        world.kN?.let { drawEntity(world, it, camX, camY) }
 
         // `i.F()` FX primitives (i.java:11782+, proven): the per-tick
         // drawFx* collectors — ropes/marker lines, dark columns, the

@@ -1057,15 +1057,15 @@ class Level0WorldTest {
         assertSame(d, w.claimed)
         assertEquals(5, w.claimPrio)
         // k.c popup: ax14 singleton S54, az=302, tagged by aw
-        assertNotNull(w.marker)
-        assertEquals(14, w.marker!!.ax); assertEquals(54, w.marker!!.S)
-        assertEquals(302, w.marker!!.az)
+        assertNotNull(w.kN)
+        assertEquals(14, w.kN!!.ax); assertEquals(54, w.kN!!.S)
+        assertEquals(302, w.kN!!.az)
         // step out of the bubble → claim (k.m) and marker (k.k) release
         w.player.setPositionPx(d.W[2] + 200, d.W[3])
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
         assertNull(w.claimed); assertEquals(6, w.claimPrio)
-        assertNull(w.marker)
+        assertNull(w.kN)
     }
 
     @Test fun `ax4 armed by attack then S6 bursts wisps and self-removes`() {
@@ -13323,7 +13323,6 @@ class Slice128Test {
         override val npcs = mutableListOf<Entity>()
         override var claimPrio = 0
         override var claimed: Entity? = null
-        override var marker: Entity? = null
         override var aq = 0
         override val kAp = IntArray(6)
         override fun kCount(slot: Int) { kAp[slot]++ }
@@ -13364,8 +13363,6 @@ class Slice128Test {
         override fun removeEntity(e: Entity) {}
         override fun claim(e: Entity, prio: Int, w: IntArray) {}
         override fun clearClaim() {}
-        override fun setMarker(x: Int, y: Int, tag: Int) {}
-        override fun clearMarker(tag: Int) {}
         override fun sfx(id: Int) {}
         override fun spawnWisp(src: Entity) {}
         override fun spawnPickup(anim: Int, x: Int, y: Int): Entity = Entity(14, null)

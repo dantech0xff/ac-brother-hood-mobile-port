@@ -316,7 +316,6 @@ class Level0World(
         if (player.gd === e) player.gd = null
         if (lockTarget === e) lockTarget = null
         if (claimed === e) clearClaim()
-        if (marker === e) { marker = null; markerTag = -1 }
     }
 
     // -- k.a(i,prio,rect) context-claim system (k.java:816, proven) -------
@@ -342,33 +341,6 @@ class Level0World(
         claimPad[2] = w[2] + 10; claimPad[3] = w[3] + 10
     }
     override fun clearClaim() { claimPrio = 6; claimed = null }
-
-    // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870-902, proven) --------
-    // Singleton ax14 entity S54 on clip9 (r(9)); later k.c calls just move
-    // it. k.k(aw) removes it on tag match (or any when tag==-1); the
-    // original plays out via N.p(). `k.c(III)` (k.javap.txt @0-96) stores
-    // it in the static `k.N` only — no `k.b` insert: it is never a
-    // `bb[]` member (slice 371; it was queued into `npcs`). Its tick
-    // (`k.I()` @810-1000) and draw (`k.b(boolean)` @4521) are separate
-    // paths, unported here (see the slice 371 plan).
-    override var marker: Entity? = null
-    private var markerTag = -1       // k.cq
-    override fun setMarker(x: Int, y: Int, tag: Int) {
-        val m = marker
-        if (m == null) {
-            val e = Entity(14, clips[9]).apply {
-                setAnim(54); az = 302; au = 0; setPositionPx(x, y)
-            }
-            marker = e; markerTag = tag                       // k.N = …
-        } else m.setPositionPx(x, y)
-    }
-    override fun clearMarker(tag: Int) {
-        if (marker == null) return
-        if (markerTag == tag || tag == -1) {
-            marker?.let { pendingRemove += it }
-            marker = null; markerTag = -1
-        }
-    }
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
     override var aq = 0              // k.aq — global tally (ax4 S5 += m)
@@ -721,7 +693,8 @@ class Level0World(
         player.ga = null; player.ac = null; player.standingOn = null
         gc = null
         grabHolder = null; player.gb = null         // g.h=null; g.b=null (:2486-2489)
-        marker = null; markerTag = -1
+        // `k.N` (the prompt) is not reset here: only `k.k()` clears it
+        // (k.java:712-719) — it outlives a reload (slice 383)
         waypointPool.clear()
         waypoints.reset()   // c.a() (i.java:2567, proven) — same `c` pool
                             // the director/pursuers read; reset on reload
@@ -4287,6 +4260,7 @@ class Level0World(
         }
         drawStylePass()
         if (!z2) drawPassBubbles()
+        kN?.drawStyleF(this)                        // N.F() (k.java:3077-3079)
         claimCardsStep()
         val hc = kC
         if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep(z2)
@@ -4568,12 +4542,13 @@ class Level0World(
     override var kN: Entity? = null                // k.N prompt marker
     override var kCq = -1                          // k.cq bound uid
     override var gP = 0                            // g.p kill-bonus flag
-    /** `k.c(int,int,int)` (k.java:870, proven): the ax14/clip9/S54/az302
-     *  prompt marker — created once then repositioned every call; `cq` is
-     *  bound to the requesting entity's uid. Stored in `k.N` only — the
-     *  bytecode (k.javap.txt `c(III)V` @0-96) has no `k.b` insert, so it
-     *  is not an `npcs` member (slice 371). Its `k.I()` tick (@810-1000)
-     *  and `k.b(boolean)` draw (@4521) are unported. */
+    /** `k.c(int,int,int)` (k.java:694-710, proven): the ax14/clip9/S54/
+     *  az302 prompt `k.N` — created once then repositioned every call;
+     *  `cq` is bound to the requesting entity's uid at creation. Stored in
+     *  `k.N` only — `c(III)V` (k.javap.txt @0-96) has no `k.b` insert, so
+     *  it is not an `npcs` member (slice 371). [promptTick] runs its
+     *  `k.I()` tick, `bPass` its `F()`, the renderer draws it (slice 383,
+     *  which also folded a second copy of `k.N`/`cq` into this one). */
     override fun showPrompt(x: Int, y: Int, aw: Int) {
         if (kN == null) {
             kN = Entity(14, clips[9]).apply {
@@ -4591,7 +4566,37 @@ class Level0World(
     override fun clearPrompt(aw: Int) {
         val n = kN ?: return
         if (kCq == aw || aw == -1) {
-            n.deactivate(); pendingRemove += n; kN = null; kCq = -1
+            n.deactivate(); kN = null; kCq = -1                // N.p(); N=null
+        }
+    }
+
+    /** `k.k(x,y)` (k.java:721-726, proven): (x,y) inside the 50×50 box
+     *  centred on the prompt's screen position. */
+    private fun promptHit(x: Int, y: Int): Boolean {
+        val n = kN ?: return false
+        return insideRect(x, y, (n.ak - 25) - camX, (n.al - 25) - camY, 50, 50)
+    }
+
+    /** `k.N`'s tick in `k.I()` (k.java:2601-2619, proven), after the player
+     *  slot and its links: `s()`; S54 and a release inside the box
+     *  (`k(H,I)`) or the 32 bit held (`v(32)`) → `i(55)`, `P &= -65`, and
+     *  the tap fires `E(32)` — the context press `i.k()` reads as
+     *  `v(65568)`, so tapping the prompt above a target assassinates it;
+     *  S55 two frames from its end → `k(-1)`; a finger held over it
+     *  (`k(J,K)`) → `P |= 64; q()` (the held frame); otherwise back to
+     *  S54. The port never ran it: the prompt could not be tapped. */
+    private fun promptTick() {
+        val n = kN ?: return
+        n.advanceAnim()                                        // N.s()
+        if (n.S == 54 && (promptHit(lastTouchX, lastTouchY) || pad.v(32))) {
+            n.setAnim(55); n.P = n.P and -65
+            if (promptHit(lastTouchX, lastTouchY)) padE(32)    // E(32)
+        } else if (n.S == 55 && n.T == (n.clip?.frameCount(55) ?: 0) - 2) {
+            clearPrompt(-1)                                    // k(-1)
+        } else if (promptHit(lastMoveX, lastMoveY)) {
+            n.P = n.P or 64; n.jumpToLastFrame()               // P|=64; q()
+        } else if (n.S != 55) {
+            n.setAnim(54); n.P = n.P and -65
         }
     }
     var gs = false                                 // g.s transition bool
@@ -5413,6 +5418,7 @@ class Level0World(
         player.ac?.let { tickNpc(it) }
         player.ab?.let { tickNpc(it) }
         player.ad?.let { if (it.ax == -999) tickNpc(it) }
+        promptTick()                                // k.N (k.java:2601-2619)
         if (pendingRemove.isNotEmpty()) {
             npcs.removeAll(pendingRemove)
             pendingRemove.clear()

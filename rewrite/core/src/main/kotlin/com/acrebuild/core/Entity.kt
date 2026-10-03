@@ -4925,9 +4925,6 @@ interface LevelCellSource {
     fun clearClaim()                      // k.m()
 
     // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870) -----------------
-    var marker: Entity?
-    fun setMarker(x: Int, y: Int, tag: Int)
-    fun clearMarker(tag: Int)
 
     // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
     var aq: Int
