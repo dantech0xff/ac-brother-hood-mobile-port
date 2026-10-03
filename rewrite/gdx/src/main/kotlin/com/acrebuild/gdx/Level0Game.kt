@@ -6,6 +6,7 @@ import com.acrebuild.core.InputQueue
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.acrebuild.core.MissionPack
+import com.acrebuild.core.SaveEnvelope
 import com.acrebuild.core.ScriptTables
 import com.acrebuild.core.TickEngine
 import com.badlogic.gdx.ApplicationAdapter
@@ -52,7 +53,7 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
     private val firstPackTilesetDir = "level0"
-    private val save = SaveBridge("asbr-save.bin")
+    private val save = SaveBridge("asbr-save.bin", SaveEnvelope.SCHEMA_KBA_V1)
     private val audio = AudioBridge()
     private var accumulatorUs = 0L
 
@@ -226,8 +227,15 @@ class Level0Game : ApplicationAdapter() {
                         "npcs=${world.npcs.size}")
                 }
                 is com.acrebuild.core.Command.PersistBA -> {
-                    save.write(c.record)
-                    Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                    // A failed write keeps the previous durable save (the
+                    // protocol never touches it before the new one is
+                    // forced); the next e(true) flush retries.
+                    try {
+                        save.write(c.record)
+                        Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                    } catch (e: Exception) {
+                        Gdx.app.error(TAG, "save: e(true) failed, previous save kept", e)
+                    }
                 }
                 is com.acrebuild.core.Command.QuitApp -> {
                     // j.c==11 → notifyDestroyed (j.java:218)
