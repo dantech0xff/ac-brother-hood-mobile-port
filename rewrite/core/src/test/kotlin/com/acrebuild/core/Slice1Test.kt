@@ -24278,11 +24278,16 @@ class Slice245Test {
             val poles = w.npcs.filter { it.ax == 44 && it.ak in 3850..4270 }
             val covering = poles.filter {
                 exitAk - 10 <= it.W[2] && exitAk + 10 >= it.W[0] }
-            // ~20t to land → pole phase at landing ≈ (ph + 20) % 7 — the
-            // overlap window is only ~3-4t while al ≥ 767. Land during
-            // S0/S1 (early non-lethal) so the next S3 lands after the
-            // hop clears the box. Drop during the covering pole's S1.
-            return covering.all { it.S == 1 }
+            // The S257 drop lands 15t after the press — one phase on.
+            // The poles tick before the player (k.I() order) and bv()
+            // tests both boxes as the previous frame left them (slice
+            // 362); the crush ticks are the S3 pair — pre-tick ph5
+            // tests the S3T0 box (y767+), ph6 the S3T1 box (y755+).
+            // The run-hop (S5, S12, S12, S233) keeps the bot on the
+            // floor through the 4th tick after landing, so only a ph0
+            // landing keeps both crush ticks off grounded frames. Drop
+            // at ph6 (S3T1) → land at ph0.
+            return covering.all { polePh(it) == 6 }
         }
         while (t++ < 140000) {
             when {
@@ -24404,6 +24409,23 @@ class Slice245Test {
                         // keeps its proven tap-fall route.
                         if (!p.aZ && p.ak > 1100)
                             held = held or Pad.M_UP
+                        // G12 re-route: the kick off the x1000 pit wall
+                        // must rise into the ax46 bar @1067,650 (S327 →
+                        // S330 catch → S165 launch east). The bar tests
+                        // last frame's W (k.I() runs bb[] before aS.I()),
+                        // and its X box ends at y≈686 — a grab at y≈818
+                        // (the free ping-pong's hop meeting the wall on
+                        // its way down) kicks 1px short. Run west and
+                        // take off ~45px out so the hop meets the wall
+                        // at its apex (grab y≈797). Too close → back off.
+                        if ((p.aZ || p.S == 5) && p.av && p.al > 840 &&
+                            p.ak in 1000..1110) {
+                            held = when {
+                                p.ak > 1060 -> Pad.M_LEFT
+                                p.ak >= 1046 -> Pad.M_LEFT or Pad.M_UP
+                                else -> Pad.M_RIGHT
+                            }
+                        }
                     } else {
                         // CHANNEL CROSSING (slice-273 — proven end-to-end):
                         // the '5' floor strip x1580-2120 is ONE continuous
@@ -24548,6 +24570,14 @@ class Slice245Test {
                         // 194 hits the "5" band start x3880; below it the
                         // probe lands on the "##" cap ("20" -> crouch trap).
                         // DOWN is one-shot: stand in-zone until dropSafe.
+                        // Under the faithful l() (slice 360) a run step
+                        // is 10px, a released run still steps on its
+                        // release tick and a long run brakes (S11) — so
+                        // the window is reached in single taps from a
+                        // stand: release while running/braking, turn in
+                        // place (aA != 0 turns without a step), step.
+                        p.aZ && p.al in 540..620 && p.ak in 3900..3970 &&
+                            (p.S == 12 || p.S == 11) -> 0
                         p.aZ && p.al in 540..620 && p.ak > 3935 -> Pad.M_LEFT
                         p.aZ && p.al in 540..620 && p.ak < 3928 -> Pad.M_RIGHT
                         p.aZ && p.al in 540..620 && !p.av -> Pad.M_LEFT
@@ -24665,12 +24695,17 @@ class Slice245Test {
                         // arc apex comes down on its head; a hop too
                         // close or aimed past just lands into its
                         // lunge reach (struck on touchdown at ~9803).
+                        // G12 re-route: never turn back west on the top.
+                        // Every attempt now lands the S157 fling on guard1
+                        // (S89 kill @9723) with guard2 30px ahead; hopping
+                        // back at a guard that has slipped behind only
+                        // feeds it strikes (the 301-death dance). Hop over
+                        // a guard ahead, otherwise run for the shaft.
                         p.aZ && p.al in 330..400 && p.ak in 9600..10080 ->
                             if (foe != null && foe.ax == 11 &&
-                                foe.aB > 200 &&
-                                kotlin.math.abs(foe.ak - p.ak) in 20..110)
-                                (if (foe.ak > p.ak) Pad.M_RIGHT
-                                 else Pad.M_LEFT) or Pad.M_UP
+                                foe.aB > 200 && foe.ak > p.ak &&
+                                foe.ak - p.ak in 20..110)
+                                Pad.M_RIGHT or Pad.M_UP
                             else Pad.M_RIGHT
                         // shaft descent / ledge / under-corridor: drift
                         // and run east toward the pillar face. Ledge-
@@ -24720,6 +24755,16 @@ class Slice245Test {
                         // ascent (S33/36/60/62 run in the trace). Scoped
                         // to the pocket — the respawn corridor at x~8896
                         // also sits at al>560 and must run EAST anyway.
+                        // G12 re-route: the chimney foot (y799 floor under
+                        // the x8941/x8979 faces). Running into the x8979
+                        // face only rides S33 → S34 back down while the
+                        // floor soldier u65 closes in; under k.I()'s order
+                        // a respawn lands grounded, so the air-tick corner
+                        // tap that used to hop it in never fires. Hop from
+                        // the floor: the arc meets the face high → S101 →
+                        // the S36/S101 zigzag climbs to the y559 ledge.
+                        p.aZ && p.al in 780..820 && p.ak in 8915..8975 ->
+                            Pad.M_RIGHT or Pad.M_UP
                         p.aZ && p.al > 560 && p.ak in 6000..9819 ->
                             Pad.M_RIGHT
                         // plateau '02' top: the ax44 pole gauntlet.
@@ -24827,6 +24872,22 @@ class Slice245Test {
                         (!p.aZ && p.ak <= 9080) || p.S in 33..36 ||
                             p.S == 92 || p.S == 101 ->
                             if (p.ag < 0) Pad.M_TAP_L else Pad.M_TAP_R
+                        // G12 re-route: bridge top (y259) — run into the
+                        // parked gondola uid49 with RIGHT alone. The
+                        // gondola binds in the entity pass and ticks
+                        // again as the player's ac link after aS.I()
+                        // (k.java:2589-2591), where a held UP is bx()'s
+                        // hop-off (k.v(16388), i.java:16150 → S157 fling).
+                        p.aZ && p.al in 240..280 && p.ak in 9000..9400 ->
+                            Pad.M_RIGHT
+                        // G12 re-route: chimney-top ledge (y559). The hop
+                        // to the x8979 face top must leave from x>=8912:
+                        // 8px further west the arc meets the face one
+                        // tick lower (grab y548, not y530) and the S36
+                        // kick then tops out under the '5' strip (y390)
+                        // instead of catching it (S280).
+                        (p.aZ || p.S == 5) && p.al in 550..565 &&
+                            p.ak in 8860..8911 -> Pad.M_RIGHT
                         // grounded at the wall face: RIGHT|UP — aF arms
                         // (cv&&u|v(M_UP)) so the face contact grabs;
                         // vaults rise toward the face otherwise.
