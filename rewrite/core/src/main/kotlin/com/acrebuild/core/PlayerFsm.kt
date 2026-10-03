@@ -200,10 +200,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
      * 41 always `return` (60 states), 58 always `goto 13629` = L353d (90
      * states), 8 do both (15 states) and the default (213 states, 13598)
      * falls into 13629. No arm jumps past L353d: every tail exit is
-     * `goto 13629`. L353d itself returns at 13711 (the type-2 death, not
-     * ported yet — follow-up F1 below); everything else falls into the
-     * post-tail at 14349. The full table is in
-     * plans/261003-1900-slice365-ge-exits/plan.md.
+     * `goto 13629`. L353d itself returns at 13711 (the type-2 death,
+     * slice 370); everything else falls into the post-tail at 14349. The
+     * full table is in plans/261003-1900-slice365-ge-exits/plan.md.
      */
     private fun dispatch(p: Entity, pad: Pad): Boolean {
         when (p.S) {
@@ -1629,20 +1628,26 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // of the shared tail every `goto 13629` arm and the default arm
         // reach. 13629-13659: `S!=9 && ab!=null && ab.S==14 → ab = null`.
         if (p.S != 9 && p.ab?.S == 14) p.ab = null
-        // KNOWN DIVERGENCE (slice 365 follow-up, not silent): the bytecode
-        // at 13662-13736 is `(aR==2 || aO==2 || L()) && g.a==null →
-        // ah=aj=0; e(0); i(50); return` (a type-2 cell at the feet, head
-        // or anchor kills an unmounted player and skips the post-tail),
-        // then `aO==6 || aR==6 → a(18,0,0,this)`. The simple view
-        // (g.java:3465-3473, 3739-3747) drops the jumps; this port reads
-        // it as "type-2 suppresses the aO==6 hit". The faithful kill makes
-        // the shipped type-2 floor strips lethal and breaks 12 capstone
-        // tests whose bot routes walk them, so it lands in its own slice
-        // — see plans/261003-1900-slice365-ge-exits/plan.md, follow-up F1.
-        if (p.aR != 2 && p.aO != 2 &&
-            p.e(world, p.ak / 20, p.al / 20) != 2) {           // L() i.java:7191
-            if (p.aO == 6) p.applyHit(18, 0, p, world)         // a(18,0,0,this)
+        // 13662-13711 (slice 370, F1 of slice 365): the type-2 kill —
+        // `(aR==2 || aO==2 || L()) && g.a==null → ah = aj = 0; g.e(0);
+        // i(50); return`. A type-2 cell below the feet (aR), at the head
+        // (aO) or at the anchor (`L()` = `e(ak/20, al/20) == 2`,
+        // i.javap.txt L() 0-25) kills an unmounted player; the `return`
+        // skips the J&4 block and the post-tail. The shipped type-2 cells
+        // are the lethal pit bottoms: one row on top of the floor, where a
+        // landing (`d()`: al = ((W[3]+1)/20)*20 - 1) puts the anchor.
+        if ((p.aR == 2 || p.aO == 2 ||
+                p.e(world, p.ak / 20, p.al / 20) == 2) &&       // L()
+            p.standingOn == null) {                             // g.a == null
+            println("DBG T2KILL TEMP370 aj=${world.kAj} @(${p.ak},${p.al}) S${p.S} Q${p.Q} aR=${p.aR} aO=${p.aO} L=${p.e(world, p.ak / 20, p.al / 20)} W=${p.W.toList()} ah=${p.ah}")
+            p.ah = 0; p.aj = 0
+            p.x1 = 0                                            // g.e(0)
+            p.setAnim(50)
+            return false                                        // 13711
         }
+        // 13712-13736: `aO==6 || aR==6 → a(18,0,0,this)` — the type-6 hurt
+        // cell at the head or below the feet.
+        if (p.aO == 6 || p.aR == 6) p.applyHit(18, 0, p, world)
         mountEntry(p, pad)  // 13739-14348 — the J&4 mount/assassinate block
         return true
     }
