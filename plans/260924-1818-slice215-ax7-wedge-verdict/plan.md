@@ -63,3 +63,14 @@ softlock — the player restarts the mission. Faithful = keep it.
   — they just never arm at deep embed.
 - The demo route through this plant wedges in the original too; the
   intended traversal past x1480 is the wall-kick shaft / other route.
+
+## Erratum (2026-10-03, G12 on the Phase 2 branch)
+
+The verdict above was traced under the port's player-first frame order.
+`k.I()` (k.java:2529-2600) ticks every `bb[]` entity — the mouth
+included — before `aS.I()`. With that order the release reads the swing
+one step further east: release ~(1488,501), and the throw lands the
+player on the floor beyond the corner at ~(1528,579) in S0 — the same
+with or without the port's pre-`e()` `a(true)` superset. There is no
+deep embed and no soft-lock. `Slice215Test` now pins that outcome
+("ax7 mouth throw clears the wall corner").

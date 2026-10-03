@@ -4,7 +4,7 @@ description: >-
   Deep-pass the shared ~170-state NPC/enemy FSM (ax 11/17/23/47/50/73) inside
   i.I(), plus i.i()/aa.b(S) state→animation mapping and remaining per-type
   handler semantics. Static-only.
-status: in_progress
+status: completed
 priority: P1
 effort: large
 branch: devin/1789984451-npc-fsm-mining

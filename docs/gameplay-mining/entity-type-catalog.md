@@ -36,15 +36,15 @@ Constructor route (`level-record-formats.md`, `proven`): raw `0`/`25` →
 | 30,54 | `ax()` | 169L/11 st | flying-mode entity | inferred | 4 / 1,4 |
 | 34 | `ak()` | 42L | player-proximity effect (42 refs) | inferred | — |
 | 35 | `bQ()` | 415L/32 st | NPC/enemy variant (msg:8) | inferred | 0,2,3,6,7 |
-| 37 | `al()` | 93L/6 st | **pickup** (msg:5 — potion/soul/memory) | inferred | 0,1,2,3,5,6,7 |
+| 37 | `al()` | 93L/6 st | **Scroll-bound trigger**: zone `W` (r8[7..10]) / bound `X` (r8[11..14]), `Z={mask, link mode, link uid, overlap mode}`; player trong zone → ghi `k.R/S/T/U` = `X` theo mask khi zone chạm `k.ac`, containment claim `k.ah` (scroll wall `i.f()`); link gate `Z[2]` (6 mode, 3-5 tự `k.c`). Record `P&32` ngủ tới khi script xóa bit (`i.java:2570-2580`, `:5739-5828`) | proven | 0,1,2,3,5,6,7 |
 | 40 | `bx()` | 127L | player-proximity interactable | inferred | 0,3,5 |
 | 41 | `n()` | 75L | **knockable prop**: gravity `aj=1536`, cap 2560, đẩy entity khác, `k.ae=aS` | proven | 0,2,3,5,6,7 |
 | 42 | `bz()` | 76L | helper (1 msg) | inferred | 0,2,3,5,6,7 |
 | 43 | `bw()` | 76L/3 st | interactable | inferred | 2,3,6 |
 | 44 | `bv()` | 96L/17 st | **door/gate**: timed cycle (Z[3] countdown), slaved (type 58 link), proximity-open; player trong vùng → `i(50)` (đè/crush) | proven | 0,2,3,5,6,7 |
 | 46 | `aZ()` | 129L/15 st | zone | inferred | 0,2,3,5,6,7 |
-| 47 | shared | — | NPC + `k.e(0,aw)` khi mount op 90 | proven | 0 (retype) |
-| 50 | shared | — | NPC family | proven | — |
+| 47 | `aL()` | — | **ledge sentinel** — runtime type do retype head (`i.java:2640-2651`): record ax11 có `r8[5]∈{80,93}`; dispatch `case 47 → aL()` (slice 346, bytecode i.javap dispatch); `k.e(0,aw)` khi mount op 90 | proven | 0,2,3,5 (retype) |
+| 50 | `aK()` | — | **pouncer** — retype từ record ax17 có `r8[5]==120`; dispatch `case 50 → aK()` (perch S120 → pounce S121-128 → despawn S130; slice 346) | proven | 3,5 (retype) |
 | 51 | `bs()` | 118L | **pushable crate**: `g.a` grab ref, player states 235–240 push/pull, carry offset `W[1]+4`, `bp()/bo()/bq()` ground/edge probes | proven | 5 |
 | 55 | `c.a()` ctor | — | **waypoint node** (dispatch rule raw 55→c) | proven | 1,4 |
 | 56 | `ay()` | 167L/14 st | flying-mode entity | inferred | 1,4 |
@@ -56,7 +56,7 @@ Constructor route (`level-record-formats.md`, `proven`): raw `0`/`25` →
 | 66 | `bm()` | 249L | **moving platform/ride**: player lên → kế thừa vel (`g.a=this`), chu kỳ Z[0]/Z[1], quay về gốc Z[2]/Z[3] | proven | 2,3,5,6,7 |
 | 67 | `bB()` | 101L | **multi-role prop** (`Z[0]`+`k.bk[]` gate): bounce-hazard (`ah=768+k.Y`, player dmg 40), collectible counter (`aA|=8`, `az-1`), **zipline anchor** (player S309 + helper S71) | proven | mọi màn (phổ biến nhất) |
 | 69 | `bC()` | 218L/16 st | launcher object (aV S=14 attach/detach) | high-confidence | 5,6 |
-| 72 | default arm | — | **interactable/assassinate spot**: `e()` check `at.ax==72` với submodes `Z[0]` 1/3/4 (radius `Z[3]`, directional `Z[4]`) | high-confidence | 0,2,3,5,6 |
+| 72 | default arm | — | **interactable/assassinate spot**: `e()` check `at.ax==72` với submodes `Z[0]` 1/3/4 (radius `Z[3]`, directional `Z[4]`) | high-confidence | 0,2,3,5,7 |
 | 73 | shared | — | NPC family | proven | 2,3,5,6 |
 | 74 | `bN()` | 105L/8 st | waypoint/graph node (msg:3 — patrol routes) | inferred | 0,1,2,3,5,6 |
 | 76 | `bO()` | 61L/7 st | helper | inferred | — |

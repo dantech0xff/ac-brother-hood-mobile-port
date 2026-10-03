@@ -1,0 +1,102 @@
+# The four gates from AGENTS.md, run on every PR and on main.
+# The original JAR is only read statically here (javap + unzip); nothing runs it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Kotlin test names with non-ASCII characters compile to class files with
+  # non-ASCII names; a JVM under the POSIX locale cannot write them.
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+jobs:
+  static:
+    name: Static reconstruction (verifier + contract tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # javap for the verifier's fresh-disassembly check.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Verifier (ok:true required)
+        run: |
+          python3 scripts/verify-static-reconstruction.py \
+            assassins_creed_-_br_320x240_136711.jar reconstructed-project > verify.json
+          python3 -c "import json; d = json.load(open('verify.json')); print('ok:', d['ok']); print('failures:', d['failures'])"
+      - name: Contract tests
+        run: python3 -m unittest discover -s tests
+      - name: Upload verifier report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-report
+          path: verify.json
+          if-no-files-found: ignore
+
+  jvm:
+    name: Port tests (core + gdx)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: rewrite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: core + gdx tests
+        run: ./gradlew --no-daemon :core:test :gdx:test
+      - name: Upload JUnit XML
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-xml
+          path: |
+            rewrite/core/build/test-results/test/*.xml
+            rewrite/gdx/build/test-results/test/*.xml
+
+  android:
+    name: Android debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: rewrite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      # compileSdk 36; AGP 8.13.2 resolves build-tools 35.0.0.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: assembleDebug
+        run: ./gradlew --no-daemon :android:assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: rewrite/android/build/outputs/apk/debug/*.apk

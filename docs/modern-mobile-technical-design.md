@@ -1,6 +1,6 @@
 ---
 document_status: proposed-design
-implementation_status: not-started
+implementation_status: android-implemented  # rewrite/ (8 missions); iOS pending a macOS host
 target_platforms: [Android, iOS]
 primary_stack: Kotlin + LibGDX
 source_runtime_dependency: none
@@ -10,6 +10,14 @@ date: 2026-07-22
 # Technical design cho bản rewrite Android/iOS
 
 ## 1. Trạng thái và quyết định
+
+> **Cập nhật 2026-10-03.** Thiết kế này đã được hiện thực cho Android trong
+> `rewrite/` (Kotlin + LibGDX, đủ 8 mission; xem `rewrite/README.md`). Hai chỗ
+> bản hiện thực chủ ý lệch khỏi tài liệu, mỗi chỗ có ADR: nhịp tick tự định
+> ≤1 tick/frame thay cho catch-up (§8,
+> `docs/decisions/tick-cadence-self-clocked.md`) và chính sách save thô giống
+> bản gốc với container v1 (§16, `docs/decisions/save-policy.md`). Đoạn dưới
+> đây giữ nguyên văn bản thiết kế ban đầu.
 
 Đây là **thiết kế kỹ thuật**, không phải implementation. Không có code game mới,
 không build launcher, không chạy JAR gốc và không thực thi simulator/device trong
@@ -166,6 +174,11 @@ A→back/B với completion đảo thứ tự, background cancellation và stale
   catch-up thời gian treo.
 - Giới hạn tối đa bốn catch-up tick/frame. Phần lag dư được drop có telemetry
   dev-only để tránh spiral-of-death.
+
+> **Đã quyết định (2026-10-03):** game path không dùng catch-up. `Level0Game`
+> chạy tối đa một tick mỗi frame với accumulator giữ phần dư, đúng vòng sleep
+> của `j.run()` gốc — ADR `docs/decisions/tick-cadence-self-clocked.md`.
+> Catch-up ≤4 bên dưới chỉ còn ở `TickEngine` của spike.
 
 Accumulator, multi-tick catch-up và drop backlog là intentional modern
 divergence. Trước khi gọi mode này là parity-capable, cần ADR và golden scenarios

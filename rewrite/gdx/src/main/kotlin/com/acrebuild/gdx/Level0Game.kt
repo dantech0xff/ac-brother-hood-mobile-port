@@ -6,10 +6,12 @@ import com.acrebuild.core.InputQueue
 import com.acrebuild.core.Level0World
 import com.acrebuild.core.LevelPack
 import com.acrebuild.core.MissionPack
+import com.acrebuild.core.SaveEnvelope
 import com.acrebuild.core.ScriptTables
 import com.acrebuild.core.TickEngine
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
 
 /**
  * game-app role: lifecycle + fixed-step driver for the slice-1 port —
@@ -52,9 +54,10 @@ class Level0Game : ApplicationAdapter() {
     private lateinit var renderer: Level0Renderer
     private val inputQueue = InputQueue()
     private val firstPackTilesetDir = "level0"
-    private val save = SaveBridge("asbr-save.bin")
-    private val audio = AudioBridge()
+    private val save = SaveBridge("asbr-save.bin", SaveEnvelope.SCHEMA_KBA_V1)
+    private val audio = AudioBridge(TAG)
     private var accumulatorUs = 0L
+    private lateinit var driver: TickDriver
 
     /** `I(aj)` pack provider (k.java:5244, proven): one mission pack
      *  = level ACLV + `k.d(1+aj)` strings + `j.e(7)` scripts — the
@@ -96,10 +99,11 @@ class Level0Game : ApplicationAdapter() {
         renderer.rebuildTilesets()
     }
 
+    /** The shared clip map: base clips load once in [create]; mission
+     *  tilesets (negative keys) are swapped by [boot] and [loadMissionTilesets]. */
+    private val clips = HashMap<Int, Clip>()
+
     override fun create() {
-        val firstPack = missionPack(0)
-        val level = firstPack.level
-        val clips = HashMap<Int, Clip>()
         clips[0] = Clip.load(Gdx.files.internal("clips/clip0/clip.acpk").readBytes())
         clips[91] = Clip.load(Gdx.files.internal("clips/clip91/clip.acpk").readBytes())
         clips[92] = Clip.load(Gdx.files.internal("clips/clip92/clip.acpk").readBytes())
@@ -155,6 +159,15 @@ class Level0Game : ApplicationAdapter() {
         clips[23] = Clip.load(Gdx.files.internal("clips/clip23/clip.acpk").readBytes())   // ax66 platform
         clips[28] = Clip.load(Gdx.files.internal("clips/clip28/clip.acpk").readBytes())   // ax51 crate
         clips[44] = Clip.load(Gdx.files.internal("clips/clip44/clip.acpk").readBytes())   // ax31
+        audio.create()
+        boot()
+    }
+
+    /** Build mission 0 from the durable save and enter the boot screens —
+     *  at start-up and from the fatal screen's restart. */
+    private fun boot() {
+        val firstPack = missionPack(0)
+        val level = firstPack.level
         // pack-15 tilesets bound via k.ej[aj*4..+2] (k.java:275); cells
         // index each tileset clip's composite-object space. Negated keys:
         // entity clips share this map via k.bi[] whose values collide
@@ -162,6 +175,7 @@ class Level0Game : ApplicationAdapter() {
         // firstPackTilesetDir already carries the "level0" prefix; the
         // et collision layer (id==0) has tilesetClip=0 = null sentinel —
         // exclude it or the load asks for a nonexistent tileset-0.
+        clips.keys.removeAll { it < 0 }
         for (ts in level.layers.filter { it.id != 0 }
                 .map { it.tilesetClip }.toSet()) {
             clips[-ts] = Clip.load(
@@ -180,16 +194,36 @@ class Level0Game : ApplicationAdapter() {
         // j.c==0 + cu==0 (k.a() case 0 = R(), k.java:3949): the real
         // boot — splash logos → sound prompt → title → menu → play.
         world.stateL(0)
+        if (::renderer.isInitialized) renderer.dispose()
         renderer = Level0Renderer()
         renderer.create(world)
-        audio.create()
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
+        // BACK is the right soft key (slice 368), never "close the app" —
+        // the original has no hardware-key path at all.
+        Gdx.input.setCatchKey(Input.Keys.BACK, true)
+        driver = TickDriver(world::tick, world::drainCommands, ::onTickFailed)
+        accumulatorUs = 0
         Gdx.app.log(TAG, "level0: ${level.entities.size} records, " +
             "${level.cols}x${level.rows} cells, world=${level.worldW}x${level.worldH}px, " +
             "npcs=${world.npcs.size}")
     }
 
+    /** The tick-failure boundary's fatal hook: stop the channel once; the
+     *  world is quarantined and [render] shows the fatal screen. */
+    private fun onTickFailed(t: Throwable) {
+        Gdx.app.error(TAG, "tick failed — world quarantined", t)
+        audio.stopAll()
+    }
+
     override fun render() {
+        if (driver.quarantined) {
+            // Fatal screen: its only action restarts from the durable save
+            // (boot screens → title). Input still drains so a tap is seen.
+            val events = inputQueue.drainTo(inputQueue.headSequence())
+            if (events.any { it.type == InputQueue.Type.UP }) { boot(); return }
+            renderer.renderFatal()
+            return
+        }
         // µs accumulator — ms-truncating `deltaTime` lost ~0.3-0.7ms per
         // frame (~40ms/s), which periodically landed a tick one vsync
         // late = the visible micro-hitch. Remainder-keep holds the 62ms
@@ -198,19 +232,19 @@ class Level0Game : ApplicationAdapter() {
         val step = tickAccStep(accumulatorUs,
             (Gdx.graphics.deltaTime * 1_000_000f).toLong())
         accumulatorUs = step.first
-        if (step.second) {
-            val events = inputQueue.drainTo(inputQueue.headSequence())
-            try {
-                world.tick(events)
-            } catch (t: Throwable) {
-                Gdx.app.error(TAG, "tick failed, quarantining", t)
-            }
-        }
-        // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
-        // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
-        // (0–9,17,21,28) log-skip — undecoded on this pipeline.
+        val commands = if (step.second)
+            driver.tick(inputQueue.drainTo(inputQueue.headSequence()))
+        else driver.drainIdle()
+        execute(commands)
+        if (driver.quarantined) renderer.renderFatal() else renderer.render(world)
+    }
+
+    /** Run a committed tick's deferred commands through the adapters. */
+    private fun execute(commands: List<com.acrebuild.core.Command>) {
+        // `z()`/`e.b()` audio commands (e.java:50-87): AudioBridge plays
+        // the pack-17 SFX WAVs and the MIDI slots (0–9,17,21,28) from
+        // their offline OGG renders (`audio/music-N.ogg`).
         // `audioTrack` mirrors e.e.
-        val commands = world.drainCommands()
         audio.execute(commands)
         for (c in commands) {
             when (c) {
@@ -226,8 +260,15 @@ class Level0Game : ApplicationAdapter() {
                         "npcs=${world.npcs.size}")
                 }
                 is com.acrebuild.core.Command.PersistBA -> {
-                    save.write(c.record)
-                    Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                    // A failed write keeps the previous durable save (the
+                    // protocol never touches it before the new one is
+                    // forced); the next e(true) flush retries.
+                    try {
+                        save.write(c.record)
+                        Gdx.app.log(TAG, "save: e(true) → ${c.record.size}B /ASBR")
+                    } catch (e: Exception) {
+                        Gdx.app.error(TAG, "save: e(true) failed, previous save kept", e)
+                    }
                 }
                 is com.acrebuild.core.Command.QuitApp -> {
                     // j.c==11 → notifyDestroyed (j.java:218)
@@ -237,22 +278,36 @@ class Level0Game : ApplicationAdapter() {
                 else -> Unit
             }
         }
-        renderer.render(world)
     }
 
+    /** `hideNotify` → `k.c()` (k.java:5817-5836): input latches cleared, a
+     *  `cd[6]` script paused, the channel stopped. Whatever the world has
+     *  queued — a `PersistBA` above all — is executed now, synchronously:
+     *  the process may not come back. */
     override fun pause() {
         Gdx.app.log(TAG, "pause at tick=${world.tickIndex}")
-        world.suspendAudio()                     // bG = kFi (k.java:5817)
+        if (!driver.quarantined) {
+            world.hideNotify()
+            execute(driver.drainIdle())
+        }
+        audio.stopAll()
         super.pause()
     }
 
+    /** `showNotify` → `k.d()` (k.java:5767-5813): in play it opens the pause
+     *  menu (`l(14)`). The tick clock restarts from zero — the time spent in
+     *  the background is not owed. */
     override fun resume() {
         accumulatorUs = 0
-        world.resumeAudio()                      // bG>=0 → z(bG)/fi (k.java:5795)
+        if (!driver.quarantined) {
+            world.showNotify()
+            execute(driver.drainIdle())
+        }
         super.resume()
     }
 
     override fun dispose() {
+        if (::driver.isInitialized) execute(driver.drainIdle())   // last flush
         audio.dispose()
         renderer.dispose()
     }

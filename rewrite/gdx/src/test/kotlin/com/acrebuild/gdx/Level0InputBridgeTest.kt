@@ -1,8 +1,11 @@
 package com.acrebuild.gdx
 
 import com.acrebuild.core.InputQueue
+import com.badlogic.gdx.Input
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Multi-touch + letterbox semantics of `Level0InputBridge`: the view
@@ -68,5 +71,19 @@ class Level0InputBridgeTest {
             InputQueue.Type.UP), evs.map { it.type })
         assertEquals(399, evs[1].x)          // clamped to the right edge
         assertEquals(399, evs[2].x)
+    }
+
+    @Test
+    fun `BACK and ESCAPE post a sequenced BACK event, other keys are left alone`() {
+        val (b, q) = rig()
+        b.touchDown(100, 100, 0, 0)
+        assertTrue(b.keyDown(Input.Keys.BACK), "BACK is consumed — never closes the app")
+        b.touchUp(100, 100, 0, 0)
+        assertTrue(b.keyDown(Input.Keys.ESCAPE), "desktop stand-in for BACK")
+        assertFalse(b.keyDown(Input.Keys.A), "the original reads no keys")
+        val evs = drain(q)
+        assertEquals(listOf(InputQueue.Type.DOWN, InputQueue.Type.BACK,
+                            InputQueue.Type.UP, InputQueue.Type.BACK), evs.map { it.type })
+        assertEquals(listOf(0L, 1L, 2L, 3L), evs.map { it.sequence }, "one sequence with touches")
     }
 }

@@ -19,7 +19,10 @@ index), entity dispatch ax 0–80, 8 mission, flying/chase/boss — dùng assets
   nguồn (`file:line` trong `reconstructed-project/src/`).
 - **Verifier phải xanh**: `python3 scripts/verify-static-reconstruction.py
   assassins_creed_-_br_320x240_136711.jar reconstructed-project` → `ok:true`;
-  `python3 -m unittest discover -s tests` → toàn bộ pass. Chạy trước mỗi PR.
+  `python3 -m unittest discover -s tests` → toàn bộ pass; trong `rewrite/`:
+  `./gradlew :core:test :gdx:test :android:assembleDebug` xanh. Chạy trước mỗi
+  PR (CI `.github/workflows/ci.yml` chạy cùng các gate; dựng môi trường bằng
+  `rewrite/tools/bootstrap-dev-env.sh`). Đặt `LANG=C.UTF-8`.
 - **Không xấp xỉ ngầm**: cơ chế gameplay phải theo semantic đã mine trong
   `docs/gameplay-mining/`; chưa mine thì mine trước, không đoán.
 
@@ -29,9 +32,13 @@ index), entity dispatch ax 0–80, 8 mission, flying/chase/boss — dùng assets
   frontmatter (`title`, `phase`, `status`, …).
 - Plan track: `plans/YYMMDD-HHMM-slug/` gồm `plan.md` + `phase-NN-*.md` +
   `reports/`; cập nhật status khi xong.
-- Contract cốt lõi cho port (đã pin trong `rewrite/`): tick 62ms, ≤4
-  catch-up, fixed-point 8.8, RNG parity Java-LCG, input queue có sequence,
-  `PlaySfx` deferred, save 49-byte `ACRS`.
+- Contract cốt lõi cho port (đã pin trong `rewrite/`): tick 62ms tự định nhịp
+  — tối đa 1 tick mỗi frame, accumulator giữ phần dư, không catch-up
+  (`docs/decisions/tick-cadence-self-clocked.md`); fixed-point 8.8, RNG parity
+  Java-LCG, input queue có sequence (BACK = soft-key phải), `PlaySfx`
+  deferred; save = container v1 `ACBA` bọc record `kBA` 320 B, ghi atomic
+  (`docs/decisions/save-policy.md`). Spike `TickEngine` (≤4 catch-up) và save
+  49-byte `ACRS` chỉ còn là của toolchain spike.
 - Entity/anim: `S` = index vào clip sprite (`b`), `r()` = anim-hết-frame;
   clip space `k.z[75]` trên pack-3; bảng `bi/bj/bk/bl/bm/bn` map ax→clip —
   xem `docs/gameplay-mining/state-animation-map.md`.
@@ -43,4 +50,6 @@ index), entity dispatch ax 0–80, 8 mission, flying/chase/boss — dùng assets
   NPC FSM, animation map, chase/boss directors.
 - `docs/modern-mobile-technical-design.md` — thiết kế port; ADR
   `docs/decisions/mobile-game-framework.md`.
-- `rewrite/README.md` — trạng thái build spike + cách chạy.
+- `rewrite/README.md` — trạng thái game port, cách build/chạy/test.
+- `plans/261003-0700-parity-gap-closure-android-hardening/plan.md` — kế hoạch
+  hiện hành (parity + hardening, phát hành nội bộ).

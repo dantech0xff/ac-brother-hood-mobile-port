@@ -2,6 +2,7 @@ package com.acrebuild.gdx
 
 import com.acrebuild.core.InputQueue
 import com.acrebuild.core.Level0World
+import com.badlogic.gdx.Input
 import com.badlogic.gdx.InputAdapter
 
 /**
@@ -68,6 +69,16 @@ class Level0InputBridge(
         activePointer = -1
         val (x, y) = toLogical(sx, sy)
         queue.post(InputQueue.Type.CANCEL, x, y)
+        return true
+    }
+
+    /** Android BACK (ESCAPE on desktop) → a sequenced [InputQueue.Type.BACK]
+     *  event; the world treats it as the right soft-key pill (slice 368).
+     *  The key is caught (`Level0Game.create`), so it never closes the app.
+     *  Every other key is left unhandled — the original reads none. */
+    override fun keyDown(keycode: Int): Boolean {
+        if (keycode != Input.Keys.BACK && keycode != Input.Keys.ESCAPE) return false
+        queue.post(InputQueue.Type.BACK, -1, -1)
         return true
     }
 }

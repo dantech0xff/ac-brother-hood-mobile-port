@@ -3,43 +3,29 @@ package com.acrebuild.core
 import kotlin.math.abs
 
 /**
- * Slice-2 NPC FSM: the ax11 soldier patrol subset of `i.I()` (simple
- * decompile `reconstructed-project/src/simple/i.java`), plus the shared
- * physics tail.
+ * Entity FSMs dispatched from `i.I()` (`reconstructed-project/src/
+ * {structured,simple}/i.java`; each function cites its own lines).
  *
- * Record → Z init (proven, `i.java` L120 arm, ax 11 and 73 share it):
+ * Soldier family (`case 11/17/23/47/50/73`): every member first runs the
+ * shared head `familyHead` (structured/i.java:3982-4004 — `if (!P()) t()`,
+ * corpse landing, `g.h`). `tick` then runs ax11's L174 arms
+ * (`armsAndL777`) and the L849/L897 tail; ax23 goes straight to that tail
+ * (`case 23 → L849`). ax17/47/50/73 run their own procs from
+ * `Level0World.tickNpc` — `tickAx17` = `aA()`, `tickAx47` = `aL()`,
+ * `tickAx50` = `aK()`, `tickAx73` = `aJ()`. Every other type has an
+ * `initAxNN`/`tickAxNN` pair further down; types without a case get
+ * `defaultArm` (the L1f35 tail).
+ *
+ * Record → Z init for ax11/73 (proven, `i.java` L120 arm):
  *   az=r8[17] (hp), aB=az, Z[14]=r8[4] (script), Z[0]=r8[10] (variant),
  *   Z[1]=0, Z[2]=-1, Z[3]=ak (patrol home), Z[4]=al, Z[5]=r8[7],
  *   Z[6]=r8[8] (patrol range cells left/right of home), Z[7]=r8[9] (link),
  *   Z[8]=r8[11], Z[15..18]=r8[12..15] (alert zone rect rel),
  *   Z[9..12]=absolute alert box (ak+Z15 .. ak+Z15+Z17, al+Z16 .. al+Z16+Z18),
- *   Z[19]=r8[18].  Initial anim `i(0)` (i.java `d(i)` case 11).
+ *   Z[19]=r8[18], Z[21]=r8[19] (corpse-drop link).
  *
- * Arms ported verbatim:
- * - L357 (S∈{2,3,92} patrol): S3 sets `k=true`, `ag=av?-512:512`, `aC=20`;
- *   while `k`, ledge-ahead `am()`/edge-ahead `aG()` route to the 3px nudge
- *   path; else the home-range check `((ak-Z[3])/20)` vs `Z[5]`/`Z[6]` gates
- *   `i(2)` + the 20-tick leg timer → `i(3)` + `av=!av` ping-pong.  Player
- *   spot (`b(k.aS)` simplified — see below) → `aA=1` + ax11 `i(5)`.
- * - L451 (S∈{4,22} chase): `Q()` face player; `aG()` edge → drop alert back
- *   to `i(k?3:2)`; `a(true)`; S4 runs at `ag=±2048`, others at `ag=±512`;
- *   hitbox overlap with player W → `aC=3; i(23)` (attack windup).
- * - L438 (S5 attack): on `r()` → `aq==0 → i(4)`; `aC=0`.
- * - L444 (S23 windup-approach): `ag=±512`; anim end → back to chase.
- * - L475 (S11?): `r()` → `i(12)`.  (S12 arm = contact/attack — replaced by
- *   windup→chase fallback; player damage via `aB()` requires the
- *   damage-floatie spawner — deferred.)
- * - L777 common tail reduced to: `h()` ledge-fall (`i(25)` when no ground
- *   under the anchor row or the row below while no platform link),
- *   gravity via `aj=1536` when `!aZ`.
- *
- * Simplifications (flagged): `b(i)` (LOS) → same-row within ±1 cell AND
- * player inside the Z[9..12] alert box AND NPC facing covers the player.
- * The stealth-state gates are ported (`losL`/`spotB`: `aA&8` hide flag,
- * blind poses S∈{267,268,291}, the ax69-ride blind arm, `iBn` notice).
- * `aC()` chase-timeout: ported as the 60-tick countdown → `i(k?3:2)`.
- * `aE()` assassination QTE, `j()`/`k()` damage/stealth-kill intake, `aD()`
- * platform links — omitted this slice.
+ * ax11 and ax73 share the `aC()` attack scheduler (`attackSchedulerAC`).
+ * Mining notes: `docs/gameplay-mining/npc-fsm.md`.
  */
 class NpcFsm(val world: LevelCellSource) {
 
@@ -59,6 +45,48 @@ class NpcFsm(val world: LevelCellSource) {
         }
         e.Z[21] = -1
     }
+
+    /**
+     * `I()`'s family head for `case 11/17/23/47/50/73` (structured/
+     * i.java:3982-4004; bytecode i.javap.txt I() offsets 1377-1578,
+     * proven), run before the per-type switch:
+     *  - `if (!P()) t()` — a dead member releases its `ae` marker
+     *    (`G()`) instead of refreshing boxes;
+     *  - corpse landing: in a corpse state (S21, S0 unless entered from
+     *    25/184, S135/20/69/106/107/164/168/94/117/78/184, S85 at
+     *    `aB<=0`), on screen, at `T==1 && U==0` → `k.A(24)`, and if the
+     *    body came out of a player carry (`Q` 175/24; S20 not while the
+     *    player is in S157) the player drops (`aS.a(0)`, `bl=0`);
+     *  - `g.h`: the member `f()` picks for the player's S38/S203 ledge
+     *    kill (`f() && g.h==null → g.h=this`, `!f() && g.h==this → null`).
+     */
+    fun familyHead(e: Entity, p: Entity) {
+        if (!e.deadRelease()) e.refreshBoxes()
+        val s = e.S
+        val corpse = s == 21 || (s == 0 && e.Q != 25 && e.Q != 184) ||
+            s == 135 || s == 20 || s == 69 || s == 106 || s == 107 ||
+            s == 164 || s == 168 || s == 94 || s == 117 || s == 78 ||
+            s == 184 || (s == 85 && e.aB <= 0)
+        if (corpse && e.inPlayV(world) && e.T == 1 && e.U == 0) {
+            val carried = e.Q == 175 || e.Q == 24
+            if (if (s == 20) p.S != 157 && carried else carried) {
+                p.flingAirborne(0, world)                       // aS.a(0)
+                e.bl = 0
+            }
+            world.sfx(24)                                       // k.A(24)
+        }
+        val f = ledgeKillF(e, p)
+        if (f && world.grabHolder == null) world.grabHolder = e
+        else if (!f && world.grabHolder === e) world.grabHolder = null
+    }
+
+    /** `i.f()` (structured/i.java:1232-1234, proven): player S38 hanging
+     *  just below this member (`dy` 1..39, `|dx| < 20`), or player S203
+     *  with its `X` box on this `W` (`i.a`). */
+    private fun ledgeKillF(e: Entity, p: Entity): Boolean =
+        if (p.S == 38) p.al > e.al && kotlin.math.abs(p.al - e.al) < 40 &&
+            kotlin.math.abs(p.ak - e.ak) < 20
+        else p.S == 203 && Entity.overlapStrict(p.X, e.W)
 
     companion object {
         // i clinit difficulty tables (proven, i.java static{}):
@@ -121,7 +149,9 @@ class NpcFsm(val world: LevelCellSource) {
      * `Z[1]=r8[9]` open timer, `Z[2]=r8[10]` closed timer, `Z[3]=0`
      * countdown, `Z[4]=r8[5]` base state, `Z[5]=r8[11]` linked ax58 uid.
      * Initial anim is the generic `i(r8[5])` (i.java:3733) — records with
-     * f5==8 spawn in the static-crusher bank S8-13.
+     * f5==8 spawn in the static-crusher bank S8-13 — then the ctor tail's
+     * `t()` (structured i.java:2900-2903): `bv()` never refreshes the box
+     * itself, so the first frame reads this one.
      */
     fun initDoor(e: Entity, f: List<Int>) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
@@ -133,59 +163,73 @@ class NpcFsm(val world: LevelCellSource) {
         e.Z[4] = rf(5)
         e.Z[5] = rf(11)
         e.setAnim(rf(5))
+        e.refreshBoxes()                 // ctor tail t() (i.java:2900-2903)
     }
 
     /**
-     * `bv()` door/gate FSM (i.java:16927, proven). Z[0] mode:
+     * `bv()` door/gate FSM (i.java:16927, proven; bytecode i.javap.txt
+     * bv() offsets 0-590). Z[0] mode:
      * 0 = timed cycle (link absent or `ac.bf()` running), 1 = slaved to
      * the linked ax58's anim, 2 = proximity auto (player inside keeps the
      * countdown reloaded). States S0-7 = two cycling banks anchored at
      * Z[4] (closed/opening/open/closing); S8-13 = static crusher bank.
-     * Crush arm (L64 + L75): player W ∩ door W while closed/closing/
-     * static → `k.aS.aj=0; ah=0; i(50)` — S50 zeroes x[1] → k.l(12).
+     * Crush: S0/S4 (offsets 453-506) `i.a(aS.W, W)` → `aS.aj = aS.ah = 0;
+     * aS.i(50); return`; S3/S7 and S8-13 (566-587) → `aS.i(50)` alone.
+     * S50 zeroes x[1] → k.l(12).
+     *
+     * Slice 362: `bv()` reads `W` and never calls `t()` (getfield W at
+     * 365/369, 471/475, 569/573) — the box is the one the previous
+     * frame's `I()` tail `if (b) t()` left (i.java:5293-5295), one anim
+     * step behind the S/T this frame's `s()` advanced to. The ax58
+     * promotion is evaluated only on the tick that resolves the link
+     * (87-175), and mode 1 opens from the base state while `ac.bf()` runs
+     * and returns to `Z[4]` once it stops (281-337).
      */
     fun tickDoor(e: Entity, player: Entity) {
-        // the original's t() recomputes W on every query; our cached copy
-        // needs a per-tick refresh since doors never take the probe paths.
-        e.refreshBoxes()
         when (e.S) {
             0, 2, 4, 6 -> {
                 e.P = e.P or 16
-                // link arm (L4): resolve Z[5] → ac once; ax58 with
-                // S∈{0,5,7} promotes Z[0] to slaved mode.
-                if (e.ac == null && e.Z[5] != -1)
+                // link arm: resolve Z[5] → ac once (`a(k.q(Z[5]))`, which
+                // also binds P|256); an ax58 resting in S0/5/7 at that
+                // moment promotes Z[0] to slaved mode.
+                if (e.ac == null && e.Z[5] != -1) {
                     e.ac = world.npcs.firstOrNull { it.aw == e.Z[5] }
+                    val q = e.ac
+                    if (q != null && q.ax == 58 && (q.S == 0 || q.S == 5 || q.S == 7))
+                        e.Z[0] = 1
+                }
                 val ac = e.ac
-                if (ac != null && ac.ax == 58 && (ac.S == 0 || ac.S == 5 || ac.S == 7))
-                    e.Z[0] = 1
                 when (e.Z[0]) {
-                    0 -> if (ac == null || bf(ac)) {
-                        if (e.Z[2] < 999 && e.Z[3] != -1) {
-                            e.Z[3]--
-                            if (e.Z[3] < 0) e.setAnim(e.S + 1)
-                        }
+                    0 -> if ((ac == null || bf(ac)) && e.Z[2] < 999 && e.Z[3] != -1) {
+                        e.Z[3]--
+                        if (e.Z[3] < 0) e.setAnim(e.S + 1)
                     }
+                    // the original dereferences `ac` unguarded here.
                     1 -> if (ac != null) {
-                        if (e.Z[4] == e.S) { if (!bf(ac)) e.setAnim(e.S + 1) }
-                        else if (bf(ac)) e.setAnim(e.Z[4])
+                        if (e.Z[4] == e.S) { if (bf(ac)) e.setAnim(e.S + 1) }
+                        else if (!bf(ac)) e.setAnim(e.Z[4])
                     }
                     2 -> if (e.Z[4] == e.S) {
-                        if (e.Z[3] == 0 && rectsOverlap(player.W, e.W))
+                        if (e.Z[3] == 0 && Entity.overlapStrict(player.W, e.W))
                             e.Z[3] = if (e.S == 0 || e.S == 4) e.Z[2] else e.Z[1]
                         if (e.Z[3] > 0) { e.Z[3]--; if (e.Z[3] <= 0) e.setAnim(e.S + 1) }
                     }
                 }
-                if (e.S == 0 || e.S == 4) crush(e, player)
+                if ((e.S == 0 || e.S == 4) && Entity.overlapStrict(player.W, e.W)) {
+                    player.aj = 0; player.ah = 0
+                    player.setAnim(50)
+                }
             }
             1, 5 -> if (e.animFinished()) { e.setAnim(e.S + 1); e.Z[3] = e.Z[1] }
             3, 7 -> {
                 if (e.animFinished()) { e.setAnim(e.S - 3); e.Z[3] = e.Z[2] }
-                crush(e, player)
+                if (Entity.overlapStrict(player.W, e.W)) player.setAnim(50)
             }
-            in 8..13 -> crush(e, player)
+            in 8..13 -> if (Entity.overlapStrict(player.W, e.W)) player.setAnim(50)
         }
         // P&16 keeps the door unintegrated (static prop); its one-per-tick
-        // anim advance comes from the I() preamble (i.java:15232).
+        // anim advance comes from the I() preamble (i.java:15232), its box
+        // refresh from the dispatch tail (defaultArm).
     }
 
     /** `bf()` (i.java:14608, proven): ax58 anim-running — true iff its S is
@@ -194,14 +238,9 @@ class NpcFsm(val world: LevelCellSource) {
         e.ax == 58 && (e.S == 1 || e.S == 3 || e.S == 4 ||
                        e.S == 6 || e.S == 8 || e.S == 10 || e.S == 12)
 
-    private fun rectsOverlap(a: IntArray, b: IntArray): Boolean =
-        a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
-
-    private fun crush(e: Entity, player: Entity) {
-        if (!rectsOverlap(player.W, e.W)) return
-        player.aj = 0; player.ah = 0
-        player.setAnim(50)
-    }
+    // Slice 364: every rect test here ports `i.a(int[],int[])`
+    // (structured i.java:540-558) and goes through `Entity.overlapStrict`,
+    // which keeps its point-box rejects; the private plain overlap is gone.
 
     // -- helpers ------------------------------------------------------------
 
@@ -215,41 +254,21 @@ class NpcFsm(val world: LevelCellSource) {
         return if (v < 12) v >= 5 else true
     }
 
-    /** `am()` (i.java, proven): wall/ledge within 3 cells above foot row. */
-    private fun wallAhead(e: Entity): Boolean {
-        val cx = e.ak / 20 + (if (e.av) -1 else 1)
-        for (r in 1..3) if (e.e(world, cx, e.al / 20 - r) >= 12) return true
-        return false
-    }
+    /** `i.am()` (structured/i.java:5832-5843, proven) — one function for
+     *  every type: no wall while riding a support (`s != null`), else a
+     *  solid cell (`e() >= 12`) in the 3 rows above the feet on the
+     *  facing side. */
+    private fun wallAhead(e: Entity): Boolean = ceilingProbe73(e, world)
 
-    /** `aG()` (i.java, proven core; platform `s` arms omitted): edge ahead. */
-    private fun edgeAhead(e: Entity): Boolean {
-        val cy = (e.W[3] + 10) / 20
-        return if (!e.av) {
-            // right side: W2/20+1 is 20 (OOB sentinel) or 5 → not an edge
-            e.e(world, e.W[2] / 20 + 1, cy) != 20 &&
-                e.e(world, e.W[2] / 20 + 1, cy) != 5
-        } else {
-            e.e(world, e.W[0] / 20 - 1, cy) != 20 &&
-                e.e(world, e.W[0] / 20 - 1, cy) != 5
-        }
-    }
+    /** `i.aG()` (structured/i.java:7258-7274, proven) — the same
+     *  function for every type: the crate-edge rule while riding an ax51
+     *  (other supports → no edge), else the facing-side cell test. */
+    private fun edgeAhead(e: Entity): Boolean = edgeAhead73(e, world)
 
     /** `b(k.aS)` simplified: alert-zone box + facing + same band. The
      *  original's `a(this.W, aS.W)` is a rect-overlap test between the
      *  Z[9..12] zone and the player's collision box — not a point test —
      *  so a player hugging the zone edge still alerts. */
-    private fun seesPlayer(e: Entity, player: Entity): Boolean {
-        // same-row within one cell of height
-        if (abs(player.al - e.al) / 20 > 1) return false
-        if (player.W[2] < e.Z[9] || player.W[0] > e.Z[10]) return false
-        if (player.W[3] < e.Z[11] || player.W[1] > e.Z[12]) return false
-        // facing must cover the player
-        if (e.av && player.ak > e.ak) return false
-        if (!e.av && player.ak < e.ak) return false
-        return true
-    }
-
     // -- per-tick ------------------------------------------------------------
 
     /** `aH()` corpse-family set (i.java:7287-7298, proven): states that
@@ -269,6 +288,18 @@ class NpcFsm(val world: LevelCellSource) {
         // dispatch head already ran it for `I()`-entered entities; this
         // fallback covers direct arm calls.
         if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
+        familyHead(e, player)
+        // `case 23: goto L849` (simple/i.java:5180, proven): ax23 shares
+        // the family head but no arm — straight to the L849/L897 tail.
+        // (Only the ax10 S30 wave grid spawns ax23, flavour Z[6]==2; no
+        // record carries that flavour, so it is unreached with this data.)
+        if (e.ax == 23) {
+            corpseDrop(e)                                    // au() (11/17/73 only)
+            e.refreshBoxes()                                 // t()
+            if (e.av) e.P = e.P or 1 else e.P = e.P and -2
+            pushL897(e, player)
+            return
+        }
         // S25 runs WITHOUT a(true) in the original (i.java:4711-4736 — the
         // arm carries no side-collide, so the feet penetrate the landing
         // row until its own anchor-cell check snaps + resumes). The port's
@@ -323,21 +354,30 @@ class NpcFsm(val world: LevelCellSource) {
                 tail[2] = true
             }
             5 -> {
-                // L438 (i.java:5507, proven): `aL=this` claim + `r14`
-                // (j() intake) then `r()` → i(4)+aC=0 → L777.
+                // L438 (simple/i.java:5507-5517, proven): `aL=this` claim +
+                // `r14` (j() intake); `r()` → `aq!=0 → i(4)`, `G()`,
+                // `aC=0`, then the `aC()` scheduler picks the next state.
                 Entity.aL = e; tail[2] = true
-                if (e.animFinished()) { e.setAnim(4); e.aC = 0 }
+                if (e.animFinished()) {
+                    if (e.aq != 0) e.setAnim(4)
+                    e.releaseAe()                               // G()
+                    e.aC = 0
+                    attackSchedulerAC(e, world, player)         // aC()
+                }
             }
             23 -> {
-                // L444 windup-approach: ag=∓512 toward player; aF() done →
-                // strike anim 12 (the contact arm at L478 runs next).
-                // `z7 = true` (i.java:4651, proven): j() runs in the shared
-                // tail — the windup is the weakened guard's damage window.
+                // L444 (simple/i.java:5518-5532, proven): `Q()`, `a(true)`,
+                // `H()`, then back off — `ag = av ? 512 : -512` (away from
+                // the player Q() just faced) — `r14`, and `aC()` decides
+                // the next state (contact → S11 windup → S12 strike).
+                // `aF()` → `ai=ag=0`. `r14` is the guard's damage window.
                 facePlayer(e, player)
                 e.collideSides(world, true)
-                e.ag = if (e.av) -512 else 512
+                e.dropHeld()                                    // H()
+                e.ag = if (e.av) 512 else -512
                 tail[2] = true
-                if (e.animFinished()) e.setAnim(12)
+                attackSchedulerAC(e, world, player)             // aC()
+                if (crateEdge73(e, world)) { e.ai = 0; e.ag = 0 } // aF()
             }
             12 -> {
                 // L478-L502 (i.java:5580-5640, proven): prelude
@@ -349,7 +389,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // Z0==0 && aB>bu/2 → L849; Z0==0 && aB<=bu/2 → L495 tail.
                 // r() → g.g()? i(2) : i(23)+aC=10 → L777.
                 tail[2] = true
-                if (Entity.overlapI(player.W, e.X) &&
+                if (Entity.overlapStrict(player.W, e.X) &&
                     player.inFrontOf(e) && player.S == 6) {
                     player.applyHit(34, 0, e, world)            // aS.a(34,0,0,this)
                     e.setAnim(18)
@@ -481,8 +521,8 @@ class NpcFsm(val world: LevelCellSource) {
                     e.releaseAe()                               // G()
                     e.aB = 0
                     e.setAnim(169)
-                    world.statTally(e.aw)                       // k.e(0,aw)
-                    if (world.kAj != 7) world.kAp[3]++          // k.o(3)
+                    world.countKill(e.aw)                       // k.e(0,aw)
+                    world.kCount(3)                             // k.o(3)
                     player.setAnim(293)                         // aS.i(293)
                     player.P = player.P and -65                 // aS.P&=-65
                     e.ar = player.al                            // ar=aS.al
@@ -626,7 +666,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (e.aB <= 0) e.aB = 0
                     e.consumeH()                                // H()
                     e.setAnim(139)
-                    world.statTally(e.aw)                       // k.e(0,aw)
+                    world.countKill(e.aw)                       // k.e(0,aw)
                 }
                 return
             }
@@ -652,8 +692,8 @@ class NpcFsm(val world: LevelCellSource) {
                 // k.o(3) + remove. → L849.
                 e.aB = 0
                 if (e.animFinished()) {
-                    world.statTally(e.aw)                       // k.e(0,aw)
-                    world.kAp[3]++                              // k.o(3)
+                    world.countKill(e.aw)                       // k.e(0,aw)
+                    world.kCount(3)                             // k.o(3)
                     world.removeEntity(e)                       // k.c(this)
                 }
                 return
@@ -720,7 +760,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // r() → i(139) corpse + k.e(0,aw). → L777.
                 if (e.animFinished()) {
                     e.setAnim(139)
-                    world.statTally(e.aw)
+                    world.countKill(e.aw)
                 }
             }
             177 -> {
@@ -803,7 +843,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (world.player.gb === e) world.player.gb = null     // g.b
                     if (e.S != 106 && e.S != 107 && e.S != 135) {
                         e.setAnim(139)
-                        world.statTally(e.aw)                 // k.e(0,aw)
+                        world.countKill(e.aw)                 // k.e(0,aw)
                     } else {
                         e.P = e.P and -17; e.P = e.P or 32 or 64
                         if (world.kBK) e.spawnFx8(world, 59, 2, e.av,
@@ -834,8 +874,8 @@ class NpcFsm(val world: LevelCellSource) {
             val s0 = e.s
             if (s0 != null && s0.ax == 51 && s0.ag != 0) e.ag = s0.ag
         }
-        if (e.s == null && e.standingOn == null &&
-            !h(e.ak / 20, e.al / 20) && !h(e.ak / 20, e.al / 20 + 1)) {
+        if (!h(e.ak / 20, e.al / 20) && !h(e.ak / 20, e.al / 20 + 1) &&
+            e.s == null) {
             e.setAnim(25)                               // open cells → fall
             world.sfx(24)                               // k.A(24)
         }
@@ -860,10 +900,13 @@ class NpcFsm(val world: LevelCellSource) {
         // `r14 → j()` player→NPC damage intake (i.java:6234; port :1305-1403)
         e.refreshBoxes(); player.refreshBoxes()
         if (tail[2] && jIntake(e, player, world)) return    // → L849
-        // `k.C != null && k.C.ab() → r13=false` (i.java:6238-6240, proven):
-        // a live script-claim suppresses the melee application.
+        // `k.C != null && k.C.ab() → r13=false` (simple/i.java:6251-6253,
+        // proven): a running script claim suppresses the melee application.
+        // `i.ab()` = `ca>=0 && !cd[0] && cK>=0` with `cK` the script step
+        // (i.javap.txt:68769-68793) — `claimAb()`; a paused claim (`cd[0]`)
+        // does not suppress (slice 367).
         val kc = world.kC
-        if (kc != null && kc.claimLive()) tail[1] = false
+        if (kc != null && kc.claimAb()) tail[1] = false
         // `r13 → aB()` (i.java:6244; ax11/ax73 arms :8845-8918)
         if (tail[1]) meleeApply(e, player, world)
         // L827+ aA-branch (i.java:6245-6250): non-attacker drops the
@@ -910,7 +953,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.ax == 0) return                                    // L909
         if (e.P and 4096 == 0) return                            // L5
         val r9 = e.W
-        if (!Entity.overlapI(p.W, r9)) return                    // L7
+        if (!Entity.overlapStrict(p.W, r9)) return                    // L7
         if (p.ah > 0 || e.ah < 0) {                              // → L11
             if (p.W[1] < r9[1] && p.W[3] < r9[3] &&
                 p.ak > r9[0] && p.ak < r9[2]) {
@@ -943,7 +986,8 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
-    // -- L357 patrol (proven structure) ----------------------------------------
+    // -- L357 patrol: `case 2/3/92` (structured/i.java:4104-4135; bytecode
+    //    i.javap.txt I() offsets 4019-4523, proven) ----------------------------
     private fun patrolArm(e: Entity, player: Entity, tail: BooleanArray) {
         if (e.S == 3) {
             e.k = true
@@ -952,31 +996,27 @@ class NpcFsm(val world: LevelCellSource) {
         }
         if (e.k) {
             val home = e.Z[3]; val rangeL = e.Z[5]; val rangeR = e.Z[6]
-            val inWalk: Boolean
-            if (wallAhead(e) || edgeAhead(e)) {
-                // L370: edge path — nudge away then still allowed to walk
+            // z4 = "turn here": a wall or edge ahead (an edge with `ag != 0`
+            // first steps back 3 px), or past the patrol range on the side
+            // it faces (offsets 4149-4202).
+            val turn: Boolean
+            if (wallAhead(e) || edgeAhead(e)) {             // am() || aG()
                 if (edgeAhead(e) && e.ag != 0) e.ak += if (e.av) -3 else 3
-                inWalk = true
+                turn = true
             } else {
-                inWalk = if (((e.ak - home) / 20) >= -rangeL && e.av) true
-                    else if (((e.ak - home) / 20) > rangeR) e.av
-                    else false
+                val cells = (e.ak - home) / 20
+                turn = (cells < -rangeL && e.av) || (cells > rangeR && !e.av)
             }
-            if (inWalk) {
-                if (e.platform == null || e.Z[7] <= 0) {
+            // A soldier linked to a crate (`Z[7]` → ax51) it is not riding
+            // yet never stops to turn (offsets 4206-4259).
+            if (turn) {
+                val q = if (e.s == null && e.Z[7] > 0) world.findByAw(e.Z[7]) else null
+                if (q == null || q.ax != 51) {
                     e.setAnim(2)
                     if (e.aC > 0) e.aC--
                     else { e.aC = 20; e.setAnim(3); e.av = !e.av }
                 }
             }
-        }
-        // i.java:4165-4170 (proven): the crate/carrier ride helper runs
-        // every patrol tick while not in hit-react — a moving crate feeds
-        // its velocity into the soldier.
-        if (e.S != 85) {
-            crateRide11(e)
-            val s = e.s
-            if (s != null && s.ax == 51 && s.ag != 0) e.ag = s.ag
         }
         // L410-L436 flag/kill arms (i.java:6010-6040, proven) — runs
         // every patrol tick:
@@ -1023,7 +1063,7 @@ class NpcFsm(val world: LevelCellSource) {
             if (e.Z[7] > 0) {
                 val q = world.findByAw(e.Z[7])
                 if (q != null && (q.ax == 51 || q.ax == 43) &&
-                    Entity.overlapI(e.W, q.W)) {
+                    Entity.overlapStrict(e.W, q.W)) {
                     e.s = q
                     if (e.S != 3) { e.setAnim(2); e.aA = 0 }
                     e.al = q.W[1] + 1
@@ -1033,7 +1073,7 @@ class NpcFsm(val world: LevelCellSource) {
         } else if (s.ax == 51 || s.ax == 43) {
             if (s.ax == 51 && s.S == 2) {
                 e.setAnim(96)
-            } else if (Entity.overlapI(e.W, s.W)) {
+            } else if (Entity.overlapStrict(e.W, s.W)) {
                 if (!Entity.grabLatch && e.aA != 0) {       // !g.j (:7180)
                     e.av = world.player.ak < e.ak           // Q() (:6207)
                 }
@@ -1070,18 +1110,13 @@ class NpcFsm(val world: LevelCellSource) {
         e.collideSides(world, true)                     // L457 a(true)
         e.ag = if (e.S == 4) (if (e.av) -2048 else 2048)
                else (if (e.av) -512 else 512)
-        // a(aS.W,W) → af==null → aC=3 + i(23) attack windup (:5562)
+        // `a(aS.W,W) && af==null → aC=3 + i(23)` windup, else the `aC()`
+        // scheduler (simple/i.java:5562-5566, proven).
         player.refreshBoxes()
-        if (e.af == null && overlap(player.W, e.W)) {
+        if (Entity.overlapStrict(player.W, e.W) && e.af == null) {
             e.aC = 3
             e.setAnim(23)
-        }
-        // aC() subset: chase timeout — lose the player for 60 ticks → patrol
-        e.P = e.P or 16
-        if (e.aC > 0) e.aC--
-        else if (!seesPlayer(e, player) && e.aA != 0) {
-            e.aC = 60; e.aA = 0; e.k = false; e.setAnim(2)
-        }
+        } else attackSchedulerAC(e, world, player)
         return true
     }
 
@@ -1201,7 +1236,7 @@ class NpcFsm(val world: LevelCellSource) {
             // invisible zone clears BOTH globals — verbatim quirk: with
             // several S0 zones the last-ticked loser wins the wipe.
             0 -> {
-                if (rectsOverlap(player.W, e.W) && e.wasHitRecently(w)) {
+                if (Entity.overlapStrict(player.W, e.W) && e.inPlayV(w)) {   // @1469 v()
                     if (e.pv != 0) w.camAf = e.pv                    // L5c7
                     if (e.aG == 0) return                          // → L1ec7
                     w.camAg = e.aG                                 // L5d7
@@ -1220,12 +1255,12 @@ class NpcFsm(val world: LevelCellSource) {
             // zone removes itself via `k.c(this)` either way.
             2 -> {
                 if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L13b5
-                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                    if (!Entity.overlapStrict(player.W, e.W)) return       // → L1ec7
                 }
                 if (e.Z[0] == 2) {                                 // L13c5
                     if (e.Z[2] == 0) return                        // → L1ec7
                     val gate = w.findByAw(e.Z[2])                  // k.q(Z[2])
-                    if (gate != null && gate.wasHitRecently(w)) return
+                    if (gate != null && gate.inPlayV(w)) return       // @5095 v()
                 }
                 val t = w.findByAw(e.Z[1])                         // L13ed k.q
                 if (t != null) {
@@ -1253,12 +1288,12 @@ class NpcFsm(val world: LevelCellSource) {
             // director "re-activate" bit. One-shot: self-removes.
             3 -> {
                 if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L14bb
-                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                    if (!Entity.overlapStrict(player.W, e.W)) return       // → L1ec7
                 }
                 if (e.Z[0] == 2) {                                 // L14cb
                     if (e.Z[2] == 0) return                        // → L1ec7
                     val gate = w.findByAw(e.Z[2])
-                    if (gate != null && gate.wasHitRecently(w)) return
+                    if (gate != null && gate.inPlayV(w)) return       // @5357 v()
                 }
                 val t = w.findByAw(e.Z[1])                         // L14f3
                 if (t != null) {
@@ -1268,33 +1303,41 @@ class NpcFsm(val world: LevelCellSource) {
                 w.removeEntity(e); return                          // L1526
             }
             // `aV()` small linked-entity triggers (proven):
-            // S47 = L219: clears the global claim slot every tick (k.aQ
-            // = the `i`-typed claim owner, NOT the Image aQ at k.java:79
-            // — JADX letter collision).
-            47 -> { w.kAQ = null; return }                         // L219
-            // S48 = L166: when the player's tight rect overlaps, copy
-            // `p` (record f13 = "boss speed") onto the o-uid target's
-            // aG and remove. Debug print "Set Boss Speed=" omitted
-            // (proven-dead dev trace).
+            // S47 = L219 (bytecode aV() @537-541): `k.aQ = null` every
+            // tick. `k.aQ` is the ONE `public static Image aQ`
+            // (k.javap.txt:2850) — the ax35 eagle-view HUD inset that
+            // `a(IIIIZ)` paints and `k.b(boolean)` @5228 blits; the
+            // port's `k.aQ` is `volPaintRect`. Slice 371: this cleared a
+            // write-only `kAQ: Entity?` duplicate (the old note's "i-typed
+            // claim owner" does not exist), so the inset survived.
+            47 -> { w.volPaintRect = null; return }                // L219
+            // S48 = L166: when the o-uid TARGET's own `Y` overlaps the
+            // zone, copy `p` (record f13 = "boss speed") onto its aG and
+            // remove. Debug print "Set Boss Speed=" omitted (proven-dead
+            // dev trace). Slice 364: the test is `i.a(r8.Y, W)` with
+            // r8 = k.q(o) (aV() offsets 358-381, `aload_1` = the target)
+            // — the port tested the player's Y.
             48 -> {
                 val t = w.findByAw(e.oId) ?: return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(t.Y, e.W)) return        // i.a(r8.Y, W)
                 t.aG = e.pv                                        // L19d
                 w.removeEntity(e); return                          // L1bb
             }
-            // S49 = L1bc: overlap → linked entity `i(20)`, remove.
+            // S49 = L1bc: the target's own `Y` overlaps → target `i(20)`,
+            // remove (aV() offsets 444-480: `i.a(r8.Y, W)`, slice 364).
             49 -> {
                 val t = w.findByAw(e.oId) ?: return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(t.Y, e.W)) return        // i.a(r8.Y, W)
                 t.setAnim(20)                                      // L1d8
                 w.removeEntity(e); return                          // L1e0
             }
             // S54 = L136: overlap + linked entity still at S29 →
-            // `i(30)`, remove. One-shot mission-step advance.
+            // `i(30)`, remove. One-shot mission-step advance. Here the
+            // test IS the player's Y: `i.a(k.aS.Y, W)` (offsets 331-341).
             54 -> {
                 val t = w.findByAw(e.oId) ?: return                // L165
                 if (t.S != 29) return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(player.Y, e.W)) return
                 t.setAnim(30)
                 w.removeEntity(e); return
             }
@@ -1341,7 +1384,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 // L3e7 — outside the band
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (!w.iBB || w.iBF < e.Z[2] || w.iBF > e.Z[3]) {
                         // L46b — abort: marker 71 + suppress + S34
                         player.releaseAe()
@@ -1399,10 +1442,10 @@ class NpcFsm(val world: LevelCellSource) {
             // (Slice 137/138 called this arm "S10" — the real S10 is L318
             // above; L1e1 is the dispatch's `case 46` target.)
             46 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     Entity.gq = true; player.gd = e
                 }
-                if (!rectsOverlap(player.W, e.W) && player.gd === e) {
+                if (!Entity.overlapStrict(player.W, e.W) && player.gd === e) {
                     Entity.gq = false; player.gd = null
                 }
             }
@@ -1411,7 +1454,7 @@ class NpcFsm(val world: LevelCellSource) {
             // overlap publishes `k.aB = k.d(1+k.aj, aF)` (level string)
             // + `k.aC = -1`; leaving clears `k.aB` when `aC <= 0`.
             4 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     w.kAB = w.levelString(1 + w.kAj, e.aF)          // L15b9
                     w.kAC = -1
                 } else if (w.kAC <= 0) w.kAB = null                 // L15dd
@@ -1421,7 +1464,7 @@ class NpcFsm(val world: LevelCellSource) {
             // (fire `u(16388)`/`v(16388)` OR direction-held matching
             // facing: `av ? u(2) : u(8)`) → player `i(22)` rise anim.
             5 -> {
-                if (rectsOverlap(e.W, player.W) &&
+                if (Entity.overlapStrict(e.W, player.W) &&
                     (w.padDown(16388) || pad.v(16388) ||
                      (player.av && w.padDown(2)) ||
                      (!player.av && w.padDown(8))))
@@ -1431,14 +1474,14 @@ class NpcFsm(val world: LevelCellSource) {
             // S6/S7 = L162e/L1643 (i.java:12173-12194): persisted flag
             // zones — overlap writes `k.aZ = 1` / `k.aZ = 0` (save byte
             // 68 — event-done toggles).
-            6 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = true; return }
-            7 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = false; return }
+            6 -> { if (Entity.overlapStrict(e.W, player.W)) w.kAZ = true; return }
+            7 -> { if (Entity.overlapStrict(e.W, player.W)) w.kAZ = false; return }
             // S8 = L152b (i.java:12052-12076): alert-toggle zone —
             // overlap flips `i.bn` and self-removes; `bn` now true →
             // `i(0)` + `E()` + `i(79)` + `g.z=0`; now false → `i(80)` +
             // `g.z=1` + `k.v()`.
             8 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     w.iBn = !w.iBn                                  // L1546
                     w.removeEntity(e)
                     if (w.iBn) {
@@ -1460,7 +1503,7 @@ class NpcFsm(val world: LevelCellSource) {
             // S12 = L175c (i.java:12309-12321): one-shot screen
             // transition `k.n(aF)` (cO/cP) + self-remove.
             12 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     w.kNSet(e.aF)                                   // k.n(aF)
                     w.removeEntity(e)
                 }
@@ -1481,7 +1524,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val t = player.af ?: return                         // L1659
                 if (t.ax != 69) return
                 if (t.Z[0] != 0 && t.Z[0] != 1 && t.Z[0] != 2) return
-                if (!rectsOverlap(t.W, e.W)) return                 // L169c
+                if (!Entity.overlapStrict(t.W, e.W)) return                 // L169c
                 t.ah = 0; t.ag = 0
                 player.setAnim(0)
                 player.P = player.P and -65                         // ~64
@@ -1505,7 +1548,7 @@ class NpcFsm(val world: LevelCellSource) {
             // `ag=-p`, `av=1`, `ak=camR+width`; else `ag=p`, `av=0`,
             // `ak=camL-width`), `al=camT+70`, `aA=1`.
             18 -> {
-                if (!rectsOverlap(player.W, e.W)) return            // L1c98
+                if (!Entity.overlapStrict(player.W, e.W)) return            // L1c98
                 if (e.oId == -1) return
                 val t = w.findByAw(e.oId) ?: return                 // L1cb9
                 if (t.ax != 4 || t.S != 33) return                  // L1cd2
@@ -1528,7 +1571,7 @@ class NpcFsm(val world: LevelCellSource) {
             // true → `k.l(21)` dialog screen; then `k.x = 48` +
             // self-remove regardless.
             21 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (w.kBMark(8, 1 + w.kAj, e.aF, e.pv))
                         w.screenL(21)                               // L187f
                     w.kDlgX = 48                                    // k.x=48 (:12851)
@@ -1541,7 +1584,7 @@ class NpcFsm(val world: LevelCellSource) {
             // else `k.A(aF)` = `z(aF)` (the ==2 branch is verbatim
             // redundant — `A` delegates to `z`). Then `k.c(this)`.
             22 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     if (e.aF < 0) w.audioStop()                     // k.w()
                     else w.audioTrackPlay(e.aF)                     // z/A(aF)
                     w.removeEntity(e)
@@ -1555,7 +1598,7 @@ class NpcFsm(val world: LevelCellSource) {
             23 -> {
                 if (e.oId == -1) return                             // L1889
                 val t = w.findByAw(e.oId) ?: return                 // L18c7
-                if (t.ax == 11 && rectsOverlap(t.W, e.W))
+                if (t.ax == 11 && Entity.overlapStrict(t.W, e.W))
                     t.cq = !t.deadRelease()                         // P()→cq
                 else t.cq = false
                 return
@@ -1574,7 +1617,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (w.kC != null && w.kC!!.claimAb() && e.aA == 1)
                     return                                          // L1b44
                 if (e.aA == 0) {
-                    if (rectsOverlap(player.W, e.W)) {              // entry
+                    if (Entity.overlapStrict(player.W, e.W)) {              // entry
                         e.aA = 1
                         player.setAnim(297)
                         player.ak = (e.W[0] + e.W[2]) shr 1         // pin x
@@ -1582,7 +1625,7 @@ class NpcFsm(val world: LevelCellSource) {
                         player.ah = 0; player.ag = 0
                         player.aj = 0; player.ai = 0                // L1b9a
                     }
-                } else if (e.aA == 1 && !rectsOverlap(player.W, e.W))
+                } else if (e.aA == 1 && !Entity.overlapStrict(player.W, e.W))
                     e.aA = 2                                        // L1bca
                 if (e.aA == 1 && player.S != 298 && player.S != 293) {
                     when {                                          // L1be7
@@ -1616,7 +1659,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val eligible = player.af !== e &&
                     player.S != 291 && player.S != 270 && player.S != 271 &&
                     player.S != 90 && player.S != 89 && player.S != 43 &&
-                    rectsOverlap(player.W, e.W) && !enemiesAlert(w, player)
+                    Entity.overlapStrict(player.W, e.W) && !enemiesAlert(w, player)
                 if (!eligible) {                               // L313
                     e.releaseAe()                              // G()
                     return
@@ -1670,7 +1713,7 @@ class NpcFsm(val world: LevelCellSource) {
             // (also zeroes `ai/aj`) + `k.b()`.
             30 -> {
                 while (true) {
-                    if (!rectsOverlap(e.W, player.W)) return        // La72
+                    if (!Entity.overlapStrict(e.W, player.W)) return        // La72
                     e.P = e.P or 16
                     if (e.Z[6] == 3) { e.Z[1] = -1; e.Z[2] = 3 }
                     e.pv = e.Z[1]; e.aG = e.Z[2]                     // p/aG
@@ -1808,13 +1851,13 @@ class NpcFsm(val world: LevelCellSource) {
             // arm via `goto L1be7` — folded in by ordering.)
             28 -> {
                 if (player.gg == null && (player.aA and 8) == 0 &&
-                    rectsOverlap(player.W, e.W) && e.Z[0] == 0) {
+                    Entity.overlapStrict(player.W, e.W) && e.Z[0] == 0) {
                     player.aA = player.aA or 8                        // L1aba
                     player.z = false                                // g.z = 0
                     e.Z[0] = 1
                     if (w.iBn) player.az = -1                       // L1b0b
                 }
-                if ((player.aA and 8) != 0 && !rectsOverlap(player.W, e.W)
+                if ((player.aA and 8) != 0 && !Entity.overlapStrict(player.W, e.W)
                     && e.Z[0] == 1) {
                     player.aA = player.aA and -9                    // ~8
                     player.z = true                                 // g.z = 1
@@ -1862,7 +1905,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.claimAb()) { e.runClaimScript(w); return }       // L5f5
                 if (e.P and 8192 != 0) { w.removeEntity(e); return }   // L601
                 e.P = e.P or 128                                       // L611
-                if (!rectsOverlap(e.W, player.W)) {
+                if (!Entity.overlapStrict(e.W, player.W)) {
                     Entity.gE = false; return
                 }
                 val kc = w.kC                                          // L632
@@ -1994,7 +2037,7 @@ class NpcFsm(val world: LevelCellSource) {
             55 -> {
                 val boss = w.kAU ?: return                            // k.aU
                 if (boss.S != 13) return                              // Lf4 gate
-                if (!rectsOverlap(boss.Y, e.W)) return                // a(aU.Y, W)
+                if (!Entity.overlapStrict(boss.Y, e.W)) return                // a(aU.Y, W)
                 boss.setAnim(25)                                      // aU.i(25)
                 boss.ak = e.ak                                        // aU.ak ← zone x
                 boss.ah = 0                                           // zero velocities
@@ -2008,7 +2051,7 @@ class NpcFsm(val world: LevelCellSource) {
             // zone's center — `al = cy + 10*(halfW-|dx|)/halfW`,
             // `ah = 0`.
             32 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (player.ac == null) {
                         player.bindAc(e)                               // aS.a(r7) — bind + P|256
                         player.setAnim(38)                             // i(38)
@@ -2028,16 +2071,16 @@ class NpcFsm(val world: LevelCellSource) {
             // player's held entity `ga` is ax51 and overlaps → remove.
             41 -> {
                 val ga = player.ga ?: return
-                if (ga.ax != 51 || !rectsOverlap(ga.W, e.W)) return
+                if (ga.ax != 51 || !Entity.overlapStrict(ga.W, e.W)) return
                 w.removeEntity(e); return
             }
             // S42 = L1d75 (i.java:13074): overlap → `k.c(this)`
             // (one-shot remove trigger).
-            42 -> { if (rectsOverlap(player.W, e.W)) w.removeEntity(e); return }
+            42 -> { if (Entity.overlapStrict(player.W, e.W)) w.removeEntity(e); return }
             // S44 = L1a59 (i.java:12683-12696): meter-write zone —
             // overlap → `k.W = k.V - aE`, remove.
             44 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     w.kW = w.kV - e.aE                                 // L1a67
                     w.removeEntity(e)
                 }
@@ -2047,13 +2090,13 @@ class NpcFsm(val world: LevelCellSource) {
             // overlap → `bh[k.aj]==3` → player `i(34)` (hit react);
             // else `k.l(12)` mission-fail + remove.
             45 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (w.missionBh() == 3) player.setAnim(34)           // L1a97
                     else { w.screenL(12); w.removeEntity(e) }          // L1aad
                 }
                 return
             }
-            33 -> if (rectsOverlap(player.W, e.W)) {
+            33 -> if (Entity.overlapStrict(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
                     player.gB = e.av
                     player.gL = if (e.aG != 0)
@@ -2061,7 +2104,7 @@ class NpcFsm(val world: LevelCellSource) {
                     player.gA = true
                 }
             } else player.gA = false
-            36 -> if (rectsOverlap(player.W, e.W)) {
+            36 -> if (Entity.overlapStrict(player.W, e.W)) {
                 player.gn = e.W[0] + ((e.W[2] - e.W[0]) shr 1)
                 player.go = e.W[3]
                 if (e.aE >= 0) player.gk = e.aE
@@ -2072,7 +2115,7 @@ class NpcFsm(val world: LevelCellSource) {
                 player.gn = 0; player.go = 0; player.gk = -1
                 e.P = e.P and -17
             }
-            43 -> if (rectsOverlap(player.W, e.W) &&
+            43 -> if (Entity.overlapStrict(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
             // S34: `aV()`'s tick arm is the trivial L5e9
@@ -2104,7 +2147,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return                                             // L17cf
                 }
                 if (e.oId == -1) return                                // L17d0
-                if (rectsOverlap(player.W, e.W) && player.g == null) { // L17d9
+                if (Entity.overlapStrict(player.W, e.W) && player.g == null) { // L17d9
                     player.spawnMarker(w, 105,
                         (e.W[0] + e.W[2]) shr 1, e.al)                 // aS.a(105,…)
                     if (w.padHeld(16388) && !w.playerAttacking() &&
@@ -2118,24 +2161,38 @@ class NpcFsm(val world: LevelCellSource) {
                     e.dropAeLink()                                     // L1850
                 }
             }
-            50 -> {                                             // L852 rope-dismount
+            // `aV()` S50 rope-dismount zone (bytecode i.javap.txt aV()
+            // @7562-7750, proven). Three exits: (a) `g.a` is an ax43 rope
+            // in S1/S4 and `i.a(aS.W, W)` (@7609) → marker `a(7,…)` pinned
+            // above the player, `g.C = false` (the rope's own 16388
+            // release in bw() @231 is muted while inside), and on the
+            // `k.v(16388)` edge the jump-off; (b) rope but no overlap →
+            // `G()` + `g.C = true` (@7737-7745); (c) no rope → `G()`
+            // (@7746-7750). Slice 371: (b)/(c) were missing — leaving the
+            // zone never dropped the marker nor re-armed `g.C`.
+            50 -> {
                 val ga = player.ga
                 if (ga != null && ga.ax == 43 &&
-                    (ga.S == 1 || ga.S == 4)) {                  // L854/L860
-                    if (rectsOverlap(player.W, e.W)) {
+                    (ga.S == 1 || ga.S == 4)) {                  // @7562-7596
+                    if (Entity.overlapStrict(player.W, e.W)) {   // @7609
                         e.spawnMarker(world, 7, player.ak, player.al - 50)
                         e.ae?.let { it.ak = player.ak; it.al = player.al - 50 }
-                        player.cFlag = false                     // g.C = false
-                        if (world.padHeld(16388)) {              // k.v(16388) edge
-                            e.releaseAe()
+                        player.cFlag = false                     // @7666 g.C = false
+                        if (world.padHeld(16388)) {              // @7672 k.v(16388) edge
+                            e.releaseAe()                        // G()
                             player.ag = if (player.av) -3328 else 3328
                             player.ah = -6656
                             player.setAnim(243)
                             player.ga = null
-                            player.cFlag = true                  // g.C = true
+                            player.cFlag = true                  // @7729 g.C = true
                             world.removeEntity(e)
                         }
+                    } else {
+                        e.releaseAe()                            // @7738 G()
+                        player.cFlag = true                      // @7742 g.C = true
                     }
+                } else {
+                    e.releaseAe()                                // @7747 G()
                 }
             }
             51 -> {                                             // L874/L880 cv register
@@ -2144,7 +2201,7 @@ class NpcFsm(val world: LevelCellSource) {
                 else if (world.cv === e && !Entity.overlapStrict(world.kAc, e.W))
                     world.cv = null
             }
-            53 -> if (player.gD && rectsOverlap(player.W, e.W) &&
+            53 -> if (player.gD && Entity.overlapStrict(player.W, e.W) &&
                       (player.S == 0 || player.S == 1 || player.S == 5)) {
                 player.setAnim(360)
                 player.ag = 0; player.ah = 0
@@ -2215,12 +2272,13 @@ class NpcFsm(val world: LevelCellSource) {
 
     private val ctxZone = IntArray(4)
 
-    /** `k.l()` (k.java:802): the 60px context bubble leading the player's
-     *  facing — M = [ak±60 by av, al-60, +60, al]. */
+    /** `k.M` (i.javap.txt aj() 110): the 60px context bubble leading the
+     *  player's facing — `[ak±60 by av, al-60, +60, al]` as `k.l()` wrote
+     *  it at the player's last `g.e()` head (slice 369 F13b), not the
+     *  player's live position. */
+    @Suppress("UNUSED_PARAMETER")
     private fun ctxZone(p: Entity) {
-        val x = if (p.av) p.ak - 60 else p.ak
-        ctxZone[0] = x; ctxZone[1] = p.al - 60
-        ctxZone[2] = x + 60; ctxZone[3] = p.al
+        world.kM.copyInto(ctxZone)
     }
 
     fun tickDestructible(e: Entity, player: Entity) {
@@ -2232,27 +2290,27 @@ class NpcFsm(val world: LevelCellSource) {
             5, 7 -> {
                 // L5 (i.java:6733): player mid-attack + body overlap arms it.
                 if (PlayerFsm.isAttackState(player.S)) {
-                    if (rectsOverlap(player.W, e.W)) {
+                    if (Entity.overlapStrict(player.W, e.W)) {
                         e.setAnim(e.S + 1); world.sfx(14); return
                     }
                 } else {
                     ctxZone(player)
                     if (player.S == 37 || player.S == 38 ||
-                        !rectsOverlap(e.W, ctxZone)) {
+                        !Entity.overlapStrict(e.W, ctxZone)) {
                         // L14: zone exit releases our claim (k.m()) and
                         // clears the marker popup (k.k(aw)).
                         if (world.claimed === e) {
-                            world.clearClaim(); world.clearMarker(e.aw)
+                            world.clearClaim(); world.clearPrompt(e.aw)
                         }
                     } else {
                         // in k.M: bid prio 5 (k.a) + marker popup (k.c).
                         world.claim(e, 5, e.W)
-                        world.setMarker(e.ak, e.al - 85, e.aw)
+                        world.showPrompt(e.ak, e.al - 85, e.aw)
                     }
                     pushOut(e, player, world) // L18: a() solid-side helper
                 }
                 // L24: the player's attack hitbox reaching W also arms it.
-                if (rectsOverlap(player.X, e.W)) {
+                if (Entity.overlapStrict(player.X, e.W)) {
                     e.setAnim(e.S + 1); world.sfx(14)
                 }
             }
@@ -2263,10 +2321,10 @@ class NpcFsm(val world: LevelCellSource) {
                 if (!e.animFinished()) return
                 if (e.m > 0) {
                     world.spawnWisp(e); e.m--
-                    world.kAp[5]++; world.kCollectStreak()
+                    world.kCount(5); world.kCollectStreak()
                     if (e.m > 0) {
                         world.spawnWisp(e)
-                        world.kAp[5]++; world.kCollectStreak()
+                        world.kCount(5); world.kCollectStreak()
                         e.m--
                     }
                 }
@@ -2279,10 +2337,10 @@ class NpcFsm(val world: LevelCellSource) {
                 // draw-list sweep over ax∈{4,11,17,73,15,23,29} ∩ X with
                 // per-type effects (ax4-S30→i(29) chain, ax29≠S20 → -50hp
                 // +i(20), melee set → `-bu[au]<<1`, ax15-S6 → i(7)+Z[3]=1).
-                if (rectsOverlap(player.W, e.X)) player.applyHit(4, 0, e, world)
-                for (o in world.npcs) {
+                if (Entity.overlapStrict(player.W, e.X)) player.applyHit(4, 0, e, world)
+                for (o in world.drawn) {                     // k.bd (slice 385)
                     val hit = when (o.ax) {
-                        4, 11, 17, 73, 15, 23, 29 -> rectsOverlap(o.W, e.X)
+                        4, 11, 17, 73, 15, 23, 29 -> Entity.overlapStrict(o.W, e.X)
                         else -> false
                     }
                     if (!hit) continue
@@ -2301,10 +2359,10 @@ class NpcFsm(val world: LevelCellSource) {
                 // L78 (i.java:5570-5581, proven): blast proximity re-arm —
                 // player hitbox ∩W or mid-S295 (body ∩W || grapple link
                 // ∩W) → i(29) restarts the sweep.
-                if (rectsOverlap(player.X, e.W)) e.setAnim(29)
+                if (Entity.overlapStrict(player.X, e.W)) e.setAnim(29)
                 if (player.S == 295 &&
-                    (rectsOverlap(player.W, e.W) ||
-                     (player.ga != null && rectsOverlap(player.ga!!.W, e.W)))) {
+                    (Entity.overlapStrict(player.W, e.W) ||
+                     (player.ga != null && Entity.overlapStrict(player.ga!!.W, e.W)))) {
                     e.setAnim(29)
                 }
             }
@@ -2351,7 +2409,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.S == 18 && p.S != 12) return           // L16-21: player S12
                                                    // proceeds (i.java:926)
         if (e.S == 131 || e.S == 146) return
-        if (!rectsOverlap(p.W, e.W)) return
+        if (!Entity.overlapStrict(p.W, e.W)) return
         if (p.ga != null) return
         if (p.S > 43) return
         val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
@@ -2365,9 +2423,6 @@ class NpcFsm(val world: LevelCellSource) {
         p.collideSides(w, true)      // a(true) side-strip rescan + snap
         p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
     }
-
-    private fun overlap(a: IntArray, b: IntArray): Boolean =
-        a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 
     // ============================================================ ax41 = n()
     // Knockable prop (i.java:6414, proven): vases/crates the player knocks
@@ -2386,7 +2441,7 @@ class NpcFsm(val world: LevelCellSource) {
             else -> false
         }
         if (carrier && kotlin.math.abs(o.al - e.al) > 20) return false
-        return Entity.overlapI(o.W, e.W)
+        return Entity.overlapStrict(o.W, e.W)
     }
 
     fun tickKnockable(e: Entity, w: Level0World, p: Entity) {
@@ -2394,27 +2449,24 @@ class NpcFsm(val world: LevelCellSource) {
             3 -> pushOut(e, p, w)                                     // L44 a()
             4 -> {                                                    // L4 settle
                 e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
-                // k.bd includes the player — w.npcs does not, append it.
-                for (o in w.npcs + p) {
-                    if (o === e) continue
+                // n() @56-277 (proven): the `k.bd` scan — the player is
+                // a draw-list member; so is this prop (its 41 arm is a
+                // no-op).
+                for (o in w.drawn) {
                     val r0 = o.ax
                     if (r0 != 0 && r0 != 11 && r0 != 51 && r0 != 41 && r0 != 4)
-                        continue                                    // L36
+                        continue                                    // @75-98
                     // `bd.W==null || this.W==null` — port W is never null;
                     // an all-zero box fails the overlap identically.
-                    if (!Entity.overlapI(o.W, e.W)) continue
-                    when (r0) {
-                        0 -> o.setAnim(9)                             // L25
-                        11 -> {                                       // L27
-                            val s = o.s
-                            if (s == null) o.setAnim(0)               // L30
-                            else if (s.ax != 51 && e.S == 6) o.setAnim(7) // L34
-                        }
-                        51 -> o.setAnim(2)                            // L31
-                        // 41 → L36 box-check only; 4 → inner default → L36.
-                        // Inner case 15 is unreachable: the outer filter
-                        // admits r0==4, not 15 — likely a decompiler
-                        // constant swap; ported verbatim (inferred).
+                    if (!Entity.overlapStrict(o.W, e.W)) continue
+                    when (r0) {                                       // @138
+                        0 -> o.setAnim(9)                             // @188
+                        // @201-237: `s == null || s.ax != 51 → i(0)` (the
+                        // port read an i(7) arm here — that is the dead
+                        // case 15, which the @75-98 filter never admits).
+                        11 -> { val s = o.s; if (s == null || s.ax != 51) o.setAnim(0) }
+                        51 -> o.setAnim(2)                            // @240
+                        // 41 → @252 no-op; 4 → default → next.
                     }
                 }
                 val clip = e.clip
@@ -2427,16 +2479,21 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.ah >= 2560) { e.ah = 2560; e.aj = 0 }
                 e.bd = true
                 e.collideSides(w, true)                               // a(true)
-                if (e.bb) e.ag = -e.ag
+                if (e.bb || e.bc) e.ag = -e.ag                        // @362-382
                 e.av = e.ag < 0                                       // L55-58
                 val moving = e.ag != 0 || e.ah != 0
-                if (knockOverlap(e, p) && moving) { e.setAnim(4); return }
-                for (o in w.npcs) {
-                    if (o === e) continue
+                if (knockOverlap(e, p)) {                             // @404-441
+                    if (moving) e.setAnim(4)
+                    return
+                }
+                // @442-551 (proven): the `k.bd` scan has no `this` skip —
+                // a drawn, moving prop meets itself (`i(this)`: dy 0,
+                // `a(W, W)`) and settles.
+                for (o in w.drawn) {
                     if (o.ax != 51 && o.ax != 11 && o.ax != 41 && o.ax != 15)
-                        continue                                      // L91
+                        continue
                     if (!knockOverlap(e, o) || !moving) continue
-                    e.setAnim(4); return                              // L88 i(4)
+                    e.setAnim(4); return                              // @546 i(4)
                 }
             }
             // case 5 + default → L92 dropped label → no-op (flagged).
@@ -2471,7 +2528,7 @@ class NpcFsm(val world: LevelCellSource) {
     private fun grabZone(e: Entity, p: Entity): Boolean {
         if (!((e.ax == 51 && e.S == 8) || (e.ax == 66 && e.S == 13)))
             return false
-        return Entity.overlapI(p.W, e.W)
+        return Entity.overlapStrict(p.W, e.W)
     }
 
     /** `i.bn()` (i.java:~16272, proven): player carries a claim →
@@ -2481,13 +2538,15 @@ class NpcFsm(val world: LevelCellSource) {
         e.spawnAeMarker(w, 1, e.ak, e.al - 60)
     }
 
-    /** `i.br()` (i.java:~16395, proven): grab-check — refresh/steal the
-     *  player's `ac` claim while overlapping or holding. `k.bd` scan →
-     *  `w.npcs + p`. */
-    private fun platformGrabCheck(e: Entity, w: LevelCellSource,
+    /** `i.br()` (i.java:15599; bytecode br() @0-380, proven): grab-check
+     *  — refresh/steal the player's `ac` claim while overlapping or
+     *  holding. The scan walks `k.bd` (the last paint's list, slice 385);
+     *  a bind ends the scan only on a held ax51 (S8) — every other bind
+     *  reports true (@345-372). */
+    internal fun platformGrabCheck(e: Entity, w: LevelCellSource,
                                   p: Entity): Boolean {
         var r5 = false
-        if (!Entity.overlapI(p.W, e.W) && !grabZone(e, p)) return false
+        if (!Entity.overlapStrict(p.W, e.W) && !grabZone(e, p)) return false
         if (!grabEligible(e)) return false
         if (p.ac != null) {
             // L11/L13/L18 — ac==this or dead claim → release then scan;
@@ -2501,7 +2560,7 @@ class NpcFsm(val world: LevelCellSource) {
             if (w.kL != null && w.kL!!.aw == e.aw) w.claimReset()
         }
         // L23 — k.bd sweep
-        for (o in w.npcs + p) {
+        for (o in w.drawn) {
             if (o === e || !grabEligible(o) || !grabInReach(o, p)) continue
             if (p.ac != null &&
                 !((o.ax == 51 && o.S == 8) || (o.ax == 66 && o.S == 13)))
@@ -2509,11 +2568,11 @@ class NpcFsm(val world: LevelCellSource) {
             // L45 — same-type-in-holding skip
             if (o.ax == 51 && o.S == 8 && e.ax == 51 && e.S == 8) continue
             if (o.ax == 66 && o.S == 13 && e.ax == 66 && e.S == 13) continue
-            if (p.S != 252) p.ac = o                              // L61
-            if (o.ax == 51) { if (o.S == 8) return r5 }             // L66
-            else r5 = true                                          // L67
+            if (p.S != 252) p.ac = o                              // @331-342
+            if (o.ax == 51 && o.S == 8) return r5                   // @345-368
+            r5 = true                                               // @371
         }
-        return r5                                                   // L70
+        return r5                                                   // @379
     }
 
     /**
@@ -2526,7 +2585,7 @@ class NpcFsm(val world: LevelCellSource) {
         when (e.S) {
             // -- L5 board: overlap + alive + not mid-throw → ride -----
             6, 24 -> {
-                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (!Entity.overlapStrict(p.W, e.W)) return@run
                 if (p.x1 <= 0) return@run                          // g.g()
                 if (p.S == 50) return@run
                 e.setAnim(if (e.S == 6) 7 else 25)                  // L14
@@ -2537,7 +2596,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
             // -- L21 ride: bind, clamp upward vel, S43 snap, timer ---
             7, 25 -> {
-                if (!Entity.overlapI(p.W, e.W)) {
+                if (!Entity.overlapStrict(p.W, e.W)) {
                     if (p.ga === e) p.ga = null                     // L34
                 } else {
                     p.ga = e
@@ -2579,12 +2638,12 @@ class NpcFsm(val world: LevelCellSource) {
                 if (p.S == 252 && p.ga === e) { p.ga = null; return } // L115
                 platformGrabCheck(e, w, p)                          // br()
                 // L121 — falling into the grab zone mid-236/239 → aid
-                if (Entity.overlapI(p.W, e.X) && p.ah > 0 &&
+                if (Entity.overlapStrict(p.W, e.X) && p.ah > 0 &&
                     (p.S == 236 || p.S == 239)) platformSpawnAid(e, w, p)
                 val r8 = if (e.Z[4] != -1) w.findByAw(e.Z[4]) else null
                 // L131/L143 — player boards/attacks onto the crate
                 if (p.ga !== e && e.S != 13 &&
-                    Entity.overlapI(p.W, e.W) &&
+                    Entity.overlapStrict(p.W, e.W) &&
                     (p.gB() || p.S == 236 || p.S == 239)) {             // g.b(k.aS.S)
                     if (r8 != null && r8.ax == 66 && r8.S == 16) {
                         p.flingAirborne(p.ah, w); p.ga = null       // L143
@@ -2634,14 +2693,14 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                 }
                 // L232 — drift release (ran in every path)
-                if (p.ga === e && !Entity.overlapI(p.W, e.X) &&
+                if (p.ga === e && !Entity.overlapStrict(p.W, e.X) &&
                     p.S != 209) { p.ga = null; e.releaseAe() }
             }
             // -- L241 → S20 after aC countdown ----------------------
             14 -> { e.aC--; if (e.aC <= 0) e.setAnim(20) }
             // -- L75 link-check: target crate holds player → arm ---
             15 -> {
-                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (!Entity.overlapStrict(p.W, e.W)) return@run
                 if (e.Z[0] == -1) return@run
                 val r03 = w.findByAw(e.Z[0])
                 if (r03 == null || r03.ax != 66 || r03.S != 12) return@run
@@ -2668,13 +2727,13 @@ class NpcFsm(val world: LevelCellSource) {
             19, 20, 21, 22 -> {
                 if (p.ga !== e) {                                   // L254
                     if (p.gB() &&                                     // g.b(k.aS.S)
-                        Entity.overlapI(p.W, e.W)) {
+                        Entity.overlapStrict(p.W, e.W)) {
                         p.setAnim(if (p.S == 264) 262 else 260)     // L260
                         p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0      // L261
                         p.ak = e.ak; p.al = e.al; p.ga = e
                     }
                 }
-                if (p.ga === e && !Entity.overlapI(p.W, e.W) &&     // L263
+                if (p.ga === e && !Entity.overlapStrict(p.W, e.W) &&     // L263
                     p.S != 261 && p.S != 259) p.ga = null
                 if (e.S == 19) {                                    // L274
                     if (e.Z[1] >= 0) { e.aC--; if (e.aC <= 0) e.setAnim(21) }
@@ -2697,7 +2756,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  `g.a == null` — player pressed against the crate while j-set. */
     private fun crateContact(e: Entity, w: LevelCellSource,
                              p: Entity): Boolean =
-        w.gj && Entity.overlapI(p.W, e.W) && p.ga == null
+        w.gj && Entity.overlapStrict(p.W, e.W) && p.ga == null
 
     /** `i.bp()` (i.java:15567, proven): `if (g.j) return false` — then
      *  `aS.S∈{43,35}` && `ah>0` && `W[0] < aS.ak < W[2]` &&
@@ -2711,7 +2770,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (p.S == 284) return                                     // L6
         if (e.claimActive()) e.runClaimScript(w)                   // ab()→aa()
         // L9/L22 — walked off while carried → release
-        if (p.ga === e && !Entity.overlapI(p.W, e.W) &&
+        if (p.ga === e && !Entity.overlapStrict(p.W, e.W) &&
             p.S != 235 && p.S != 238 && p.S != 50 && p.S != 9) {
             p.ga = null; e.releaseAe()
         }
@@ -2722,7 +2781,7 @@ class NpcFsm(val world: LevelCellSource) {
                 p.S != 146 && p.S != 236 && p.S != 239 &&
                 p.S != 235 && p.S != 238 && p.S != 237 &&
                 p.S != 240 && p.S != 0 && p.S != 277 &&
-                Entity.overlapI(p.W, e.W) && e.S != 8) {           // L30
+                Entity.overlapStrict(p.W, e.W) && e.S != 8) {           // L30
                 if (p.S == 16 || p.Q == 16 ||
                     ((e.al - p.gy) / 20) < 20 || w.gH()) {         // L62
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
@@ -2745,7 +2804,7 @@ class NpcFsm(val world: LevelCellSource) {
         }
         // L84/L94 — board arm: ac null or claimed-on-this + S236/239
         if (p.ga !== e && e.S != 8 && (p.ac == null || p.ac === e) &&
-            Entity.overlapI(p.W, e.W) &&
+            Entity.overlapStrict(p.W, e.W) &&
             (p.S == 236 || p.S == 239)) {
             p.setAnim(if (p.S == 236) 237 else 240)                // L103
             p.ah = 0; p.ag = 0; p.ga = e
@@ -2789,7 +2848,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (p.P and 1024 == 0) w.gc = e               // L192
                 }
                 if (p.ga === e) {                                 // L195/L197
-                    if (!Entity.overlapI(p.W, e.W) &&
+                    if (!Entity.overlapStrict(p.W, e.W) &&
                         p.S != 50 && p.S != 9) {
                         e.P = e.P and -17; p.ga = null; e.releaseAe()
                         return
@@ -2804,7 +2863,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
             2 -> {                                                // L213
                 e.releaseAe()
-                if (!Entity.overlapI(p.W, e.W)) {
+                if (!Entity.overlapStrict(p.W, e.W)) {
                     e.P = e.P and -17; p.ga = null; e.releaseAe()
                 }
                 if (e.animFinished()) { e.P = e.P or 64 or 32 }   // L217
@@ -2820,11 +2879,11 @@ class NpcFsm(val world: LevelCellSource) {
     // -1 keep, 0 → av=true, else av=false.
 
     fun tickZoneInteract(e: Entity, w: LevelCellSource, p: Entity) {
-        if (!Entity.overlapI(p.W, e.W) && e.S != 0) e.setAnim(0)
+        if (!Entity.overlapStrict(p.W, e.W) && e.S != 0) e.setAnim(0)
         when (e.S) {
             0 -> {                                        // L10
                 if (!p.gB()) return                       // g.b(S) gate
-                if (!Entity.overlapI(p.W, e.W)) return    // L49 (dropped)
+                if (!Entity.overlapStrict(p.W, e.W)) return    // L49 (dropped)
                 p.ak = e.ak; p.al = e.al                  // L12 snap
                 p.ah = 0; p.ag = 0
                 if (e.Z[3] != -1) p.av = e.Z[3] == 0      // L14/L18/L19
@@ -2888,7 +2947,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  aG!=-1 + Z[0] gate (Z0==1 requires the 65568 edge); sets `aS.P`
      *  facing bit by `aS.av`, then the `k.C` slot claim = `N()` body. */
     private fun eventBind(e: Entity, w: LevelCellSource, p: Entity) {
-        if (!Entity.overlapI(p.W, e.W)) return               // L5
+        if (!Entity.overlapStrict(p.W, e.W)) return               // L5
         if (e.aG == -1) return                               // L7
         when (e.Z[0]) {                                      // L7/L11
             0 -> {}
@@ -2963,7 +3022,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 // L11 — proximity arm
-                if (!Entity.overlapI(p.W, e.W)) return       // L224
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L224
                 e.eventArm(e.eventN, w)                      // b(this.n)
                 if (w.iAI <= 0) w.iAI = 1                    // L15
                 e.aC = e.aF * e.eventN
@@ -2973,7 +3032,7 @@ class NpcFsm(val world: LevelCellSource) {
             4 -> {                                           // L178
                 if (p.S == 50) return                        // L180
                 if (w.gG()) return                           // player dead
-                if (!Entity.overlapI(p.W, e.W)) return       // L228
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L228
                 w.screenL(15)                                // k.l(15)
                 return
             }
@@ -2982,7 +3041,7 @@ class NpcFsm(val world: LevelCellSource) {
             // ---------- S9 — claim stepper ----------
             9 -> {                                           // L186
                 if (e.Z[1] != 16) return                     // L229
-                if (!Entity.overlapI(p.W, e.W)) return       // L188
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L188
                 if (e.Z[2] == -1) return                     // L231
                 val r02 = w.findByAw(e.Z[2]) ?: return       // L194
                 if (r02 !== w.kC) return                     // L196 gate
@@ -3111,7 +3170,7 @@ class NpcFsm(val world: LevelCellSource) {
     /** `i.h(i)` (i.java:20791, proven): dangerous on-screen enemy —
      *  `W ∩ k.ac` && (ax∈{17,50} → true; ax∈{11,73} → `!P() && aA>=1`). */
     private fun enemyDanger(r3: Entity, w: LevelCellSource): Boolean {
-        if (!Entity.overlapI(r3.W, w.camRect)) return false
+        if (!Entity.overlapStrict(r3.W, w.camRect)) return false
         return when (r3.ax) {
             17, 50 -> true
             11, 73 -> !r3.deadRelease() && r3.aA >= 1
@@ -3137,7 +3196,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  `ax==27` callers skip the vertical inner gates (fire entity). */
     private fun pushApart(r7: Entity, P: Int, r9: IntArray, self: Entity) {
         if (P and 4096 == 0) return                          // L5
-        if (!Entity.overlapI(r7.W, r9)) return               // L7
+        if (!Entity.overlapStrict(r7.W, r9)) return               // L7
         // L7 head → L11b: from-above landing runs when r7 rises or self
         // falls; its W gates fall through to L24 on failure.
         if (r7.ah > 0 || self.ah < 0) {
@@ -3210,7 +3269,7 @@ class NpcFsm(val world: LevelCellSource) {
                 var engage = false
                 if (p.S != 267) {
                     if (p.S == 89 || p.S == 90) {            // L12→L20
-                    } else if (!Entity.overlapI(p.W, e.W)) {
+                    } else if (!Entity.overlapStrict(p.W, e.W)) {
                     } else if (enemiesAlert(w, p)) {
                     } else engage = true
                 }
@@ -3308,7 +3367,7 @@ class NpcFsm(val world: LevelCellSource) {
             15 -> {                                          // L91
                 e.P = e.P or 4096
                 if (p.X[0] != p.X[2] &&
-                    Entity.overlapI(e.W, p.X)) {             // L91-L94
+                    Entity.overlapStrict(e.W, p.X)) {             // L91-L94
                     e.aB -= 10
                     if (e.aB > 0) e.setAnim(5) else e.setAnim(12)
                 }
@@ -3351,11 +3410,12 @@ class NpcFsm(val world: LevelCellSource) {
         if (w.kAD == null) w.kAD = e                         // L75
     }
 
-    /** `bL()` L121 tail (i.java:20960): push overlapping ax11s out of
-     *  the entity's box while `P&4096` (the fire/hazard bit). `k.bd[]`
-     *  ↔ `w.npcs` filtered; `a(i,P,W)` = the push-apart routine. */
+    /** `bL()` L121 tail (i.java:19272): push the drawn ax11s within 50px
+     *  out of the entity's box while `P&4096` (the fire/hazard bit) —
+     *  `k.bd[]`, the last paint's list (slice 385); `a(i,P,W)` = the
+     *  push-apart routine. */
     private fun fuseTail(e: Entity, w: LevelCellSource) {
-        for (n in w.npcs) {
+        for (n in w.drawn) {
             if (n.ax != 11) continue
             if (Math.abs(e.ak - n.ak) > 50) continue
             pushApart(n, e.P, e.W, e)
@@ -3431,7 +3491,7 @@ class NpcFsm(val world: LevelCellSource) {
             else -> return                                   // L123 default
         }
         // ---- L22-L53 S0 ride/board head -----------------------------
-        if (Entity.overlapI(p.W, e.W) && e.ah == 0) {        // L22+L24
+        if (Entity.overlapStrict(p.W, e.W) && e.ah == 0) {        // L22+L24
             if (p.ac === e) {                                // riding
                 val hop = w.padHeld(16388) ||                // L28 context tap
                     (p.av && w.padHeld(2)) ||                // L30 tap left
@@ -3497,7 +3557,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
         }
         // L88 — player walked off the platform → unlink.
-        if (p.ac === e && !Entity.overlapI(p.W, e.W)) p.ac = null
+        if (p.ac === e && !Entity.overlapStrict(p.W, e.W)) p.ac = null
         // L93 — parked → done.
         if (e.ah == 0) return
         // L95 — departure fall: gravity, capped.
@@ -3505,10 +3565,11 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.ah > 2048) e.ah = 2048
         // L99 — side-cell wall reached → reset arm.
         if (frontCellBlocked(e, w)) { e.setAnim(1); return }
-        // L102 — crush any ax11 the falling gondola overlaps.
-        for (n in w.npcs) {
+        // L102 — crush the first drawn ax11 the falling gondola overlaps
+        // (`k.bd` — the last paint's list, slice 385).
+        for (n in w.drawn) {
             if (n.ax != 11) continue
-            if (!Entity.overlapI(n.W, e.W)) continue
+            if (!Entity.overlapStrict(n.W, e.W)) continue
             killByType(n)                                    // d(k.bd[r8])
             e.setAnim(1)
             return
@@ -3568,7 +3629,8 @@ class NpcFsm(val world: LevelCellSource) {
 
     /**
      * ax67 `bB()` (i.java:17584, proven transcription). Overlap checks use
-     * `i.a()` — INCLUSIVE edges (i.java:632, differs from `overlap`).
+     * `i.a(int[],int[])` = `Entity.overlapStrict` — INCLUSIVE edges plus
+     * the point-box rejects (structured i.java:540-558).
      * - bk==27 springboard: S∈{19,21,23,32,35,38} armed; W∩playerW →
      *   `ah=768+k.Y` + op40 grab + `i(S+1)`; then for S∈{19,21,23} the
      *   `bd[]` scan arms ax68-linked children (`ad.i(2)`, `d(8,…)`
@@ -3586,18 +3648,19 @@ class NpcFsm(val world: LevelCellSource) {
             when (e.S) {
                 19, 21, 23, 32, 35, 38 -> {
                     // L7: player body reaches the pad → bounce + grab
-                    if (Entity.overlapI(e.W, player.W)) {
+                    if (Entity.overlapStrict(e.W, player.W)) {
                         player.ah = 768 + world.kY
                         player.applyHit(40, 0, e, world)   // a(40,0,0,this)
                         if (e.S != 39) e.setAnim(e.S + 1)
                     }
                     // L12/L14/L94: S∈{32,35,38} skip the child scan
                     if (e.S == 32 || e.S == 35 || e.S == 38) return
-                    // L19: `k.bd[]` scan for an ax68-linked child hitting W
-                    for (r0 in world.npcs) {
+                    // L19: `k.bd[]` scan (the last paint's list, slice
+                    // 385) for an ax68-linked child hitting W
+                    for (r0 in world.drawn) {
                         val ad = r0.ad ?: continue
                         if (ad.ax != 68) continue
-                        if (!Entity.overlapI(e.W, ad.W)) continue
+                        if (!Entity.overlapStrict(e.W, ad.W)) continue
                         if (e.S != 39) e.setAnim(e.S + 1)
                         ad.setAnim(2)
                         e.spawnFloatie(world, 8, ad.ak, ad.al)   // d(8,…)
@@ -3618,21 +3681,22 @@ class NpcFsm(val world: LevelCellSource) {
             28 -> {
                 // L46: r02 = player side vs prop centerline
                 val r02 = player.ak - ((e.W[0] + e.W[2]) shr 1)
-                if (Entity.overlapI(e.X, player.W) &&
-                    !e.wasHitRecently(world)) {
+                if (Entity.overlapStrict(e.X, player.W) &&
+                    !e.inPlayV(world)) {             // bB() @432 v()
+                    // bB() @438-537 (proven): no ae, or one that isn't a
+                    // 71 → `aS.G(); aS.a(71, ak, al)`; then pin it and
+                    // return. The port fell through to the shove check
+                    // when the ae was not a 71 (slice 384).
                     val ae = player.ae
-                    if (ae == null) {
-                        player.releaseAe()               // aS.G() then a(71)
+                    if (ae == null || ae.S != 71) {
+                        player.releaseAe()               // aS.G()
                         player.ae = world.spawnPickup(71, e.ak, e.al)
-                        pinAe(player.ae!!, r02, e.al); return
                     }
-                    if (ae.S == 71) {                    // L53→L56 re-pin
-                        pinAe(ae, r02, e.al); return
-                    }
-                    // ae exists but isn't a 71 → fall to the shove check
+                    pinAe(player.ae!!, r02, e.al)        // @483-534
+                    return
                 }
                 // L62: player inside the body → hard shove out
-                if (Entity.overlapI(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     player.setAnim(309)
                     player.aC = 5
                     if (r02 >= 0) { player.ag = 2560; player.av = true }
@@ -3646,7 +3710,7 @@ class NpcFsm(val world: LevelCellSource) {
             12 -> {
                 if (e.Z[1] != 1) return                  // L72
                 // L74: un-guarded + overlap → bind (aA|=8, g.e, az-1)
-                if (player.gg == null && Entity.overlapI(e.W, player.W)) {
+                if (player.gg == null && Entity.overlapStrict(e.W, player.W)) {
                     player.aA = player.aA or 8
                     player.ge = e
                     player.az = e.az - 1
@@ -3697,25 +3761,26 @@ class NpcFsm(val world: LevelCellSource) {
      *   always allocated, so the all-zero W stands in for null.
      * - `a(aS.Y,W) && !aS.f()` → `aF=1`, `P&~128` (armed + unhidden).
      * - `S==107` → follow the player (`ak/al = aS.ak/al`).
-     * - linked (`o!=-1`, resolved via `k.q` = scan by `aw`): in-play waits
-     *   `bZ>=aE`, then unhides, `ah=k.Y`, `aC=15` countdown → `k.c(this)`;
-     *   waits while target `P&32` (held) or `P&128` (hidden). Off-play:
-     *   hide when the player leaves (`P|=128`), consume when `r5.S==j`
-     *   and `aA!=1`.
+     * - linked (`o!=-1`, resolved via `k.q` = scan by `aw`): on a
+     *   `k.bh[k.aj]==3` mission (bytecode aX() @101-109 — NOT `!k.al`,
+     *   slice 371) waits `bZ>=aE`, then unhides, `ah=k.Y`, `aC=15`
+     *   countdown → `k.c(this)`; waits while target `P&32` (held) or
+     *   `P&128` (hidden). Other missions: hide when the player leaves
+     *   (`P|=128`), consume when `r5.S==j` and `aA!=1`.
      * - unlinked: once armed (`aF==1`), player leaving W → `aA==1` hides
      *   (`P|=128`), otherwise `k.c(this)` — the pickup is collected.
      */
     fun tickPickup(e: Entity, player: Entity) {
         // anim advance: I() preamble (i.java:15232)
         if (e.W.contentEquals(Entity.ZERO_RECT)) return      // L6 W==null
-        if (Entity.overlapI(player.Y, e.W) && !player.isHolding()) {
+        if (Entity.overlapStrict(player.Y, e.W) && !player.isHolding()) {
             e.aF = 1
             e.P = e.P and -129
         }
         if (e.S == 107) { e.ak = player.ak; e.al = player.al }
         val r5 = if (e.oId != -1) world.findByAw(e.oId) else null
         if (r5 != null) {
-            if (world.inPlay) {
+            if (world.missionBh() == 3) {                    // @101-109 k.bh[k.aj]==3
                 if (e.bZ < e.aE) return                      // L17 wait arm
                 e.P = e.P and -129
                 e.ah = world.kY
@@ -3727,7 +3792,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.aC <= 0) world.removeEntity(e)
                 return
             }
-            if (e.aF == 1 && !Entity.overlapI(player.Y, e.W))
+            if (e.aF == 1 && !Entity.overlapStrict(player.Y, e.W))
                 e.P = e.P or 128
             if (r5.S != e.j) return                          // watch state
             if (e.aA == 1) return                            // persistent
@@ -3735,7 +3800,7 @@ class NpcFsm(val world: LevelCellSource) {
             return
         }
         if (e.aF != 1) return                                // never touched
-        if (Entity.overlapI(player.Y, e.W)) return           // still inside
+        if (Entity.overlapStrict(player.Y, e.W)) return           // still inside
         if (e.aA == 1) { e.P = e.P or 128; return }          // hide, keep
         world.removeEntity(e)                                // collected
     }
@@ -3759,7 +3824,7 @@ class NpcFsm(val world: LevelCellSource) {
         // anim advance: I() preamble (i.java:15232)
         when (e.S) {
             30, 38 -> {                   // L9/L15 — equip pickups
-                if (!Entity.overlapI(player.W, e.W)) return
+                if (!Entity.overlapStrict(player.W, e.W)) return
                 val bit = if (e.S == 30) 2 else 8
                 player.requestAction(bit, world)
                 player.requestH(bit, world)
@@ -3769,7 +3834,7 @@ class NpcFsm(val world: LevelCellSource) {
                 world.removeEntity(e)
             }
             39 -> {                       // L21 — mount-request pickup
-                if (!Entity.overlapI(player.W, e.W)) return
+                if (!Entity.overlapStrict(player.W, e.W)) return
                 player.requestAction(4, world)
                 world.removeEntity(e)
             }
@@ -3796,11 +3861,11 @@ class NpcFsm(val world: LevelCellSource) {
                 if (world.missionBh() == 3) {
                     e.ah = 0; e.ag = 0
                     if (e.af === player) e.sweepNeighborsB(world)
-                    else if (Entity.overlapI(e.X, player.W))
+                    else if (Entity.overlapStrict(e.X, player.W))
                         player.applyHit(38, 0, e, world)
                 } else {
                     e.sweepNeighbors(world)
-                    if (Entity.overlapI(e.X, player.W))
+                    if (Entity.overlapStrict(e.X, player.W))
                         player.applyHit(4, 0, e, world)
                 }
                 e.af = null
@@ -3819,7 +3884,7 @@ class NpcFsm(val world: LevelCellSource) {
                 e.aj = 512
                 if (e.ah == 0 && e.ag != 0) e.spawnMarker(world, 4, e.ak, e.al - 60)
                 var r9 = false
-                if (Entity.overlapI(player.W, e.X)) {
+                if (Entity.overlapStrict(player.W, e.X)) {
                     if (!world.playerAttacking()) {
                         player.applyHit(4, 0, e, world); r9 = true
                     } else if (!e.bR) {
@@ -3842,7 +3907,7 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                 }
                 if (e.bR && e.af?.ax == 23 &&
-                    Entity.overlapI(e.W, e.af!!.W)) {
+                    Entity.overlapStrict(e.W, e.af!!.W)) {
                     e.af!!.aB = 0; e.af!!.setAnim(79); r9 = true
                 }
                 if (r9) {
@@ -3879,7 +3944,7 @@ class NpcFsm(val world: LevelCellSource) {
             // `v()` view check.
             22, 23 -> {
                 if (e.W.contentEquals(Entity.ZERO_RECT)) { world.removeEntity(e); return }
-                if (Entity.overlapI(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     player.applyHit(4, 0, e, world)
                     world.removeEntity(e); return
                 }
@@ -3888,7 +3953,10 @@ class NpcFsm(val world: LevelCellSource) {
                     e.W[3] > player.W[1]) {
                     e.setAnim(25); e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 }
-                if (e.S == 23 && !e.markerVisible(world)) world.removeEntity(e)
+                // bb() @1223-1243: `S==23 && !v() → k.c(this)` — the full
+                // v() (slice 371: `markerVisible` returned `au > i`, the
+                // inverse, and skipped the `a(k.ac, Y)` camera test).
+                if (e.S == 23 && !e.inPlayV(world)) world.removeEntity(e)
             }
             // L152 — anim end → k.c
             25 -> if (e.animFinished()) world.removeEntity(e)
@@ -3898,7 +3966,7 @@ class NpcFsm(val world: LevelCellSource) {
             // indicator; a 65568 tap teleports the player into `i(216)`
             // + A(29).
             31 -> {
-                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (!Entity.overlapStrict(player.W, e.W)) { e.releaseAe(); return }
                 if (player.S == 216 || player.S == 50 || world.playerAttacking() ||
                     (player.gJ and 2) == 0) { e.releaseAe(); return }
                 e.spawnMarker(world, 8, e.ak, e.al - 85)
@@ -3911,7 +3979,7 @@ class NpcFsm(val world: LevelCellSource) {
             // L172 — left/right kill prompts: same shape → `i(214)`;
             // S32 pins `aS.ak = ak-45, av=false`; S33 `ak+45, av=true`.
             32, 33 -> {
-                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (!Entity.overlapStrict(player.W, e.W)) { e.releaseAe(); return }
                 if (player.S == 214 || player.S == 215 || player.S == 50 ||
                     (player.gJ and 2) == 0) { e.releaseAe(); return }
                 e.spawnMarker(world, 8, e.ak, e.al - 85)
@@ -4178,7 +4246,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
             if (mask == 62) {
                 w.findByAw(e.Z[13])?.let { w.removeEntity(it) }
                 w.findByAw(e.Z[14])?.let { w.removeEntity(it) }
-                w.statTally(e.aw)                        // k.e(0,aw)
+                w.countKill(e.aw)                        // k.e(0,aw)
                 e.aA = 7
             } else {
                 val cC = when (mask) {
@@ -4579,7 +4647,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         else -> r0 = false
     }
     // L23 — counter/stagger eligibility (box overlap + r0)
-    if (r0 && Entity.overlapI(e.W, p.X)) {
+    if (r0 && Entity.overlapStrict(e.W, p.X)) {
         when (w.iBy) {
             1 -> {
                 // L29 — RNG counter vs stagger (200+cn / 1000)
@@ -4587,7 +4655,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                     // L32 r02 arm — counter pose + player-punish
                     e.ah = 0; e.ag = 0
                     e.setAnim(21)
-                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                    if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                         w.playerAttacking() && p.S != 8) {
                         p.setAnim(8)
                         w.kE?.let { it.P = it.P or 128 }
@@ -4632,7 +4700,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                         }
                     }
                 } else if (e.S != 20 && e.S != 26) {
-                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                    if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                         w.playerAttacking() && p.S != 8) {
                         p.setAnim(8)
                         w.kE?.let { it.P = it.P or 128 }
@@ -4718,7 +4786,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L220 — S14/35 barrage: face, punish-check, spawn knives
         14, 35 -> {
             e.facePlayer(w)
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -4757,7 +4825,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L300+L302 — S15/16/6: inert + punish-check + r()→i(0)
         15, 16, 6 -> {
             e.ah = 0; e.ag = 0
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -4851,7 +4919,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L388 — S4 strike: lunge, W∩aS.W → i(6)+e(2); r()→trail-end+i(0)
         4 -> {
             e.ag = if (e.av) 2560 else -2560
-            if (Entity.overlapI(e.W, p.W)) {
+            if (Entity.overlapStrict(e.W, p.W)) {
                 e.ah = 0; e.ag = 0
                 e.setAnim(6)
                 e.bossAura(w, 2, e.ak, e.al, 300)
@@ -4870,7 +4938,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
             e.facePlayer(w)
             w.kE?.let { it.P = it.P or 128 }
             e.spawnMarker(w, 80, e.ak, e.al - 85)
-            if (Entity.overlapI(e.W, p.W) || Entity.overlapI(e.W, p.X)) {
+            if (Entity.overlapStrict(e.W, p.W) || Entity.overlapStrict(e.W, p.X)) {
                 if (pad.v(65568)) {
                     p.ah = 0; p.ag = 0
                     e.releaseAe()
@@ -4890,7 +4958,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         }
         // L255 — S21 counter pose: punish-check + r()→Q+aQ
         21 -> {
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -5008,7 +5076,7 @@ private fun NpcFsm.bossPushPast(e: Entity) {
     if (e.S == 18 && p.S != 12) return           // L16-21: player S12
                                                    // proceeds (i.java:926)
     if (e.S == 131 || e.S == 146) return
-    if (!Entity.overlapI(p.W, e.W)) return
+    if (!Entity.overlapStrict(p.W, e.W)) return
     if (p.S > 43) return
     val pHalf = (p.W[2] - p.W[0]) / 2
     val eHalf = (e.W[2] - e.W[0]) / 2
@@ -5119,8 +5187,8 @@ private fun ax35AfArmFlags(e: Entity) {
  *  `aC=2; Z[7]++` → `Z[7]>Z[12]` tail; `r8 = Z[12]>2?3:2`;
  *  `r04=(Z[7]-r8)*Z[6]`; fire-x `r9 = S∈{27,31} ? Z[8] : r04+Z[8]`;
  *  march `r11=r9; r122=Z[9]; do {r11-=r05; r122-=r06} while r122>=k.P`
- *  (`r05/r06 = 20·sin/cos(Z[5]·M/360)>>8`); S∈{2,31}→L124 spawn the
- *  S18 marker at `(r9+36·sin, Z[9]+36·cos)` + `f()` child (+S31 clears
+ *  (`r05/r06 = 20·cos/sin(Z[5]·M/360)>>8`); S∈{2,31}→L124 spawn the
+ *  S18 marker at `(r9+36·cos, Z[9]+36·sin)` + `f()` child (+S31 clears
  *  P64 & `i(29)`); else (S27) `f()` + `aC=10; P&=-65; i(25)`; all paths
  *  end at the L129 tail. */
 private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
@@ -5134,8 +5202,8 @@ private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
     val r04 = (e.Z[7] - r8) * e.Z[6]
     val r9 = if (e.S == 27 || e.S == 31) e.Z[8] else r04 + e.Z[8]
     val th = e.Z[5] * Trig.M / 360
-    val r05 = (20 * Trig.sin(th)) shr 8
-    val r06 = (20 * Trig.sin(Trig.N - th)) shr 8   // j.b(j.n-θ) = cos
+    val r05 = (20 * Trig.cos(th)) shr 8
+    val r06 = (20 * Trig.cos(Trig.N - th)) shr 8   // j.b(j.n-θ) = sin
     var r11 = r9
     var r122 = e.Z[9]
     do {                                                        // L118
@@ -5143,8 +5211,8 @@ private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
     } while (r122 >= w.kP)
     if (e.S == 2 || e.S == 31) {                                // L124
         ax35SpawnMarker(e, w, 18,
-            r9 + ((36 * Trig.sin(th)) shr 8),
-            e.Z[9] + ((36 * Trig.sin(Trig.N - th)) shr 8))
+            r9 + ((36 * Trig.cos(th)) shr 8),
+            e.Z[9] + ((36 * Trig.cos(Trig.N - th)) shr 8))
         ax35WaveChild(e, w, r11, r122, r9, e.Z[5])
         if (e.S == 31) { e.P = e.P and -65; e.setAnim(29) }
     } else {                                                    // L123 (S27)
@@ -5192,7 +5260,7 @@ private fun ax35AeCleanup(e: Entity, p: Entity) {
  * S2·31 L88 (af absent/dead → `S31?i(29):i(0)`; else L97 wave director);
  * S27→L97; S6-9 L142 (W-box player-hit: `p.S∈{0,1,7}→aS.i(9)` then
  *   `p.S==12` shared L267 deflect arm else `g.d(GU[au]);g.t=5`; `k.bd`
- *   sweep → `as()` on overlap; `aG`-march `20·sin/cos` commit-if-free
+ *   sweep → `as()` on overlap; `aG`-march `20·cos/sin` commit-if-free
  *   → `i(10+bR());aC=20` on cell20; edge despawn `±20` past `k.O`);
  * S10-13 L196 (`r()→i(14+bR())`); S14-17 L200 (`!b(Y,k.ac)→k.c`);
  * S18/19 L204 (`r()→k.c`); S20 L275 (vol-edge overlap → `aC=Z[11]`
@@ -5276,26 +5344,24 @@ fun NpcFsm.tickAx35(e: Entity, w: LevelCellSource, p: Entity) {
         27 -> ax35WaveStep(e, w)                                // L97
         in 6..9 -> {                                            // L142
             e.refreshBoxes()
+            // bQ() @1525-1613 (proven): S ∈ {0,1,7,12} flinch (`i(9)`),
+            // then the drain + `g.t = 5` for every pose. The port read a
+            // S12 arm here (VolPaint + `i(3)`) that the bytecode lacks.
             if (p.gt <= 0 &&
                     Entity.overlapStrict(e.W, p.W) && !w.kAn) {  // L145
-                if (p.S == 0 || p.S == 1 || p.S == 7) {
-                    p.setAnim(9)                                 // L156→L157
+                if (p.S == 0 || p.S == 1 || p.S == 7 || p.S == 12) {
+                    p.setAnim(9)                                 // @1594
                 }
-                if (p.S == 12) {                                 // L267 arm
-                    ax35VolPaint(e, w)
-                    if (e.animFinished()) e.setAnim(3)
-                } else {
-                    p.gDrain(w.GU[w.weaponSlot], w); p.gt = 5    // L157
-                }
+                p.gDrain(w.GU[w.weaponSlot], w); p.gt = 5        // @1602-1613
             }
-            for (o in w.npcs) {                                  // L160 sweep
+            for (o in w.drawn) {                     // @1616 k.bd (slice 385)
                 if (o.ax !in AX35_SWEEP_AX) continue
                 if (o.deadRelease()) continue
                 if (Entity.overlapStrict(e.W, o.W)) o.instantKill()
             }
             val th = e.aG * Trig.M / 360                         // L181 march
-            val nx = e.ak + ((20 * Trig.sin(th)) shr 8)
-            val ny = e.al + ((20 * Trig.sin(Trig.N - th)) shr 8)
+            val nx = e.ak + ((20 * Trig.cos(th)) shr 8)
+            val ny = e.al + ((20 * Trig.cos(Trig.N - th)) shr 8)
             if (w.collisionCell(nx / 20, ny / 20) == 20) {
                 e.setAnim(10 + ax35Quadrant(e.aG)); e.aC = 20
             } else {
@@ -5452,7 +5518,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
         9 -> if (e.animFinished()) w.removeEntity(e)             // k.c(this)
         // L13 — contact-harm shell (S10)
         10 -> {
-            if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+            if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W)) {
                 p.applyHit(4, 0, e, w)                           // aS.a(4,0,0,this)
             }
             if (e.animFinished()) w.removeEntity(e)
@@ -5467,7 +5533,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
         // L50 — S15 catch: Y-overlap grabs the player into S375 + the
         // weapon-table drain `g.d(g.u[k.au])`; S0/S6 → r()→despawn only.
         0, 6, 15 -> {
-            if (e.S == 15 && Entity.overlapI(e.Y, p.Y) && p.S != 375) {
+            if (e.S == 15 && Entity.overlapStrict(e.Y, p.Y) && p.S != 375) {
                 p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
                 p.setAnim(375)
                 p.al = e.al
@@ -5580,7 +5646,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
  *  S2 only — the grab snap `i(375)` + vel0 + boss-y (L44); S17 instead
  *  lands at L39 after the hit (av=false, no snap). r() → P|=128|32. */
 fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
-    if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+    if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W)) {
         if (p.S != 9 && p.S != 375 && p.S != 376 && p.S != 377) {
             if (p.ak < (w.kAU?.ak ?: 0)) {
                 p.av = false                                       // L39
@@ -5818,12 +5884,14 @@ private fun ax15Body(e: Entity, w: Level0World, p: Entity) {
     }
     // L137 — grounded → settle flags
     if (e.supportedByGround(w)) { e.bd = true; e.ai = 0; e.ah = 0 }
-    // L141 — neighbor sweep over k.bd (= w.npcs)
-    for (n in w.npcs) {
-        // L156 ax44 door overlapping an S6 block → i(7) collapse anim
+    // L141 — neighbor sweep over `k.bd` (the last paint's list, slice 385)
+    for (n in w.drawn) {
+        // L156 ax44 door overlapping an S6 block → i(7) collapse anim; the
+        // sweep ends there (bu() @1216-1222: `i(7); goto 1707`).
         if (n.ax == 44 && n.S == 0 && r1 == 6 &&
             Entity.overlapStrict(n.X, e.W)) {
             e.setAnim(7)
+            break
         }
         // ax66 platform ride — mount on overlap, unmount on leave,
         // carry by its velocity (L167/L172/L195)
@@ -5971,12 +6039,17 @@ private fun ax46Touch(e: Entity, w: Level0World, p: Entity) {
     e.setAnim(7)
 }
 
-/** L33 fire-cycle arm (proven): X overlap → S328 pins again; on anim
- *  end S5 resets to i(3)+face-invert, S328 throws off to i(329),
+/** L33 fire-cycle arm (proven): X overlap → re-pin (S328 anim 330, S5/S6
+ *  anim 110); on anim end S5 resets to i(3)+face-invert, S328 throws off to i(329),
  *  S6 winds down to i(4). `Z[2]=Z[3]` rearms the 30-tick counter. */
 private fun ax46Cycle(e: Entity, w: Level0World, p: Entity) {
     if (!Entity.overlapStrict(p.W, e.X)) return                 // L34
-    if (e.S == 328) p.applyHit(24, 330, e, w)                   // L37
+    // L35/L37 (simple/i.java:13637-13639, :13680-13682, proven): every
+    // overlapping tick re-pins — S328 with anim 330, S5/S6 with 110. op24
+    // snaps the player onto W[0],W[1], keeping him inside the sweeping X
+    // box until the r() release below (slice 347: the 110 arm was missing).
+    if (e.S == 328) p.applyHit(24, 330, e, w)
+    else p.applyHit(24, 110, e, w)
     if (!e.animFinished()) return                               // L40
     when (e.S) {
         5 -> { e.setAnim(3); p.av = !e.av }                     // L41/L59 flip
@@ -6224,14 +6297,10 @@ fun NpcFsm.initAx13(e: Entity, f: List<Int>) {
     e.Z[2] = 0
     e.Z[3] = rf(10)
     e.Z[6] = rf(11)
-    // inferred: the pendulum's start angle scales with the variant —
-    // `bP = aG<<12` → aG=4 gives 16384 (r13=64 = straight down). Every
-    // init path (ctor :2269/:7354, L502, L1bea) leaves `bP=0`, which
-    // yields a zero-height grab box once the rope is grown — verified
-    // empirically that `bP=16384` produces the live hang box. `aG<<12`
-    // maps the variant {0,1,2,4} → {0,4096,8192,16384}; only aG=4 is
-    // verified on real records.
-    e.bP = e.aG shl 12
+    // `bP` stays 0 (proven: the ctor `bP = 0`, structured/i.java:662/1916,
+    // and no init arm writes it). With `j.b` = cos, angle 0 hangs straight
+    // down — the old `bP = aG<<12` start angle only compensated for the
+    // pre-352 sine table and is gone.
     e.setAnim(rf(5))
     e.refreshBoxes()
 }
@@ -6242,7 +6311,7 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.bO != 0 || e.bP != 0) {                                   // L5→L6
         val r0 = e.bO
         e.bP += e.bO shl 1
-        e.bO -= Trig.sin(Trig.N - (e.bP shr 8)) shl 1               // j.b(n-θ)
+        e.bO -= Trig.cos(Trig.N - (e.bP shr 8)) shl 1               // j.b(n-θ)
         integrated = true
         if (e.aA == 1) {                                            // L9
             if (e.bM === p && e.aG == 1 && r0 * e.bO < 0) {
@@ -6297,10 +6366,10 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
                 val r07 = 3072 * e.bN
                 val r122 = (3072 * (e.bN - 4)).coerceAtLeast(1)     // L66
                 val r09 = e.bP shr 8
-                val r010 = (r07 * Trig.sin(Trig.N - r09)) shr 8
-                val r011 = (r07 * Trig.sin(r09)) shr 8
-                val r012 = (r122 * Trig.sin(Trig.N - r09)) shr 8
-                val r013 = (r122 * Trig.sin(r09)) shr 8
+                val r010 = (r07 * Trig.cos(Trig.N - r09)) shr 8
+                val r011 = (r07 * Trig.cos(r09)) shr 8
+                val r012 = (r122 * Trig.cos(Trig.N - r09)) shr 8
+                val r013 = (r122 * Trig.cos(r09)) shr 8
                 if (r010 > 0) {
                     e.W[0] = ((e.N + r012) shr 8) - 4; e.W[2] = ((e.N + r010) shr 8) + 4
                 } else {
@@ -6310,14 +6379,14 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
                 e.W[3] = ((e.O + r011) + r05 - r07) shr 8           // L73
                 if (Entity.overlapStrict(r06, e.W)) {               // a(r06,W)
                     // L76-88: pick the grab segment r04 on the arc.
-                    // r93==0 (j.b(0)=0 — post-release `bP=0`, the aG==4
-                    // latch zeroes it at L99) makes the original divide
-                    // by zero — a latent J2ME ArithmeticException
-                    // (proven: the aG==4 L147→L440 path is reachable
-                    // only when `cI==0`, i.java:17775-17792, so this
-                    // arm runs pre-release while bP>0 — the port still
-                    // guards the divide as a segment-miss).
-                    val r93 = (3072 * Trig.sin(r09)) shr 8
+                    // r93 = 12·cos θ is 0 only with the rope exactly
+                    // horizontal (θ = ±64; the clamp allows ±80). The
+                    // original then divides by zero (i.java:13311);
+                    // `paint()`'s catch sets `c = -1` (structured/
+                    // j.java:256-261), `run()` leaves its loop and calls
+                    // `notifyDestroyed()` — the MIDlet exits. Accepted
+                    // deviation: the port treats it as a segment miss.
+                    val r93 = (3072 * Trig.cos(r09)) shr 8
                     if (r93 != 0) {
                         var r8 = (p.O - e.O) / r93
                         if (r8 < 0) r8 = 0
@@ -6540,35 +6609,31 @@ private fun NpcFsm.runnerArriveAnim(e: Entity, x: Int, y: Int) {
     }
 }
 
-/** `i.i(int,int)` (i.java:7795, proven): anim-set selector —
- *  0→i(r6), 1→i(r6+23), 2→i(22), 3→i(r6). */
+/** `i.i(int,int)` (bytecode i.javap.txt:27470-27510, proven): anim-set
+ *  selector — 1→i(r6+23), 2→i(22), 3→i(28), anything else→i(r6). */
 private fun NpcFsm.animVariant(e: Entity, set: Int, base: Int) {
-    when (set) { 1 -> e.setAnim(base + 23); 2 -> e.setAnim(22); else -> e.setAnim(base) }
-}
-
-/** `i.b(int,int,int,int)` (i.java:8026, proven): dominant-direction index
- *  {1,2,3} from (x1,y1)→(x2,y2) — 5120px dominance threshold. */
-private fun NpcFsm.dirVariant(x1: Int, y1: Int, x2: Int, y2: Int): Int {
-    val dx = x2 - x1; val dy = y2 - y1
-    if (dx == 0) return 2
-    if (kotlin.math.abs(dx) <= 5120) return 2
-    val slope = (dy * 100) / dx
-    if (slope == 0) return 2
-    if (kotlin.math.abs(dy) <= 5120) return 2
-    return if (slope < 0) (if (dx > 0) 1 else 3)
-           else (if (dx > 0) 3 else 1)
+    when (set) {
+        1 -> e.setAnim(base + 23)
+        2 -> e.setAnim(22)
+        3 -> e.setAnim(28)
+        else -> e.setAnim(base)
+    }
 }
 
 /** `i.a(int, boolean)` (i.java:7826, proven): projectile volley — arms
  *  `count` free `k.aX` slots (av() = first with P&128 clear). Launch point
  *  `am/an` = X-center<<7 for ax54/30/56 else W-center<<7; `copyAim` keeps
- *  e.ao/ap, else aim = wpF point or the player W-center<<7. Angular fan
- *  spreads count>1 volleys ±r02 around atan2 aim; speed 2048 (ax54 Z[9]==2
- *  → 1280; ax30 Z[9]==2&&count==3&&first → 2560). Velocity =
- *  (dir*speed)/dist + gravity. Facing av/P|1, subpixel seed N/O, anim
- *  i(Z[8],dirVar) on ax54 / i(Z[3],dirVar) on ax30, aG = Z[9] (both),
- *  af = owner, aC = n. First shot of a volley: ax30 → sfx27 else sfx16. */
-private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
+ *  e.ao/ap, else aim = wpF point or the player W-center<<7 (other types:
+ *  100px east). Angular fan spreads count>1 volleys around the `j.b`
+ *  aim (odd counts ±r02·k with slot 0 straight, even counts straddling
+ *  at ∓r02/2); speed 2048, or 1280 for ax54 Z[9]==2, ax56 Z[4]==2 and
+ *  every other caller, 2560 for ax30's first shot of a Z[9]==2 triple.
+ *  Velocity = (dir*speed)/dist + gravity. Facing av/P|1, subpixel seed
+ *  N/O, anim i(Z[8],dirVar) on ax54/ax30 / i(Z[3],dirVar) on ax56, aG =
+ *  Z[9] (ax54/30) or Z[4] (ax56), af = owner, aC = n. First shot of a
+ *  volley: ax30 → sfx27 else sfx16. Slice 353 re-checked the fan, the
+ *  speed and the anim arms against the bytecode. */
+internal fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
                                w: Level0World) {
     val pool = w.projectilePool ?: return             // unseeded → inert (inferred)
     // L6 (structured/i.java:6245, proven): fan half-angle —
@@ -6607,39 +6672,39 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
         var r12 = r04.ao - r04.am
         var r13 = r04.ap - r04.an
         var r14 = e.h(r12, r13)
-        if (count > 1) {                             // fan math (L54-L80)
-            var r05 = Trig.atan2(r13, r12)  // j.b(r12,r13) = atan2(y=r13,x=r12)
-            if (r10 == 0 && (count % 2) != 0) {
-                // first shot of odd volley goes straight — L80 re-aim
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
-            } else if ((r10 % 2) != 0) {             // odd slot → +side
-                val r15 = if ((count % 2) == 0)
-                    r05 + (r02 * ((r10 % 2) + (r10 / 2)))
-                else if (r10 == 1)
-                    r05 + (r02 * ((r10 % 2) + (r10 / 2))) / 2
-                else r05 + (r02 * ((r10 % 2) + (r10 / 2)))
-                r04.ao = r04.am + ((r14 * Trig.sin(r15)) shr 8)
-                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r15)) shr 8)
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
-            } else if (r10 != 0) {                   // even slot → -side
-                val r152 = if ((count % 2) == 0)
-                    r05 - (r02 * (r10 / 2))
-                else if (r10 == 0)
-                    r05 - ((r02 * ((r10 / 2) + 1)) / 2)
-                else r05 - (r02 * ((r10 / 2) + 1))
-                r04.ao = r04.am + ((r14 * Trig.sin(r152)) shr 8)
-                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r152)) shr 8)
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
+        if (count > 1) {
+            // fan (bytecode i.javap.txt:27553+, offsets 458-762, proven;
+            // the structured view of this method is flagged "decompiled
+            // incorrectly"): odd counts keep slot 0 on the aim and step
+            // ±r02·k; even counts straddle it, slots 0/1 at ∓r02/2.
+            val r05 = Trig.atan2(r13, r12)          // j.b(r12, r13)
+            if (r10 > 0 || count % 2 == 0) {        // 472-480
+                val th = if (r10 % 2 == 1) {        // 483: odd slot → +side
+                    val k = (r10 % 2) + (r10 / 2)
+                    if (count % 2 == 0 && r10 == 1) r05 + (r02 * k) / 2   // 503
+                    else r05 + r02 * k                                  // 524/543
+                } else {                            // 614: even slot → −side
+                    if (count % 2 != 0) r05 - r02 * (r10 / 2)           // 666
+                    else if (r10 == 0) r05 - (r02 * ((r10 / 2) + 1)) / 2  // 632
+                    else r05 - r02 * ((r10 / 2) + 1)                    // 650
+                }
+                r04.ao = r04.am + ((r14 * Trig.cos(th)) shr 8)
+                r04.ap = r04.an + ((r14 * Trig.cos(Trig.N - th)) shr 8)
             }
+            r12 = r04.ao - r04.am; r13 = r04.ap - r04.an   // 729: re-aim
+            r14 = e.h(r12, r13)
         }
-        if (r14 != 0) {                              // L82 velocity
-            var speed = 2048
-            if (e.ax == 54 && e.Z[9] == 2) speed = 1280
-            else if (e.ax == 30 && e.Z[9] == 2 && count == 3 && r10 == 0)
-                speed = 2560
+        if (r14 != 0) {                              // 764: velocity
+            // 769-857: 2048; ax54 Z[9]==2 → 1280; ax30 Z[9]==2 3-shot
+            // slot 0 → 2560; ax56 Z[4]==2 → 1280; every other caller
+            // (the ax24 burst, ax64) → 1280. The structured view drops
+            // that last store (an empty `else if` block).
+            val speed = when (e.ax) {
+                54 -> if (e.Z[9] == 2) 1280 else 2048
+                30 -> if (e.Z[9] == 2 && count == 3 && r10 == 0) 2560 else 2048
+                56 -> if (e.Z[4] == 2) 1280 else 2048
+                else -> 1280
+            }
             r04.ag = (r12 * speed) / r14
             r04.ah = ((r13 * speed) / r14) + w.kY
         }
@@ -6649,10 +6714,10 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
         r04.N = r04.am; r04.O = r04.an
         r04.ak = r04.am shr 8; r04.al = r04.an shr 8
         r04.P = r04.P and -129; r04.P = r04.P and -33; r04.P = r04.P or 16
-        val r06 = dirVariant(r04.am, r04.an, r04.ao, r04.ap)
-        when (e.ax) {
-            54 -> animVariant(r04, e.Z[8], r06)      // i(Z[8], r06)
-            30, 56 -> animVariant(r04, e.Z[3], r06)  // i(Z[3], r06)
+        val r06 = dirIndex5(r04.am, r04.an, r04.ao, r04.ap)   // b(am,an,ao,ap)
+        when (e.ax) {                                // 1054-1119
+            54, 30 -> animVariant(r04, e.Z[8], r06)  // i(Z[8], r06)
+            56 -> animVariant(r04, e.Z[3], r06)      // i(Z[3], r06)
             else -> animVariant(r04, 0, r06)         // i(0, r06)
         }
         r04.refreshBoxes()                           // t()
@@ -6976,103 +7041,6 @@ private fun NpcFsm.projLay(e: Entity, dx: Int, dy: Int, w: Level0World) {
     w.queueInsert(child)
 }
 
-/** `i.bc()` (i.java:14396, proven): the projectile-vs-hostiles sweep —
- *  iterates `k.bd[]` (= all npcs); `this.X` is the attack box. Per-ax hit
- *  semantics; `d(8,…)`/`d(9,…)` floatie spawns → `spawnFloatie`. */
-private fun NpcFsm.projSweepBc(e: Entity, w: Level0World): Boolean {
-    var hit = false
-    for (r0 in w.npcs) {
-        if (e.X == null) break
-        when (r0.ax) {
-            54 -> {                                        // L26-fallback arm
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30) continue
-                r0.ad?.let { if (Entity.overlapStrict(it.W, e.X)) {
-                    it.setAnim(2)
-                    e.spawnFloatie(w, 8, it.ak, it.al)          // d(8,…)
-                    w.countKill(r0.aw); r0.setAnim(10)
-                    hit = true } }
-                if (Entity.overlapStrict(r0.W, e.X)) { r0.setAnim(10)
-                    w.countKill(r0.aw); hit = true }
-                if (hit) { e.setAnim(9); return true }
-            }
-            30 -> {
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 30 ||
-                    e.af!!.ax == 56) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                r0.aB -= 20; r0.cGCount = 6
-                if (r0.aB <= 0) {
-                    r0.cGCount = 0; r0.setAnim(10); w.countKill(r0.aw)
-                    r0.ad?.let { it.setAnim(2)
-                        e.spawnFloatie(w, 8, it.ak, it.al) }    // d(8,…)
-                }
-                e.setAnim(9); hit = true; return true
-            }
-            56 -> {
-                if (e.af == null || e.af!!.ax == 54 || e.af!!.ax == 56 ||
-                    e.af!!.ax == 30) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                r0.setAnim(10); w.countKill(r0.aw)
-                e.setAnim(9); hit = true; return true
-            }
-            67 -> {
-                if (r0.S != 19 && r0.S != 21 && r0.S != 23 && r0.S != 32 &&
-                    r0.S != 35 && r0.S != 38 && r0.S != 41 && r0.S != 43) continue
-                if (!Entity.overlapStrict(r0.W, e.X)) continue
-                if (e.S != 9) r0.aB--
-                if (r0.aB <= 0) r0.setAnim(r0.S + 1)
-                e.setAnim(9); hit = true
-            }
-            24 -> {
-                if (r0.S != 19 || !Entity.overlapStrict(r0.W, e.X)) continue
-                r0.setAnim(20); e.setAnim(9); hit = true
-            }
-            32 -> {
-                if ((r0.l and 1) == 0) continue
-                if (r0.S in 21..27 && !w.cFFlag) break         // L87 cF gate → abort sweep
-                if (r0.S == 20 || !Entity.overlapStrict(r0.W, e.X)) continue
-                if (r0.aB > 0) {
-                    r0.aB -= Entity.WEAPON_K[w.weaponSlot]
-                    when (r0.pv) {
-                        0 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(15); r0.cGCount = 0 }
-                        2 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(19); r0.cGCount = 0 }
-                        3 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(25); r0.cGCount = 0 }
-                        4 -> if (r0.aB > 0) r0.cGCount = 6
-                             else { r0.setAnim(36); r0.cGCount = 0 }
-                    }
-                }
-                hit = true
-            }
-        }
-    }
-    return hit
-}
-
-/** `i.bd()` (i.java:14538, proven): non-flying sweep — ax19 S2→i(3),
- *  ax17/ax23 damage `H[k.au]` via `aB` with death anims. */
-private fun NpcFsm.projSweepBd(e: Entity, w: Level0World): Boolean {
-    var hit = false
-    for (r0 in w.npcs) {
-        if (e.X == null) break
-        if (!Entity.overlapStrict(r0.W, e.X)) continue
-        if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); hit = true }
-        if (e.S != 17) continue
-        when (r0.ax) {
-            17 -> { if (r0.S != 69) {
-                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
-                if (r0.aB <= 0) r0.setAnim(129) else r0.setAnim(68)
-                hit = true } }
-            23 -> { if (r0.S == 79) {
-                r0.aB -= Entity.WEAPON_H[w.weaponSlot]
-                if (r0.aB <= 0) r0.setAnim(79) else r0.setAnim(73)
-                hit = true } }
-        }
-    }
-    return hit
-}
-
 /** `i.ba()` (i.java:13742, proven transcription). */
 fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
     val inFlight = (e.S in 0..4) || (e.S in 22..28)      // L7/L15 gate
@@ -7113,7 +7081,7 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
             // the S9 impact anim on reaching it (or when bc() hits).
             if (e.al <= e.ap) e.setAnim(9)
             e.ap += w.kX
-            if (projSweepBc(e, w)) e.setAnim(9)
+            if (e.sweepNeighborsB(w)) e.setAnim(9)          // ba() @1367 bc()
         }
         7 -> { val r = e.aC - 1; e.aC = r; if (r < 0) e.setAnim(9) }  // L166
         8 -> if (e.animFinished()) { w.removeEntity(e); return }    // L87
@@ -7122,11 +7090,11 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
             e.refreshBoxes()                             // L69 t()
             if (Entity.MISSION_BH[w.kAj] == 3) {
                 e.ah = 0; e.ag = 0
-                if (e.af == p) projSweepBc(e, w)
+                if (e.af == p) e.sweepNeighborsB(w)          // ba() @693 bc()
                 else if (e.X != null && Entity.overlapStrict(e.X, p.W))
                     p.applyHit(38, 0, e, w)              // L75
             } else {
-                projSweepBd(e, w)                        // L79 bd()
+                e.sweepNeighbors(w)                      // L79 ba() @738 bd()
                 if (e.X != null && Entity.overlapStrict(e.X, p.W))
                     p.applyHit(4, 0, e, w)
             }
@@ -7233,19 +7201,19 @@ fun NpcFsm.tickAx24(e: Entity, w: Level0World, p: Entity) {
 // ==================================================================// ax58 — `bg()` lever/switch block (i.java:14633-14697, proven)
 // ==================================================================
 /**
- * `i.be()` (i.java:14585, proven): "someone standing on the lever zone" —
- * `W ∩ aS.W` short-circuits true; otherwise scans `k.bd[]` for ax∈{11,15}
- * entities overlapping `W`, marks each `P|=16` (pressure flash) and stays
- * true while any overlap holds. Loop marks ALL overlapping (no break).
+ * `i.be()` (i.java:14310; bytecode be() @0-123, proven): "someone standing
+ * on the lever zone" — `W ∩ aS.W` short-circuits true; otherwise the
+ * `k.bd[]` scan (the last paint's list, slice 385) takes the FIRST
+ * ax∈{11,15} overlapping `W`, marks it `P|=16` and stops (@113 `goto
+ * 122` — the port marked every overlapping one).
  */
 private fun leverOccupied(e: Entity, w: Level0World, p: Entity): Boolean {
     if (Entity.overlapStrict(e.W, p.W)) return true
-    var hit = false
-    for (n in w.npcs) {                                   // k.bd[] scan
+    for (n in w.drawn) {
         if (n.ax != 15 && n.ax != 11) continue
-        if (Entity.overlapStrict(e.W, n.W)) { n.P = n.P or 16; hit = true }
+        if (Entity.overlapStrict(e.W, n.W)) { n.P = n.P or 16; return true }
     }
-    return hit
+    return false
 }
 
 /**
@@ -7487,13 +7455,16 @@ private fun NpcFsm.ax60Mount(e: Entity, w: Level0World, p: Entity,
     } else if (p.ga == e && p.S != 209) {                  // L73 walked off
         p.ga = null
     }
-    // L92-L109: S13 X-overlap → hand velocity to the S11 pair member
+    // L92-L109: S13 X-overlap → hand velocity to the S11 pair member —
+    // the first one in `k.bd` (c(Z) @703-801: `goto 801` after the hit;
+    // the last paint's list, slice 385).
     if (e.ag != 0 && e.S == 13) {
-        for (n in w.npcs) {
+        for (n in w.drawn) {
             if (n.ax == 60 && n.S == 11 &&
                 Entity.overlapStrict(n.X, e.X)) {
                 e.ag = (-e.Z[1]) shl 8
                 n.ag = e.Z[1] shl 8
+                break
             }
         }
     }
@@ -7543,9 +7514,11 @@ private fun NpcFsm.ax60Mount(e: Entity, w: Level0World, p: Entity,
     return true
 }
 
-/** `bj()` L177 tail (proven): ax10 S=39 zone overlap → bounce/latch/idle. */
+/** `bj()` L177 tail (bytecode @1163-1338, proven): every drawn ax10
+ *  S=39 zone overlapping `W` → bounce/latch/idle, the S switch re-read
+ *  per hit (`k.bd` — the last paint's list, slice 385). */
 private fun ax60Zones(e: Entity, w: Level0World) {
-    for (n in w.npcs) {
+    for (n in w.drawn) {
         if (n.ax != 10 || n.S != 39) continue
         if (!Entity.overlapStrict(n.W, e.W)) continue
         when (e.S) {
@@ -7756,7 +7729,7 @@ private fun hGate(e: Entity, p: Entity): Boolean {
  *  its value is the side-effect — leaving ATTACK_ANIMS preempts this
  *  tick's `j()` damage exactly like the source. */
 private fun iEngage(e: Entity, p: Entity, w: LevelCellSource): Boolean {
-    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X) ||
+    if (p.X[0] == p.X[2] || !Entity.overlapStrict(e.W, p.X) ||
         p.S !in ATTACK_ANIMS) return false
     if (p.S != 8) {
         p.setAnim(8)
@@ -7801,7 +7774,7 @@ private fun jIntake(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             w.iBf = true
         }
     }
-    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X)) return false
+    if (p.X[0] == p.X[2] || !Entity.overlapStrict(e.W, p.X)) return false
     e.av = p.ak < e.ak                                          // Q()
     val au = w.weaponSlot
     if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217) {
@@ -7874,12 +7847,12 @@ fun NpcFsm.initAx17(e: Entity, f: List<Int>) {
     e.refreshBoxes()                                        // L427 t()
 }
 /** `i.b(int[],int[])` (i.java:666, proven): strict containment —
- *  r4 inside r5 on all four edges. The `l()` ax17 notice uses it as
- *  `b(this.W, k.ac)` = "fully inside the camera view". */
+ *  r4 inside r5 on all four edges. `l()`'s L70/L77 arms (ax17/23/50,
+ *  `losL`) use it as `b(this.W, k.ac)` = "fully inside the camera view". */
 private fun insideOf(a: IntArray, b: IntArray): Boolean =
     a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3]
 /** `i.aA()` (i.java:8708-8847, proven) — the civilian tick.
- *  S57 idle→panic (l() = `!bn && b(W, camRect)`; player S9/S50 suppress),
+ *  S57 idle→panic (full `l()` = `losL`; player S9/S50 suppress),
  *  anims 60-68 = directional panic flail (picked by player-vs-W quadrant,
  *  strikes the player with op4 at T==3, `r()` → back to S57),
  *  S69 collapse (HAS-BLOOD-gated fx, lock releases), S129 dead-on-spot,
@@ -7892,9 +7865,12 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
     when (e.S) {
         57 -> {                                              // L12 idle
             e.ah = 0; e.ag = 0
-            // l() ax17 arm (i.java:2385 L70): !bn && b(W, k.ac) — fully
-            // on-screen; bn is the bA[79] checkpoint alert flag.
-            val notice = !w.iBn && insideOf(e.W, w.camRect)
+            // L12 calls the full `l()` (simple/i.java:8742-8745, proven):
+            // ai() fast path, aS.aA&8 blind, `case 17 → L70` = !bn &&
+            // b(W, k.ac) (fully on-screen; bn is the bA[79] alert flag),
+            // then the L88-L101 tail — LOS e(aS) and player ∉ {284,285}.
+            // (Before slice 350 only the L70 camera gate was ported here.)
+            val notice = losL(e, p, w)
             if (notice && p.S != 9 && p.S != 50) {           // L14/L16 gates
                 w.sfx(16)                                    // k.A(16) → z()
                 e.av = p.ak < e.ak                           // L21 face player
@@ -8005,7 +7981,7 @@ fun NpcFsm.tickAx69(e: Entity, w: Level0World, p: Entity) {
     if (e.Z[0] != 0 && e.Z[0] != 2 && e.aA != 1 && (e.S == 6 || e.S == 7) &&
         p.af === e) {
         if (e.af == null) {
-            for (n in w.npcs) {                             // L19 k.bd[] scan
+            for (n in w.drawn) {                            // L19 k.bd[] scan
                 if (n.ax != 11) continue                    // L22
                 if (n.faces(p)) continue                    // !g(aS) L24
                 if (n.W[3] <= p.af!!.W[1]) continue         // L27 Y-overlap
@@ -8456,11 +8432,6 @@ private fun strikePlayer73(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-/** `i.v()` ax73 fallthrough (i.java:730-785 L85, proven): "active" iff
- *  the support box overlaps the camera rect. */
-private fun onscreen73(e: Entity, w: LevelCellSource): Boolean =
-    w.kAc?.let { Entity.overlapStrict(it, e.Y) } ?: false
-
 /** `i.aF()` (i.java:9192, proven): TRAILING-side ledge probe — a crate
  *  edge (s.ax==51) within 20px of ak on either side, or the cell behind
  *  the facing direction is neither 20 (void) nor 5. */
@@ -8539,26 +8510,44 @@ private fun ceilingAmbush73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
     }
 }
 
-/** `i.aC()` (i.java:8893-9144, proven): the attack scheduler — `P|=16`,
- *  `k.aA=60`, face the player; `aq!=0` → leap-landing arm (ax69 bound
- *  i(138) + Z0==3 ceiling leap to i(165)); else the j-tier dispatch —
- *  0 stalk, 6/4 windup→S131, 3/1 approach→S154 via aG() edge check. */
-private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
+/** `i.c(int,int,int,int)` (structured/i.java:7146-7161, proven): the
+ *  per-type state pick of the shared schedulers — ax11 takes `s11`,
+ *  ax73 `s73`; `-1` (and every other type) leaves the state alone. */
+private fun cPick(e: Entity, s11: Int, s73: Int) {
+    when (e.ax) {
+        11 -> if (s11 != -1) e.setAnim(s11)
+        73 -> if (s73 != -1) e.setAnim(s73)
+    }
+}
+
+/** `i.aC()` (structured/i.java:7009-7136, proven): the attack scheduler
+ *  shared by ax11 and ax73 — `P|=16`, `k.aA=60`, face the player
+ *  (`Q()`); `aq!=0` → the leap-landing arm (a bound ax69 → `i(138)`;
+ *  ax73 `Z0==3` ceiling leap to `i(165)`; else marker reached →
+ *  `c(2,152)`); then the `j` tiers from `d()`: 0 far (>180 / >70) →
+ *  60-tick stalk `c(23,155)`, timeout or `!v()` → back to patrol (ax11
+ *  `i(k?3:2)`, ax73 `i(152)`); 6 contact → `c(23,155)`, `aC` spent →
+ *  `c(11,131)`; 4 close → `l++`, `aC` spent → `c(11,131)` else
+ *  `c(23,155)`; 3 mid → `aC` spent and no `aG()` edge → `c(22,154)`;
+ *  1 far → no edge → `c(4,154)`. Slice 357 widened the ax73-only port
+ *  to ax11 (it ran only a chase-timeout subset, so S11 was unreachable). */
+private fun attackSchedulerAC(e: Entity, w: LevelCellSource, p: Entity) {
     e.P = e.P or 16
     w.kAA = 60
     e.av = p.ak < e.ak                                    // Q()
-    var r7: Int; var r8: Int
+    val r7: Int; val r8: Int
     if (e.aq != 0) {
-        // L5: leap-landing arm — bound ax69 kill or Z0==3 ceiling probe.
+        // leap-landing arm — bound ax69 kill or the ax73 Z0==3 leaper.
         val af = e.af
-        if (af != null && af.ax == 69 && af.aA == 1 &&
-            Entity.overlapStrict(e.W, af.W)) { e.setAnim(138); return }
+        if (af != null && af.ax == 69 && af.aA == 1) {
+            if (Entity.overlapStrict(e.W, af.W)) e.setAnim(138)
+            return
+        }
         r7 = Math.abs(e.aq - e.ak); r8 = Math.abs(e.ar - e.al)
         e.av = e.aq < e.ak                                // face the marker
-        if (e.Z[0] == 3) {                                // L20-L42 leaper
-            // i.java:25336-25391 — leap when the marker is reached, the
-            // player is out of reach (>=140), a ceiling blocks the backing
-            // direction, or the floor ends under the trailing edge (aF).
+        if (e.ax == 73 && e.Z[0] == 3) {
+            // leap when the marker is reached, the player is out of reach
+            // (>=140), a ceiling blocks the backing column, or aF().
             var leap = r7 < 10 || Math.abs(p.ak - e.ak) >= 140
             if (!leap) {
                 val x0 = e.ak / 20 + if (e.av) 1 else -1
@@ -8566,47 +8555,48 @@ private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
                     if (e.e(w, x0, e.al / 20 - r9) >= 12) { leap = true; break }
                 if (!leap) leap = crateEdge73(e, w)
             }
-            if (leap && e.S == 155) {                     // Lf3
+            if (leap && e.S == 155) {
                 e.ar = 0; e.aq = 0; w.kAA = 0
                 e.setAnim(165); e.am = e.ak; w.gZ = false
             }
             return
         }
-        // L11f: marker reached → c(2,152) reset, then j-tier fallthrough.
-        if (r7 < 10) {
-            e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0; e.setAnim(152)
+        if (r7 < 10) {                                    // marker reached
+            e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0
+            cPick(e, 2, 152)
         }
     } else {
         r7 = Math.abs(p.ak - e.ak); r8 = Math.abs(p.al - e.al)
     }
-    when (e.j) {
-        // L50: unaware → stalk the player until close, else countdown back
-        // to S152 idle.
-        0 -> if (r7 > 180 || r8 > 70) {
-            if (e.aC == 0) { e.aC = 60; e.setAnim(155) }
-            else {
-                e.aC--
-                if (e.aC <= 0 || !onscreen73(e, w)) {
-                    e.P = e.P and -17; w.kAA = 0; e.aA = 0
-                    e.setAnim(152)                        // L72 ax73 arm
-                }
+    if (e.j == 0 && (r7 > 180 || r8 > 70)) {
+        if (e.aC == 0) { e.aC = 60; cPick(e, 23, 155); return }
+        e.aC--
+        if (e.aC <= 0 || !e.inPlayV(w)) {
+            e.P = e.P and -17; w.kAA = 0; e.aA = 0
+            when (e.ax) {
+                11 -> { e.setAnim(if (e.k) 3 else 2); e.k = false }
+                73 -> e.setAnim(152)
             }
         }
-        6 -> {                                            // L76 contact tier
-            e.setAnim(155)
+        return
+    }
+    when (e.j) {
+        6 -> {
+            cPick(e, 23, 155)
             val was = e.aC; e.aC = was - 1
-            if (was <= 0) e.setAnim(131)                  // c(11,131) block
+            if (was <= 0) cPick(e, 11, 131)
         }
-        4 -> {                                            // L82 close tier
-            if (++e.l <= 0) e.l = 1
+        4 -> {
+            val l0 = e.l; e.l = l0 + 1
+            if (l0 <= 0) e.l = 1
             val was = e.aC; e.aC = was - 1
-            if (was >= 0) e.setAnim(155) else e.setAnim(131)
+            if (was < 0) cPick(e, 11, 131) else cPick(e, 23, 155)
         }
-        3 -> {                                            // L93 mid tier
+        3 -> {
             val was = e.aC; e.aC = was - 1
-            if (was <= 0 && !edgeAhead73(e, w)) e.setAnim(154)
+            if (was <= 0 && !edgeAhead73(e, w)) cPick(e, 22, 154)
         }
-        1 -> if (!edgeAhead73(e, w)) e.setAnim(154)       // L101 far tier
+        1 -> if (!edgeAhead73(e, w)) cPick(e, 4, 154)
     }
 }
 
@@ -8649,7 +8639,7 @@ private fun markerTapped74(e: Entity, w: LevelCellSource): Boolean {
 /** `i.n(44,0)` (i.java:9792, proven): any open-door corridor (ax44 S==0
  *  with an X box) overlapping my W. */
 private fun doorScan73(e: Entity, w: LevelCellSource): Boolean {
-    for (n in w.npcs) {
+    for (n in w.drawn) {                                   // k.bd (slice 385)
         if (n.ax == 44 && n.S == 0 && n.X.let { it[0] != it[2] } &&
             Entity.overlapStrict(e.W, n.X)) return true
     }
@@ -8674,12 +8664,10 @@ private fun kDist73(dx: Int, dy: Int): Int {
     return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
 }
 
-/** `k.l()` (k.java:804, proven): the 60×60 reach box in front of the
- *  player — `k.M`. */
-private fun reachRect73(p: Entity): IntArray {
-    val x = if (p.av) p.ak - 60 else p.ak
-    return intArrayOf(x, p.al - 60, x + 60, p.al)
-}
+/** `k.M` (i.javap.txt aJ() 11): the 60×60 reach box in front of the
+ *  player as `k.l()` wrote it at the player's last `g.e()` head (slice
+ *  369 F13b), not the player's live position. */
+private fun reachRect73(w: LevelCellSource): IntArray = w.kM
 
 /** `i.P()` (i.java:7699, proven): dead → release the marker. */
 private fun heavyDead73(e: Entity): Boolean =
@@ -8688,7 +8676,7 @@ private fun heavyDead73(e: Entity): Boolean =
 /** `i.aJ()` (i.java:9331-9905, proven): the heavy-guard tick. */
 fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     // -- head: P() or out-of-reach → L8 release claim; in reach → claim --
-    if (heavyDead73(e) || !Entity.overlapStrict(e.W, reachRect73(p))) {
+    if (heavyDead73(e) || !Entity.overlapStrict(e.W, reachRect73(w))) {
         if (w.kL?.aw == e.aw) w.claimReset()               // k.m()
     } else {
         w.registerClaim(e, 0, e.W)                         // k.a(this,0,W)
@@ -8745,7 +8733,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
                 if (Entity.overlapStrict(p.W, e.W) && e.af == null) {
                     e.aC = 3; e.setAnim(155)
                 }
-                attackScheduler73(e, w, p)
+                attackSchedulerAC(e, w, p)
             }
         }
         155 -> {                                           // L68 attack commit
@@ -8758,7 +8746,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
                 e.ag = if (e.av) 512 else -512
                 r11 = true
             }
-            attackScheduler73(e, w, p)
+            attackSchedulerAC(e, w, p)
             if (crateEdge73(e, w)) { e.ai = 0; e.ag = 0 }  // L81 aF()
         }
         156 -> {                                           // L83 leap
@@ -8877,16 +8865,20 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     e.pushContact(w)
 }
 
-// =====================================================================// Slice 64 — ax47 `aK()` ledge sentinel + ax50 `aL()` pouncer + the shared
+// =====================================================================// Slice 64 — ax50 `aK()` pouncer + ax47 `aL()` ledge sentinel + the shared
 // stealth-kill driver `i.k()` (i.java:2057-2255) both FSM tails funnel into.
 //
-//  aK() i.java:9910-10007 — S120 perch (ceiling-grab on the player drop-kill
-//      set → S119; else l() seen → 3x3 quadrant pounce pick 121-128);
-//      S121-128 pounce (T==1 sfx16, T==3 op4 on player, r()→S120);
-//      S119/S129/default → k();j();  S130 r()→k.c(this) despawn.
-//  aL() i.java:10008-10099 — S80/93 perch (93 = ceiling-grab variant +
-//      registerClaim), S81 countdown→S82→S80, S83 air-walk via M() → S84 →
-//      S0, S94 P|=512 + claim-release → despawn, default → k();j().
+//  Dispatch (i.java:5181-5194; bytecode i.javap.txt:20024-20025, proven):
+//      `case 47 → aL()`, `case 50 → aK()` — each method's only call site.
+//      Slice 64 ran the bodies the other way round (ax47 → aK, ax50 → aL);
+//      slice 346 restores the original pairing.
+//  aK() i.java:9910-10007 (ax50) — S120 perch (ceiling-grab on the player
+//      drop-kill set → S119; else l() seen → 3x3 quadrant pounce pick
+//      121-128); S121-128 pounce (T==1 sfx16, T==3 op4 on player,
+//      r()→S120); S119/S129/default → k();j();  S130 r()→k.c(this) despawn.
+//  aL() i.java:10008-10099 (ax47) — S80/93 perch (93 = ceiling-grab variant
+//      + registerClaim), S81 countdown→S82→S80, S83 air-walk via M() → S84
+//      → S0, S94 P|=512 + claim-release → despawn, default → k();j().
 //  k()  i.java:2057-2255  — backstab window L81 (player faces me, I don't
 //      face player, <80px, S38 split): prompt k.c(ak,al-85,aw) + 65568 edge
 //      → op6 victim anim (49 mid / 283 near); ax11 ceiling-kill arm (S24+
@@ -8900,10 +8892,11 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
 //  init i.java:3082 L134 (ax47 `az=r8[17]`) / :3017 L114 (ax50 `az=r8[13]`)
 //      — minimal inits; records arrive via retype ax11+S∈{80,93}→47 and
 //      ax17+S==120→50 (i.java:2644/2651) applied in Level0World.initNpcs.
-//  l()  i.java:2255 — ax47 → L83 default arm (r11/r12/r13 stay 0 →
-//      degenerate [ak,al,ak,al] sight rect = point-pierce only); ax50 →
-//      L77 `bn→false; b(W,k.ac)` W⊆cam rect; shared L88-L101 tail
-//      (LOS clear + player ∉ {284,285}).
+//  l()  i.java:2255 (port: `losL`) — only aK() calls it among these two,
+//      and aK() runs only for ax50, so it always takes the `case 50 → L77`
+//      arm: `bn` → false; else `b(W,k.ac)` W⊆cam rect; then the shared
+//      L88-L101 tail (LOS clear + player ∉ {284,285}). aL() (ax47) never
+//      calls l().
 //  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
 // =====================================================================
 private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
@@ -8943,41 +8936,6 @@ fun NpcFsm.initAx50(e: Entity, f: List<Int>) {
     e.refreshBoxes()
 }
 
-/** `i.l()` ax47 arm (i.java:2255-2340, proven): `ai()` fast-path → true;
- *  `aA&8` → false. L83 default arm: r11/r12/r13 stay the head-initialized
- *  zeros (only ax11's arm populates them) → sight rect degenerates to
- *  `[ak,al,ak,al]` — a point-pierce check on the player mid-point. Then
- *  the shared tail: LOS clear (e(aS)==false) + player ∉ {284,285}. */
-private fun seen47(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
-    if ((p.aA and 8) != 0) return false                   // L10 → r0=false
-    val r0 = Entity.pointInBox(
-        p.ak, (p.W[1] + p.W[3]) shr 1,
-        intArrayOf(e.ak, e.al, e.ak, e.al))
-    if (!r0) return false                                 // L88
-    if (e.losBlocked(p, w)) return false                  // L90
-    if (p.S == 284) return false                          // L92
-    return p.S != 285                                     // L94-L101
-}
-
-/** `i.l()` ax50 arm (i.java:2395 L77, proven): `bn→false` (iBn kill-
- *  disable); else `b(W,k.ac)` — my W strictly inside the camera rect
- *  (i.java:666: `r4[0]>=r5[0] && r4[1]>=r5[1] && r4[2]<=r5[2] &&
- *  r4[3]<=r5[3]` — proper containment, W ⊆ ac). Then the shared tail. */
-private fun seen50(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
-    if ((p.aA and 8) != 0) return false
-    if (w.iBn) return false                               // L77 bn gate
-    val ac = w.kAc
-    val r0 = ac != null &&
-        e.W[0] >= ac[0] && e.W[1] >= ac[1] &&
-        e.W[2] <= ac[2] && e.W[3] <= ac[3]
-    if (!r0) return false
-    if (e.losBlocked(p, w)) return false
-    if (p.S == 284) return false
-    return p.S != 285
-}
-
 /** `i.M()` + `i.h(x,y)` (i.java:7198/7207, proven): cell facing-adjacent
  *  (`ak/20 ± 1` by `av`, row `al/20`) ≥5 = "floor ahead" — S83's landing
  *  probe. `av==false → +1` (right), `av==true → -1` (left). */
@@ -8987,7 +8945,7 @@ private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
 /** `i.S()` (i.java:9253, proven): `repeat(3){ m(-1); k.o(5); k.s() }` —
  *  wisp burst + stat + shake, shared by every k() kill arm. */
 private fun wispBurst(e: Entity, w: LevelCellSource) {
-    repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.kCollectStreak() }
+    repeat(3) { w.spawnWisp(e); w.kCount(5); w.kCollectStreak() }
 }
 
 /**
@@ -9216,10 +9174,11 @@ private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Bool
     return true                                           // ax47 → L86
 }
 
-/** `i.aK()` (i.java:9910-10007, proven): ledge-sentinel FSM — transcribed
- *  arm for arm. `r7 = l()` runs first every tick. */
-fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
-    var r7 = seen47(e, w, p)                              // l()
+/** `i.aK()` (i.java:9910-10007, proven): the ax50 pouncer FSM — dispatch
+ *  `case 50 → aK()` (i.javap.txt:20025) — transcribed arm for arm.
+ *  `r7 = l()` runs first every tick; for ax50 `l()` takes L77. */
+fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
+    var r7 = losL(e, p, w)                                // l() → L77
     when (e.S) {
         120 -> {
             // L6: ceiling-grab on the player drop-kill set.
@@ -9275,9 +9234,9 @@ fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
     damageIntakeSentinel(e, w, p)
 }
 
-/** `i.aL()` (i.java:10008-10099, proven): pouncer FSM — transcribed arm
- *  for arm. */
-fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
+/** `i.aL()` (i.java:10008-10099, proven): the ax47 ledge-sentinel FSM —
+ *  dispatch `case 47 → aL()` (i.javap.txt:20024) — transcribed arm for arm. */
+fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
     when (e.S) {
         94 -> {
             // L43: claim-hold then release-and-despawn.
@@ -9350,7 +9309,7 @@ fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
  *  switch arms send {0,4,5,17,18,30,31,32,33} → r04=true, else false. */
 private val AX64_VULN = intArrayOf(0, 4, 5, 17, 18, 30, 31, 32, 33)
 
-/** `i.b(int,int,int,int)` (i.java:8026, proven): direction index 0-4 from
+/** `i.b(int,int,int,int)` (bytecode i.javap.txt:28347-28390, proven): direction index 0-4 from
  *  a (x0,y0)→(x1,y1) subpixel vector — the pooled-shot's `i(0, dir)` pick. */
 private fun dirIndex5(x0: Int, y0: Int, x1: Int, y1: Int): Int {
     val dx = x1 - x0; val dy = y1 - y0
@@ -9438,17 +9397,6 @@ private fun ax64Barrage(e: Entity, p: Entity, w: LevelCellSource) {
     s.aG = -1                                        // L128 (ax64 arm)
     s.af = e; s.aC = e.nl                            // L129: af=this,aC=n
     w.sfx(16)                                        // L139: k.A(16)
-}
-
-/** `u()` (i.java:700) + `v()` (i.java:730) reduced to the ax64 path
- *  (proven gates that apply; ax64 hits none of the special-cases):
- *  `au = |ak-(kO+200)|/400 + |al-(kP+120)|/120`; alive while `au<=i` or
- *  the `Y` foot box overlaps the `k.ac` view rect. */
-private fun ax64Alive(e: Entity, w: LevelCellSource): Boolean {
-    e.au = abs(e.ak - (w.kO + 200)) / 400 + abs(e.al - (w.kP + 120)) / 120
-    if (e.au <= e.i) return true
-    val view = w.kAc ?: return false
-    return Entity.overlapStrict(view, e.Y)
 }
 
 /** `bl()` — the ax64 harrier FSM (i.java:15391-15897). Head arm runs only
@@ -9677,14 +9625,18 @@ private fun ax64S2(e: Entity, w: LevelCellSource, p: Entity) {
     p.moveMarker(w, w.kO + 200, w.kP + 120)        // p.d(k.O+200, k.P+120)
     if (p.markerTouched(w)) p.bl += 9              // L281-285: touch → +9
     if (!p.mashQte(w)) return                      // L285→L322: not escaped
-    // escape (proven, L285-298): release + anim 9 + reset S2 siblings.
-    p.bl = 0; w.kStatE(e.aw); w.iBi = false
+    // escape (proven, L285-298): release + anim 9 + reset the drawn S2
+    // grabbers (`k.bd` — the last paint's list, this one included; slice
+    // 385). bl() @2879-2896: `bd[i].cz = this.aa.b(this.S)` — the length
+    // of THIS grabber's current anim (S2 until its own entry flips it to
+    // 4/5), not the entry's.
+    p.bl = 0; w.countKill(e.aw); w.iBi = false
     p.releaseAe(); p.setAnim(9)
-    for (n in w.npcs) {
+    for (n in w.drawn) {
         if (n.ax != 64 || n.S != 2) continue
         n.ag = 0; n.ah = 0
         n.setAnim(if (n.Z[6] != 0) 5 else 4)
-        n.cz = n.clip?.frameCount(n.S) ?: 0        // cz = aa.b(S)
+        n.cz = e.clip?.frameCount(e.S) ?: 0
         n.cA = 0
     }
 }
@@ -9717,7 +9669,10 @@ private fun ax64S7(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.runnerG) e.ag = 0                        // L252: bound → still
     if (e.Z[8] < 0) e.ah = w.kY shr 1              // L255
     if (e.al > w.kP - 20) e.ah = w.kY              // L258
-    if (!ax64Alive(e, w)) w.removeEntity(e)        // L261→L306: v()==false
+    // bl() @2498-2505 → @2966: `!v() → k.c(this)` — the full v(): `u()`,
+    // `au > i → false`, else `a(k.ac, Y)` (slice 371: the old `ax64Alive`
+    // returned true on `au <= i` without the camera test).
+    if (!e.inPlayV(w)) w.removeEntity(e)           // L261→L306: v()==false
 }
 
 // ============================================================ ax74 = bN()
@@ -9775,8 +9730,8 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
             if (e.aA != 0) return                  // aA!=0 → L62
             if (e.j >= e.aE) e.aC-- else e.j += 15 // L28/L30
             e.aF = (e.aD * 256) / 360              // aF = aD·m/360
-            e.ak = e.aq + ((Trig.sin(e.aF) * e.j) shr 8)
-            e.al = e.ar + ((Trig.sin(Trig.N - e.aF) * e.j) shr 8)
+            e.ak = e.aq + ((Trig.cos(e.aF) * e.j) shr 8)
+            e.al = e.ar + ((Trig.cos(Trig.N - e.aF) * e.j) shr 8)
             if (e.j < e.aE) return
             if (e.aC > 0) return                   // L64: keep orbiting
             e.setAnim(2)
@@ -9992,13 +9947,22 @@ fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
 }
 
 /** ax37 `L633` (i.java:8074, proven): scroll-bound trigger init —
- *  `Z[0..3]=r8[15..18]`; `P|=0x200`; `(P&0x20)==0 → P|=0x10`. L1bea
- *  skips ax37 (no `i()` finish) — this arm has no setAnim call. */
+ *  `Z[0..3]=r8[15..18]` (wall/bound mask, link mode, link uid, overlap
+ *  mode); `P|=0x200`; `(P&0x20)==0 → P|=0x10`, so live triggers tick
+ *  every frame and parked ones wait for a script to clear `P&32`. L1bea
+ *  skips ax37 (no `i()` finish). The constructor tail (structured/
+ *  i.java:2913-2926) stages the zone `W = (ak+r8[7], al+r8[8], +r8[9],
+ *  +r8[10])` and the bound `X = (ak+r8[11], al+r8[12], +r8[13], +r8[14])`;
+ *  `t()` returns them untouched for ax37. */
 fun NpcFsm.initAx37(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.Z[0] = rf(15); e.Z[1] = rf(16); e.Z[2] = rf(17); e.Z[3] = rf(18)
     e.P = e.P or 512
     if ((e.P and 32) == 0) e.P = e.P or 16
+    e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
+    e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
+    e.X[0] = e.ak + rf(11); e.X[1] = e.al + rf(12)
+    e.X[2] = e.X[0] + rf(13); e.X[3] = e.X[1] + rf(14)
 }
 
 /** ax75 `Ldb1` (i.java:9206, proven): `az=r8[7]` only. */
@@ -10301,13 +10265,13 @@ private fun meleeApply(e: Entity, p: Entity, w: LevelCellSource) {
     when (e.ax) {
         11 -> {
             if (e.X[0] == e.X[2]) return                       // degenerate X
-            if (!Entity.overlapI(p.W, e.X)) return             // a(aS.W, X)
+            if (!Entity.overlapStrict(p.W, e.X)) return             // a(aS.W, X)
             if (p.S == 43 || p.S == 22) p.applyHit(20, e.l, e, w)
             else p.applyHit(4, e.l, e, w)
         }
         73 -> {
             if (e.X[0] == e.X[2]) return
-            if (!Entity.overlapI(p.W, e.X)) return
+            if (!Entity.overlapStrict(p.W, e.X)) return
             when {
                 e.S == 165 -> {
                     e.releaseAe()                              // G()
@@ -10377,7 +10341,7 @@ private fun sightPriorityD(e: Entity, p: Entity, w: LevelCellSource): Int {
     var r6 = p.al - e.al
     if ((p.aA and 8) != 0) return 0
     // L21: player W or X touching own W → the L25 close branch.
-    if (Entity.overlapI(p.W, e.W) || Entity.overlapI(p.X, e.W)) {
+    if (Entity.overlapStrict(p.W, e.W) || Entity.overlapStrict(p.X, e.W)) {
         val ga = p.ga                                 // g.a — ax15 link
         if (ga != null && ga.ax == 15 && Math.abs(r6) > 15) return 0
         if ((p.aA and 256) != 0) {
@@ -10411,10 +10375,11 @@ private fun sightPriorityD(e: Entity, p: Entity, w: LevelCellSource): Int {
  *       flat checks (af.S∈{1,7} blind, af.Z[0]==0 + own S117 → seen);
  *       else W-overlap → seen, else the Z[9..12] rect vs player center.
  *     - ax73: W-overlap → seen, else the same Z[9..12] rect.
- *     - ax17/23/50: `bn` alert flag → blind; own W on camera (`k.ac`) → seen.
+ *     - ax17/23/50: `bn` alert flag → blind; own W fully inside the camera
+ *       rect (`b(W, k.ac)`, containment) → seen.
  *  4. `e(aS)` LOS clear (Bresenham above) and player S∉{284,285}.
  *  Result feeds `aS.a(32)` in the L827 tail branch — the counter-alerts. */
-private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
+internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     val ae = w.kAe
     if (ae != null && ae.ax == 10 && ae.S == 52) return true   // ai()
     if ((p.aA and 8) != 0) return false                        // L10 → blind
@@ -10424,26 +10389,31 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             else if (Math.abs(e.al - p.al) / 20 > 1) false
             else {
                 // L22-L52: player riding an ax69 (`af`) — af.Z[0]==0 +
-                // player S∈{250,150} → blind; own S117 only PRIMES r0
-                // (the af.S checks below and L54 can overwrite it —
-                // faithful). af.S∈{7,1} → blind; af.S==6 → the zone
-                // rect vs af.W; else falls to L54.
+                // player S∈{250,150} → blind (@193-218); af.Z[0]==0 + own
+                // S117 → seen, straight to the @713 LOS tail (@221-231
+                // `iconst_1; goto 713` — slice 371: the af.S checks and
+                // L54 never run; structured i.java:1664-1666 has this exit
+                // but garbles the other states' fall-through to @234).
+                // af.S∈{7,1} → blind; af.S==6 → the zone rect vs af.W;
+                // else falls to L54.
                 val af = p.af
                 var resolved = false
                 var r0 = false
                 if (af != null && af.ax == 69) {
                     if (af.Z[0] == 0) {
                         if (p.S == 250 || p.S == 150) resolved = true
-                        else if (e.S == 117) r0 = true
+                        else if (e.S == 117) { resolved = true; r0 = true }
                     }
                     if (!resolved) {
                         if (af.S == 7 || af.S == 1) { resolved = true; r0 = false }
                         else if (af.S == 6) {
                             resolved = true
-                            r0 = Entity.overlapI(
-                                intArrayOf(
-                                    if (e.av) e.Z[9] else e.ak, e.Z[11],
-                                    if (e.av) e.ak else e.Z[10], e.Z[12]),
+                            // `i.a(x0,y0,x1,y1,af.W)` — the edges variant
+                            // (l() offsets 336-350, `a:(IIII[I)Z`): both
+                            // point rejects apply (slice 364).
+                            r0 = Entity.edgeRectOverlap(
+                                if (e.av) e.Z[9] else e.ak, e.Z[11],
+                                if (e.av) e.ak else e.Z[10], e.Z[12],
                                 af.W)
                         }
                     }
@@ -10452,7 +10422,7 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
                 else {
                     // L54/L83: own W overlap → seen; else Z[9..12] rect
                     // vs the player's box center.
-                    if (Entity.overlapI(p.W, e.W)) true
+                    if (Entity.overlapStrict(p.W, e.W)) true
                     else pointInRect(
                         p.ak, (p.W[1] + p.W[3]) shr 1,
                         intArrayOf(
@@ -10462,7 +10432,7 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             }
         }
         73 -> {
-            if (Entity.overlapI(p.W, e.W)) true
+            if (Entity.overlapStrict(p.W, e.W)) true
             else pointInRect(
                 p.ak, (p.W[1] + p.W[3]) shr 1,
                 intArrayOf(
@@ -10470,11 +10440,14 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
                     if (e.av) e.ak else e.Z[10], e.Z[12]))
         }
         17, 23, 50 -> {
-            // L70/L77: bn → blind; own W on the camera rect → seen.
+            // L70/L77 (simple/i.java:2384-2406, proven): bn → blind; else
+            // `b(this.W, k.ac)` — own W fully INSIDE the camera rect
+            // (`b(int[],int[])` is containment, :665-676). Before slice
+            // 350 this arm used overlap: a half-visible actor already saw.
             if (w.iBn) false
             else {
                 val ac = w.kAc
-                ac != null && Entity.overlapI(e.W, ac)
+                ac != null && insideOf(e.W, ac)
             }
         }
         else -> false                                          // L83 default
@@ -10610,7 +10583,7 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
         // `m`/`aA==Z[3]` prompt checks that latch `n`, the cyan
         // progress bar (fill `j.b` + outline `j.c`), then the armed
         // `bA[4-aD..3]` cards positioned at y=160 and ticked 62ms.
-        if (!Entity.overlapI(e.W, player.W) || (e.P and 128) != 0) return
+        if (!Entity.overlapStrict(e.W, player.W) || (e.P and 128) != 0) return
         val colW = 400 / (e.aD + 1)
         val off = 4 - e.aD
         if (e.m >= 10) {
@@ -10654,7 +10627,7 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
     val near = player.S != 9 &&
         ((player.af === e &&
           player.ak > wa[0] && player.ak < wa[2]) ||
-         Entity.overlapI(player.W, wa))
+         Entity.overlapStrict(player.W, wa))
     if (near) {
         val inside = player.ak >= wa[0] && player.ak <= wa[2]
         val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])

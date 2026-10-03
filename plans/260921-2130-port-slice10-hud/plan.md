@@ -1,3 +1,8 @@
+---
+title: "Port slice 10 — HUD sync meter"
+status: done
+---
+
 # Port slice 10 — HUD sync meter
 
 ## Mining — proven (k.java:5381 `c(boolean)`)

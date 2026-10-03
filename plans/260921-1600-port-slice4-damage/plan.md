@@ -1,3 +1,8 @@
+---
+title: "Port slice 4 — player→NPC damage + soldier death/corpse"
+status: done
+---
+
 # Port slice 4 — player→NPC damage + soldier death/corpse
 
 Bối cảnh: tiếp nối slice 3 (đã có NPC→player damage qua `i.a(op)` dispatcher).

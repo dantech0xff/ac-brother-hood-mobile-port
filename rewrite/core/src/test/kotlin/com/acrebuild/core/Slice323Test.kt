@@ -37,10 +37,18 @@ class Slice323Test {
         assertTrue(trio.all { it.S == 152 && (it.P and 32) != 0 })
 
         // walk the player through the watcher zone on the rooftop path
-        for (step in 0..8) {
+        // until the watcher binds; script 309 then runs its setup groups.
+        // It ends by putting the player in S50 (the spotted fail) — the
+        // checks below land while the claim still holds (slice 379: the
+        // death anim plays out instead of freezing the world at once).
+        outer@ for (step in 0..8) {
             w.player.setPositionPx(2600 + step * 40, 493)
-            repeat(60) { w.tick(emptyList()) }
+            for (i in 0 until 60) {
+                w.tick(emptyList())
+                if (w308.claimActive()) break@outer
+            }
         }
+        repeat(40) { w.tick(emptyList()) }
 
         // the watcher is now the live claimer running script 309
         assertTrue(w308.claimActive(), "watcher aw308 should hold the claim")

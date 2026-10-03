@@ -1,3 +1,8 @@
+---
+title: "Port slice 5 — attack input → sword combo (S67/68/69) + gameplay kill"
+status: done
+---
+
 # Port slice 5 — attack input → sword combo (S67/68/69) + gameplay kill
 
 Bối cảnh: slice 4 đã có damage intake `j()` + corpse chain nhưng thiếu đường

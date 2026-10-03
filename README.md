@@ -16,8 +16,9 @@ Các giai đoạn phục vụ mục tiêu đó:
 1. Khôi phục cấu trúc mã, tài nguyên và hành vi suy ra từ bytecode (xong).
 2. Đào semantic gameplay thành contract cho port — `docs/gameplay-mining/`
    và `docs/gameplay-design-document.md` (xong).
-3. Rebuild trong `rewrite/` theo contract đó (đang thực hiện; Android spike
-   đã qua gate, iOS còn chờ macOS).
+3. Rebuild trong `rewrite/` theo contract đó (đang thực hiện: cả 8 mission
+   chơi được trên Android; đang sửa sai lệch parity và hardening cho bản phát
+   hành nội bộ; iOS còn chờ host macOS).
 
 Nguyên tắc xuyên suốt:
 
@@ -62,7 +63,11 @@ luồng boot → menu → briefing → gameplay (mission-0, Rome Colosseum):
 - [ADR chọn framework mobile](docs/decisions/mobile-game-framework.md)
 - [Báo cáo kiểm định tĩnh cuối](plans/260722-1922-assassins-creed-reconstruction/reports/final-verification.md)
 - [Bản reconstruction package](reconstructed-project/README.md)
-- [Rewrite toolchain spike (Kotlin + LibGDX)](rewrite/README.md) và
+- [Bản port Kotlin + LibGDX](rewrite/README.md) và
+  [kế hoạch hiện hành](plans/261003-0700-parity-gap-closure-android-hardening/plan.md)
+- ADR: [nhịp tick](docs/decisions/tick-cadence-self-clocked.md),
+  [chính sách save](docs/decisions/save-policy.md)
+- [Rewrite toolchain spike](plans/260921-0830-libgdx-toolchain-spike/plan.md) và
   [kết quả gate](plans/260921-0830-libgdx-toolchain-spike/reports/gate-results.md)
 
 ## Artifact chính
@@ -164,19 +169,23 @@ Plan đã `completed`; cả bốn phase, kiểm định độc lập và tài li
 
 ## Trạng thái rewrite track
 
-Toolchain spike theo mandatory decision gate của
-[`docs/decisions/mobile-game-framework.md`](docs/decisions/mobile-game-framework.md),
-theo dõi tại
-[`plans/260921-0830-libgdx-toolchain-spike/`](plans/260921-0830-libgdx-toolchain-spike/plan.md):
+Bản port game trong [`rewrite/`](rewrite/README.md) (Kotlin + LibGDX `1.14.2`):
 
-- `rewrite/` chứa Gradle project Kotlin + LibGDX `1.14.2` (core pure-Kotlin,
-  adapters `gdx`, launchers `android`/`lwjgl3`, scaffold `ios` chỉ build trên
-  macOS, `tools` converter và `generated/` assets có provenance).
-- Gate items 2–6 pass trên Android emulator + desktop; core test 11/11.
-- Gate item 1 còn nửa iOS: cần session macOS (RoboVM + Xcode) trước khi gọi
-  stack là đạt đủ gate cho port gameplay production.
-- Spike này không phải bản port game; entity FSM, timeline, collision và level
-  loader chưa được chuyển.
+- Port core gốc theo từng slice có trích nguồn: frame `k.a()`/`k.I()`, máy
+  trạng thái màn hình, player `g.e()`, NPC `i.I()` và dispatch ax, script
+  claim, HUD/menu/dialog, flying/chase/boss; cả 8 mission chơi được trên
+  Android. Bot capstone chơi lại từng mission trong `:core:test`.
+- Kế hoạch hiện hành:
+  [`plans/261003-0700-parity-gap-closure-android-hardening/`](plans/261003-0700-parity-gap-closure-android-hardening/plan.md)
+  — Phase 1 (sửa sai lệch parity) và Phase 3 (save container v1 ghi atomic,
+  cách ly tick lỗi, phím BACK, lifecycle) xong; Phase 2 (bot capstone xanh
+  trên game đã sửa; device run cần host emulator) và Phase 4 (CI, docs) đang
+  làm; phát hành **nội bộ**, không lên store.
+- Gate: verifier, `unittest`, `./gradlew :core:test :gdx:test
+  :android:assembleDebug` — chạy trong CI (`.github/workflows/ci.yml`).
+- Toolchain spike ban đầu
+  ([`plans/260921-0830-libgdx-toolchain-spike/`](plans/260921-0830-libgdx-toolchain-spike/plan.md))
+  đã qua nửa Android của gate; nửa iOS cần session macOS (RoboVM + Xcode).
 
 ## Trạng thái gameplay mining
 

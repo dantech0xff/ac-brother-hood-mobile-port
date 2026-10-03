@@ -343,8 +343,9 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 ## Run-21 — m2 Florence combat (pad/menu notes)
 
 - **jC=12 restart-confirm**: `pad.e(327712)` edges often get eaten —
-  the jC==12 path first flushes held pad bits (`kJT!=0 → skip frame`),
-  and the confirm arm is `pad.v(M_CONTEXT)||rowTap` then kBw arming.
+  the first jC==12 frame after a level load, a checkpoint reload or an
+  input lock is skipped (`jT!=0 → jT=0`, slice 376), and the confirm
+  arm is `pad.v(M_CONTEXT)||rowTap` then kBw arming.
   Two edges usually work, but when pointer+edges are flaky, call the
   dispatcher directly: `eval this.menuItem(14)` (14=YES row id, 15=NO)
   in bp-context → `reloadCheckpoint(true)` immediately (jC 12→8).

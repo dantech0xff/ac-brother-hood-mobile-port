@@ -61,17 +61,18 @@ Track tại
 Đây là slice implementation đầu tiên của bản rewrite: thực thi mandatory
 decision gate của ADR framework trên Kotlin + LibGDX `1.14.2`.
 
-|| Phase | Tên | Trạng thái |
-||---|---|---|
-|| 1 | Project Scaffold | completed |
-|| 2 | Core Simulation Slice | completed |
-|| 3 | Content Conversion Slice | completed |
-|| 4 | LibGDX Adapters and Launchers | completed |
-|| 5 | Gate Verification and Handoff | completed — iOS half của gate item 1 pending macOS |
+| Phase | Tên | Trạng thái |
+|---|---|---|
+| 1 | Project Scaffold | completed |
+| 2 | Core Simulation Slice | completed |
+| 3 | Content Conversion Slice | completed |
+| 4 | LibGDX Adapters and Launchers | completed |
+| 5 | Gate Verification and Handoff | completed — iOS half của gate item 1 chuyển sang track iOS (cần macOS) |
 
 Kết quả gate:
 [`reports/gate-results.md`](../plans/260921-0830-libgdx-toolchain-spike/reports/gate-results.md)
-— Android + desktop pass trên mọi item; iOS pending; chưa phải bản port game.
+— Android + desktop pass trên mọi item; iOS pending. Spike chỉ chứng minh
+stack; bản port game là track 6.
 
 ## Follow-up track 5: Gameplay mining
 
@@ -79,8 +80,8 @@ Track tại
 [`plans/260921-0929-gameplay-mining/`](../plans/260921-0929-gameplay-mining/plan.md).
 Đào semantic gameplay từ artifact đã decode để làm content contract cho port:
 
-| | Phase | Tên | Trạng thái |
-|---|---|---|---|
+| Phase | Tên | Trạng thái |
+|---|---|---|
 | 1 | String-table corpus | completed |
 | 2 | Level atlas | completed |
 | 3 | Player mechanics | completed |
@@ -92,6 +93,30 @@ Kết quả: [`docs/gameplay-mining/`](gameplay-mining/) (corpus, atlas, catalog
 mechanics, audio/sprite) và [`docs/gameplay-design-document.md`](gameplay-design-document.md)
 — 8 mission, entity dispatch 0–80, player FSM, physics constants, cheat/audio
 tables.
+
+## Follow-up track 6: Game port (`rewrite/`)
+
+Port game thật trên nền spike, chia thành slice nhỏ, mỗi slice có plan trong
+`plans/` (YYMMDD-HHMM-sliceNNN-…) trích nguồn gốc và test riêng:
+
+- Slice 1–~330: world/level loader, player `g.e()`, NPC `i.I()` và dispatch
+  ax 0–80, script claim, camera, HUD/menu/dialog, save `kBA`, flying/chase/
+  boss; bot capstone chơi hết 8 mission trong `:core:test`. Device run tới
+  Run-30 (`plans/260922-0730-demo-verify/reports/REPORT.md`).
+- Kế hoạch hiện hành:
+  [`plans/261003-0700-parity-gap-closure-android-hardening/`](../plans/261003-0700-parity-gap-closure-android-hardening/plan.md).
+
+| Phase | Tên | Trạng thái |
+|---|---|---|
+| 1 | Parity-gap closure (slice 346–368; follow-up 369–371 đang làm) | completed |
+| 2 | Capstone re-validation và device evidence | in_progress — capstone xanh; device Run-32/33 cần host emulator |
+| 3 | Save và lifecycle hardening | completed |
+| 4 | CI, docs sync, repo hygiene | in_progress |
+| 5 | Cấu hình Android phát hành nội bộ | pending |
+
+Quyết định: nhịp tick tự định ≤1 tick/frame
+([ADR](decisions/tick-cadence-self-clocked.md)), save thô giống bản gốc trong
+container v1 ([ADR](decisions/save-policy.md)); phát hành nội bộ, không lên store.
 
 ## Kết quả thực tế
 
