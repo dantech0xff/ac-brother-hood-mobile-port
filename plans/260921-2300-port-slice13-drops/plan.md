@@ -1,3 +1,8 @@
+---
+title: "Port slice 13 — corpse-drop `au()` (Z[21] linked-entity activation)"
+status: done
+---
+
 # Port slice 13 — corpse-drop `au()` (Z[21] linked-entity activation)
 
 ## Mining — proven (i.java:7738, k.java:5890 `q()`)

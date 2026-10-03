@@ -1,3 +1,8 @@
+---
+title: "Port slice 8 — player knockout: `x[1]` meter = HP, death → respawn"
+status: done
+---
+
 # Port slice 8 — player knockout: `x[1]` meter = HP, death → respawn
 
 Bối cảnh: slice 7 hiểu nhầm `x[1]` chỉ là stamina — pass này mine sâu

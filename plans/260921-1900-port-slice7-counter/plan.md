@@ -1,3 +1,8 @@
+---
+title: "Port slice 7 — auto-counter: meter pay → `c(attacker)` stagger → weaken"
+status: done
+---
+
 # Port slice 7 — auto-counter: meter pay → `c(attacker)` stagger → weaken
 
 Bối cảnh: lấp chỗ còn thiếu giữa slice 5/6 — trong bản gốc trạng thái

@@ -11,6 +11,7 @@ sources:
   - reconstructed-project/src/simple/k.java:5259      (GloftASBR.c call site)
   - reconstructed-project/resources/decoded/pack-14/entry-000-strings.json
     (id 24 = "LOADING")
+status: done
 ---
 
 ## What

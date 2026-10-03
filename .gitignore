@@ -19,3 +19,6 @@ __pycache__/
 .reconstructed-project.backup-*
 .verification-report.json.*.tmp
 *.swp
+
+# compiler debris (a stray `a.out` was committed once)
+a.out

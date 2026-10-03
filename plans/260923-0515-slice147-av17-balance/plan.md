@@ -2,6 +2,7 @@
 slice: 147
 date: 2026-09-23
 confidence: proven
+status: done
 ---
 
 # Slice 147 — ax10 S17 balance zone (L1b44)
