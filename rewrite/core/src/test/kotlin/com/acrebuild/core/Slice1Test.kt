@@ -23273,6 +23273,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23320,8 +23321,19 @@ class Slice245Test {
             // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
             // it and press UP → teleport east. Drop M_RIGHT so the run
             // actually settles inside the box (aZ) before the edge.
-            if (p.ak in 10530..10620 && p.al in 380..455)
-                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // slice 360: aw()'s UP + carry-target arm (g.java:5257)
+            // enters S6 while the posted guard uid571 stands in front,
+            // and a held UP keeps it there. g/ci bind only in front:
+            // face west (away from the guard) first, then pulse UP.
+            if (p.ak in 10530..10620 && p.al in 380..455) {
+                doorPulse = (doorPulse + 1) and 1
+                held = when {
+                    !p.aZ -> 0
+                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                    else -> 0
+                }
+            }
             // The door arm also needs `g == null` — the column-top
             // soldier uid571 binds the interact target, so slash it
             // while bound until the lock clears. The Z2 road-blocker
@@ -23388,6 +23400,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23454,8 +23467,19 @@ class Slice245Test {
             // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
             // it and press UP → teleport east. Drop M_RIGHT so the run
             // actually settles inside the box (aZ) before the edge.
-            if (p.ak in 10530..10620 && p.al in 380..455)
-                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // slice 360: aw()'s UP + carry-target arm (g.java:5257)
+            // enters S6 while the posted guard uid571 stands in front,
+            // and a held UP keeps it there. g/ci bind only in front:
+            // face west (away from the guard) first, then pulse UP.
+            if (p.ak in 10530..10620 && p.al in 380..455) {
+                doorPulse = (doorPulse + 1) and 1
+                held = when {
+                    !p.aZ -> 0
+                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                    else -> 0
+                }
+            }
             // Finale-shaft S33 on the fort's west face: the into-wall
             // dir arm is the LIP SCAN (dirKey && ah<0 → ct=true + scan —
             // a no-op on the flat '20' face), not the kick — the kick
@@ -23533,6 +23557,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23575,8 +23600,17 @@ class Slice245Test {
                     if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
                     if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
                         held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
-                    if (p.ak in 10530..10620 && p.al in 380..455)
-                        held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+                    // slice 360: see the cp7 fuse leg — face away from
+                    // the posted guard, then pulse UP inside the door.
+                    if (p.ak in 10530..10620 && p.al in 380..455) {
+                        doorPulse = (doorPulse + 1) and 1
+                        held = when {
+                            !p.aZ -> 0
+                            p.g != null || p.ci != null -> Pad.M_LEFT
+                            p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                            else -> 0
+                        }
+                    }
                     if (p.S == 33 && p.ak in 11285..11340)
                         held = if (p.al > 735)
                             (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
