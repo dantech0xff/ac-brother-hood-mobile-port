@@ -2662,7 +2662,9 @@ class Level0WorldTest {
         b.setAnim(28)
         w.iBy = 3; w.iCp = 47; w.iCi = IntArray(5)
         w.npcFsm.tickBoss(b, p, Pad())
-        assertEquals(0, b.S, "cp>=48 -> i(0)")
+        // cp>=48 -> i(0); i.i() maps i(0) on k.aU at by 3 to i(36)
+        // (i.javap.txt i(int) offsets 0-20, slice 361)
+        assertEquals(36, b.S, "cp>=48 -> i(0) -> i(36) for the by3 boss")
         assertEquals(0, w.iCp)
     }
 
@@ -19027,7 +19029,10 @@ class Slice193Test {
         val p = mk(200, 100); p.S = 61; p.aC = 1   // last grace tick
         fsm.tick(p, Pad())
         assertEquals(43, p.S, "aC→0 → H+G+a(0) drop → freefall — L2460")
-        assertEquals(130, p.al, "al += W3-W1 (+20) then a(0) al+=10")
+        // the arm's own `al += W3-W1` (+20), then a(0) = a(43,32) → i(43)
+        // while still S61 adds W3-W1 again (i.java:264-266, slice 361),
+        // then a(0)'s al += 10
+        assertEquals(150, p.al, "al += W3-W1 twice, then a(0) al+=10")
     }
 
     @Test fun `S61 edge loss with no link drops immediately`() {

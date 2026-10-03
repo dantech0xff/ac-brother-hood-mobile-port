@@ -602,6 +602,9 @@ class Level0World(
     var boundMaxX = 0; var boundMaxY = 0
 
     init {
+        // `i.i(int)`'s world hooks stay off while the pack loads; the
+        // last init block binds this world once every field is set.
+        Entity.hostWorld = null
         spawnEntities()                         // i.D() static reset FIRST
         resetPlayerToSpawn()                    // then k.a(z2) bA restore
         postSpawn()                             // player-ctor kD/kE inserts
@@ -5397,6 +5400,7 @@ class Level0World(
     // Second init block: runs after every property initializer, so the
     // C() init `m(ad)` snap (k.java:2343) sees kAe/kAd in their set state.
     init {
+        Entity.hostWorld = this
         kM(2)
         applyG2()   // `G(2)` runs for the constructor pack too
     }

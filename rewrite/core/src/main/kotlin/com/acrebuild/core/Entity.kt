@@ -911,8 +911,25 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * rejected (state unchanged); when `n != S`: `Q = old S` (unless
      * `S == 35`), `T = U = a = 0`, `P &= ~64`.
      */
-    fun setAnim(n: Int) {
+    /** `i.i(int)` (bytecode i.javap.txt i(int) offsets 0-299, proven):
+     *  the boss in phase 3 maps `i(0)` to `i(36)`; an out-of-range anim
+     *  is ignored; ax29's `i(27)` places the `ck` aura (`e(15, ak, al,
+     *  az-1)`); ax43's `i(11)` stops it dead; on the player slot the
+     *  `g.e(0)` (S50), `g.y = al` (S43/148/0) and S61→S43 `al` shift run
+     *  on EVERY call; only a real change resets `Q/S/T/U/a`, `P&64` and
+     *  the `y` anim-freeze counter. */
+    fun setAnim(n0: Int) {
+        var n = n0
+        val hw = hostWorld
+        if (hw != null && hw.kAU === this && n == 0 && hw.iBy == 3) n = 36
         if (n < 0 || (clip != null && n >= clip!!.animCount())) return
+        if (ax == 29 && n == 27 && hw != null) bossAura(hw, 15, ak, al, az - 1)
+        if (ax == 43 && n == 11) { ai = 0; ag = 0; aj = 0; ah = 0 }
+        if (ax == 0) {
+            if (n == 50) x1 = 0                                // g.e(0)
+            if (n == 43 || n == 148 || n == 0) gy = al         // g.y = al
+            if (n == 43 && S == 61) al += W[3] - W[1]
+        }
         if (n != S) {
             if (S != 35) Q = S
             S = n
@@ -920,11 +937,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             U = 0
             a = 0
             P = P and -65
-            // i.java:265-275 (proven): on the player (ax==0), entering
-            // anim 43/148/0 stamps g.y = al (apex/fall-origin marker);
-            // entering anim 50 zeroes the meter (g.e(0)).
-            if (ax == 0 && (n == 43 || n == 148 || n == 0)) gy = al
-            if (ax == 0 && n == 50) x1 = 0
+            y = 0
         }
     }
 
@@ -1524,10 +1537,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun enterStateMasked(n: Int, mask: Int, world: LevelCellSource) {
         if (mask and 1 == 0) { setAnim(n); refreshBoxes() }
+        // x snaps are one else-if chain (i.javap.txt a(II) 16-124)
         if (mask and 2048 != 0) ak = W[0]
-        if (mask and 4096 != 0) ak = W[2]
-        if (mask and 4 != 0) ak += tc - ((W[0] + W[2]) shr 1)
-        if (mask and 8 != 0) ak -= (ak % 20) - 10
+        else if (mask and 4096 != 0) ak = W[2]
+        else if (mask and 4 != 0) ak += tc - ((W[0] + W[2]) shr 1)
+        else if (mask and 8 != 0) ak -= (ak % 20) - 10
         if (mask and 64 != 0) al = W[1]
         else if (mask and 128 != 0) al = W[3]
         else if (mask and 8192 != 0) al = ((W[3] / 20) * 20) - 1
@@ -3386,6 +3400,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         /** `i.at` (i.java:42) — static mount/assassination link; set by
          *  az()'s ax72 arm and the ax11 grab arm (i.java:6007). */
+        /** The world whose `i.i(int)` side effects read `k.aU`/`i.by` and
+         *  place the ax29 aura — set by `Level0World`'s init (one live
+         *  world at a time, like the other `i`/`g` statics here). */
+        var hostWorld: LevelCellSource? = null
         var at: Entity? = null
         /** `i.aL` (i.java:75) — the claim-script camera-focus entity;
          *  `k.m`'s snap arm (`k.java:2354`) and `n()` clear it. */
