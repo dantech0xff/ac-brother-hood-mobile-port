@@ -2268,6 +2268,30 @@ class Level0Renderer {
     private fun clipPackOf(clip: Clip): Int? =
         clips.entries.firstOrNull { it.value === clip }?.key
 
+    /** The tick-failure boundary's fatal screen (design §8): the world is
+     *  quarantined; the only action is a tap to restart from the durable
+     *  save. Drawn with the libGDX default font — no game asset is trusted
+     *  after a failed tick. */
+    fun renderFatal() {
+        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
+        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
+        if (sc < 1) sc = 1
+        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
+        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
+        Gdx.gl.glViewport(0, 0, sw, sh)
+        ScreenUtils.clear(0f, 0f, 0f, 1f)
+        Gdx.gl.glViewport(offsetX, offsetY, dw, dh)
+        batch.projectionMatrix.setToOrtho2D(
+            0f, 0f, Level0World.VIEW_W.toFloat(), Level0World.VIEW_H.toFloat())
+        batch.begin()
+        font.color = com.badlogic.gdx.graphics.Color.WHITE
+        font.draw(batch, "An error stopped the game.", 0f, 140f,
+            Level0World.VIEW_W.toFloat(), com.badlogic.gdx.utils.Align.center, false)
+        font.draw(batch, "Tap to restart from your last save.", 0f, 110f,
+            Level0World.VIEW_W.toFloat(), com.badlogic.gdx.utils.Align.center, false)
+        batch.end()
+    }
+
     fun dispose() {
         batch.dispose()
         if (::font.isInitialized) font.dispose()
