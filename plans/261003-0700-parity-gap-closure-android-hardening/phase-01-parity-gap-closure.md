@@ -40,7 +40,8 @@ and lands with unit tests that would have caught it.
 | 1.7 ax37 scroll triggers as entities (+ `k.c` holder release / same-frame skip) | done | [355](../261003-1030-slice355-ax37-triggers-as-entities/plan.md) |
 | G12 frame order: `k.I()` ticks `bb[]` before `aS.I()` (port: player first) | open | — |
 | 1.7 ax23 `case 23 → L849` + stale comments; G13 family head (`t()`, corpse landing, `g.h` → S203 ledge kill), ax73 `au()` | done | [356](../261003-1100-slice356-family-head-ax23/plan.md) |
-| 1.5 ax11 `aC()` scheduler | pending | — |
+| 1.5 ax11 `aC()` scheduler (G5) | blocked — ported on branch `claude/g5-ac-scheduler`; 5 capstone bots need Phase 2 re-validation | [357](../261003-1200-slice357-ax11-ac-scheduler/plan.md) |
+| `v()` overlaps are `i.a` (strict) + one `aG()` (split out of 357) | done | [358](../261003-1230-slice358-v-strict-single-aG/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

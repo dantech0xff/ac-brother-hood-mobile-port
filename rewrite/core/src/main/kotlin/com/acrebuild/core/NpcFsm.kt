@@ -251,18 +251,10 @@ class NpcFsm(val world: LevelCellSource) {
         return false
     }
 
-    /** `aG()` (i.java, proven core; platform `s` arms omitted): edge ahead. */
-    private fun edgeAhead(e: Entity): Boolean {
-        val cy = (e.W[3] + 10) / 20
-        return if (!e.av) {
-            // right side: W2/20+1 is 20 (OOB sentinel) or 5 → not an edge
-            e.e(world, e.W[2] / 20 + 1, cy) != 20 &&
-                e.e(world, e.W[2] / 20 + 1, cy) != 5
-        } else {
-            e.e(world, e.W[0] / 20 - 1, cy) != 20 &&
-                e.e(world, e.W[0] / 20 - 1, cy) != 5
-        }
-    }
+    /** `i.aG()` (structured/i.java:7258-7274, proven) — the same
+     *  function for every type: the crate-edge rule while riding an ax51
+     *  (other supports → no edge), else the facing-side cell test. */
+    private fun edgeAhead(e: Entity): Boolean = edgeAhead73(e, world)
 
     /** `b(k.aS)` simplified: alert-zone box + facing + same band. The
      *  original's `a(this.W, aS.W)` is a rect-overlap test between the
