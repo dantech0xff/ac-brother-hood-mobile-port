@@ -4706,40 +4706,42 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         } else if (w.iBF <= 100) w.iBB = false
                     }
                 }
-                // La92 (i.java:13185-13460): i.e-- + the shrine-burst
-                // sparkle field — f/g/h[360] lazy-alloc, spawns on
-                // `rand&127==0`, four dot offsets per active slot.
+                // i.e-- + the pickup sparkle field (bytecode i.javap.txt F()
+                // offsets 2709-3238, proven; structured/i.java:3233-3283):
+                // f/g/h[360] lazy-alloc; a slot spawns only on a draw
+                // `r >= 0 && (r & 127) == 0` — the sign gate halves the odds
+                // and keeps the shared j.j stream in step — with
+                // `g = r%40 + 60` (21..99, no abs) and `h = |r%60| + 60`;
+                // every live slot (g > 15) draws one white radial line at
+                // i° from radius g+f to h+f, then `f += 15`, reset at 100.
                 if (w.iE > 0) {
                     w.iE--
                     val f = w.iF ?: IntArray(360).also { w.iF = it }
                     val g = w.iG ?: IntArray(360).also { w.iG = it }
                     val h = w.iH ?: IntArray(360).also { w.iH = it }
                     for (i in 0 until 360) {
-                        if (w.jNextInt() and 127 == 0 && g[i] == 0) {
-                            g[i] = kotlin.math.abs(w.jNextInt() % 40) + 60
+                        val r = w.jNextInt()
+                        if (r >= 0 && (r and 127) == 0 && g[i] == 0) {
+                            g[i] = (w.jNextInt() % 40) + 60
                             h[i] = kotlin.math.abs(w.jNextInt() % 60) + 60
-                            // `if (g[i] < 0) h[i] = -h[i]` — proven-dead:
-                            // g[i] was just set ≥60.
+                            if (g[i] < 0) h[i] = -h[i]          // dead: g ≥ 21
                             f[i] = 0
                         }
                     }
-                    val cx = ak - w.kO
-                    val cy = ((W[1] + W[3]) shr 1) - w.kP
+                    val ox = ak - w.kO
+                    val oy = ((W[1] + W[3]) shr 1) - w.kP
                     for (i in 0 until 360) {
                         if (g[i] > 15) {
-                            // Lbaf: the 4-point rosette around the
-                            // screen-anchored W-center (high-confidence
-                            // — alternating g/h amplitudes at
-                            // quarter phases).
-                            val ph = i * Trig.M / 360
-                            for (k2 in 0 until 4) {
-                                val a = ph + k2 * Trig.N
-                                w.drawFxDot(
-                                    cx + (Trig.cos(Trig.N - a) *
-                                          (g[i] + f[i]) shr 8),
-                                    cy + (Trig.cos(Trig.O - a) *
-                                          (h[i] + f[i]) shr 8))
-                            }
+                            val th = i * Trig.M / 360
+                            val sn = Trig.cos(Trig.N - th)      // j.b(n−θ)
+                            val cs = Trig.cos(th)               // j.b(θ)
+                            w.drawFxLine(ox + ((sn * (g[i] + f[i])) shr 8),
+                                         oy + ((cs * (g[i] + f[i])) shr 8),
+                                         ox + ((sn * (h[i] + f[i])) shr 8),
+                                         oy + ((cs * (h[i] + f[i])) shr 8),
+                                         -1)                    // setColor(-1)
+                            f[i] += 15
+                            if (f[i] >= 100) { f[i] = 0; g[i] = 0 }
                         }
                     }
                 }
@@ -5611,7 +5613,6 @@ interface LevelCellSource {
      *  fillRect; the S31 progress bar and similar fills). */
     fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {}
     /** `g.a(x,y,…)` sparkle dot — one point of the Lbaf rosette. */
-    fun drawFxDot(x: Int, y: Int) {}
     /** `k.y.a(g,cR,x,y,w,lines,…)` (i.java:13942, proven): the ax11
      *  overhead speech bubble — dark rect + border + wrapped `text`. */
     fun drawFxBubble(x: Int, y: Int, w: Int, lines: Int, flip: Boolean,

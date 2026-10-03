@@ -625,11 +625,11 @@ class Level0Renderer {
 
     /**
      * `i.F()`'s pure-draw calls (i.java:11782+, proven): drains the
-     * per-tick `fx*` collectors — rope/marker lines (`j.a`), dark
-     * columns + fullscreen veil (`j.a` fill), the ax11 speech bubble
-     * (`k.y.a` — dark panel, white border, wrapped body text on the
-     * `y` font), and the shrine-burst sparkle dots (`g.a`). All coords
-     * arrive screen-relative (world → camera already subtracted).
+     * per-tick `fx*` collectors — rope/marker lines and the pickup
+     * sparkle rays (`j.a`), dark columns + fullscreen veil (`j.a` fill),
+     * the ax11 speech bubble (`k.y.a` — dark panel, white border, wrapped
+     * body text on the `y` font). All coords arrive screen-relative
+     * (world → camera already subtracted).
      */
     private fun fxOverlay(w: Level0World) {
         for (r in w.fxRects) fillAr(r[0], r[1], r[2], r[3], r[4])
@@ -657,7 +657,6 @@ class Level0Renderer {
             val pr = Entity.scriptPrompts.getOrNull(slot) ?: continue
             if (pr.anim.e >= 0) drawPrompt(pr, 62)
         }
-        for (d in w.fxDots) fillAr(d[0], d[1], 2, 2, -0x33889900)  // sparkle
     }
 
     /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a

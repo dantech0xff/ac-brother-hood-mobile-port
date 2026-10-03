@@ -1094,14 +1094,13 @@ class Level0World(
     // -- slice 239: `i.F()` draw-style state (i.java:11782+) ------------
     override val iR = IntArray(4)              // i.r — ax15-S10 marker box
     override var iF: IntArray? = null          // i.f — sparkle field (lazy 360)
-    override var iG: IntArray? = null          // i.g — x-amplitude
-    override var iH: IntArray? = null          // i.h — y-amplitude
+    override var iG: IntArray? = null          // i.g — ray inner radius (0 = free)
+    override var iH: IntArray? = null          // i.h — ray outer radius
     /** `i.F()`'s pure-draw collectors — the `j.a`/`j.b`/`g.a`/`k.y.a`
      *  primitives emitted each tick; `Level0Renderer` drains per frame
      *  (bounded: the source draws straight to screen). */
     val fxLines = ArrayList<IntArray>()
     val fxRects = ArrayList<IntArray>()
-    val fxDots = ArrayList<IntArray>()
     val fxBubbles = ArrayList<IntArray>()
     val fxBubbleText = ArrayList<String>()
     override fun drawFxLine(x1: Int, y1: Int, x2: Int, y2: Int, argb: Int) {
@@ -1119,9 +1118,6 @@ class Level0World(
     }
     override fun drawFxRect(x: Int, y: Int, w: Int, h: Int, argb: Int) {
         if (fxRects.size < 256) fxRects.add(intArrayOf(x, y, w, h, argb))
-    }
-    override fun drawFxDot(x: Int, y: Int) {
-        if (fxDots.size < 2048) fxDots.add(intArrayOf(x, y))
     }
     override fun drawFxBubble(x: Int, y: Int, w: Int, lines: Int,
                               flip: Boolean, text: String) {
@@ -2342,7 +2338,7 @@ class Level0World(
     fun drawStylePass() {
         fxLines.clear(); fxRects.clear(); fxOutlines.clear()
         fxPrompts.clear()
-        fxDots.clear(); fxBubbles.clear(); fxBubbleText.clear()
+        fxBubbles.clear(); fxBubbleText.clear()
         buildDrawList(advanceLinkedFx = true)          // tick-side `s()` mirror
         if ((player.P and 128) == 0) {                   // L224-L230: aS.ae.s()
             val ae = player.ae

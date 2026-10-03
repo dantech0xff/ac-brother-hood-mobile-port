@@ -36,6 +36,7 @@ and lands with unit tests that would have caught it.
 | 1.6 jC=28 ghost rows (G6) | done | [351](../261003-0827-slice351-ae-121-no-panel/plan.md) |
 | 1.7 `Trig` tables (G7 → high impact: `j.b` is cos) | done | [352](../261003-0900-slice352-trig-tables-verbatim/plan.md) |
 | G10 volley `i.a(int,boolean)` fan/speed/anim (found auditing `j.b` sites) | done | [353](../261003-0930-slice353-volley-fan-speed-anim/plan.md) |
+| G11 pickup sparkle field in `i.F()` (RNG gate, rays, `f` advance) | done | [354](../261003-1000-slice354-pickup-sparkle-field/plan.md) |
 | 1.5, 1.7 (ax37, ax23, comments) | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
