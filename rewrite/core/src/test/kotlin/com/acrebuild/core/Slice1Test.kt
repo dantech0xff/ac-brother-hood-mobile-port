@@ -25642,6 +25642,22 @@ class Slice281Test {
                     it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
                     Math.abs(it.al - p.al) < 60
                 }) mask = Pad.M_RIGHT + Pad.M_UP
+            // aw4/aw5 are solid breakable crates (ax4 S5/S7, aj() L18 a()
+            // push-out). Under k.I()'s frame order (G12) the crate's
+            // `aS.ag = 0` runs before the player's integration step, so a
+            // player whose box touches a crate can neither run nor hop
+            // away from it — smash it instead (attack + body overlap).
+            // S5 counts as grounded: an UP held into the landing would
+            // start another S21 hop from inside the crate's box.
+            if ((p.aZ || p.S == 5) && w.npcs.any {
+                    it.ax == 4 && (it.S == 5 || it.S == 7) &&
+                    Entity.overlapI(p.W, it.W)
+                }) mask = Pad.M_CONTEXT
+            // Past the smashed crates the run reaches the block's east
+            // edge (S26 edge walk, x≈1168) instead of bunny-hopping off
+            // it: jump there for the arc onto the ax22 vault at 1249.
+            if (p.S == 26 && p.ak in 1100..1200 && p.al in 1810..1825)
+                mask = Pad.M_RIGHT + Pad.M_UP
         val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
