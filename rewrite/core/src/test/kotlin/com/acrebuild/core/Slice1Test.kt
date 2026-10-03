@@ -27184,6 +27184,12 @@ class Slice289Test {
                 // its tumble→pin chain never starts and the launch-pad
                 // zone's gA autowalk fires cleanly. Held constantly it
                 // would swing-crawl the whole 700px approach (~5px/swing).
+                // Phase 2: with the real aC() cycle (S23 back-off → S11
+                // wind-up → S12) the hardened lip guards uid226/534/228
+                // knock a hop-running bot back west into the pit. On the
+                // ground, fight through without the UP hop — the combo's
+                // i-frames carry the run east to the launch pad.
+                foe != null && p.aZ -> Pad.M_RIGHT + Pad.M_CONTEXT
                 foe != null -> Pad.M_RIGHT + Pad.M_UP + Pad.M_CONTEXT
                 else -> Pad.M_RIGHT + Pad.M_UP
             }
