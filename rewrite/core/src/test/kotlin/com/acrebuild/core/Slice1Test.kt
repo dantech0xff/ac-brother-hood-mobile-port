@@ -25703,6 +25703,22 @@ class Slice281Test {
                     it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
                     Math.abs(it.al - p.al) < 60
                 }) mask = Pad.M_RIGHT + Pad.M_UP
+            // aw4/aw5 are solid breakable crates (ax4 S5/S7, aj() L18 a()
+            // push-out). Under k.I()'s frame order (G12) the crate's
+            // `aS.ag = 0` runs before the player's integration step, so a
+            // player whose box touches a crate can neither run nor hop
+            // away from it — smash it instead (attack + body overlap).
+            // S5 counts as grounded: an UP held into the landing would
+            // start another S21 hop from inside the crate's box.
+            if ((p.aZ || p.S == 5) && w.npcs.any {
+                    it.ax == 4 && (it.S == 5 || it.S == 7) &&
+                    Entity.overlapI(p.W, it.W)
+                }) mask = Pad.M_CONTEXT
+            // Past the smashed crates the run reaches the block's east
+            // edge (S26 edge walk, x≈1168) instead of bunny-hopping off
+            // it: jump there for the arc onto the ax22 vault at 1249.
+            if (p.S == 26 && p.ak in 1100..1200 && p.al in 1810..1825)
+                mask = Pad.M_RIGHT + Pad.M_UP
         val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
@@ -25879,7 +25895,14 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                // balance-pin. The post-intro pin over the gap (980,563)
+                // is left with DOWN (the S17 zone's v(33024) drop): under
+                // k.I()'s frame order (G12) the zone's TAP_R leap and the
+                // player's S19 tick share a frame, so the TAP_R edge also
+                // arms the cv → aF grab latch, and the leap clings to the
+                // gap's east wall (S101) and kicks west into the pit.
+                297 -> mask = if (p.ak in 960..1000 && p.al in 540..590)
+                    Pad.M_DOWN else Pad.M_CONTEXT + Pad.M_TAP_R
                 89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
@@ -26204,6 +26227,14 @@ class Slice282Test {
             // hold UP approaching the x11800 wall face so the vault/
             // climb arms on contact (wall run + lip grab).
             if (p.ak >= 11600) mask = Pad.M_RIGHT + Pad.M_UP
+            // Falling (S43) at the x11940 face above the y760 step, a held
+            // UP clings to it (fall-arm wall grab → S101 → S36 kick back
+            // west); without UP the player slides down the face and the
+            // postTail ct consumer's lip grab (S60) mounts the y680 top.
+            // Under G12 the running jump off the step meets the face
+            // while still that high (the old hop reached it lower).
+            if (p.S == 43 && p.ak in 11880..11940 && p.al < 760)
+                mask = Pad.M_RIGHT
             // guards engage on the street — attack when one is in front.
             w.pad.e(mask)
             w.tick(emptyList())
@@ -26436,6 +26467,14 @@ class Slice288Test {
                         w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
                         w.tick(emptyList())
                     }
+                    // The respawn puts the player back at the last
+                    // checkpoint, below legs already flown: resume the
+                    // route at the first leg above it. (Under G12 the
+                    // bot reaches the top claim on x1 5 and dies there;
+                    // left in "claim" mode it never re-bound the aw324
+                    // perch and fell behind the camera on every retry.)
+                    val back = route.indexOfFirst { p.al > it.second - 60 }
+                    if (back in 0 until leg) leg = back
                     continue
                 }
                 w.jC == 21 -> {
@@ -27717,6 +27756,14 @@ class Slice291Test {
                         // committed gap-edge hops on the mass tops
                         p.aZ && p.al < 290 && p.ak in 8820..8900 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
                         p.aZ && p.al < 290 && p.ak in 9100..9165 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                        // pillar top x9240-9339@y139 past the rope: walk off
+                        // its east edge (S26 → fall) so the drop lands in
+                        // door uid166's box [9374,9429] and the held UP
+                        // fires it. Under G12 the rope dismount lands on
+                        // the pillar and the hops overshoot the door to
+                        // x9469, where the ax35 volleys kill the bot.
+                        (p.aZ || p.S == 5) && p.al in 130..145 &&
+                            p.ak in 9240..9340 -> Pad.M_RIGHT
                         // inside a gap — drift toward the east face
                         !p.aZ && p.al > 240 && p.ak in 8850..9250 -> Pad.M_RIGHT
                         // bound on an ax66 lift — ride ≥4 ticks then hop toward the next point
@@ -27837,6 +27884,14 @@ class Slice291Test {
                 p.S == 65 || p.S == 228 || p.S == 358 -> 16396
                 p.S == 101 -> Pad.M_RIGHT or Pad.M_UP
                 p.ga != null && p.ga!!.ax == 66 -> Pad.M_RIGHT
+                // Under G12 launcher uid176's bm() mount (i(260)) and the
+                // player's own S260 arm run in the same frame, so the
+                // input held while flying into it picks the launch: UP
+                // fires the straight-up S259 (which drops back onto the
+                // launcher, forever); RIGHT fires S261 east.
+                !p.aZ && w.npcs.any { it.aw == 176 && it.ax == 66 &&
+                    kotlin.math.abs(it.ak - p.ak) < 60 &&
+                    p.al - it.al in -60..120 } -> Pad.M_RIGHT
                 foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 -> {
                     if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
                 }
