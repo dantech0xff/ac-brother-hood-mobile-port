@@ -1,7 +1,7 @@
 ---
 title: "Slice 360 — g.l(), g.aw(), the e() head aA raise and e()'s post-tail follow the bytecode; one k.bD"
 phase: "port"
-status: "in_progress"
+status: "done"
 slice: 360
 date: 2026-10-03
 confidence: proven
@@ -93,3 +93,10 @@ legs are re-validated with the rest of Phase 2.
 
 - Task: map g.e()'s ~70 early `return`s to the port's arms — the port
   runs `postTail` after every arm.
+
+## Gates
+
+On `claude/phase2-faithful-ai` @ 1e7bb59d (with G5, 359, 361-363 and G12):
+verifier `ok:true`, unittest 57/57, `:core:test` 1689/1689, `:gdx:test`
+9/9, `:android:assembleDebug` green. The `g.e()` early-return audit stays
+open as its own follow-up.

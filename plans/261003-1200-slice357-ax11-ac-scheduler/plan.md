@@ -1,7 +1,7 @@
 ---
-title: "Slice 357 — ax11 runs the real aC() attack scheduler (G5) — parked pending capstone re-validation"
+title: "Slice 357 — ax11 runs the real aC() attack scheduler (G5)"
 phase: "port"
-status: "blocked"
+status: "done"
 slice: 357
 date: 2026-10-03
 confidence: proven
@@ -55,3 +55,12 @@ and flee policies were tuned to the old S23→S12 shortcut. Phase 2 rule:
 re-route/re-time the bots, never weaken enemies. The bisect showed the
 strict `v()` and the single `aG()` are not the cause; both landed on the
 main branch separately.
+
+## Resolution (Phase 2, 2026-10-03)
+
+Landed on the Phase 2 integration branch `claude/phase2-faithful-ai`
+(merge 0a30b851) together with slice 359 and G12. Every capstone the
+faithful soldiers broke was re-routed or re-timed without touching the
+enemies (`reports/capstone-revalidation.md` in the parent plan). Gates on
+1e7bb59d: verifier `ok:true`, unittest 57/57, `:core:test` 1689/1689,
+`:gdx:test` 9/9, `:android:assembleDebug` green.

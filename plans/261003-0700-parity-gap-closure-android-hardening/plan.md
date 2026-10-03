@@ -9,7 +9,7 @@ description: >-
 status: in_progress
 priority: P1
 effort: large
-branch: ''
+branch: 'claude/phase2-faithful-ai'
 tags:
   - rewrite
   - parity
@@ -67,8 +67,8 @@ for internal use.
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | [Parity-gap closure](./phase-01-parity-gap-closure.md) | in_progress |
-| 2 | [Capstone re-validation and device evidence](./phase-02-capstone-revalidation-device-evidence.md) | pending |
+| 1 | [Parity-gap closure](./phase-01-parity-gap-closure.md) | done |
+| 2 | [Capstone re-validation and device evidence](./phase-02-capstone-revalidation-device-evidence.md) | in_progress — capstones green ([report](./reports/capstone-revalidation.md)); device runs need an emulator host |
 | 3 | [Save and lifecycle hardening](./phase-03-save-lifecycle-hardening.md) | pending |
 | 4 | [CI, docs sync and repo hygiene](./phase-04-ci-docs-hygiene.md) | pending |
 | 5 | [Android internal-release configuration](./phase-05-android-internal-release.md) | pending |

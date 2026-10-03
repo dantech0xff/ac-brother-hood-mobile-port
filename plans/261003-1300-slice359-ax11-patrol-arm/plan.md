@@ -1,7 +1,7 @@
 ---
 title: "Slice 359 — ax11 patrol arm (case 2/3/92): turn test, am() support guard, crate-link skip, single aD()"
 phase: "port"
-status: "in_progress"
+status: "done"
 slice: 359
 date: 2026-10-03
 confidence: proven
@@ -66,3 +66,9 @@ Capstones broken by the faithful patrol (alone, before G5): m0 finale
 (`Slice245Test` cp7 tower, finale pack, stats → mission 1) and m5 leg I
 (`Slice289Test`). Re-validated on the integration branch together with
 G5's five.
+
+## Resolution (Phase 2, 2026-10-03)
+
+Re-validated with G5 and G12 on `claude/phase2-faithful-ai`; all capstones
+pass with re-routed bots (`reports/capstone-revalidation.md` in the parent
+plan). Gates on 1e7bb59d: `:core:test` 1689/1689.

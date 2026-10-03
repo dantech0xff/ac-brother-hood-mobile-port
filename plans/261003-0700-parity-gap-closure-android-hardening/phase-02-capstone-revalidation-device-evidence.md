@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: Capstone Re-validation and Device Evidence
-status: pending
+status: in_progress
 priority: P1
 dependencies: [1]
 ---
@@ -32,6 +32,15 @@ corrected game and refreshes the device evidence that stopped at slice 330.
   `pass` / `re-routed` / `fix-regression` (Phase 1 fix is wrong → back to
   Phase 1) / `faithful-dead-end` (the original blocks this route too).
 - Device runs happen on the emulator host only.
+
+## Progress (2026-10-03)
+
+- Steps 1–2 done on `claude/phase2-faithful-ai`: every capstone passes
+  (`:core:test` 1689/1689) — verdicts in
+  [`reports/capstone-revalidation.md`](./reports/capstone-revalidation.md).
+  Re-validation found four more parity bugs (slices 360–363), fixed.
+- Step 3 (connect the stitched legs) and steps 4–7 (Run-31 write-up,
+  device Run-32/33) are open; the device steps need an emulator host.
 
 ## Implementation Steps
 

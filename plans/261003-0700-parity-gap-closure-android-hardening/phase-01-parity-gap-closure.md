@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: Parity-Gap Closure
-status: in_progress
+status: done
 priority: P1
 dependencies: []
 ---
@@ -38,10 +38,15 @@ and lands with unit tests that would have caught it.
 | G10 volley `i.a(int,boolean)` fan/speed/anim (found auditing `j.b` sites) | done | [353](../261003-0930-slice353-volley-fan-speed-anim/plan.md) |
 | G11 pickup sparkle field in `i.F()` (RNG gate, rays, `f` advance) | done | [354](../261003-1000-slice354-pickup-sparkle-field/plan.md) |
 | 1.7 ax37 scroll triggers as entities (+ `k.c` holder release / same-frame skip) | done | [355](../261003-1030-slice355-ax37-triggers-as-entities/plan.md) |
-| G12 frame order: `k.I()` ticks `bb[]` before `aS.I()` (port: player first) | open | — |
+| G12 frame order: `k.I()` ticks `bb[]` before `aS.I()` (port: player first) | done (Phase 2 branch) | [G12](../261003-1530-g12-frame-order/plan.md) |
 | 1.7 ax23 `case 23 → L849` + stale comments; G13 family head (`t()`, corpse landing, `g.h` → S203 ledge kill), ax73 `au()` | done | [356](../261003-1100-slice356-family-head-ax23/plan.md) |
-| 1.5 ax11 `aC()` scheduler (G5) | blocked — ported on branch `claude/g5-ac-scheduler`; 5 capstone bots need Phase 2 re-validation | [357](../261003-1200-slice357-ax11-ac-scheduler/plan.md) |
+| 1.5 ax11 `aC()` scheduler (G5) | done (Phase 2 branch; bots re-validated) | [357](../261003-1200-slice357-ax11-ac-scheduler/plan.md) |
 | `v()` overlaps are `i.a` (strict) + one `aG()` (split out of 357) | done | [358](../261003-1230-slice358-v-strict-single-aG/plan.md) |
+| ax11 patrol arm (`case 2/3/92`): turn test, crate-link skip, `am()`, one `aD()` | done (Phase 2 branch) | [359](../261003-1300-slice359-ax11-patrol-arm/plan.md) |
+| `g.l()`/`g.aw()`/`e()` `aA` head + post-tail order; one `k.bD` (found in Phase 2) | done (Phase 2 branch) | [360](../261003-1400-slice360-player-l-aw-posttail/plan.md) |
+| `setAnim` is `i.i(int)`; `enterStateMasked` x snaps are `i.a(int,int)`'s chain (found in Phase 2) | done (Phase 2 branch) | [361](../261003-1500-slice361-setanim-i-i/plan.md) |
+| ax44 door `bv()`: last frame's box, mode-1 polarity, resolve-tick promotion, `i.a`, crush arms (found in Phase 2) | done (Phase 2 branch) | [362](../261003-1600-slice362-ax44-door-bv/plan.md) |
+| below-the-camera kill is `i.B()`'s (flying player only) (found in Phase 2) | done (Phase 2 branch) | [363](../261003-1700-slice363-below-camera-kill-flying-only/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
@@ -108,7 +113,7 @@ is in.
 - Tests: S370 → S371 (`:1213-1215`) is never flung on anim end; the ax61 S12
   grab (`NpcFsm.kt:5510-5516`) resolves through its QTE/lose path only.
 
-### 1.5 ax11 `aC()` attack scheduler (G5) — mine, then port
+### 1.5 ax11 `aC()` attack scheduler (G5) — proven · done (slice 357, landed with Phase 2)
 
 - Gap: ax11's chase arm calls `aC()` (`simple/i.java:5557-5560`); the port
   has only a chase-timeout subset (`NpcFsm.kt:1076-1085`) and nothing sets an
