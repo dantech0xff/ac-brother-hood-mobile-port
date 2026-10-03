@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: CI, Docs Sync and Repo Hygiene
-status: pending
+status: in_progress
 priority: P2
 dependencies: []
 ---
@@ -21,6 +21,32 @@ The four gates run only by hand and only on machines that happen to have JDK
 and `AGENTS.md` pins two contracts the game no longer uses. This phase
 automates the gates, makes the docs describe the real port, and removes
 repo debris.
+
+## Progress (2026-10-03)
+
+- 4.1 CI: `.github/workflows/ci.yml` (static / jvm / android jobs, Temurin 17,
+  UTF-8 locale). The verifier also passes with JDK 17's `javap` (checked
+  locally). Not yet exercised on GitHub — it runs on the next PR or push to
+  `main`.
+- 4.2 `rewrite/tools/bootstrap-dev-env.sh` (idempotent; `--no-install` audit
+  mode); SDK pins fixed in `rewrite/README.md` (`build-tools;35.0.0` is AGP
+  8.13.2's default, read from its `ToolsRevisionUtils`).
+- 4.3 docs: `rewrite/README.md` rewritten for the port (Vietnamese),
+  `README.md` rewrite status, `project-roadmap.md` (game-port track, broken
+  tables fixed), `project-overview-pdr.md`, `codebase-summary.md`,
+  `system-architecture.md` (§2b implemented architecture),
+  `modern-mobile-technical-design.md` (status + ADR pointers), GDD §6,
+  `level-atlas.md` (runtime histogram after retype: ax11/17 corrected,
+  ax47/ax50 rows, ax72 is in pack 13 not 12, ax37 role) and
+  `entity-type-catalog.md` (ax47 `aL()`, ax50 `aK()`, ax72 levels). ADR
+  `docs/decisions/tick-cadence-self-clocked.md`.
+- 4.4 `AGENTS.md` contracts updated (self-clocked tick, save container,
+  BACK, Gradle gates/CI). Call it out in the PR description.
+- 4.5/4.6 done: 17 plan statuses, npc-fsm-mining completed, spike plan
+  status; `a.out` and `DebugSlice2.kt` removed. The spike assets stay (the
+  iOS scaffold launches `SpikeGame`; 37 KB). Remote `devin/*` branch cleanup
+  needs explicit user approval — not done. The `Slice1Test.kt` split is
+  optional and not done (it would conflict with in-flight bot work).
 
 ## Implementation Steps
 

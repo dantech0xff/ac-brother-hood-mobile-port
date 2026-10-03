@@ -1,8 +1,8 @@
 # Tóm Tắt Codebase
 
 Tài liệu này mô tả cấu trúc kho hiện tại sau khi đối chiếu trực tiếp artifact
-khôi phục tĩnh. Nội dung chỉ phản ánh trạng thái hiện có;
-không có giả định về runtime hay buildability.
+khôi phục tĩnh và bản port `rewrite/`. Nội dung chỉ phản ánh trạng thái hiện
+có; buildability chỉ được nêu khi có gate chứng minh.
 
 ## Tổng quan cây thư mục
 
@@ -19,6 +19,9 @@ không có giả định về runtime hay buildability.
 | `reconstructed-project/` | Artifact phục hồi, inventory và resource đã giải mã. |
 | `scripts/` | Tám script Python cho pack/sprite/level decode, package build, inventory, verifier và parity contracts. |
 | `tests/` | `unittest` static-only cho parity contracts và corpus oracle. |
+| `rewrite/` | Bản port Kotlin + LibGDX: `core` (game thuần Kotlin), `gdx` (adapter LibGDX), `android`/`lwjgl3` (launcher), `ios` (scaffold macOS), `tools` (converter, bootstrap), `generated/` (asset runtime có provenance). Xem `rewrite/README.md`. |
+| `plans/YYMMDD-HHMM-slice…/` | Plan từng slice port (English, YAML frontmatter), trích nguồn gốc; kế hoạch hiện hành `plans/261003-0700-parity-gap-closure-android-hardening/`. |
+| `.github/workflows/ci.yml` | CI chạy bốn gate: verifier, `unittest`, `:core:test :gdx:test`, `:android:assembleDebug`. |
 
 ## Artifact trọng tâm
 

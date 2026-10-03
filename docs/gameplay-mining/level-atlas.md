@@ -25,7 +25,11 @@ Nhận xét shape (`high-confidence`, từ extent + mission text):
 
 ## Runtime-type histogram theo pack
 
-(gộp `runtime_type_histogram`; retype `47` chỉ xảy ra ở pack-6, 4 record)
+(gộp `runtime_type_histogram`, tức là sau retype head `i.java:2640-2651`:
+record ax11 có `r8[5]∈{80,93}` thành ax47 ledge sentinel — pack 6/8/9/11 =
+4/2/3/3 record; record ax17 có `r8[5]==120` thành ax50 pouncer — pack 9/11 =
+3/5 record. Cột ax11/ax17 đã trừ các record bị retype. Cập nhật 2026-10-03
+từ `reconstructed-project/resources/levels-decoded/pack-*/records.json`.)
 
 | Type | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | Vai trò hiện có |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
@@ -37,12 +41,12 @@ Nhận xét shape (`high-confidence`, từ extent + mission text):
 | 7 | 3 | – | 3 | 1 | – | 1 | 1 | 1 | helper effect (aV S=24) |
 | 9 | 3 | – | 1 | 3 | – | 2 | 1 | – | |
 | 10 | 15 | 8 | 22 | 32 | 16 | 13 | 11 | 7 | TriggerController (`i.aV`, 56 states) |
-| 11 | 49 | – | 43 | 30 | – | 30 | 28 | 4 | Linked entity (aV S=23 sync flag) |
+| 11 | 49 | – | 41 | 27 | – | 27 | 28 | 4 | Soldier (FSM `i.I()` họ 11/17/23/47/50/73); linked entity (aV S=23 sync flag) |
 | 13 | 4 | – | 6 | – | – | 1 | 1 | 2 | |
 | 14 | 51 | 7 | 58 | 71 | 3 | 36 | 91 | 22 | Rất phổ biến — interactable/zone |
 | 15 | 1 | – | – | – | – | 30 | 4 | – | |
 | 16 | – | – | 1 | – | – | 8 | 2 | – | |
-| 17 | – | – | 5 | 5 | – | 6 | – | – | |
+| 17 | – | – | 5 | 2 | – | 1 | – | – | NPC họ soldier (`aA()`) |
 | 19 | 2 | 5 | – | 1 | 7 | 6 | – | 1 | |
 | 21 | – | – | – | – | 1 | – | – | – | |
 | 22 | 10 | – | 7 | 10 | – | 3 | 13 | 5 | |
@@ -53,13 +57,15 @@ Nhận xét shape (`high-confidence`, từ extent + mission text):
 | 30 | – | – | – | – | 1 | – | – | – | chỉ pack-10 |
 | 32 | – | – | – | – | 5 | – | – | – | chỉ pack-10 |
 | 35 | 1 | – | 11 | 13 | – | – | 2 | 1 | |
-| 37 | 28 | 1 | 35 | 41 | – | 38 | 39 | 19 | phổ biến — pickup/zone |
+| 37 | 28 | 1 | 35 | 41 | – | 38 | 39 | 19 | camera scroll trigger (`al()`: zone → bound `k.R/S/T/U`, slice 355) |
 | 40 | 6 | – | – | 6 | – | 3 | – | – | |
 | 41 | 1 | – | – | – | – | – | – | – | chỉ pack-6 |
 | 42 | 1 | – | 1 | 1 | – | 1 | 1 | 1 | |
 | 43 | – | – | 2 | 5 | – | – | 1 | – | |
 | 44 | 61 | – | 61 | 128 | – | 57 | 81 | 54 | Rất phổ biến — tile/decor/trigger |
 | 46 | 2 | – | 9 | 10 | – | 3 | 8 | 2 | |
+| 47 | 4 | – | 2 | 3 | – | 3 | – | – | ledge sentinel (retype từ ax11; `aL()`, slice 346) |
+| 50 | – | – | – | 3 | – | 5 | – | – | pouncer (retype từ ax17; `aK()`, slice 346) |
 | 51 | – | – | – | – | – | 15 | – | – | chỉ Venice |
 | 54 | – | 23 | – | – | 18 | – | – | – | flying-mode entity |
 | 55 | – | 80 | – | – | 104 | – | – | – | flying-mode entity |
@@ -71,7 +77,7 @@ Nhận xét shape (`high-confidence`, từ extent + mission text):
 | 66 | – | – | 13 | 26 | – | 29 | 26 | 20 | |
 | 67 | 253 | 28 | 117 | 144 | 25 | 204 | 374 | 141 | type phổ biến nhất |
 | 69 | – | – | – | – | – | 2 | 1 | – | interactable (aV S=14 launch) |
-| 72 | 2 | – | 3 | 6 | – | 6 | 5 | – | |
+| 72 | 2 | – | 3 | 6 | – | 6 | – | 5 | interactable/assassinate spot |
 | 73 | – | – | 2 | 1 | – | 4 | 3 | – | |
 | 74 | 86 | 46 | 104 | 99 | 47 | 99 | 121 | – | waypoint/graph node |
 | 78 | 2 | – | – | – | – | – | – | – | chỉ pack-6 |
