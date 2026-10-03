@@ -28425,6 +28425,14 @@ class Slice303Test {
                     when {
                         p.ga != null -> mask = 0                            // riding an ax66 sink lift — wait it out
                         p.al > 1760 -> mask = 0                             // under-chamber — done
+                        // G12: he now steps off onto sink lift u24 a tick
+                        // earlier, and the airborne LEFT drift turns him west
+                        // on it — so on the y1559 landing S5's land arm turns a
+                        // held LEFT into a run (S12) that bounces off the lip
+                        // back into S5 and never reaches groundedTail's
+                        // a(257,8) drop. Hold DOWN alone through S5 here;
+                        // DOWN+LEFT from S0 then drops.
+                        p.S == 5 && p.al > 1530 && p.ak in 620..1100 -> mask = Pad.M_DOWN
                         !p.aZ -> mask = Pad.M_LEFT                          // airborne: always drift west — lands '2'/r78, never the x1120-1499 hole
                         p.al > 1530 && p.ak in 620..1100 -> mask = Pad.M_DOWN + Pad.M_LEFT   // lift bind zone — crouch-walk under: 36px box clears the y1500-1520 hover
                         p.al > 1530 -> mask = Pad.M_LEFT                    // '2'/r78/r87 — west to r78's x0 edge → drop to r96 (r87 east is walled: towers at x1020/x1500)
@@ -28512,6 +28520,7 @@ class Slice304Test {
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        var jitter = 0; var prevAk = p.ak; var prevAl = p.al
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
         var jumpCd = 0
@@ -28559,7 +28568,7 @@ class Slice304Test {
             } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
-            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ) {
+            } else if (jumpCd <= 0 && chainDone && (stall >= 30 || jitter >= 30) && p.aZ) {
                 mask = if (midCorridor) (16396 or Pad.M_RIGHT) else if (descended || p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
                 jumpCd = 30
             }
@@ -28604,6 +28613,13 @@ class Slice304Test {
             if (u269Fired || u280Fired || u306Fired || (midCorridor && p.ak > 1280)) break
             if (descended && !midCorridor && p.ak > 1560) break
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            // G12 order: the ax27 door post uid44 (x330, y1299 ledge) pushes
+            // the player out (i.a(k.aS,P,W), ag=0) in the entity pass, BEFORE
+            // his run integrates back in — so a run held into it jitters
+            // 341<->351 every tick instead of parking and `stall` never
+            // builds. Count "back where he was two ticks ago" as stalled too.
+            if (p.ak == prevAk && p.al == prevAl) jitter++ else jitter = 0
+            prevAk = lastAk; prevAl = lastAl
             lastAk = p.ak; lastAl = p.al
             if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
             val rope = w.findByAw(37)
@@ -28669,6 +28685,7 @@ class Slice306Test {
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        var jitter = 0; var prevAk = p.ak; var prevAl = p.al
         val trace = ArrayDeque<String>(80)
         var lastS = p.S
         var jumpCd = 0; var pressCd = 0
@@ -28745,7 +28762,7 @@ class Slice306Test {
             } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
-            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ && !(catapult && p.al in 1450..1530)) {
+            } else if (jumpCd <= 0 && chainDone && (stall >= 30 || jitter >= 30) && p.aZ && !(catapult && p.al in 1450..1530)) {
                 mask = if (midCorridor) (16396 or Pad.M_RIGHT) else if (descended || p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
                 jumpCd = 30
             }
@@ -28798,6 +28815,11 @@ class Slice306Test {
             if (cp339 || u269Fired || u280Fired || u306Fired || (midCorridor && p.ak > 1280)) break
             if (descended && !midCorridor && p.ak > 1560) break
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            // G12 order: the run into the ax27 door post uid44 jitters
+            // 341<->351 instead of parking — count it as a stall too (see
+            // Slice304Test).
+            if (p.ak == prevAk && p.al == prevAl) jitter++ else jitter = 0
+            prevAk = lastAk; prevAl = lastAl
             lastAk = p.ak; lastAl = p.al
             if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} F=${p.F?.ax}#${p.F?.aw} at=${Entity.at?.ax}#${Entity.at?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
             val rope = w.findByAw(37)
@@ -28993,7 +29015,13 @@ class Slice309Test {
         p.ak = u252.ak; p.al = u252.al; p.N = u252.ak shl 8; p.setAnim(0); p.aZ = true; p.refreshBoxes()
         var mounted = false; var bound = false; var released = false
         for (t in 0..120) {
-            w.pad.e(0); w.tick(emptyList())
+            // G12 (k.I() order): u248's board test (i.bm() L131, needs
+            // g.b(S)) reads the player's state from the previous frame,
+            // and the straight fall lands (S5) in the same frame its W
+            // first reaches u248's W — so the drop alone never boards.
+            // A jump press on the landing spot puts him in S233 (in
+            // g.b()) while overlapping, and the next entity pass boards.
+            w.pad.e(if (!mounted && p.aZ && p.S == 0) Pad.M_UP else 0); w.tick(emptyList())
             if (p.ga === u248) mounted = true
             if (w.kC === u252) bound = true
             if (bound && w.kC == null) { released = true; break }
