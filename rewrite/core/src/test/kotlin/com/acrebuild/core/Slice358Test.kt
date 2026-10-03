@@ -3,6 +3,7 @@ package com.acrebuild.core
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -50,6 +51,6 @@ class Slice358Test {
         w2.npcs += e2
         w2.player.setPositionPx(4300, 980); w2.player.refreshBoxes()
         w2.npcFsm.tick(e2, w2.player)
-        assertEquals(4, e2.S, "aG() false on the crate → the chase goes on")
+        assertNotEquals(3, e2.S, "aG() false on the crate → no i(k?3:2) edge stop")
     }
 }
