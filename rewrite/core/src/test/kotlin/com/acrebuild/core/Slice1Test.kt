@@ -10577,6 +10577,7 @@ class Slice89Test {
         // (al-20) is what postTail's aO reads, so walk `al` up until the
         // cell one row ABOVE the head is '5' — rising under the lip.
         p.al = cy * 20 + 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
@@ -10585,7 +10586,9 @@ class Slice89Test {
         }
         assertEquals(5, p.e(w, p.ak / 20, p.W[1] / 20 - 1),
             "could not place the head under a '5' lip")
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertEquals(280, p.S, "cw && aO==5 must fire the S280 ceiling grab")
         assertEquals(cy * 20 + 10, p.al, "al snaps onto the '5' lip row +10")
     }
@@ -10618,13 +10621,16 @@ class Slice89Test {
         p.ah = -3000                                 // rising
         p.ak = cx * 20 + 10
         p.al = cy * 20 + 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
             if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
             p.al--
         }
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertEquals(280, p.S, "precondition: the lip grab fires")
         guard = 0
         while (guard++ < 60 && p.S == 280) w.tick(emptyList())
@@ -10673,13 +10679,16 @@ class Slice89Test {
         p.ah = -3000
         p.ak = 2109
         p.al = 40 * 20 + 80                          // dip '5' cy40 + 80 (same offset the '5'-grab tests use)
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
             if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
             p.al--
         }
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertTrue(p.S == 280 || p.S == 38,
             "precondition: the dip lip grab fires — S${p.S}@${p.ak},${p.al}")
         guard = 0
@@ -10733,6 +10742,7 @@ class Slice89Test {
         // edge stays ≥21px left of the wall — place ak ~1.5 cells out.
         p.ak = (wx - 2) * 20 + 5                     // air left of the wall
         p.al = wy * 20 - 80                          // start above the lip
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 80 && p.S == 43) w.tick(emptyList())
         assertEquals(61, p.S, "the fall must auto-grab the wall lip")
@@ -10781,6 +10791,7 @@ class Slice89Test {
             p.S = 43; p.ah = 2560; p.av = false
             p.ak = (wx - 2) * 20 + 5
             p.al = wy * 20 - 80
+            p.refreshBoxes()                             // a finished frame's t() (G12)
             var g = 0
             while (g++ < 80 && p.S == 43) w.tick(emptyList())
             assertEquals(61, p.S, "the fall must auto-grab the wall lip")
@@ -10829,6 +10840,7 @@ class Slice89Test {
         // kisses the wall face (~1px out), not the 1.5-cell hang gap.
         p.ak = wx * 20 - 12
         p.al = wy * 20 - 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 80 && p.S == 43) w.tick(emptyList())
         assertEquals(60, p.S, "the near lip probe grabs the wall edge")
@@ -10888,6 +10900,7 @@ class Slice89Test {
         p.av = false                            // face right, toward the drop
         p.ak = px * 20 + 10
         p.al = py * 20 - 1                      // feet on the platform top
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         w.pad.queuePress(Pad.M_DOWN)
         w.tick(emptyList())
         assertEquals(257, p.S, "DOWN at the thin edge arms the vault-drop")
@@ -13455,7 +13468,7 @@ class Slice129Test {
         // bound (1577,619)-(1927,799), mask=1 → left wall at x=1577.
         val w = world()
         val p = w.player
-        p.setPositionPx(1700, 700)
+        p.setPositionPx(1700, 700); p.refreshBoxes()
         w.tick(emptyList())                        // zone overlap → claim
         p.ag = -5120                               // -20px/tick toward wall
         p.Y[0] = 1590; p.Y[1] = 660; p.Y[2] = 1610; p.Y[3] = 700
@@ -16791,10 +16804,15 @@ class Slice168Test {
         val (w, p) = armed()
         holdRight(w)
         var sawArmedRun = false; var sawArmedStop = false
+        var prevAk = p.ak
         for (i in 0 until 400) {
             w.tick(listOf())
-            if (p.S == 12 && p.ag != 0 && p.aO == 0 && p.z) sawArmedRun = true
-            if (p.S == 12 && (p.ag == 0 || p.aO != 0) && p.z) sawArmedStop = true
+            // a blocked tick: the run did not advance (the frame now ends
+            // after e() re-arms ag — G12 — so ag==0 is not observable)
+            val blocked = p.ak == prevAk || p.aO != 0
+            if (p.S == 12 && !blocked && p.z) sawArmedRun = true
+            if (p.S == 12 && blocked && p.z) sawArmedStop = true
+            prevAk = p.ak
         }
         assertTrue(sawArmedRun, "active-run ticks arm z via L17c9→l()")
         assertTrue(sawArmedStop, "stopped/blocked ticks re-arm z via L17c9")
@@ -16834,9 +16852,13 @@ class Slice168Test {
         val (w, p) = armed()
         holdRight(w)
         var pinned = false
+        var prevAk = p.ak
         for (i in 0 until 300) {
             w.tick(listOf())
-            if (p.S == 12 && p.ag == 0 && p.ak >= 500) { pinned = true; break }
+            // pinned: running but not advancing (G12: the frame ends after
+            // e() re-arms ag, so read the stalled position, not ag==0)
+            if (p.S == 12 && p.ak == prevAk && p.ak >= 500) { pinned = true; break }
+            prevAk = p.ak
         }
         assertTrue(pinned, "runner should pin at the aw10 crate (~ak504)")
         for (k in 0 until 12) {
@@ -20545,6 +20567,7 @@ class Slice210Test {
         // close enough that the arc reaches the x2200 face airborne.
         p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -200; p.aj = 1536
         p.av = false                               // facing east
+        p.refreshBoxes()                           // a finished frame's t() (G12)
         // hold RIGHT — pad zone 2 emits `2<<2 = 8` = M_TAP_R
         val q = InputQueue()
         val (rx, ry) = w.cellPoint(2)
@@ -20604,6 +20627,7 @@ class Slice212Test {
         p.setPositionPx(1790, 700)             // mid-shaft, face x1820 spans y420-800
         p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -300; p.aj = 1536
         p.av = false                            // facing east toward x1820
+        p.refreshBoxes()                        // a finished frame's t() (G12)
         val q = InputQueue()
         val (rx, ry) = w.cellPoint(2)
         q.post(InputQueue.Type.DOWN, rx, ry)   // hold east the whole time
@@ -20743,11 +20767,13 @@ class Slice214Test {
         // trigger rect sits off-anchor, so re-pin the player inside it
         // each tick while the world settles.
         var swallowed = false
-        repeat(20) {
+        for (i in 0 until 20) {
             p.setPositionPx((e.W[0] + e.W[2]) / 2, (e.W[1] + e.W[3]) / 2)
-            p.S = 0; p.ah = 0; p.ag = 0
+            p.S = 0; p.ah = 0; p.ag = 0; p.refreshBoxes()   // the plant ticks first (G12)
             w.tick(emptyList())
-            if (e.S == 1) { swallowed = true; return@repeat }
+            // stop re-pinning once swallowed (`return@repeat` only skipped
+            // to the next pass, which re-forced S0 under the capture)
+            if (e.S == 1) { swallowed = true; break }
         }
         assertTrue(swallowed, "overlap -> i(1) swallow; e.S=${e.S}")
         assertTrue(p.P and 64 != 0, "player slot-held P|64 while swallowed")
@@ -20755,9 +20781,9 @@ class Slice214Test {
         // preamble's s() now advances e.T for claimed procs.
         var released = false
         var thrownAg = 0
-        repeat(200) {
+        for (i in 0 until 200) {
             w.tick(emptyList())
-            if (e.S == 0) { released = true; thrownAg = p.ag; return@repeat }
+            if (e.S == 0) { released = true; thrownAg = p.ag; break }
         }
         assertTrue(released, "animFinished -> i(0) release + throw; e.S=${e.S} T=${e.T}")
         assertTrue(released, "S1 arm completed the swallow cycle")
@@ -20773,6 +20799,7 @@ class Slice214Test {
             ?: error("no ax22 record at (1214,636)")
         keepLive(e)
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        p.refreshBoxes()           // no stale spawn boxes for the intro claim (G12)
         w.tick(emptyList())
         // aOp's >=100 sentinel: skip s() this tick, then m() (not claim-
         // suspended) resets y to 0 so the next tick advances again.
