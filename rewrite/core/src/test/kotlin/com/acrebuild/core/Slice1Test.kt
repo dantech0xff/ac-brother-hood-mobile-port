@@ -26635,7 +26635,12 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
         (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
             Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55
     }
-    if (foe != null && p.aZ) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+    // The swing faces east: a foe behind (west) on a lower level — e.g.
+    // the cp321 tower base guard uid30 stuck in its chase under the
+    // y919 step — is not in reach, so the route goes on instead.
+    if (foe != null && p.aZ &&
+        (foe.ak >= p.ak - 20 || Math.abs(foe.al - p.al) < 20))
+        mask = Pad.M_CONTEXT + Pad.M_RIGHT
     return mask
 }
 
