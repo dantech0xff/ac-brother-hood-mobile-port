@@ -1363,7 +1363,7 @@ class Level0World(
     var kDw = 0                        // k.dw — jc24/25 counters
     var kDy: String? = null            // k.dy — jc24 credits buffer
     // k.aD → `kAD` (existing field, HUD fuse entity — same original field)
-    var kEc = 0                        // k.eC — screen timer
+    var kEc = 0                        // k.eC — yes/no prompt string id (13/19/25/69/73/121)
     var kEb = 0                        // k.eB — banner variant
     var kEe = 0                        // k.eE — stats width
     var kEf = 0                        // k.eF
@@ -4227,17 +4227,51 @@ class Level0World(
     private fun missionInit() {
         if (kAJ == 1) z(9) else if (kEE[kAj] != -1) z(kEE[kAj])
     }
-    /** `k`'s suspend/resume music arm (k.java:5817-5830, proven):
-     *  pause → `bG = !e.a()||fj>=10 ? -1 : bH` (our queue is always
-     *  available → `bG = kFi`, the pending-track slot); resume →
-     *  `bG >= 0` replays `z(bG)`, or stashes `fi = bG` while `j.c==14`.
-     *  (Verbatim quirk kept: the resume gate `bG==1 || bG!=-1` collapses
-     *  to `bG != -1`.) */
-    fun suspendAudio() { kBg = kFi }
-    fun resumeAudio() {
-        if (kBg < 0) return
-        if (jC != 14) z(kBg) else kFi = kBg
-        kBg = -1
+    /** `k.fy` — the hide/show latch of [hideNotify]/[showNotify]. */
+    var kFy = false
+
+    /**
+     * `k.c()` — `hideNotify` (structured k.java:5817-5836, proven): once per
+     * hide, clear the input latches (`v()`), pause a claim script that holds
+     * `cd[6]` while in play (`C.Y()`), stash the resume track
+     * `bG = (!e.a() || fj >= 10) ? -1 : bH`, and stop the channel (`e.b()`).
+     * `bH` and `fj` are only ever written by `<clinit>` (= -1,
+     * k.javap.txt 3713-3722), so the stash is always -1: the original never
+     * replays music on its own after a hide.
+     */
+    fun hideNotify() {
+        if (kFy) return
+        kFy = true
+        inputReset()                                        // v()
+        if (jC == 8) kC?.let { c -> if (c.cd[6]) c.pauseScript() }  // C.Y()
+        kBg = -1                                            // bG = … ? -1 : bH(-1)
+        audioStop()                                         // e.b()
+    }
+
+    /**
+     * `k.d()` — `showNotify` (structured k.java:5767-5813, proven): on the
+     * first show after a hide — on a yes/no prompt (`bv == 3`) the eC
+     * 13/19/25/69/73 prompts reset `bw = -1`; in play (`j.c` 8/21) `J()` is
+     * true, so the game opens the pause menu (`l(14)`; the `C.Z()` arm behind
+     * it is unreachable); on the pause menu `bw = 0`. Then the stashed track:
+     * `j.c != 14 → z(bG)` when `bG != -1`, else `fi = bG` (verbatim gate
+     * `bG == 1 || bG != -1`); finally `v()`.
+     */
+    fun showNotify() {
+        if (!kFy) return
+        kCb = true
+        kFy = false
+        if (kBv == 3) {
+            when (kEc) { 13, 19, 69, 73, 25 -> kBw = -1 }
+        } else if (jC == 8 || jC == 21) {
+            if (jC != 12 && jC != 13) stateL(14)            // J() → l(14)
+        } else if (jC == 14) {
+            kBw = 0
+        }
+        if (jC != 14) { if (kBg == 1 || kBg != -1) z(kBg) }
+        else if (kBg != -1) kFi = kBg
+        kCb = true
+        inputReset()                                        // v()
     }
     private fun inputReset() { pad.clearLatches() }  // `k.v()` — clears all
                                                      // six words (k.java:5609)
