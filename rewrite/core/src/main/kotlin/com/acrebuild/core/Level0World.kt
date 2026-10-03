@@ -4152,6 +4152,16 @@ class Level0World(
         }
     }
 
+    /** The full-screen fill `b()` paints between the tile blit and the
+     *  entity loop this frame (structured k.java:2848-2859, proven):
+     *  while `i.bQ > 0` (script sub-op 6, i.java:18241) white when
+     *  `bQ % 4 <= 2`, else red, stepping `bQ--` once per pass; else
+     *  white while `i.ce` (sub-ops 13/14, i.java:18144-18148); 0 = none.
+     *  The entities draw over it. The port armed both and never drew or
+     *  stepped either (slice 378). */
+    var backdropFill = 0
+        private set
+
     /** `K()` (k.java:2672-2676, proven): `j.a(0,0,400,240)` is a dead
      *  stub (j.java:1355); `j.a(cd,-1,-1,1,1,true)` collapses the clip
      *  for the rest of the current frame's paint only (the next `b()`
@@ -4181,6 +4191,11 @@ class Level0World(
     private fun bPass(z2: Boolean) {
         if (!z2 && (jC == 12 || jC == 13 || jC == 31)) return
         scrollBounds()
+        backdropFill = when {                       // k.java:2848-2859
+            iBQ > 0 -> (if (iBQ % 4 <= 2) -1 else -65536).also { iBQ-- }
+            iCe -> -1
+            else -> 0
+        }
         drawStylePass()
         if (!z2) drawPassBubbles()
         val hc = kC

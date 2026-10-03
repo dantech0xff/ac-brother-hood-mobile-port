@@ -1365,6 +1365,12 @@ class Level0Renderer {
             }
         }
 
+        // `i.bQ` flash / `i.ce` white backdrop (k.java:2848-2859): a
+        // full-screen fill over the tiles, under the entities; the world
+        // picks the colour and steps `bQ` once per pass (slice 378).
+        if (world.backdropFill != 0)
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H, world.backdropFill)
+
         // k.b(z2) entity draw pass (k.java:2904-2934, proven): iterate the
         // `bd[]` sorted list; `ad` child draws BEFORE the parent except
         // ax76/ax29 (after + `ad.s()`); `E` held entity + `ab` overlay.
