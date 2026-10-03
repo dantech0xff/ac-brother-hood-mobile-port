@@ -7879,12 +7879,12 @@ fun NpcFsm.initAx17(e: Entity, f: List<Int>) {
     e.refreshBoxes()                                        // L427 t()
 }
 /** `i.b(int[],int[])` (i.java:666, proven): strict containment —
- *  r4 inside r5 on all four edges. The `l()` ax17 notice uses it as
- *  `b(this.W, k.ac)` = "fully inside the camera view". */
+ *  r4 inside r5 on all four edges. `l()`'s L70/L77 arms (ax17/23/50,
+ *  `losL`) use it as `b(this.W, k.ac)` = "fully inside the camera view". */
 private fun insideOf(a: IntArray, b: IntArray): Boolean =
     a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3]
 /** `i.aA()` (i.java:8708-8847, proven) — the civilian tick.
- *  S57 idle→panic (l() = `!bn && b(W, camRect)`; player S9/S50 suppress),
+ *  S57 idle→panic (full `l()` = `losL`; player S9/S50 suppress),
  *  anims 60-68 = directional panic flail (picked by player-vs-W quadrant,
  *  strikes the player with op4 at T==3, `r()` → back to S57),
  *  S69 collapse (HAS-BLOOD-gated fx, lock releases), S129 dead-on-spot,
@@ -7897,9 +7897,12 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
     when (e.S) {
         57 -> {                                              // L12 idle
             e.ah = 0; e.ag = 0
-            // l() ax17 arm (i.java:2385 L70): !bn && b(W, k.ac) — fully
-            // on-screen; bn is the bA[79] checkpoint alert flag.
-            val notice = !w.iBn && insideOf(e.W, w.camRect)
+            // L12 calls the full `l()` (simple/i.java:8742-8745, proven):
+            // ai() fast path, aS.aA&8 blind, `case 17 → L70` = !bn &&
+            // b(W, k.ac) (fully on-screen; bn is the bA[79] alert flag),
+            // then the L88-L101 tail — LOS e(aS) and player ∉ {284,285}.
+            // (Before slice 350 only the L70 camera gate was ported here.)
+            val notice = losL(e, p, w)
             if (notice && p.S != 9 && p.S != 50) {           // L14/L16 gates
                 w.sfx(16)                                    // k.A(16) → z()
                 e.av = p.ak < e.ak                           // L21 face player
@@ -8909,10 +8912,11 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
 //  init i.java:3082 L134 (ax47 `az=r8[17]`) / :3017 L114 (ax50 `az=r8[13]`)
 //      — minimal inits; records arrive via retype ax11+S∈{80,93}→47 and
 //      ax17+S==120→50 (i.java:2644/2651) applied in Level0World.initNpcs.
-//  l()  i.java:2255 — only aK() calls it among these two, and aK() runs
-//      only for ax50, so it always takes the `case 50 → L77` arm: `bn` →
-//      false; else `b(W,k.ac)` W⊆cam rect; then the shared L88-L101 tail
-//      (LOS clear + player ∉ {284,285}). aL() (ax47) never calls l().
+//  l()  i.java:2255 (port: `losL`) — only aK() calls it among these two,
+//      and aK() runs only for ax50, so it always takes the `case 50 → L77`
+//      arm: `bn` → false; else `b(W,k.ac)` W⊆cam rect; then the shared
+//      L88-L101 tail (LOS clear + player ∉ {284,285}). aL() (ax47) never
+//      calls l().
 //  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
 // =====================================================================
 private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
@@ -8950,24 +8954,6 @@ fun NpcFsm.initAx50(e: Entity, f: List<Int>) {
     e.Z[0] = rf(4)
     e.setAnim(rf(5))
     e.refreshBoxes()
-}
-
-/** `i.l()` ax50 arm (i.java:2395 L77, proven): `bn→false` (iBn kill-
- *  disable); else `b(W,k.ac)` — my W strictly inside the camera rect
- *  (i.java:666: `r4[0]>=r5[0] && r4[1]>=r5[1] && r4[2]<=r5[2] &&
- *  r4[3]<=r5[3]` — proper containment, W ⊆ ac). Then the shared tail. */
-private fun seen50(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
-    if ((p.aA and 8) != 0) return false
-    if (w.iBn) return false                               // L77 bn gate
-    val ac = w.kAc
-    val r0 = ac != null &&
-        e.W[0] >= ac[0] && e.W[1] >= ac[1] &&
-        e.W[2] <= ac[2] && e.W[3] <= ac[3]
-    if (!r0) return false
-    if (e.losBlocked(p, w)) return false
-    if (p.S == 284) return false
-    return p.S != 285
 }
 
 /** `i.M()` + `i.h(x,y)` (i.java:7198/7207, proven): cell facing-adjacent
@@ -9210,9 +9196,9 @@ private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Bool
 
 /** `i.aK()` (i.java:9910-10007, proven): the ax50 pouncer FSM — dispatch
  *  `case 50 → aK()` (i.javap.txt:20025) — transcribed arm for arm.
- *  `r7 = l()` runs first every tick; for ax50 `l()` takes L77 (`seen50`). */
+ *  `r7 = l()` runs first every tick; for ax50 `l()` takes L77. */
 fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
-    var r7 = seen50(e, w, p)                              // l() → L77
+    var r7 = losL(e, p, w)                                // l() → L77
     when (e.S) {
         120 -> {
             // L6: ceiling-grab on the player drop-kill set.
@@ -10404,7 +10390,8 @@ private fun sightPriorityD(e: Entity, p: Entity, w: LevelCellSource): Int {
  *       flat checks (af.S∈{1,7} blind, af.Z[0]==0 + own S117 → seen);
  *       else W-overlap → seen, else the Z[9..12] rect vs player center.
  *     - ax73: W-overlap → seen, else the same Z[9..12] rect.
- *     - ax17/23/50: `bn` alert flag → blind; own W on camera (`k.ac`) → seen.
+ *     - ax17/23/50: `bn` alert flag → blind; own W fully inside the camera
+ *       rect (`b(W, k.ac)`, containment) → seen.
  *  4. `e(aS)` LOS clear (Bresenham above) and player S∉{284,285}.
  *  Result feeds `aS.a(32)` in the L827 tail branch — the counter-alerts. */
 private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
@@ -10463,11 +10450,14 @@ private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
                     if (e.av) e.ak else e.Z[10], e.Z[12]))
         }
         17, 23, 50 -> {
-            // L70/L77: bn → blind; own W on the camera rect → seen.
+            // L70/L77 (simple/i.java:2384-2406, proven): bn → blind; else
+            // `b(this.W, k.ac)` — own W fully INSIDE the camera rect
+            // (`b(int[],int[])` is containment, :665-676). Before slice
+            // 350 this arm used overlap: a half-visible actor already saw.
             if (w.iBn) false
             else {
                 val ac = w.kAc
-                ac != null && Entity.overlapI(e.W, ac)
+                ac != null && insideOf(e.W, ac)
             }
         }
         else -> false                                          // L83 default

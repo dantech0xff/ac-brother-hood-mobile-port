@@ -7139,8 +7139,12 @@ class Slice17Test {
 
     @Test fun `S57 quadrant pick — below+X-sep 67, above+X-sep 66`() {
         val w = world()
-        w.kO = 0; w.kP = 0
-        val e = ax17At(w, 150, 120)
+        // slice 350: S57 runs the full l() — LOS e(aS) included — so both
+        // placements stay inside level0's open top-left block (cells
+        // 0..28 x 0..24); y=120 put the "above" player off the map (y<0,
+        // OOB cells read solid). Camera kP=100 keeps W inside k.ac.
+        w.kO = 0; w.kP = 100
+        val e = ax17At(w, 150, 320)
         // player fully right of W (X-separated) and well below/above it —
         // p.W carries large anim-box offsets so the margin must clear them
         placePlayer(w, e.W[2] + 200, e.W[3] + 200)
@@ -7154,8 +7158,8 @@ class Slice17Test {
 
     @Test fun `S57 quadrant pick — below+overlap 63, above+overlap 62`() {
         val w = world()
-        w.kO = 0; w.kP = 0
-        val e = ax17At(w, 150, 120)
+        w.kO = 0; w.kP = 100                         // see the X-sep case
+        val e = ax17At(w, 150, 320)
         placePlayer(w, e.ak, e.W[3] + 200)
         w.npcFsm.tickAx17(e, w, w.player)
         assertEquals(63, e.S, "X-overlap + player below → i(63)")

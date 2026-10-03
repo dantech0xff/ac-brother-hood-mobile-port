@@ -29,7 +29,7 @@ and lands with unit tests that would have caught it.
 |---|---|---|
 | 1.1 ax47/ax50 FSM swap (G1) | done | [346](../261003-0723-slice346-ax47-ax50-fsm-pairing/plan.md) |
 | G9 ax46 S5/S6 re-pin missing (found re-validating 346) | done | [347](../261003-0730-slice347-ax46-fire-cycle-repin/plan.md) |
-| 1.6b `l()` containment for ax17/23/50 (G8, found in 346) | pending | — |
+| 1.6b `l()` containment + full sight test for ax17/23/50 (G8, found in 346) | done | [350](../261003-0816-slice350-l-sight-containment/plan.md) |
 | 1.2 `applyHit` op 40 (G2) | done | [348](../261003-0747-slice348-applyhit-op40/plan.md) |
 | 1.3 player S18 arm (G3) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
 | 1.4 player S371 arm (G4) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
@@ -127,7 +127,7 @@ is in.
   or the renderer's panel pass from drawing rows for `jC==28 && kEc==121`.
 - Test: the jC=28 / kEc=121 frame produces no row rects or pills.
 
-### 1.6b `l()` camera gate for ax17/23/50 (G8) — proven, found in slice 346
+### 1.6b `l()` camera gate for ax17/23/50 (G8) — proven, found in slice 346 · done (slice 350)
 
 - Original `l()` (`simple/i.java:2255-2406`): `case 17/23 → L70`,
   `case 50 → L77`; both arms are `bn → false; else b(this.W, k.ac)`, and

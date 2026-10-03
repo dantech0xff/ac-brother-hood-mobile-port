@@ -27,6 +27,10 @@ repo debris.
 ### 4.1 CI (`.github/workflows/ci.yml`)
 
 - Triggers: `pull_request`, `push` to `main`; one concurrency group per ref.
+- Set a UTF-8 locale (`LANG=C.UTF-8`): Kotlin test names with non-ASCII
+  characters compile lambdas into class files with non-ASCII names, which
+  a JVM under the POSIX locale cannot write (`sun.jnu.encoding` ASCII —
+  hit in the 2026-10-03 cloud session, slice 350).
 - Job `static`: Python 3 → verifier (`ok:true` required) + `unittest`.
 - Job `jvm`: Temurin JDK 17, Gradle cache → `:core:test :gdx:test`; upload
   JUnit XML on failure.
