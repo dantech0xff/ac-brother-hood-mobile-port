@@ -25834,7 +25834,14 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                // balance-pin. The post-intro pin over the gap (980,563)
+                // is left with DOWN (the S17 zone's v(33024) drop): under
+                // k.I()'s frame order (G12) the zone's TAP_R leap and the
+                // player's S19 tick share a frame, so the TAP_R edge also
+                // arms the cv → aF grab latch, and the leap clings to the
+                // gap's east wall (S101) and kicks west into the pit.
+                297 -> mask = if (p.ak in 960..1000 && p.al in 540..590)
+                    Pad.M_DOWN else Pad.M_CONTEXT + Pad.M_TAP_R
                 89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
@@ -26159,6 +26166,14 @@ class Slice282Test {
             // hold UP approaching the x11800 wall face so the vault/
             // climb arms on contact (wall run + lip grab).
             if (p.ak >= 11600) mask = Pad.M_RIGHT + Pad.M_UP
+            // Falling (S43) at the x11940 face above the y760 step, a held
+            // UP clings to it (fall-arm wall grab → S101 → S36 kick back
+            // west); without UP the player slides down the face and the
+            // postTail ct consumer's lip grab (S60) mounts the y680 top.
+            // Under G12 the running jump off the step meets the face
+            // while still that high (the old hop reached it lower).
+            if (p.S == 43 && p.ak in 11880..11940 && p.al < 760)
+                mask = Pad.M_RIGHT
             // guards engage on the street — attack when one is in front.
             w.pad.e(mask)
             w.tick(emptyList())
