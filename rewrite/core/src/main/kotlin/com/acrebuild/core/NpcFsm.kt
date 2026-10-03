@@ -2272,12 +2272,13 @@ class NpcFsm(val world: LevelCellSource) {
 
     private val ctxZone = IntArray(4)
 
-    /** `k.l()` (k.java:802): the 60px context bubble leading the player's
-     *  facing — M = [ak±60 by av, al-60, +60, al]. */
+    /** `k.M` (i.javap.txt aj() 110): the 60px context bubble leading the
+     *  player's facing — `[ak±60 by av, al-60, +60, al]` as `k.l()` wrote
+     *  it at the player's last `g.e()` head (slice 369 F13b), not the
+     *  player's live position. */
+    @Suppress("UNUSED_PARAMETER")
     private fun ctxZone(p: Entity) {
-        val x = if (p.av) p.ak - 60 else p.ak
-        ctxZone[0] = x; ctxZone[1] = p.al - 60
-        ctxZone[2] = x + 60; ctxZone[3] = p.al
+        world.kM.copyInto(ctxZone)
     }
 
     fun tickDestructible(e: Entity, player: Entity) {
@@ -8651,12 +8652,10 @@ private fun kDist73(dx: Int, dy: Int): Int {
     return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
 }
 
-/** `k.l()` (k.java:804, proven): the 60×60 reach box in front of the
- *  player — `k.M`. */
-private fun reachRect73(p: Entity): IntArray {
-    val x = if (p.av) p.ak - 60 else p.ak
-    return intArrayOf(x, p.al - 60, x + 60, p.al)
-}
+/** `k.M` (i.javap.txt aJ() 11): the 60×60 reach box in front of the
+ *  player as `k.l()` wrote it at the player's last `g.e()` head (slice
+ *  369 F13b), not the player's live position. */
+private fun reachRect73(w: LevelCellSource): IntArray = w.kM
 
 /** `i.P()` (i.java:7699, proven): dead → release the marker. */
 private fun heavyDead73(e: Entity): Boolean =
@@ -8665,7 +8664,7 @@ private fun heavyDead73(e: Entity): Boolean =
 /** `i.aJ()` (i.java:9331-9905, proven): the heavy-guard tick. */
 fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     // -- head: P() or out-of-reach → L8 release claim; in reach → claim --
-    if (heavyDead73(e) || !Entity.overlapStrict(e.W, reachRect73(p))) {
+    if (heavyDead73(e) || !Entity.overlapStrict(e.W, reachRect73(w))) {
         if (w.kL?.aw == e.aw) w.claimReset()               // k.m()
     } else {
         w.registerClaim(e, 0, e.W)                         // k.a(this,0,W)

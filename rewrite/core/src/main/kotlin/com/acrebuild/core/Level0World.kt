@@ -487,7 +487,12 @@ class Level0World(
     override val equipList = IntArray(5) { -1 }   // k.ar[5]
     override var equipCount = 0                 // k.as
     override var actionLock = 0                 // k.at
-    override var cEntity: Entity? = null        // k.C
+    /** `k.C` as `g.ao()` reads it (g.javap.txt ao() 37-57: the same
+     *  `#172 k.C` as `e()`'s head). It had its own never-written field;
+     *  it is the claimer slot [kC] (slice 369). */
+    override var cEntity: Entity?
+        get() = kC
+        set(v) { kC = v }
     override var vehicle: Entity? = null        // g.a
     override var cv: Entity? = null             // i.cv — ax10-S51 rail zone
     override var iFlag = true                   // g.i
@@ -1102,6 +1107,9 @@ class Level0World(
     override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
+    /** `k.M` — the player's front box, written at `g.e()` offset 154
+     *  (`k.l()`), zeroed at allocation (`k.ah()`). */
+    override val kM = IntArray(4)
     override var iBy = 1                       // i.by — boss phase tier
                                              // (i.java:2475 D() `by = 1`,
                                              //  i.java:22326 statics — proven;
@@ -5647,13 +5655,18 @@ class Level0World(
         p.integrate(if (!iAH) 1 else maxOf(1, iAI))
         p.gMountAlign(p.ga)                                     // g.d()
         if (bh3) p.posToWaypoint(this)                          // bF()
-        // The wall rescan `a(an())` also runs inside `g.e()`'s head
-        // (g.java:1282, proven); this pre-dispatch `a(true)` is a
-        // slice-2 superset the bot legs were proven against — removing
-        // it stalls proven crossings (gate row, canyon shaft), so it
-        // stays until a proven arm covers those states.
-        p.collideSides(this, true)
-        playerFsm.tick(p, pad)                                  // g.e()
+        // `g.e()` offsets 0-163 (slice 369): the `k.C` and `g.r` returns
+        // and `k.l()` run on the integrated position, before anything
+        // else in `e()` moves the player.
+        if (!playerFsm.eHeadReturns(p)) {
+            // The wall rescan `a(an())` also runs inside `g.e()`'s head
+            // (g.java:1282, proven); this pre-dispatch `a(true)` is a
+            // slice-2 superset the bot legs were proven against — removing
+            // it stalls proven crossings (gate row, canyon shaft), so it
+            // stays until a proven arm covers those states.
+            p.collideSides(this, true)
+            playerFsm.tickBody(p, pad)                          // g.e()
+        }
         // L1f35 tail (i.java:18904-18922): every dispatched entity ends
         // its `I()` with `if (b) t()` + the `av → P&1` facing sync.
         if (p.b) p.refreshBoxes()

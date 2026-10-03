@@ -5216,6 +5216,14 @@ interface LevelCellSource {
     fun dialogAdvance(lines: Int): Int = lines * 10
     /** `k.C` — HUD-claimed entity (`i.N()`). */
     var kC: Entity? get() = null; set(_) {}
+    /** `k.M` (k.java:640-652, proven) — the 60×60 box in front of the
+     *  player: `[av ? ak-60 : ak, al-60, +60, al]`. Written only by
+     *  `k.l()` at `g.e()` offset 154 (`PlayerFsm.eHeadReturns`); `k.ah()`
+     *  allocates it zeroed (k.javap.txt ah() 152-155). Read by the ax4
+     *  `aj()` (i.javap.txt aj() 110) and ax73 `aJ()` (aJ() 11) claim
+     *  tests — on the frame after the player's `e()` wrote it. The
+     *  default is a throwaway array (writes are dropped). */
+    val kM: IntArray get() = IntArray(4)
     /** `i.by` — boss phase tier static (0/1/3; 2 = dormant tick). */
     var iBy: Int get() = 0; set(_) {}
     /** `i.ci[5]` — boss cooldown counters (null-init arm inside aP). */

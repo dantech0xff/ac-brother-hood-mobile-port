@@ -285,6 +285,10 @@ No capstone bot test changed.
 - **F11 — S199 (6386-6410).** `y() && ag != 0 → ag = 0; a(S, 4)`: the port
   skips the `a(S,4)` mask-4 snap.
 
+F2-F11 are resolved in
+[slice 369](../261003-2300-slice369-player-ge-followups/plan.md) (F11 ported;
+not observable after the head's `a(an())`).
+
 ## Gates
 
 On `claude/slice365-ge-exits` (from `claude/phase2-faithful-ai` @
