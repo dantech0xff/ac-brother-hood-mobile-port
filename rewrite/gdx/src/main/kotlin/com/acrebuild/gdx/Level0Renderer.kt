@@ -965,7 +965,9 @@ class Level0Renderer {
     /** `a(str,str2)` (k.java:2270, proven) — the footer soft-key strip:
      *  left pill at (5,235) skipped on jc21/8, `y` text when str==d(0,16);
      *  right pill at (395-cf,235), `y` text when str2==d(0,18) else the
-     *  A[2] arrow `zD?29:24`. Hit-test lives in world.footerQ. */
+     *  A[2] arrow `zD?29:24`. The hit-test half — and the `ce/cf` widths
+     *  it persists — is world-side (`Level0World.softKeys`); drawing
+     *  never writes world state. */
     private fun footer(world: Level0World, left: String?, right: String?) {
         // `r10 == d(0,79) → goto L23`: an "OK" left draws nothing at
         // all (k.java:2909-2912). jc21/8 reach only the L20 hit-test
@@ -974,7 +976,6 @@ class Level0Renderer {
         // (ce=36, hit-test only, no pill — k.java:2917-2928).
         if (left != null && left == world.d0(16) && world.jC != 21 && world.jC != 8) {
             val ce = world.footerLeftDim(left)
-            world.kCe = ce
             softPill(5, 235, ce,
                      world.pointerMoveIn(-5, 198, ce + 20, 47))
             fontY.l(0)
@@ -982,7 +983,6 @@ class Level0Renderer {
         }
         if (!right.isNullOrEmpty()) {
             val cf = world.footerRightDim(right)
-            world.kCf = cf
             val zD = world.pointerMoveIn(395 - cf - 10, 198, cf + 20, 47)
             softPill(395 - cf, 235, cf, zD)
             if (right == world.d0(18)) {

@@ -9670,7 +9670,14 @@ class Slice79Test {
 
     @Test fun `pause rect tap emits M_PAUSE edge and l(14)`() {
         val w = world()
+        // `J()` hit-tests the release point (`c()` reads k.H/k.I) after
+        // `I()`; the E(262144) lands in bB at the next commit, so the
+        // pause opens one frame after the release (slice 368).
         down(w, 370, 10)
+        assertEquals(8, w.jC, "a press alone arms nothing (pointerPressed = wheel only)")
+        up(w, 370, 10)
+        assertEquals(8, w.jC, "release frame: E(262144) armed, v() still clear")
+        w.tick(emptyList())
         assertEquals(14, w.jC, "k.java:1056 — pause icon → k.l(14)")
     }
 
@@ -16538,6 +16545,10 @@ class Slice165Test {
         val c = claimWaiting(); w.kC = c
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
                       InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // b(false)'s SKIP pill arms E(131072) on the release frame; the
+        // :944 gate reads it at the next one (slice 368).
+        assertEquals(21, w.jC, "release frame: E(131072) armed")
+        w.tick(emptyList())
         assertEquals(8, w.jC, "v(131072) + C.cd[2] → C.Z(); l(8) (:1003-1010)")
         assertTrue(c.cd[1], "C.cd[1]=true on the consume arm")
         assertFalse(c.cd[0], "C.Z() resumes the halted claimer")
@@ -16557,7 +16568,7 @@ class Slice165Test {
         w.kC = claimWaiting()
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 340, 210),
                       InputQueue.Event(1, InputQueue.Type.UP, 340, 210)))
-        assertEquals(21, w.jC, "x=340 sits outside (349..405,198..245)")
+        assertEquals(21, w.jC, "x=340 sits outside the SKIP pill (cf=36 → 349..405,198..245)")
     }
 
     @Test fun `pause icon on jC21 routes to the pause menu`() {

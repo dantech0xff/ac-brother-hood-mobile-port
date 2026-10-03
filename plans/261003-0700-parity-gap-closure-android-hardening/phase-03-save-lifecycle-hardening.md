@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: Save and Lifecycle Hardening
-status: pending
+status: done
 priority: P1
 dependencies: []
 ---
@@ -32,6 +32,32 @@ checkpoint is lost when the process dies, as in the original (Run-26).
 - No change to what is saved or when (`saveFlush` call sites stay as ported);
   only the container, the write protocol and recovery change.
 - Existing raw 320 B `asbr-save.bin` files keep loading.
+
+## Progress (2026-10-03)
+
+All seven steps done on `claude/phase2-faithful-ai`:
+
+- Steps 1–4: ADR [`docs/decisions/save-policy.md`](../../docs/decisions/save-policy.md),
+  `core/SaveEnvelope.kt` (v1 container, legacy 320 B migration),
+  `gdx/SaveStore.kt` (temp → `force` → `.bak` rotation → rename; crash-point
+  tests at every step). `Files.move(ATOMIC_MOVE)` is not used: `minSdk 24`
+  predates `java.nio.file`; `File.renameTo` is `rename(2)` on Android.
+- Step 5: `gdx/TickDriver.kt` quarantine + `Level0Renderer.renderFatal()`
+  (tap restarts from the durable save).
+- Step 6: mined first — the original reads no hardware keys
+  (`k.keyPressed/keyReleased` are bare `return`s). BACK is mapped onto the
+  right soft-key pill on every screen that draws one, and does nothing
+  elsewhere ([slice 368](../261003-2230-slice368-soft-keys-back/plan.md)).
+  The mining also fixed the claim SKIP pill (the m0 intro is skippable
+  again), the wheel's `ce/cf` margins and the pause icon timing.
+- Step 7: lifecycle is `k.c()`/`k.d()` (hideNotify/showNotify,
+  [slice 366](../261003-2100-slice366-hide-show-notify/plan.md)); `pause()`
+  flushes pending commands and stops audio, `resume()` resets the
+  accumulator, `dispose()` flushes; `AudioBridge` logs under its own tag
+  ([plan](../261003-2130-tick-quarantine-lifecycle/plan.md)).
+
+Device check of BACK, the SKIP pill and the pause icon is pending the next
+emulator run (Phase 2 Run-32/33).
 
 ## Implementation Steps
 

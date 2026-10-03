@@ -11,6 +11,7 @@ import com.acrebuild.core.ScriptTables
 import com.acrebuild.core.TickEngine
 import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
 
 /**
  * game-app role: lifecycle + fixed-step driver for the slice-1 port —
@@ -197,6 +198,9 @@ class Level0Game : ApplicationAdapter() {
         renderer = Level0Renderer()
         renderer.create(world)
         Gdx.input.inputProcessor = Level0InputBridge(inputQueue, renderer)
+        // BACK is the right soft key (slice 368), never "close the app" —
+        // the original has no hardware-key path at all.
+        Gdx.input.setCatchKey(Input.Keys.BACK, true)
         driver = TickDriver(world::tick, world::drainCommands, ::onTickFailed)
         accumulatorUs = 0
         Gdx.app.log(TAG, "level0: ${level.entities.size} records, " +

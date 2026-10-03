@@ -3237,30 +3237,47 @@ class Level0World(
         24 -> Pair(null, d0(18))        // case24 `a(null,d(0,18))` (:1363)
         else -> Pair(null, null)
     }
-    /** Footer hit-test inside `a(str,str2)` — `c()` on the two rects
-     *  arms `E(262144)` left / `E(131072)` right (:2288/:2309). Called
-     *  from menuQ before the v() arms so the armed bits dispatch in the
-     *  same frame, matching the orig's a()→L()→Q() order. */
+    /** Footer hit-test for the menu screens — [softKeys] on the
+     *  [menuFooter] label pair. Called from menuQ before the v() arms so
+     *  the armed bits dispatch in the same frame, matching the orig's
+     *  a()→L()→Q() order. */
     private fun footerQ() {
         val fl = menuFooter()
-        val left = fl.first
-        // `a()` resets `ce/cf = -1` at entry (k.java:2907-2908); an "OK"
-        // left (`r10 == d(0,79) → goto L23`) skips the pill AND the
-        // hit-test entirely — the zone is inert (jc14-else/19/23/28/3/30).
-        // jc21/8 still hit-test via `goto L20` with ce=-1 (a 19px sliver).
+        softKeys(fl.first, fl.second)
+    }
+    /** The hit-test half of `a(str,str2)` (k.java:2270-2311, proven) —
+     *  `c()` on the two rects arms `E(262144)` left / `E(131072)` right
+     *  (:2288/:2309), and the `ce/cf` widths persist for `j()` /
+     *  `j(x,y)`. BACK ([backKey]) counts as a release inside the right
+     *  pill. The drawing half is the renderer's `footer`. */
+    private fun softKeys(left: String?, right: String?) {
+        // `a()` resets `ce/cf = -1` at entry (k.java:2271-2272); an "OK"
+        // left (`str != d(0,79)` fails) skips the pill AND the hit-test
+        // entirely — the zone is inert (jc14-else/19/23/28/3/30).
+        // jc21/8 still hit-test with ce=-1 (a 19px sliver).
         kCe = -1
         if (left != null && left != "" && left != d0(79)) {
             if (jC != 21 && jC != 8) kCe = footerLeftDim(left)
             if (pointerDownIn(-5, 198, kCe + 20, 47)) padE(Pad.M_PAUSE)
         }
-        val right = fl.second
         kCf = -1
         if (!right.isNullOrEmpty()) {
             kCf = footerRightDim(right)
-            if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47)) {
+            if (pointerDownIn(395 - kCf - 10, 198, kCf + 20, 47) || backKey)
                 padE(Pad.M_CYCLE)
-            }
         }
+    }
+    /** `b(false)`'s claim footer (k.java:3163-3165; bytecode k.javap.txt
+     *  b(Z) offsets 5604-5650, proven): `C != null && (C.ab() || u == 9)
+     *  && C.cd[2]` → `a("", d(0,18))` — the SKIP pill over a skippable
+     *  claim script, in play (jC 8) and over its u==9 dialog (jC 21). The
+     *  edge reaches `i.aa()`'s `cd[2] && v(131072)` skip latch
+     *  (i.java:17940) or the dialog's `:944` gate. `b(false)` returns at
+     *  entry on jC ∈ {12,13,31} (k.java:2682-2686). */
+    private fun claimFooter() {
+        if (jC == 12 || jC == 13 || jC == 31) return
+        val c = kC ?: return
+        if ((c.claimAb() || dlgU == 9) && c.cd[2]) softKeys("", d0(18))
     }
     /** Row label (k.java:6046-6140, proven). `j.c==19` →
      *  `d(0,10)+" "+(row+1)` = "LEVEL n"; every other state →
@@ -4558,11 +4575,14 @@ class Level0World(
 
     private var pointerDown = false
 
-    /** `k.ce`/`k.cf` (k.java:147-148, proven): safe-area insets for the
-     *  400×240 canvas — the soft-key row excludes x≤ce / x≥400-cf below
-     *  y207 (`cg`=37 is the top-inset, k.java:149). */
-    private val ce = 60
-    private val cf = 60
+    /** Android BACK seen this tick (`InputQueue.Type.BACK`). The original
+     *  has no hardware keys — `k.keyPressed/keyReleased` are bare
+     *  `return`s (bytecode k.javap.txt:26544-26556) — so BACK is mapped
+     *  onto the right soft-key pill: [softKeys] treats it as a release
+     *  inside that pill's rect, wherever `a(str,str2)` draws one. Where no
+     *  right pill exists BACK does nothing (slice 368). Cleared at the end
+     *  of [tick], like `k.H/k.I`. */
+    private var backKey = false
 
     /** Any DOWN edge in this tick's event list — the screen-21 dialog's
      *  dismiss input (press anywhere, like the original's `k.v` edge). */
@@ -4614,8 +4634,10 @@ class Level0World(
     fun resolvePadZone(x: Int, y: Int): Int {
         if (!((jC == 21 && dlgU == 8) || jC == 8 || (jC == 21 && dlgU == 10)) ||
             x == -1 || y == -1 || y >= 240) return -1
-        // margins below the soft-key row + pause-icon rect are not wheel
-        if (((x <= ce || x >= VIEW_W - cf) && y >= 207) ||
+        // margins below the soft-key row + pause-icon rect are not wheel;
+        // `ce/cf` are the statics `a(str,str2)` last wrote (init 60/60,
+        // k.java:147-148/:2271-2298) — slice 368.
+        if (((x <= kCe || x >= VIEW_W - kCf) && y >= 207) ||
             insideRect(x, y, 354, 0, 46, 37)) return -1
         val p = player
         if (mounted) {                                          // k()
@@ -4870,24 +4892,14 @@ class Level0World(
         for (e in events) {
             when (e.type) {
                 InputQueue.Type.DOWN -> {
-                    // pause icon (c(354,0,46,37)→E(262144), k.java:1054)
-                    // — J() runs on jC∈{8,21} (:2653, proven).
-                    if (insideRect(e.x, e.y, 354, 0, 46, 37) && jC == 8)
-                        padE(Pad.M_PAUSE)
-                    else if (jC == 21 &&
-                             insideRect(e.x, e.y, 349, 198, 56, 47))
-                        // bit 17 is armed solely by the right-pill
-                        // hit-test (k.java:2308-2309); hardware keys
-                        // are dead (:5578-5583) and no pill draws on
-                        // j.c==21 — so this rect arm is a deliberate
-                        // NEW affordance carrying the same verbatim
-                        // rect math (cf=36 → (349,198,56,47)).
-                        padE(Pad.M_CYCLE)
-                    else {
-                        val iJ = resolvePadZone(e.x, e.y)
-                        if (iJ != -1) { padE(2 shl iJ)         // E(2<<iJ)
-                            if (iJ < 5) kJT = kJT or (1 shl iJ) }
-                    }
+                    // `pointerPressed` (k.java:486-494, proven) arms only
+                    // the wheel edge. The pause icon and the soft-key
+                    // pills are release hit-tests (`c()` reads k.H/k.I)
+                    // inside their frame procs — `J()` and `a(str,str2)`
+                    // (slice 368).
+                    val iJ = resolvePadZone(e.x, e.y)
+                    if (iJ != -1) { padE(2 shl iJ)             // E(2<<iJ)
+                        if (iJ < 5) kJT = kJT or (1 shl iJ) }
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                     // panel-drag arm for the bv4 overflow scroll: a DOWN
@@ -4937,6 +4949,7 @@ class Level0World(
                         menuDragPrevY = -1
                     }
                 }
+                InputQueue.Type.BACK -> backKey = true
             }
         }
         // input-sample tail (k.java:1509-1519, proven)
@@ -4967,13 +4980,6 @@ class Level0World(
         // g.J is set once per mission by F(aj) and |= only via
         // g.g() pickups (k.java:4644-4651, proven) — no per-frame
         // pointer-held write.
-        // pause icon edge (k.java:1056-1063): v(262144) → claimer pause
-        // + bw=0 + l(14) — read inside the play arm.
-        if (jC == 8 && pad.v(Pad.M_PAUSE)) {
-            kC?.pauseScript()                             // C.Y() — cd[0]=true
-            kBw = 0
-            stateL(14)
-        }
         playerFsm.tickCount = tickIndex
 
         // `k.al` world-freeze (i.I() gate): mission-fail / win / frozen
@@ -5007,6 +5013,10 @@ class Level0World(
                 // `E(65568)` (:874-876): a screen tap feeds the context
                 // edge the arms read — consume() marks presses but the
                 // dialog's own `v(65568)` checks are the only consumers.
+                // `b(false)` runs first (k.java:867): its claim SKIP pill
+                // (`u==9 && C.cd[2]`) arms E(131072) and sets the `ce/cf`
+                // that `j()` reads next (slice 368).
+                claimFooter()
                 if (pointerStrip()) padE(Pad.M_CONTEXT)
                 // `J()` (k.java:1040-1063, proven): `c(354,0,46,37)` →
                 // E(262144) on jC∈{8,21} — the original runs J() AFTER
@@ -5082,9 +5092,8 @@ class Level0World(
                 tipStr = if (kFS < s.length) s.substring(0, kFS) else s
                 if (kFS >= s.length + 10) kFS = -1
             }
-            // `J()` pause-icon arm (k.java:1040-1063, proven): the
-            // 354,0,46,37 rect-press → E(262144) is injected in consume()
-            // for jC∈{8,21}; `v(262144)` → `C.Y();bw=0;l(14)`.
+            // `J()` read (k.java:1056-1063, proven): the rect release was
+            // armed above (E(262144)); `v(262144)` → `C.Y();bw=0;l(14)`.
             if (jC != 12 && jC != 13) {                       // J() (:2653)
                 if (pad.v(Pad.M_PAUSE)) {
                     kC?.pauseScript()                         // C.Y() (:1057)
@@ -5287,9 +5296,26 @@ class Level0World(
         // companion tick — `i.e--`/`g.t--`/sparkles/counters live here.
         drawStylePass()
 
+        // case 8 after `I()` (k.java:859-1063, proven): `b(false)` — its
+        // claim SKIP pill hit-test — then `J()`: `c(354,0,46,37)` →
+        // E(262144); `v(262144)` → `C.Y(); bw=0; l(14)`. Both read the
+        // release point, and E() lands in bB at the next frame's commit,
+        // so the pause opens the frame after the release, once the world
+        // has run that frame (slice 368).
+        claimFooter()
+        if (jC != 12 && jC != 13) {                          // J() (:2653)
+            if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
+            if (pad.v(Pad.M_PAUSE)) {
+                kC?.pauseScript()                            // C.Y() (:1057)
+                kBw = 0
+                stateL(14)                                   // l(14) (:1061)
+            }
+        }
+
         tickIndex++; jG++
         } finally {
             lastTouchX = -1; lastTouchY = -1     // k.H/k.I live one frame
+            backKey = false
         }
     }
 
