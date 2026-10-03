@@ -55,8 +55,8 @@ the shared `j.j` RNG stream.
 
 `b(true)` also runs the build + `F()` pass on jc 10–14 and 30/31 frames
 (pause, death/loading, mission end — k.java:1110/1123/1454/1657/1792); the
-port freezes those effects there. User-timed or transitional screens;
-left for a later slice if replay parity across pauses is needed.
+port freezes those effects there. → Done in
+[slice 375](../261004-0100-slice375-btrue-world-pass/plan.md).
 
 ## Tests
 
