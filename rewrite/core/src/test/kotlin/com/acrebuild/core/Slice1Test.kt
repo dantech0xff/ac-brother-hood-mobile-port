@@ -1817,8 +1817,8 @@ class Level0WorldTest {
         p.lungeTick(w)
         assertEquals(277, p.S, "ax11 victim -> i(277)")
         assertEquals(0, p.cL)
-        assertEquals(20 * Trig.sin(32), s.ag, "F.ag = (cF>>8)*j.b(cy)")
-        assertEquals(-20 * Trig.sin(Trig.N - 32), s.ah, "F.ah = -(cF>>8)*j.b(n-cy)")
+        assertEquals(20 * Trig.cos(32), s.ag, "F.ag = (cF>>8)*j.b(cy)")
+        assertEquals(-20 * Trig.cos(Trig.N - 32), s.ah, "F.ah = -(cF>>8)*j.b(n-cy)")
         assertEquals(181, s.S, "F.g(this) true -> i(181)")
         p.g = null
     }
@@ -1872,8 +1872,8 @@ class Level0WorldTest {
         p.mountOrbitTick(w, Pad())
         assertEquals(22, p.S, "W-overlap -> i(22) dismount")
         assertNull(p.F)
-        assertEquals(-20 * Trig.sin(64), p.ag, "ag = -(cF>>8)*j.b(cy)")
-        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        assertEquals(-20 * Trig.cos(64), p.ag, "ag = -(cF>>8)*j.b(cy)")
+        assertEquals(20 * Trig.cos(Trig.N - 64), p.ah)
         Entity.at = null
     }
 
@@ -1919,13 +1919,14 @@ class Level0WorldTest {
         w.npcs.add(track)
         m.ac = track
         Entity.at = m; p.g = null
-        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = 64; p.cF = 0
+        // cart straight above the rider: c() gives cy = j.b(-1, cA<0) ≈ o
+        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = Trig.O; p.cF = 0
         w.cm = 1                                     // k.k() mounted
         p.mountOrbitTick(w, Pad())
-        assertEquals(250, m.ak, "F.ak = cJ - cB*sin(cy)")
-        assertEquals(150, m.al, "F.al = cK + cB*sin(n-cy)")
-        assertEquals(240, track.ak, "track drags aq behind")
-        assertEquals(130, track.al)
+        assertEquals(300, m.ak, "F.ak = cJ - cB·cos(o) = cJ")
+        assertEquals(100, m.al, "F.al = cK + cB·cos(n-o) = cK - cB: cart above")
+        assertEquals(290, track.ak, "track drags aq behind")
+        assertEquals(80, track.al)
         Entity.at = null; w.cm = 0
     }
 
@@ -1960,8 +1961,8 @@ class Level0WorldTest {
         p.cF = 5120; p.cy = 64
         p.mountOrbitTick(w, Pad())
         assertSame(s, p.F)
-        assertEquals(-20 * Trig.sin(64), p.ag, "L200 drag vx")
-        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        assertEquals(-20 * Trig.cos(64), p.ag, "L200 drag vx")
+        assertEquals(20 * Trig.cos(Trig.N - 64), p.ah)
         p.g = null
     }
 
@@ -4632,9 +4633,13 @@ class Slice44Test {
         val w = world(); w.npcs.clear()
         val af = Entity(11, w.clips[7]).apply { aw = 777; aB = 100 }
         w.npcs.add(af)
-        // Z[5]=angle 0 (march up), Z[8]/Z[9] = fire point, Z[12]=3 waves
+        // Z[5]=125° (26 of the 28 ax35 records in m0/m2/m3/m6/m7; the
+        // other two are 60°), θ=88:
+        // the L118 march steps `20·sin θ` up per turn and only ends above
+        // k.P, so θ needs sin θ > 0 — angle 0 never terminates in the
+        // original either (j.b = cos, slice 352). Z[8]/Z[9] = fire point.
         val e = ax35At(w, 300, 100, 2,
-            z = intArrayOf(0,0,20,20,0,0,10,0,0,777))
+            z = intArrayOf(0,0,20,20,0,125,10,0,0,777))
         e.af = af
         e.Z[8] = 300; e.Z[9] = 100; e.aC = 1
         w.kP = 40                      // kP: march endpoint stays in-map
@@ -8245,8 +8250,8 @@ class Slice66Test {
         e.j = 0
         w.npcFsm.tickAx74(e, w, w.player)            // j=15, aF=90*256/360=64
         assertEquals(64, e.aF)
-        assertEquals(400 + ((Trig.sin(64) * 15) shr 8), e.ak)
-        assertEquals(300 + ((Trig.sin(0) * 15) shr 8), e.al)
+        assertEquals(400 + ((Trig.cos(64) * 15) shr 8), e.ak)
+        assertEquals(300 + ((Trig.cos(0) * 15) shr 8), e.al)
         assertTrue((e.P and 16) != 0)                // P |= 16
     }
 
@@ -20297,30 +20302,31 @@ class Slice205Test {
         return p
     }
 
-    // -- j.d(int) piecewise table sqrt (j.java:1097, proven; U table
-    //    verified 255/256 against resources/archive/16 offset 154) ------
+    // -- j.d(int) piecewise table sqrt (structured/j.java:418-429,
+    //    proven; U = archive /16 entry 1 verbatim, U[0] = 0 — slice 352
+    //    dropped the old `U[0]=256` misread, see Slice352Test) ---------
 
-    @Test fun `table sqrt small inputs incl the U0 quirk`() {
-        assertEquals(0, Entity.isqrt(-1))
-        assertEquals(16, Entity.isqrt(0), "U[0]=256 quirk → d(0)=16, not 0")
-        assertEquals(1, Entity.isqrt(1))
-        assertEquals(1, Entity.isqrt(3))
-        assertEquals(15, Entity.isqrt(255))
+    @Test fun `table sqrt small inputs`() {
+        assertEquals(0, Trig.sqrt(-1))
+        assertEquals(0, Trig.sqrt(0), "U[0] = 0 → d(0) = 0")
+        assertEquals(1, Trig.sqrt(1))
+        assertEquals(1, Trig.sqrt(3))
+        assertEquals(15, Trig.sqrt(255))
     }
 
     @Test fun `table sqrt mid band boundaries`() {
-        assertEquals(16, Entity.isqrt(256))
-        assertEquals(63, Entity.isqrt(4095))
-        assertEquals(255, Entity.isqrt(65535))
-        assertEquals(256, Entity.isqrt(65536))
-        assertEquals(512, Entity.isqrt(262144))
+        assertEquals(16, Trig.sqrt(256))
+        assertEquals(63, Trig.sqrt(4095))
+        assertEquals(255, Trig.sqrt(65535))
+        assertEquals(256, Trig.sqrt(65536))
+        assertEquals(512, Trig.sqrt(262144))
     }
 
     @Test fun `table sqrt quantizes large inputs`() {
-        assertEquals(1020, Entity.isqrt(1048575),
+        assertEquals(1020, Trig.sqrt(1048575),
             "U[255]<<2 = 1020 — table value, not true floor-sqrt 1023")
-        assertEquals(32768, Entity.isqrt(0x40000000))
-        assertEquals(46080, Entity.isqrt(Int.MAX_VALUE),
+        assertEquals(32768, Trig.sqrt(0x40000000))
+        assertEquals(46080, Trig.sqrt(Int.MAX_VALUE),
             "U[127]<<8 — top of the piecewise window")
     }
 
@@ -25117,7 +25123,7 @@ class Slice277Test {
         assertTrue(w.cm == 1)
     }
 
-    @Test fun `S277 orbit applies the frozen-cy down-drag and never releases`() {
+    @Test fun `S277 orbit applies the frozen-cy drag toward the victim and never releases`() {
         val w = world()
         w.npcs.clear()
         val p = w.player
@@ -25128,8 +25134,10 @@ class Slice277Test {
         p.cF = 5120; p.cy = 128                           // atan2(0,-54) = 128
         repeat(400) {
             p.mountOrbitTick(w, Pad())
-            assertEquals(0, p.ag, "ag = -(cF>>8)·sin(128) = 0")
-            assertEquals(5120, p.ah, "ah = 20·sin(-64) = +20px/tick down-drag")
+            // j.b = cos (slice 352): victim due east → +20px/tick east, no
+            // vertical pull (the old "down-drag" was the sine-table artifact)
+            assertEquals(5120, p.ag, "ag = -(cF>>8)·cos(128) = +20px/tick")
+            assertEquals(0, p.ah, "ah = 20·cos(64-128) = 20·cos(-64) = 0")
             assertEquals(128, p.cy, "cy never recomputed — frozen at bind")
             w.playerFsm.interactScan(p)                   // release-gate sweep
             assertSame(s, p.g, "no release arm reachable — g stays bound")
@@ -26368,6 +26376,12 @@ class Slice288Test {
                 if (p.al < wallT.W[3] + 40) held = held or Pad.M_DOWN
                 else if (p.al > wallT.W[3] + 90) held = held or Pad.M_UP
             }
+            // Predictive dodge (slice 353): with the volleys aimed and
+            // fanned as the bytecode has them, a live escort shot is
+            // projected 24 ticks ahead; when it would pass within 30px
+            // of the drifting player, take the move that keeps the most
+            // clearance.
+            dodgeMask288(w, p)?.let { held = it }
             val preAF = w.kAF
             prevS = p.S
             w.pad.e(held); w.tick(emptyList())
@@ -26392,6 +26406,38 @@ class Slice288Test {
     }
 }
 
+
+/** Mission-4 bot dodge: each live enemy pool shot (`af` set, in-flight
+ *  anim) is stepped `ak += ag/256, al += ah/256` for 24 ticks against the
+ *  player's W-centre drifting at the scroll speed `kY`; inside 30px the
+ *  bot picks the 8px/tick move (left/right, plus up/down while inside the
+ *  view band) with the largest minimum clearance. */
+private fun dodgeMask288(w: Level0World, p: Entity): Int? {
+    val pool = w.projectilePool ?: return null
+    val shots = pool.filter {
+        it != null && (it.P and 128) == 0 && it.af != null &&
+            (it.S in 0..4 || it.S in 22..28)
+    }
+    if (shots.isEmpty()) return null
+    val drift = w.kY / 256.0
+    val cy0 = (p.W[1] + p.W[3]) / 2.0
+    fun clearance(dx: Double, dy: Double): Double {
+        var best = Double.MAX_VALUE
+        for (s in shots) for (t in 1..24) {
+            val sx = s!!.ak + s.ag * t / 256.0
+            val sy = s.al + s.ah * t / 256.0
+            val d = Math.hypot(sx - (p.ak + dx * t), sy - (cy0 + (drift + dy) * t))
+            if (d < best) best = d
+        }
+        return best
+    }
+    if (clearance(0.0, 0.0) > 30) return null
+    val q = p.al - w.kP
+    val opts = mutableListOf(Pad.M_LEFT to (-8.0 to 0.0), Pad.M_RIGHT to (8.0 to 0.0))
+    if (q > 90) opts += Pad.M_UP to (0.0 to -8.0)
+    if (q < 190) opts += Pad.M_DOWN to (0.0 to 8.0)
+    return opts.maxByOrNull { clearance(it.second.first, it.second.second) }?.first
+}
 
 private fun chaseMask289(p: Entity, w: Level0World): Int {
     var mask = Pad.M_RIGHT

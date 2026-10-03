@@ -31,6 +31,13 @@ plus the shared machinery it exercises:
   table. `T[]` is deserialized from pack-2 (`f(0)`) — NOT extracted; port
   generates `T[k]=round(sin(πk/128)·256)` — **high-confidence**, mirror
   logic proven.
+
+  > **Erratum (2026-10-03, slice 352):** `T[]` comes from archive `/16`
+  > (`j.a("/16",0,1)`, `structured/k.java:4009`), not pack-2, and it is a
+  > **cosine** table, `trunc(256·cos(πi/128))` — so `j.b(θ)` is cos θ and
+  > the generated sine table put every consumer a quarter turn off. `j.b`
+  > is now `Trig.cos` with the archive bytes verbatim; see
+  > [`plans/261003-0900-slice352-trig-tables-verbatim`](../261003-0900-slice352-trig-tables-verbatim/plan.md).
 - `k.aq`/`k.ap[r5]++`/`k.s()`/`k.A(int)` counters (`k.java:4304/5338/7372`,
   `i.java:3033/3142`).
 

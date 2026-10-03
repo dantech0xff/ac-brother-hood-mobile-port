@@ -60,6 +60,13 @@ Environment notes (cloud container, not the emulator host):
 | G6 | **Ghost YES/NO rows** on the jC=28 "GAME DATA HAS BEEN DELETED" screen: `panelVisible` is true for every jC=28 while the `eC==121` arm of `ae()` draws title + back only. | port `Level0World.kt:3095-3097`, `:3554-3563`; original `k.java:6204-6228`; device `REPORT.md:1507-1508` | probable — confirm against the original draw path |
 | G7 | Deviations, low impact: ax37 scroll triggers run from a separate record list that ignores P&32/P&256 and script removals; ax23 is routed through ax11 arms (unreachable with current data); `Trig` sin table is generated and `atan2` uses `StrictMath` instead of the original `V[]` binary search. | port `Level0World.kt:592-614`, `:5275`; `NpcFsm.kt:264`; `Trig.kt:7-20`, `:40-45`; original `structured/j.java:371-417` | proven (code) / inferred (impact) |
 
+> **Correction (2026-10-03, slice 352):** the `Trig` part of G7 is not low
+> impact. `T` is a cosine table loaded from archive `/16`, so `j.b(θ)` is
+> cos θ and every port consumer (orbit, throws, ropes, waves, shot fans)
+> ran a quarter turn off; the ax13 rope even gained an invented start
+> angle to compensate. Fixed in slice 352; the shot-fan code itself had
+> further bytecode divergences, fixed in slice 353.
+
 Stale code comments: `NpcFsm.kt:29-31` (S12 "deferred", ported at `:342`),
 `PlayerFsm.kt:2197` (assassination shortcut "omitted", ported at `:2274-2282`),
 `NpcFsm.kt:9219` (`aK` labelled "ledge-sentinel"),

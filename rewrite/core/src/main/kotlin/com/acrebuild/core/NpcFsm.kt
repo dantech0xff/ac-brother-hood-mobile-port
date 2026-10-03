@@ -5119,8 +5119,8 @@ private fun ax35AfArmFlags(e: Entity) {
  *  `aC=2; Z[7]++` → `Z[7]>Z[12]` tail; `r8 = Z[12]>2?3:2`;
  *  `r04=(Z[7]-r8)*Z[6]`; fire-x `r9 = S∈{27,31} ? Z[8] : r04+Z[8]`;
  *  march `r11=r9; r122=Z[9]; do {r11-=r05; r122-=r06} while r122>=k.P`
- *  (`r05/r06 = 20·sin/cos(Z[5]·M/360)>>8`); S∈{2,31}→L124 spawn the
- *  S18 marker at `(r9+36·sin, Z[9]+36·cos)` + `f()` child (+S31 clears
+ *  (`r05/r06 = 20·cos/sin(Z[5]·M/360)>>8`); S∈{2,31}→L124 spawn the
+ *  S18 marker at `(r9+36·cos, Z[9]+36·sin)` + `f()` child (+S31 clears
  *  P64 & `i(29)`); else (S27) `f()` + `aC=10; P&=-65; i(25)`; all paths
  *  end at the L129 tail. */
 private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
@@ -5134,8 +5134,8 @@ private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
     val r04 = (e.Z[7] - r8) * e.Z[6]
     val r9 = if (e.S == 27 || e.S == 31) e.Z[8] else r04 + e.Z[8]
     val th = e.Z[5] * Trig.M / 360
-    val r05 = (20 * Trig.sin(th)) shr 8
-    val r06 = (20 * Trig.sin(Trig.N - th)) shr 8   // j.b(j.n-θ) = cos
+    val r05 = (20 * Trig.cos(th)) shr 8
+    val r06 = (20 * Trig.cos(Trig.N - th)) shr 8   // j.b(j.n-θ) = sin
     var r11 = r9
     var r122 = e.Z[9]
     do {                                                        // L118
@@ -5143,8 +5143,8 @@ private fun ax35WaveStep(e: Entity, w: LevelCellSource) {
     } while (r122 >= w.kP)
     if (e.S == 2 || e.S == 31) {                                // L124
         ax35SpawnMarker(e, w, 18,
-            r9 + ((36 * Trig.sin(th)) shr 8),
-            e.Z[9] + ((36 * Trig.sin(Trig.N - th)) shr 8))
+            r9 + ((36 * Trig.cos(th)) shr 8),
+            e.Z[9] + ((36 * Trig.cos(Trig.N - th)) shr 8))
         ax35WaveChild(e, w, r11, r122, r9, e.Z[5])
         if (e.S == 31) { e.P = e.P and -65; e.setAnim(29) }
     } else {                                                    // L123 (S27)
@@ -5192,7 +5192,7 @@ private fun ax35AeCleanup(e: Entity, p: Entity) {
  * S2·31 L88 (af absent/dead → `S31?i(29):i(0)`; else L97 wave director);
  * S27→L97; S6-9 L142 (W-box player-hit: `p.S∈{0,1,7}→aS.i(9)` then
  *   `p.S==12` shared L267 deflect arm else `g.d(GU[au]);g.t=5`; `k.bd`
- *   sweep → `as()` on overlap; `aG`-march `20·sin/cos` commit-if-free
+ *   sweep → `as()` on overlap; `aG`-march `20·cos/sin` commit-if-free
  *   → `i(10+bR());aC=20` on cell20; edge despawn `±20` past `k.O`);
  * S10-13 L196 (`r()→i(14+bR())`); S14-17 L200 (`!b(Y,k.ac)→k.c`);
  * S18/19 L204 (`r()→k.c`); S20 L275 (vol-edge overlap → `aC=Z[11]`
@@ -5294,8 +5294,8 @@ fun NpcFsm.tickAx35(e: Entity, w: LevelCellSource, p: Entity) {
                 if (Entity.overlapStrict(e.W, o.W)) o.instantKill()
             }
             val th = e.aG * Trig.M / 360                         // L181 march
-            val nx = e.ak + ((20 * Trig.sin(th)) shr 8)
-            val ny = e.al + ((20 * Trig.sin(Trig.N - th)) shr 8)
+            val nx = e.ak + ((20 * Trig.cos(th)) shr 8)
+            val ny = e.al + ((20 * Trig.cos(Trig.N - th)) shr 8)
             if (w.collisionCell(nx / 20, ny / 20) == 20) {
                 e.setAnim(10 + ax35Quadrant(e.aG)); e.aC = 20
             } else {
@@ -6229,14 +6229,10 @@ fun NpcFsm.initAx13(e: Entity, f: List<Int>) {
     e.Z[2] = 0
     e.Z[3] = rf(10)
     e.Z[6] = rf(11)
-    // inferred: the pendulum's start angle scales with the variant —
-    // `bP = aG<<12` → aG=4 gives 16384 (r13=64 = straight down). Every
-    // init path (ctor :2269/:7354, L502, L1bea) leaves `bP=0`, which
-    // yields a zero-height grab box once the rope is grown — verified
-    // empirically that `bP=16384` produces the live hang box. `aG<<12`
-    // maps the variant {0,1,2,4} → {0,4096,8192,16384}; only aG=4 is
-    // verified on real records.
-    e.bP = e.aG shl 12
+    // `bP` stays 0 (proven: the ctor `bP = 0`, structured/i.java:662/1916,
+    // and no init arm writes it). With `j.b` = cos, angle 0 hangs straight
+    // down — the old `bP = aG<<12` start angle only compensated for the
+    // pre-352 sine table and is gone.
     e.setAnim(rf(5))
     e.refreshBoxes()
 }
@@ -6247,7 +6243,7 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
     if (e.bO != 0 || e.bP != 0) {                                   // L5→L6
         val r0 = e.bO
         e.bP += e.bO shl 1
-        e.bO -= Trig.sin(Trig.N - (e.bP shr 8)) shl 1               // j.b(n-θ)
+        e.bO -= Trig.cos(Trig.N - (e.bP shr 8)) shl 1               // j.b(n-θ)
         integrated = true
         if (e.aA == 1) {                                            // L9
             if (e.bM === p && e.aG == 1 && r0 * e.bO < 0) {
@@ -6302,10 +6298,10 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
                 val r07 = 3072 * e.bN
                 val r122 = (3072 * (e.bN - 4)).coerceAtLeast(1)     // L66
                 val r09 = e.bP shr 8
-                val r010 = (r07 * Trig.sin(Trig.N - r09)) shr 8
-                val r011 = (r07 * Trig.sin(r09)) shr 8
-                val r012 = (r122 * Trig.sin(Trig.N - r09)) shr 8
-                val r013 = (r122 * Trig.sin(r09)) shr 8
+                val r010 = (r07 * Trig.cos(Trig.N - r09)) shr 8
+                val r011 = (r07 * Trig.cos(r09)) shr 8
+                val r012 = (r122 * Trig.cos(Trig.N - r09)) shr 8
+                val r013 = (r122 * Trig.cos(r09)) shr 8
                 if (r010 > 0) {
                     e.W[0] = ((e.N + r012) shr 8) - 4; e.W[2] = ((e.N + r010) shr 8) + 4
                 } else {
@@ -6315,14 +6311,14 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
                 e.W[3] = ((e.O + r011) + r05 - r07) shr 8           // L73
                 if (Entity.overlapStrict(r06, e.W)) {               // a(r06,W)
                     // L76-88: pick the grab segment r04 on the arc.
-                    // r93==0 (j.b(0)=0 — post-release `bP=0`, the aG==4
-                    // latch zeroes it at L99) makes the original divide
-                    // by zero — a latent J2ME ArithmeticException
-                    // (proven: the aG==4 L147→L440 path is reachable
-                    // only when `cI==0`, i.java:17775-17792, so this
-                    // arm runs pre-release while bP>0 — the port still
-                    // guards the divide as a segment-miss).
-                    val r93 = (3072 * Trig.sin(r09)) shr 8
+                    // r93 = 12·cos θ is 0 only with the rope exactly
+                    // horizontal (θ = ±64; the clamp allows ±80). The
+                    // original then divides by zero (i.java:13311);
+                    // `paint()`'s catch sets `c = -1` (structured/
+                    // j.java:256-261), `run()` leaves its loop and calls
+                    // `notifyDestroyed()` — the MIDlet exits. Accepted
+                    // deviation: the port treats it as a segment miss.
+                    val r93 = (3072 * Trig.cos(r09)) shr 8
                     if (r93 != 0) {
                         var r8 = (p.O - e.O) / r93
                         if (r8 < 0) r8 = 0
@@ -6545,35 +6541,31 @@ private fun NpcFsm.runnerArriveAnim(e: Entity, x: Int, y: Int) {
     }
 }
 
-/** `i.i(int,int)` (i.java:7795, proven): anim-set selector —
- *  0→i(r6), 1→i(r6+23), 2→i(22), 3→i(r6). */
+/** `i.i(int,int)` (bytecode i.javap.txt:27470-27510, proven): anim-set
+ *  selector — 1→i(r6+23), 2→i(22), 3→i(28), anything else→i(r6). */
 private fun NpcFsm.animVariant(e: Entity, set: Int, base: Int) {
-    when (set) { 1 -> e.setAnim(base + 23); 2 -> e.setAnim(22); else -> e.setAnim(base) }
-}
-
-/** `i.b(int,int,int,int)` (i.java:8026, proven): dominant-direction index
- *  {1,2,3} from (x1,y1)→(x2,y2) — 5120px dominance threshold. */
-private fun NpcFsm.dirVariant(x1: Int, y1: Int, x2: Int, y2: Int): Int {
-    val dx = x2 - x1; val dy = y2 - y1
-    if (dx == 0) return 2
-    if (kotlin.math.abs(dx) <= 5120) return 2
-    val slope = (dy * 100) / dx
-    if (slope == 0) return 2
-    if (kotlin.math.abs(dy) <= 5120) return 2
-    return if (slope < 0) (if (dx > 0) 1 else 3)
-           else (if (dx > 0) 3 else 1)
+    when (set) {
+        1 -> e.setAnim(base + 23)
+        2 -> e.setAnim(22)
+        3 -> e.setAnim(28)
+        else -> e.setAnim(base)
+    }
 }
 
 /** `i.a(int, boolean)` (i.java:7826, proven): projectile volley — arms
  *  `count` free `k.aX` slots (av() = first with P&128 clear). Launch point
  *  `am/an` = X-center<<7 for ax54/30/56 else W-center<<7; `copyAim` keeps
- *  e.ao/ap, else aim = wpF point or the player W-center<<7. Angular fan
- *  spreads count>1 volleys ±r02 around atan2 aim; speed 2048 (ax54 Z[9]==2
- *  → 1280; ax30 Z[9]==2&&count==3&&first → 2560). Velocity =
- *  (dir*speed)/dist + gravity. Facing av/P|1, subpixel seed N/O, anim
- *  i(Z[8],dirVar) on ax54 / i(Z[3],dirVar) on ax30, aG = Z[9] (both),
- *  af = owner, aC = n. First shot of a volley: ax30 → sfx27 else sfx16. */
-private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
+ *  e.ao/ap, else aim = wpF point or the player W-center<<7 (other types:
+ *  100px east). Angular fan spreads count>1 volleys around the `j.b`
+ *  aim (odd counts ±r02·k with slot 0 straight, even counts straddling
+ *  at ∓r02/2); speed 2048, or 1280 for ax54 Z[9]==2, ax56 Z[4]==2 and
+ *  every other caller, 2560 for ax30's first shot of a Z[9]==2 triple.
+ *  Velocity = (dir*speed)/dist + gravity. Facing av/P|1, subpixel seed
+ *  N/O, anim i(Z[8],dirVar) on ax54/ax30 / i(Z[3],dirVar) on ax56, aG =
+ *  Z[9] (ax54/30) or Z[4] (ax56), af = owner, aC = n. First shot of a
+ *  volley: ax30 → sfx27 else sfx16. Slice 353 re-checked the fan, the
+ *  speed and the anim arms against the bytecode. */
+internal fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
                                w: Level0World) {
     val pool = w.projectilePool ?: return             // unseeded → inert (inferred)
     // L6 (structured/i.java:6245, proven): fan half-angle —
@@ -6612,39 +6604,39 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
         var r12 = r04.ao - r04.am
         var r13 = r04.ap - r04.an
         var r14 = e.h(r12, r13)
-        if (count > 1) {                             // fan math (L54-L80)
-            var r05 = Trig.atan2(r13, r12)  // j.b(r12,r13) = atan2(y=r13,x=r12)
-            if (r10 == 0 && (count % 2) != 0) {
-                // first shot of odd volley goes straight — L80 re-aim
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
-            } else if ((r10 % 2) != 0) {             // odd slot → +side
-                val r15 = if ((count % 2) == 0)
-                    r05 + (r02 * ((r10 % 2) + (r10 / 2)))
-                else if (r10 == 1)
-                    r05 + (r02 * ((r10 % 2) + (r10 / 2))) / 2
-                else r05 + (r02 * ((r10 % 2) + (r10 / 2)))
-                r04.ao = r04.am + ((r14 * Trig.sin(r15)) shr 8)
-                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r15)) shr 8)
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
-            } else if (r10 != 0) {                   // even slot → -side
-                val r152 = if ((count % 2) == 0)
-                    r05 - (r02 * (r10 / 2))
-                else if (r10 == 0)
-                    r05 - ((r02 * ((r10 / 2) + 1)) / 2)
-                else r05 - (r02 * ((r10 / 2) + 1))
-                r04.ao = r04.am + ((r14 * Trig.sin(r152)) shr 8)
-                r04.ap = r04.an + ((r14 * Trig.sin(Trig.N - r152)) shr 8)
-                r12 = r04.ao - r04.am; r13 = r04.ap - r04.an
-                r14 = e.h(r12, r13)
+        if (count > 1) {
+            // fan (bytecode i.javap.txt:27553+, offsets 458-762, proven;
+            // the structured view of this method is flagged "decompiled
+            // incorrectly"): odd counts keep slot 0 on the aim and step
+            // ±r02·k; even counts straddle it, slots 0/1 at ∓r02/2.
+            val r05 = Trig.atan2(r13, r12)          // j.b(r12, r13)
+            if (r10 > 0 || count % 2 == 0) {        // 472-480
+                val th = if (r10 % 2 == 1) {        // 483: odd slot → +side
+                    val k = (r10 % 2) + (r10 / 2)
+                    if (count % 2 == 0 && r10 == 1) r05 + (r02 * k) / 2   // 503
+                    else r05 + r02 * k                                  // 524/543
+                } else {                            // 614: even slot → −side
+                    if (count % 2 != 0) r05 - r02 * (r10 / 2)           // 666
+                    else if (r10 == 0) r05 - (r02 * ((r10 / 2) + 1)) / 2  // 632
+                    else r05 - r02 * ((r10 / 2) + 1)                    // 650
+                }
+                r04.ao = r04.am + ((r14 * Trig.cos(th)) shr 8)
+                r04.ap = r04.an + ((r14 * Trig.cos(Trig.N - th)) shr 8)
             }
+            r12 = r04.ao - r04.am; r13 = r04.ap - r04.an   // 729: re-aim
+            r14 = e.h(r12, r13)
         }
-        if (r14 != 0) {                              // L82 velocity
-            var speed = 2048
-            if (e.ax == 54 && e.Z[9] == 2) speed = 1280
-            else if (e.ax == 30 && e.Z[9] == 2 && count == 3 && r10 == 0)
-                speed = 2560
+        if (r14 != 0) {                              // 764: velocity
+            // 769-857: 2048; ax54 Z[9]==2 → 1280; ax30 Z[9]==2 3-shot
+            // slot 0 → 2560; ax56 Z[4]==2 → 1280; every other caller
+            // (the ax24 burst, ax64) → 1280. The structured view drops
+            // that last store (an empty `else if` block).
+            val speed = when (e.ax) {
+                54 -> if (e.Z[9] == 2) 1280 else 2048
+                30 -> if (e.Z[9] == 2 && count == 3 && r10 == 0) 2560 else 2048
+                56 -> if (e.Z[4] == 2) 1280 else 2048
+                else -> 1280
+            }
             r04.ag = (r12 * speed) / r14
             r04.ah = ((r13 * speed) / r14) + w.kY
         }
@@ -6654,10 +6646,10 @@ private fun NpcFsm.runnerBurst(e: Entity, count: Int, copyAim: Boolean,
         r04.N = r04.am; r04.O = r04.an
         r04.ak = r04.am shr 8; r04.al = r04.an shr 8
         r04.P = r04.P and -129; r04.P = r04.P and -33; r04.P = r04.P or 16
-        val r06 = dirVariant(r04.am, r04.an, r04.ao, r04.ap)
-        when (e.ax) {
-            54 -> animVariant(r04, e.Z[8], r06)      // i(Z[8], r06)
-            30, 56 -> animVariant(r04, e.Z[3], r06)  // i(Z[3], r06)
+        val r06 = dirIndex5(r04.am, r04.an, r04.ao, r04.ap)   // b(am,an,ao,ap)
+        when (e.ax) {                                // 1054-1119
+            54, 30 -> animVariant(r04, e.Z[8], r06)  // i(Z[8], r06)
+            56 -> animVariant(r04, e.Z[3], r06)      // i(Z[3], r06)
             else -> animVariant(r04, 0, r06)         // i(0, r06)
         }
         r04.refreshBoxes()                           // t()
@@ -9329,7 +9321,7 @@ fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
  *  switch arms send {0,4,5,17,18,30,31,32,33} → r04=true, else false. */
 private val AX64_VULN = intArrayOf(0, 4, 5, 17, 18, 30, 31, 32, 33)
 
-/** `i.b(int,int,int,int)` (i.java:8026, proven): direction index 0-4 from
+/** `i.b(int,int,int,int)` (bytecode i.javap.txt:28347-28390, proven): direction index 0-4 from
  *  a (x0,y0)→(x1,y1) subpixel vector — the pooled-shot's `i(0, dir)` pick. */
 private fun dirIndex5(x0: Int, y0: Int, x1: Int, y1: Int): Int {
     val dx = x1 - x0; val dy = y1 - y0
@@ -9754,8 +9746,8 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
             if (e.aA != 0) return                  // aA!=0 → L62
             if (e.j >= e.aE) e.aC-- else e.j += 15 // L28/L30
             e.aF = (e.aD * 256) / 360              // aF = aD·m/360
-            e.ak = e.aq + ((Trig.sin(e.aF) * e.j) shr 8)
-            e.al = e.ar + ((Trig.sin(Trig.N - e.aF) * e.j) shr 8)
+            e.ak = e.aq + ((Trig.cos(e.aF) * e.j) shr 8)
+            e.al = e.ar + ((Trig.cos(Trig.N - e.aF) * e.j) shr 8)
             if (e.j < e.aE) return
             if (e.aC > 0) return                   // L64: keep orbiting
             e.setAnim(2)

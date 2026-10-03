@@ -667,8 +667,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (S == 298) f.setAnim(168)
                 else {
                     cL = 0; setAnim(277)
-                    f.ag = (cF shr 8) * Trig.sin(cy)
-                    f.ah = -(cF shr 8) * Trig.sin(Trig.N - cy)
+                    f.ag = (cF shr 8) * Trig.cos(cy)
+                    f.ah = -(cF shr 8) * Trig.cos(Trig.N - cy)
                     f.setAnim(if (f.inFrontOf(this)) 181 else 180)
                 }
             }
@@ -680,8 +680,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `g.at()` (g.java:4376, proven): position on the orbit —
      * `ak = cH + cB·j.b(cy)>>8; al = cI - cB·j.b(j.n-cy)>>8`. */
     fun orbitPosition() {
-        ak = cH + ((cB * Trig.sin(cy)) shr 8)
-        al = cI - ((cB * Trig.sin(Trig.N - cy)) shr 8)
+        ak = cH + ((cB * Trig.cos(cy)) shr 8)
+        al = cI - ((cB * Trig.cos(Trig.N - cy)) shr 8)
     }
 
     /**
@@ -763,8 +763,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (cB >= 15) { al = W[3]; flingAirborne(0, w) }
                 cK = al
             } else {
-                ag = -(cF shr 8) * Trig.sin(cy)
-                ah = (cF shr 8) * Trig.sin(Trig.N - cy)
+                ag = -(cF shr 8) * Trig.cos(cy)
+                ah = (cF shr 8) * Trig.cos(Trig.N - cy)
             }
             return
         }
@@ -788,8 +788,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
         orbitPosition()
         if (overlapI(W, f.W)) {
             setAnim(22)
-            ag = -(cF shr 8) * Trig.sin(cy)
-            ah = (cF shr 8) * Trig.sin(Trig.N - cy)
+            ag = -(cF shr 8) * Trig.cos(cy)
+            ah = (cF shr 8) * Trig.cos(Trig.N - cy)
             val r0 = ak
             ak += ag shr 8
             collideSides(w, false)
@@ -876,8 +876,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val brake = pad.v(Pad.M_CONTEXT) || pad.u(Pad.M_CONTEXT) ||
             (!w.mounted && indicatorNearTouch(w))               // L167→L172
         if (brake) cB -= (cF shr 8) shr 2
-        val r03 = (cB * Trig.sin(cy)) shr 8                     // L173
-        val r04 = (cB * Trig.sin(Trig.N - cy)) shr 8
+        val r03 = (cB * Trig.cos(cy)) shr 8                     // L173
+        val r04 = (cB * Trig.cos(Trig.N - cy)) shr 8
         f.ak = cJ - r03
         f.al = cK + r04
         val ac = f.ac ?: run { wallProbe(w); return }           // L186
@@ -1943,8 +1943,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun ropeArcPlace(t: Entity) {
         val r0 = bN * 3072
         val r02 = bP shr 8
-        val r03 = (r0 * Trig.sin(Trig.N - r02)) shr 8   // j.b(j.n-θ) = cos
-        val r04 = (r0 * Trig.sin(r02)) shr 8            // j.b(θ) = sin
+        val r03 = (r0 * Trig.cos(Trig.N - r02)) shr 8   // j.b(j.n-θ) = sin
+        val r04 = (r0 * Trig.cos(r02)) shr 8            // j.b(θ) = cos
         t.N = N + r03
         t.O = O + r04
         t.ak = t.N shr 8
@@ -3374,42 +3374,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
             return (a + b) - (m shr 1) - (m shr 2) + (m shr 3)
         }
 
-        /** `j.U[]` (pack resource /16 blob offset 154, proven): the 256-entry
-         *  Q4 square-root table — `U[i] = floor(16·sqrt(i))`, except the
-         *  verbatim quirk `U[0] = 256` (so `j.d(0)` returns 16, not 0).
-         *  Blob-verified 255/256 entries against `resources/archive/16`. */
-        private val SQRT_U = IntArray(256) { i ->
-            if (i == 0) 256 else (16.0 * kotlin.math.sqrt(i.toDouble())).toInt()
-        }
-
-        /** `j.d(int)` (j.java:1097, proven): piecewise table square root —
-         *  indexes `U` by a shifting window, so for large `x` the result
-         *  quantizes in steps of 256 (NOT the true floor-sqrt). */
-        fun isqrt(x: Int): Int = when {
-            x < 0 -> 0
-            x < 0x100 -> SQRT_U[x] shr 4
-            x < 0x400 -> SQRT_U[x shr 2] shr 3
-            x < 0x1000 -> SQRT_U[x shr 4] shr 2
-            x < 0x4000 -> SQRT_U[x shr 6] shr 1
-            x < 0x10000 -> SQRT_U[x shr 8]
-            x < 0x40000 -> SQRT_U[x shr 10] shl 1
-            x < 0x100000 -> SQRT_U[x shr 12] shl 2
-            x < 0x400000 -> SQRT_U[x shr 14] shl 3
-            x < 0x1000000 -> SQRT_U[x shr 16] shl 4
-            x < 0x4000000 -> SQRT_U[x shr 18] shl 5
-            x < 0x10000000 -> SQRT_U[x shr 20] shl 6
-            x < 0x40000000 -> SQRT_U[x shr 22] shl 7
-            else -> SQRT_U[x ushr 24] shl 8
-        }
-
         /** `k.e(int,int,int,int)` (k.java:6860, proven): the arc/lead
          *  solver — roots of `x² + r5·x − r4 = 0` (the `1`-coefficient is
          *  hardcoded; the `r6` arg is dead in the original): returns
          *  `(r7 / max(r62,r42)) << 8`, or -1 when both roots are ≤ 0. */
         fun arcSolve(r4: Int, r5: Int, r7: Int): Int {
             val disc = r5 * r5 - 4 * (-r4)
-            val r62 = if (disc >= 0) (isqrt(disc) - r5) / 2 else -1
-            val r42 = if (disc >= 0) (-isqrt(disc) - r5) / 2 else -1
+            val r62 = if (disc >= 0) (Trig.sqrt(disc) - r5) / 2 else -1
+            val r42 = if (disc >= 0) (-Trig.sqrt(disc) - r5) / 2 else -1
             if (r62 <= 0 && r42 <= 0) return -1
             return (r7 / maxOf(r62, r42)) shl 8
         }
@@ -4763,9 +4735,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
                             for (k2 in 0 until 4) {
                                 val a = ph + k2 * Trig.N
                                 w.drawFxDot(
-                                    cx + (Trig.sin(Trig.N - a) *
+                                    cx + (Trig.cos(Trig.N - a) *
                                           (g[i] + f[i]) shr 8),
-                                    cy + (Trig.sin(Trig.O - a) *
+                                    cy + (Trig.cos(Trig.O - a) *
                                           (h[i] + f[i]) shr 8))
                             }
                         }

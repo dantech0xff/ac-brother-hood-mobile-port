@@ -34,7 +34,9 @@ and lands with unit tests that would have caught it.
 | 1.3 player S18 arm (G3) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
 | 1.4 player S371 arm (G4) | done | [349](../261003-0804-slice349-player-s18-s371/plan.md) |
 | 1.6 jC=28 ghost rows (G6) | done | [351](../261003-0827-slice351-ae-121-no-panel/plan.md) |
-| 1.5, 1.7 | pending | — |
+| 1.7 `Trig` tables (G7 → high impact: `j.b` is cos) | done | [352](../261003-0900-slice352-trig-tables-verbatim/plan.md) |
+| G10 volley `i.a(int,boolean)` fan/speed/anim (found auditing `j.b` sites) | done | [353](../261003-0930-slice353-volley-fan-speed-anim/plan.md) |
+| 1.5, 1.7 (ax37, ax23, comments) | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
@@ -148,9 +150,10 @@ is in.
   against the data and fix or document.
 - ax23 family filter (`NpcFsm.kt:264`): document as unreachable with current
   data, or route `case 23` straight to the tail (`simple/i.java:5180`).
-- `Trig`: replace the generated `T[]` with the table deserialized from pack-2
-  (`j.a("/2")` → `f(0)`, `j.java:311`), and port the `V[]` binary-search
-  `atan2` (`structured/j.java:371-417`); add parity vectors.
+- `Trig` — done in slice 352: the tables come from archive `/16`
+  (`j.a("/16",0,1)`, `structured/k.java:4009`), not pack-2, and `T` is a
+  **cosine** table, so every `j.b` consumer was a quarter turn off (not a
+  low-impact deviation). `V[]` atan2 and `U[0] = 0` ported verbatim.
 - Stale comments: `NpcFsm.kt:29-31`, `NpcFsm.kt:9219`, `PlayerFsm.kt:2197`,
   `Level0Game.kt:209-212`.
 

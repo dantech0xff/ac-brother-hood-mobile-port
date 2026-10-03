@@ -698,8 +698,8 @@ class Level0Renderer {
             seg--
             d += 6
             drawFrame(61, 0, 0,
-                      x4 + ((d * Trig.sin(ang)) shr 8),
-                      y4 - ((d * Trig.sin(Trig.N - ang)) shr 8), 0)
+                      x4 + ((d * Trig.cos(ang)) shr 8),
+                      y4 - ((d * Trig.cos(Trig.N - ang)) shr 8), 0)
         }
     }
 
@@ -2211,15 +2211,15 @@ class Level0Renderer {
      *  anchor object `Z[7]` at `(N>>8, O>>8)`, then `i4` middle
      *  segments (`Z[1]-1`, or `bN-1` when `aG==4`) stepped 12px along
      *  the pendulum angle `bP>>8` (angle-256), plus the end segment.
-     *  `iB = 3072·j.b(n-θ)>>8` = 12px·cos θ; `iB2 = 3072·j.b(θ)>>8` =
-     *  12px·sin θ. */
+     *  `iB = 3072·j.b(n-θ)>>8` = 12px·sin θ; `iB2 = 3072·j.b(θ)>>8` =
+     *  12px·cos θ. */
     private fun drawRopeSegments(e: Entity, pack: Int, camX: Int, camY: Int) {
         if (e.Z.size <= 7) return
         val ax = (e.N shr 8) - camX
         val ay = (e.O shr 8) - camY
         val th = e.bP shr 8
-        val sx = (3072 * Trig.sin(Trig.N - th)) shr 8   // iB  = 12px·cos θ
-        val sy = (3072 * Trig.sin(th)) shr 8            // iB2 = 12px·sin θ
+        val sx = (3072 * Trig.cos(Trig.N - th)) shr 8   // iB  = 12px·sin θ
+        val sy = (3072 * Trig.cos(th)) shr 8            // iB2 = 12px·cos θ
         val segs = if (e.aG == 4) e.bN - 1 else e.Z[1] - 1
         drawObject(pack, e.Z[7], ax, ay, e.P, palette = e.palette)  // anchor
         var fx = ax shl 8

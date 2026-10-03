@@ -19,6 +19,14 @@ Two `inferred` sites verified against the source and ported verbatim:
    - **Blob-verified**: 255/256 entries match `floor(16·sqrt(i))` encoded
      as big-endian u16 starting at offset 154. The one mismatch is the
      verbatim quirk **`U[0] = 256`** → `j.d(0)` returns **16**, not 0.
+
+     > **Erratum (2026-10-03, slice 352):** offset 154 is one byte early.
+     > Entry 1 is marker `03` at 151, typed header `0x1A` at 152, a LE
+     > u16 count (256) at 153-154, then LE shorts from 155
+     > (`structured/j.java:988-1030`). Read that way all 256 entries are
+     > `floor(16·sqrt(i))` and `U[0] = 0`; the "256" was the count's
+     > high byte read big-endian. `j.d(0)` is 0 —
+     > [`plans/261003-0900-slice352-trig-tables-verbatim`](../261003-0900-slice352-trig-tables-verbatim/plan.md).
    - Band dispatch (all proven from the decompile):
      `x<0→0`; `[0,2^8)→U[x]>>4`; `[2^8,2^10)→U[x>>2]>>3`;
      `[2^10,2^12)→U[x>>4]>>2`; `[2^12,2^14)→U[x>>6]>>1`;
