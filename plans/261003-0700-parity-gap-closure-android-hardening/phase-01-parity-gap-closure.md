@@ -51,6 +51,8 @@ and lands with unit tests that would have caught it.
 | `g.e()` arm exits: post-tail only after L353d, `az()` in the head (found in Phase 2; follow-ups F1-F11 open) | done (Phase 2 branch) | [365](../261003-1900-slice365-ge-exits/plan.md) |
 | soldier melee gate reads `i.ab()` (running claim suppresses `aB()`) (found in Phase 3) | done (Phase 2 branch) | [367](../261003-2200-slice367-claim-ab-melee-gate/plan.md) |
 | soft keys: claim SKIP pill hit-test (m0 intro skippable), `ce/cf` wheel margins, pause icon on release (found in Phase 3) | done (Phase 2 branch) | [368](../261003-2230-slice368-soft-keys-back/plan.md) |
+| draw-pass state steps once per frame in the world: `i.ad()` bubbles (one call site), row band, jc20 `eZ` (found in Phase 4 renderer audit) | done (Phase 2 branch) | [373](../261004-0010-slice373-draw-pass-state/plan.md) |
+| dialog typewriter + the jC 21 frame's `b(false)` `F()` pass in the world; renderer drops duplicated `F()` writes | done (Phase 2 branch) | [374](../261004-0030-slice374-dialog-frame-pass/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
