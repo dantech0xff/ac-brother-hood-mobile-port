@@ -1349,7 +1349,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (aN != null && aN.S != 106 &&
                     Math.abs(aN.al - p.al) < 20) {
                     aN.setAnim(106)                     // victim → i(106)
-                    world.kStatE(p.aw)                  // k.e(0,aw)
+                    world.countKill(p.aw)                  // k.e(0,aw)
                     aN.victimPayoff(world)              // i.aN.S() (:7276)
                     aN.ak = if (p.av) p.ak - 30 else p.ak + 30
                     aN.al = p.al
@@ -1389,7 +1389,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.S == 184 && aN != null && aN.S != 107 &&
                     Math.abs(aN.al - p.al) < 20) {
                     aN.setAnim(107)                     // victim → i(107)
-                    world.kStatE(p.aw)                  // k.e(0,aw)
+                    world.countKill(p.aw)                  // k.e(0,aw)
                     aN.victimPayoff(world)              // i.aN.S()
                     aN.ak = if (p.av) p.ak + 35 else p.ak - 35
                     aN.al = p.al

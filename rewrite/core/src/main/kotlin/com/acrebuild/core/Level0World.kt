@@ -240,6 +240,10 @@ class Level0World(
      *  registers kills — `ap[0]++` when `uid>0 && kAj!=7` (r5 ignored
      *  verbatim — always slot 0). */
     override val kAp = IntArray(6)
+    /** `k.e(i,i2)` (k.java:3264-3269, proven): `ap[0]++` unless
+     *  `i2 <= 0 || aj == 7` (the first arg is unread) — every
+     *  `k.e(0,aw)` kill site calls this. Slice 382 folded two duplicate
+     *  ports into it, one of which fed a counter nothing read. */
     override fun countKill(uid: Int) { if (uid > 0 && kAj != 7) kAp[0]++ }
 
     var kDg = 0                           // k.dg — mission-frame counter (timer)
@@ -549,12 +553,7 @@ class Level0World(
     override var playerLinkB: Entity? = null    // g.b marker-engage link
     override val missionIndex get() = kAj         // k.aj — follows the
                                                   // mutable mission field
-    var statTally0 = 0                          // k.ap[0] kill/stat tally
     override var iBh = 0                        // i.bh static hit-lock
-    /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` when `aw>0 && aj!=7`. */
-    override fun statTally(aw: Int) {
-        if (aw > 0 && missionIndex != 7) statTally0++
-    }
 
     /** `m(int)` particle burst (i.java:21259, proven): `a(74,54,1,
      *  player.az+1)` via the generic spawner (i.java:4799) — random angle
@@ -1649,12 +1648,6 @@ class Level0World(
     override var iCg: Entity? = null             // i.cg
     override var iCh: Entity? = null             // i.ch
     override var iZ = false                      // i.z static (sub-op 24/25)
-    override fun kStat(n: Int) {                 // k.o(n) (k.java:4304)
-        if (n != 3 || kAj != 7) kAp[n]++
-    }
-    override fun kStatE(gate: Int) {             // k.e(0,gate) (k.java:4314)
-        if (gate > 0 && kAj != 7) kAp[0]++
-    }
     /** `i.a(ax,clip,S,az)` (i.java:3644-3657, proven): `Entity(ax,
      *  clips[clip])` + `i(S)` + `az`, inheriting the caller's ak/al/av
      *  (`src`, may be null in harness calls). */
@@ -4725,7 +4718,7 @@ class Level0World(
             player.aA = player.aA or 256                       // :5153-5155
         if (z2) {
             kK()                                               // K() (:5174)
-            kAp[1]++                                           // o(1) (:5175)
+            kCount(1)                                          // o(1) (:5175)
         }
         if (snap != null) {
             // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — the

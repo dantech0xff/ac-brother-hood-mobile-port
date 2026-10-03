@@ -13992,8 +13992,8 @@ class Slice135Test {
     /** MarkerWorld + tracking for the finisher payoff calls. */
     class FinWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
         var statE = 0; var stat5 = 0; var streak = 0; var wisps = 0
-        override fun kStatE(gate: Int) { statE++ }
-        override fun kStat(n: Int) { if (n == 5) stat5++ }
+        override fun countKill(uid: Int) { statE++ }
+        override fun kCount(slot: Int) { if (slot == 5) stat5++ }
         override fun kCollectStreak() { streak++ }
         override fun spawnWisp(src: Entity) { wisps++ }
     }
@@ -17884,7 +17884,7 @@ class Slice183Test {
         e.U = (e.clip?.frameDuration(176, e.T) ?: 1) - 1
         w.npcFsm.tick(e, w.player)
         assertEquals(139, e.S, "S176 r() → i(139) corpse")
-        assertEquals(1, w.statTally0, "k.e(0,aw) → statTally0++")
+        assertEquals(1, w.kAp[0], "k.e(0,aw) → ap[0]++ (k.java:3264)")
     }
 
     @Test fun `S177 and S140 unwind back to idle S23`() {
@@ -27970,7 +27970,10 @@ class Slice291Test {
         w.kO = 10080; w.kP = 400
         var maxAk = 0; var won = false; var died = false
         for (t in 0..3000) {
-            if (w.jC == 15) { won = true; break }
+            // l(15) re-enters as l(22) the same tick when a medal stamps
+            // (k.java:1666-1700) — this leg's kills reach ap[0] >= 7 since
+            // slice 382 counts every k.e(0,aw) site
+            if (w.jC == 15 || w.jC == 22) { won = true; break }
             if (w.jC == 12 || w.jC == 13) { died = true; break }
             if (p.ak - 200 > w.kO) w.kO = p.ak - 200
             if (p.al - 120 > w.kP) w.kP = p.al - 120

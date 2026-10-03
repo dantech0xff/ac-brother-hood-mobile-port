@@ -2175,7 +2175,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 if (r024 < 0) r024 += 256   // i16→u8 fixup
                                 if (r14 != null) {
                                     if (r14.ax == 11 && r024 == 139) {     // kill count
-                                        w.kStatE(r14.aw); w.kStat(3)
+                                        w.countKill(r14.aw); w.kCount(3)
                                     }
                                     r14.setAnim(r024)
                                 }
@@ -2308,7 +2308,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val r12 = r9; val r2 = r10
         if (r013 == 1) when (r12) {
             0 -> cd[2] = true                                              // L140
-            1 -> { w.screenL(15); if (w.kAj != 7) w.kStat(0) }             // L141
+            1 -> { w.screenL(15); if (w.kAj != 7) w.kCount(0) }             // L141
             2 -> { w.kBx = -1; w.screenL(12) }                             // L144
             3 -> cd[3] = true                                              // L145
             4 -> { val v = w.kAV; if (v != null) v.Z[0] = 1 }              // L146
@@ -2917,7 +2917,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     fun victimPayoff(w: LevelCellSource) {
         repeat(3) {
             w.spawnWisp(this)               // m(-1) → a(74,54,1,…)
-            w.kStat(5)                      // k.o(5)
+            w.kCount(5)                     // k.o(5)
             w.kCollectStreak()              // k.s()
         }
     }
@@ -3554,13 +3554,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
             49 -> {
                 aj = 0; ah = 0; ag = 0
                 ag = ((snapX - ak) / 10) shl 8
-                world.kStatE(aw); world.kAp[3]++; world.sfx(20)
+                world.countKill(aw); world.kCount(3); world.sfx(20)
             }
             283 -> {
                 val ax2 = attacker?.ak ?: ak
                 ak = ax2 + if (av) 10 else -10
                 aj = 0; ah = 0; ag = 0
-                world.kStatE(aw); world.kAp[3]++; world.sfx(20)
+                world.countKill(aw); world.kCount(3); world.sfx(20)
             }
             else -> {
                 ak = snapX
@@ -3568,8 +3568,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     spawnFx8(world, 59, 1, av, attacker.ak, al, 300)
                 if (anim == 90) {
                     // ax47 attacker → k.e(0,aw) stat; every attacker → k.o(3).
-                    if (attacker?.ax == 47) world.kStatE(aw)
-                    world.kAp[3]++
+                    if (attacker?.ax == 47) world.countKill(aw)
+                    world.kCount(3)
                 } else {
                     al = attacker?.al ?: al
                 }
@@ -5081,7 +5081,6 @@ interface LevelCellSource {
     fun missionBh(): Int = Entity.MISSION_BH[missionIndex]
     /** `k.e(0,aw)` (k.java:4314, proven): `ap[0]++` kill/stat tally —
      *  gated `aw > 0` and `k.aj != 7`. */
-    fun statTally(aw: Int) {}
     /** `g.b()` (g.java:346, proven): player mid-attack — `I∈{1,2} && S` in
      *  the attack set {67,68,69,81,112-115,183,184,216,217,286,287}. */
     fun playerAttacking(): Boolean =
@@ -5393,10 +5392,8 @@ interface LevelCellSource {
     /** `k.e(int,int)`/`k.o(int)` (k.java:4314/4304, proven) — `ap[n]++`
      *  stat counters; `k.o(3)` and `k.e(0,uid)` skip the increment when
      *  `k.aj==7`. Callers pass the counter index. */
-    fun kStat(n: Int) {}
     /** `k.e(0,gate)` (k.java:4314, proven): `ap[0]++` iff `gate>0 &&
      *  k.aj!=7` — the kill-stat arm inside op22's ax11/139 branch. */
-    fun kStatE(gate: Int) {}
     /** `k.m(int)` (k.java:2346) — camera return-to-player driver, mask-
      *  gated by `k.ad`; ported as `Level0World.kM` (the real tracker). */
     fun kM(mask: Int) {}

@@ -521,8 +521,8 @@ class NpcFsm(val world: LevelCellSource) {
                     e.releaseAe()                               // G()
                     e.aB = 0
                     e.setAnim(169)
-                    world.statTally(e.aw)                       // k.e(0,aw)
-                    if (world.kAj != 7) world.kAp[3]++          // k.o(3)
+                    world.countKill(e.aw)                       // k.e(0,aw)
+                    world.kCount(3)                             // k.o(3)
                     player.setAnim(293)                         // aS.i(293)
                     player.P = player.P and -65                 // aS.P&=-65
                     e.ar = player.al                            // ar=aS.al
@@ -666,7 +666,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (e.aB <= 0) e.aB = 0
                     e.consumeH()                                // H()
                     e.setAnim(139)
-                    world.statTally(e.aw)                       // k.e(0,aw)
+                    world.countKill(e.aw)                       // k.e(0,aw)
                 }
                 return
             }
@@ -692,8 +692,8 @@ class NpcFsm(val world: LevelCellSource) {
                 // k.o(3) + remove. → L849.
                 e.aB = 0
                 if (e.animFinished()) {
-                    world.statTally(e.aw)                       // k.e(0,aw)
-                    world.kAp[3]++                              // k.o(3)
+                    world.countKill(e.aw)                       // k.e(0,aw)
+                    world.kCount(3)                             // k.o(3)
                     world.removeEntity(e)                       // k.c(this)
                 }
                 return
@@ -760,7 +760,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // r() → i(139) corpse + k.e(0,aw). → L777.
                 if (e.animFinished()) {
                     e.setAnim(139)
-                    world.statTally(e.aw)
+                    world.countKill(e.aw)
                 }
             }
             177 -> {
@@ -843,7 +843,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (world.player.gb === e) world.player.gb = null     // g.b
                     if (e.S != 106 && e.S != 107 && e.S != 135) {
                         e.setAnim(139)
-                        world.statTally(e.aw)                 // k.e(0,aw)
+                        world.countKill(e.aw)                 // k.e(0,aw)
                     } else {
                         e.P = e.P and -17; e.P = e.P or 32 or 64
                         if (world.kBK) e.spawnFx8(world, 59, 2, e.av,
@@ -2320,10 +2320,10 @@ class NpcFsm(val world: LevelCellSource) {
                 if (!e.animFinished()) return
                 if (e.m > 0) {
                     world.spawnWisp(e); e.m--
-                    world.kAp[5]++; world.kCollectStreak()
+                    world.kCount(5); world.kCollectStreak()
                     if (e.m > 0) {
                         world.spawnWisp(e)
-                        world.kAp[5]++; world.kCollectStreak()
+                        world.kCount(5); world.kCollectStreak()
                         e.m--
                     }
                 }
@@ -4237,7 +4237,7 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
             if (mask == 62) {
                 w.findByAw(e.Z[13])?.let { w.removeEntity(it) }
                 w.findByAw(e.Z[14])?.let { w.removeEntity(it) }
-                w.statTally(e.aw)                        // k.e(0,aw)
+                w.countKill(e.aw)                        // k.e(0,aw)
                 e.aA = 7
             } else {
                 val cC = when (mask) {
@@ -8933,7 +8933,7 @@ private fun floorAheadM(e: Entity, w: LevelCellSource): Boolean =
 /** `i.S()` (i.java:9253, proven): `repeat(3){ m(-1); k.o(5); k.s() }` —
  *  wisp burst + stat + shake, shared by every k() kill arm. */
 private fun wispBurst(e: Entity, w: LevelCellSource) {
-    repeat(3) { w.spawnWisp(e); w.kAp[5]++; w.kCollectStreak() }
+    repeat(3) { w.spawnWisp(e); w.kCount(5); w.kCollectStreak() }
 }
 
 /**
@@ -9614,7 +9614,7 @@ private fun ax64S2(e: Entity, w: LevelCellSource, p: Entity) {
     if (p.markerTouched(w)) p.bl += 9              // L281-285: touch → +9
     if (!p.mashQte(w)) return                      // L285→L322: not escaped
     // escape (proven, L285-298): release + anim 9 + reset S2 siblings.
-    p.bl = 0; w.kStatE(e.aw); w.iBi = false
+    p.bl = 0; w.countKill(e.aw); w.iBi = false
     p.releaseAe(); p.setAnim(9)
     for (n in w.npcs) {
         if (n.ax != 64 || n.S != 2) continue
