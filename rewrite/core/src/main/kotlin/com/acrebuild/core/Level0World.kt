@@ -1747,8 +1747,11 @@ class Level0World(
     /** `k.fs` (k.java:323, proven): `i.bh` vignette alpha counter, init
      *  80, counts down by 10 and wraps to 80. */
     var kFs = 80
-    /** One-frame solid-black latch for the an-fade completion frame
-     *  (k.java:3171-3174 `setColor(0); j.b(0,0,400,240); an=false`). */
+    /** The `an` fade's completion frame paints solid black
+     *  (k.java:3171-3174 `setColor(0); j.b(0,0,400,240); an=false`):
+     *  true for that one tick, cleared by the next [overlayTailStep] —
+     *  the renderer used to clear it on its first drawn frame, a quarter
+     *  of the tick (slice 381). */
     var fadeSolidFrame = false
     /** The `i.bJ==i.bI && i.bL<=20` early-return in b(z2) (k.java:3231-
      *  3238) — skips the aU-bar draw for the frame that zeroes i.bJ. */
@@ -3972,6 +3975,7 @@ class Level0World(
      *  l(8); z(23); F(aj)`. `dl`/`A[]` are resource-management
      *  releases with no port equivalents (eager decode). */
     private fun menuJc9() {
+        loadScreenN()                        // case 9: N() first (:1068)
         // `G(j.g)` staged loader (k.java:4741-5090): the two stages that
         // matter at runtime — `G(3)=I(aj)` pack swap and `G(164)=d(false)`
         // entity spawn — run on their `j.g` ticks; every other stage is
@@ -3989,6 +3993,7 @@ class Level0World(
         }
         if (jG > 164 && (pad.w(Pad.M_CONTEXT) || pointerStrip())) {
             kBg = 0                                  // bG = 0
+            loadDl = null                            // dl = null (:1071)
             kBA[16] = 0                              // a(bA,16,(short)0)
             checkpointSnap = null; kG = 0            // …the snap's twin
             kAx = kDB; kAy = kDC; kAN = kDF          // ax=dB;ay=dC;aN=dF
@@ -4152,6 +4157,97 @@ class Level0World(
         }
     }
 
+    /** `C.cd[8] && cb[3] > 0` drew `d(0,91)` this frame (k.java:3117-3128):
+     *  the renderer draws the banner at (200,120). The `cb[3] > 15`
+     *  frames call the 6-arg `b.a` — an empty stub (b.java:1832) — so
+     *  only the last 16 of the 20 pulse frames show it. */
+    var claimBannerDraw = false
+        private set
+
+    /** `b()`'s claim block (structured k.java:3085-3128, proven), after the
+     *  entity loop: while `C.ab()`, `cb[1] ∈ {0,1,2}` puts card `i.bA[0]`
+     *  at (200,160), else `cc != null` fans `i.bA[0..cc[0]-1]` (`cc[0]==3`
+     *  → 200+50(i-1), `cc[0]==2` → 200±50, else 200; y 160); each card
+     *  steps `b(j.f)` before its `c()` draw; then `cd[8] && cb[3] > 0`
+     *  steps `cb[3]--` (floor 0) and draws the banner. The renderer did all
+     *  of it per rendered frame — the cards ran ~4x fast, never moved
+     *  headless while script op 108 hit-tests the pointer against their
+     *  positions, and the banner never drew (slice 381). */
+    private fun claimCardsStep() {
+        claimBannerDraw = false
+        val c = kC ?: return
+        if (!c.claimAb()) return
+        val cb = c.cb
+        val cc = c.cc
+        if (cb != null && (cb[1] == 0 || cb[1] == 1 || cb[1] == 2 || cc != null)) {
+            if (cb[1] == 0 || cb[1] == 1 || cb[1] == 2) {
+                Entity.scriptPrompts[0]?.let { it.a = 200; it.b = 160; it.anim.tick(62) }
+            } else if (cc != null) {
+                for (i54 in 0 until cc[0]) {
+                    val pr = Entity.scriptPrompts.getOrNull(i54) ?: continue
+                    pr.a = when (cc[0]) {
+                        3 -> 200 + 50 * (i54 - 1)
+                        2 -> 200 + 50 * (if (i54 == 1) 1 else -1)
+                        else -> 200
+                    }
+                    pr.b = 160
+                    pr.anim.tick(62)
+                }
+            }
+        }
+        if (c.cd[8] && cb != null && cb[3] > 0) {
+            cb[3]--
+            if (cb[3] <= 0) cb[3] = 0
+            claimBannerDraw = cb[3] <= 15
+        }
+    }
+
+    /** `k.fL` (k.java:1041-1052, proven) — the pause icon `a(A[2],377,19)`,
+     *  stepped in `J()` once per jc8/21 frame: held `d(354,0,46,37)` →
+     *  `fL.a(30,1)` else `fL.a(25,-1)`, then `fL.b(j.f)`. The renderer
+     *  draws it; it used to tick it 62 ms per rendered frame (slice 381). */
+    var pauseIcon: UiAnimObject? = null
+        private set
+    private fun pauseIconStep() {
+        val fl = pauseIcon ?: UiAnimObject(clips[93], 377, 19).also { pauseIcon = it }
+        if (pointerMoveIn(354, 0, 46, 37)) fl.arm(30, 1) else fl.arm(25, -1)
+        fl.tick(62)
+    }
+
+    /** The `fS` "CHECKPOINT" marquee (k.java:1027-1039, proven), in the
+     *  case-8/21 tail of every play and dialog frame: one char per two
+     *  frames, `d(0,111)` clipped into [tipStr], -1 = done. The port
+     *  stepped it on dialog frames only, so after `k.y()` (`fS = 0`) the
+     *  banner never typed out during play (slice 381). */
+    private fun marqueeFS() {
+        if (kFS < 0) return
+        val s = d0(111) ?: ""
+        if (jG % 2L == 0L) kFS++
+        tipStr = if (kFS < s.length) s.substring(0, kFS) else s
+        if (kFS >= s.length + 10) kFS = -1
+    }
+
+    /** `k.dl` (k.java:3485-3500, proven) — the load screen's anim
+     *  `a(A[5],80,-40)` armed `(0,-1)`, stepped once per `N()` frame;
+     *  from `j.g >= 165` it is re-seeked to its third-last frame each
+     *  frame. The jc9 exit drops it (`dl = null`, k.java:1071). */
+    var loadDl: UiAnimObject? = null
+        private set
+    /** `eW[]` (k.java:299, proven) — per-mission tip index for `N()`. */
+    private val kEW = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
+
+    /** `N()`'s per-frame state (k.java:3472-3513, proven): the `dl` step
+     *  and, from `j.g > 1`, the tip typewriter `a(bW, d(0,51+eW[aj]))` —
+     *  the same `dj/dk` [typewriterStep] the stats screen uses. The
+     *  renderer stepped its own copies per rendered frame (slice 381). */
+    private fun loadScreenN() {
+        val dl = loadDl ?: UiAnimObject(clips[99], 80, -40)
+            .also { it.arm(0, -1); loadDl = it }
+        dl.tick(62)
+        if (jG >= 165L) dl.seek(dl.len() - 3)
+        if (jG > 1L) typewriterStep(d0(51 + kEW[kAj.coerceIn(0, kEW.size - 1)]) ?: "")
+    }
+
     /** The full-screen fill `b()` paints between the tile blit and the
      *  entity loop this frame (structured k.java:2848-2859, proven):
      *  while `i.bQ > 0` (script sub-op 6, i.java:18241) white when
@@ -4198,6 +4294,7 @@ class Level0World(
         }
         drawStylePass()
         if (!z2) drawPassBubbles()
+        claimCardsStep()
         val hc = kC
         if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep(z2)
         if (!z2) claimFooter()
@@ -4948,6 +5045,7 @@ class Level0World(
      *  the tick's 62ms cadence is the same clock. The renderer reads the
      *  post-step values to draw (Level0Renderer overlay tail). */
     private fun overlayTailStep() {
+        fadeSolidFrame = false
         // `an` fade-in (k.java:3166-3174): ramp bI; each in-ramp step runs
         // `aa()`'s `fn++` grow arm (:5724-5734) — the stripe letterbox IS
         // the fade. Ramp done → one solid-black frame, `an=false`.
@@ -5264,17 +5362,11 @@ class Level0World(
                     }
                 }
             }
-            // `fS` tip marquee (k.java:1027-1039, proven): one char per
-            // two frames, `d(0,111)` clipped into `tipStr`, -1 = done.
-            if (kFS >= 0) {
-                val s = d0(111) ?: ""
-                if (jG % 2L == 0L) kFS++
-                tipStr = if (kFS < s.length) s.substring(0, kFS) else s
-                if (kFS >= s.length + 10) kFS = -1
-            }
+            marqueeFS()
             // `J()` read (k.java:1056-1063, proven): the rect release was
             // armed above (E(262144)); `v(262144)` → `C.Y();bw=0;l(14)`.
             if (jC != 12 && jC != 13) {                       // J() (:2653)
+                pauseIconStep()
                 if (pad.v(Pad.M_PAUSE)) {
                     kC?.pauseScript()                         // C.Y() (:1057)
                     kBw = 0
@@ -5479,7 +5571,9 @@ class Level0World(
         // pause opens the frame after the release, once the world has
         // run that frame (slice 368).
         bPass(false)
+        marqueeFS()
         if (jC != 12 && jC != 13) {                          // J() (:2653)
+            pauseIconStep()
             if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
             if (pad.v(Pad.M_PAUSE)) {
                 kC?.pauseScript()                            // C.Y() (:1057)

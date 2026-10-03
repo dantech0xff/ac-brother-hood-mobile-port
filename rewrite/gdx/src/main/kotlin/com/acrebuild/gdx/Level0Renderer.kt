@@ -291,8 +291,11 @@ class Level0Renderer {
      *  tick the anim by the frame ms, then draw `d.a(g, e, f, a, b, c,
      *  0,0)` — anim e frame f at (a,b), flags c. Palette slot `k` stays
      *  -1 in every op we ported (no producer), so palette 0. */
-    private fun drawPrompt(pr: ScriptPrompt, ms: Int) {
-        pr.anim.tick(ms)
+    /** `a.c()` (a.java:215) — draw only: the world steps the card's
+     *  `b(j.f)` once per pass (`Level0World.claimCardsStep`, the ax10
+     *  S31 lane's `aUDraw`); this used to tick it per rendered frame too
+     *  (slice 381). */
+    private fun drawPrompt(pr: ScriptPrompt) {
         drawFrame(pr.clipIdx, pr.anim.e, pr.anim.currentFrame,
                   pr.anim.a, pr.anim.b, pr.anim.c)
     }
@@ -300,15 +303,8 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
-    private var nDl: UiAnimObject? = null             // k.dl — N() icon
-    private var pauseFl: UiAnimObject? = null         // k.fL — pause icon
     private var edgeCQ = -1                           // k.cQ — corner width
     private var edgeCR = -1                           // k.cR — tile width
-    private var nTipDj = 0                            // k.dj — tip type pos
-    private var nTipDk = 0                            // k.dk — tip hold
-
-    /** `eW[]` (k.java:299, proven) — per-mission tip index for `N()`. */
-    private val tipEW = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
 
     /** `fP[]` (k.java:344, proven) — mission poster-boundary table for
      *  `ag()`'s `A[4]` anim pick (`i+4`). */
@@ -350,23 +346,21 @@ class Level0Renderer {
      *  `j.g>=165` → dm=165 + `dl.a(dl.a()-3)` freeze-frame + `d(0,9)`
      *  blink; else `dm=j.g` + `bW.l(0)` `d(0,24)`; bar `j.a(dm<<?/165
      *  *300)` at (50,205) color 7644855; `j.g>1` → tip typewriter
-     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. */
+     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. The world
+     *  steps `dl` and the typewriter (`loadScreenN`); this only draws
+     *  (slice 381). */
     private fun loadScreen(world: Level0World) {
-        val dl = nDl ?: UiAnimObject(clips[99], 80, -40)
-            .also { it.arm(0, -1); nDl = it }
+        val dl = world.loadDl
         fillAr(0, 0, 400, 240, -16777216)            // setColor(0);j.b
         val dm: Int
         if (world.jG >= 165L) {
             dm = 165
-            dl.tick(62)
-            dl.seek(dl.len() - 3)                  // dl.a(dl.a()-3)
-            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dl?.let { drawFrame(99, it.e, it.currentFrame, it.a, it.b, it.c) }
             if (world.jG % 10L < 5L) {
                 drawText(world.d0(9) ?: "", 200, 220, 17, pack = 91)
             }
         } else {
-            dl.tick(62)
-            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dl?.let { drawFrame(99, it.e, it.currentFrame, it.a, it.b, it.c) }
             dm = world.jG.toInt()
             fontW.l(0)
             drawText(world.d0(24) ?: "", 395, 230, 40, pack = 91)
@@ -375,7 +369,7 @@ class Level0Renderer {
         val w = ((((dm shl 8) / 165) * 300) + 128) shr 8
         fillAr(50, 205, w, 10, 7644855)
         if (world.jG > 1L) {
-            tipTypewriter(world.d0(51 + tipEW[world.kAj]) ?: "")
+            drawText(world.typewriterText, 200, 40, 17, pack = 91)  // a(bW,…)
             // y.a(str,null) → b.d measured width; x = max(20,(400-b.d)>>1)
             val title = world.levelString(1, 0) ?: return
             val x = ((400 - fontY.measure(title)[0]) shr 1).coerceAtLeast(20)
@@ -470,31 +464,6 @@ class Level0Renderer {
         if (x0 == x1 && y0 == y1) return false
         if (r[0] == r[2]) return r[1] != r[3]
         return true
-    }
-
-    /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
-     *  `dj` chars; inserts `\\2`/palette-2 around the newest char;
-     *  after full string `dk=15` frame hold then `dj=0` restart.
-     *  `bVar.f=true` bold — our drawText maps `\\0`.. codes via the
-     *  font's own escape pass. */
-    private fun tipTypewriter(str: String) {
-        if (str.isEmpty()) return
-        if (nTipDk <= 0) {
-            if (nTipDj < str.length) {
-                // verbatim: \2<new char>\0 bracket inside the FULL string
-                // (untyped tail still draws — moving-highlight cursor)
-                val shown = "\\0" + str.substring(0, nTipDj) +
-                            "\\2" + str[nTipDj] + "\\0" +
-                            str.substring(nTipDj + 1)
-                drawText(shown, 200, 40, 17, pack = 91)
-                nTipDj++
-                return
-            }
-            nTipDj = 0
-            nTipDk = 15
-        }
-        nTipDk--
-        drawText("\\0" + str, 200, 40, 17, pack = 91)
     }
 
     /** jc18 title-screen arm (k.java:1146-1157, proven) —
@@ -647,11 +616,11 @@ class Level0Renderer {
             if (text.isNotEmpty()) drawText(text, x + 4, y + 3, 0, pack = 92)
         }
         for (o in w.fxOutlines) outlineAr(o[0], o[1], o[2], o[3], o[4])
-        // `a.c()` (a.java:215, proven): armed prompt-card slots — the
-        // renderer ticks + blits at the (a,b) the sim wrote.
+        // `a.c()` (a.java:215, proven): armed prompt-card slots, blitted
+        // at the (a,b) the sim wrote and stepped.
         for (slot in w.fxPrompts) {
             val pr = Entity.scriptPrompts.getOrNull(slot) ?: continue
-            if (pr.anim.e >= 0) drawPrompt(pr, 62)
+            if (pr.anim.e >= 0) drawPrompt(pr)
         }
     }
 
@@ -1453,13 +1422,11 @@ class Level0Renderer {
 
         // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
         // claim-script entity (`kC`) is active (`ab()`), its cb/cc state
-        // selects — `cb[1] ∈ {0,1,2}` → the single YES/NO card at
-        // (200,160); else `cc != null` → the choice-list fan
-        // (cc[0]==3 → 200±50, cc[0]==2 → 200±50, else 200; y=160). Each
-        // card ticks `b(j.f)` then `c()` draws anim e frame f at (a,b)
-        // flags c — palette slot k when set. The trailing
-        // `cd[8] && cb[3]>0` arm pulses bW palette 3 while counting down.
-        // `j.f` = the fixed 62ms tick delta for card ticks.
+        // selects — `cb[1] ∈ {0,1,2}` → the single card, else
+        // `cc != null` → the fan. The world positions and steps them once
+        // per pass (`claimCardsStep`); `c()` draws anim e frame f at
+        // (a,b). Then the `cd[8]` banner `d(0,91)` at (200,120), font
+        // palette 3, on the frames the world flags (slice 381).
         val cEnt2 = world.kC
         if (cEnt2 != null && cEnt2.claimActive()) {
             val cb = cEnt2.cb
@@ -1467,27 +1434,16 @@ class Level0Renderer {
             if (cb != null && (cb[1] == 0 || cb[1] == 1 || cb[1] == 2 ||
                 cc != null)) {
                 if (cb[1] == 0 || cb[1] == 1 || cb[1] == 2) {
-                    Entity.scriptPrompts[0]?.let { pr ->
-                        pr.a = 200; pr.b = 160
-                        drawPrompt(pr, 62)
-                    }
+                    Entity.scriptPrompts[0]?.let { drawPrompt(it) }
                 } else if (cc != null) {
                     for (i54 in 0 until cc[0]) {
-                        val pr = Entity.scriptPrompts[i54] ?: continue
-                        pr.a = when {
-                            cc[0] == 3 -> 200 + 50 * (i54 - 1)
-                            cc[0] == 2 -> 200 + 50 * (if (i54 == 1) 1 else -1)
-                            else -> 200
-                        }
-                        pr.b = 160
-                        drawPrompt(pr, 62)
+                        Entity.scriptPrompts.getOrNull(i54)?.let { drawPrompt(it) }
                     }
                 }
             }
-            if (cEnt2.cd[8] && cEnt2.cb != null && cEnt2.cb!![3] > 0) {
-                fontW.l(3); cEnt2.cb!![3]--
-            }
         }
+        if (world.claimBannerDraw)
+            drawText(world.d0(91) ?: "", 200, 120, 3, palette = 3, pack = 91)
 
         if (world.bh3) {
             // bh3 arm (k.java:4187-4245, proven)
@@ -1607,13 +1563,10 @@ class Level0Renderer {
         // `E(262144)` → `v(262144)` → `l(14)` press chain is already
         // wired in `consume`.
         if (world.jC != 12 && world.jC != 13) {
-            val fl = pauseFl ?: UiAnimObject(clips[93], 377, 19)
-                             .also { pauseFl = it }
             val held = world.pointerMoveIn(354, 0, 46, 37)
             edgeStrip(359, 32, 36, held)
-            fl.arm(if (held) 30 else 25, if (held) 1 else -1)
-            fl.tick(62)                                       // fL.b(j.f)
-            drawFrame(93, fl.e, fl.currentFrame, fl.a, fl.b, fl.c)
+            // `fL` is armed and stepped by the world (`pauseIconStep`)
+            world.pauseIcon?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
         }
 
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
@@ -1658,10 +1611,7 @@ class Level0Renderer {
             fillAr(0, 0, 400, h, -16777216)
             fillAr(0, 240 - h, 400, h, -16777216)
         }
-        if (world.fadeSolidFrame) {
-            fillAr(0, 0, 400, 240, -16777216)
-            world.fadeSolidFrame = false
-        }
+        if (world.fadeSolidFrame) fillAr(0, 0, 400, 240, -16777216)
         if (world.kAo && world.kFn >= 0) {
             val h1 = 120 - ((world.kFl - world.kFn) * world.kFm)
             val h2 = 120 - ((world.kFl - world.kFn - 1) * world.kFm)

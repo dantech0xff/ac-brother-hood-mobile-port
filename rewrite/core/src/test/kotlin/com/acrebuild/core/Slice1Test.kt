@@ -777,7 +777,9 @@ class Level0WorldTest {
         val cp = w.checkpoints.first()
         overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
-        assertEquals(0, w.kFS, "aY() arms the fS tip-marquee counter")
+        // armed (`fS != -1`); the case-8 tail types it from the same
+        // frame on (k.java:1027-1031, slice 381)
+        assertTrue(w.kFS in 0..1, "aY() arms the fS tip-marquee counter")
         // The fired record's slot tombstones → after reload the rebuilt
         // checkpoint list marks it consumed again (no second fire).
         w.resetLevel(true)
@@ -11666,6 +11668,8 @@ class Slice98Test {
         tickClean(w, 1)
         assertFalse(w.kAn, "bI>255-fk → an=false (k.java:3171)")
         assertTrue(w.fadeSolidFrame, "single solid-black frame armed")
+        tickClean(w, 1)
+        assertFalse(w.fadeSolidFrame, "for one tick (slice 381)")
     }
 
     @Test fun `fadeIn drains bI and recedes stripes`() {
@@ -21420,7 +21424,7 @@ class Slice237Test {
         overlapCheckpoint(w, cp)
         w.tick(emptyList())
         assertTrue(cp.consumed)
-        assertEquals(0, w.kFS)
+        assertTrue(w.kFS in 0..1, "fS armed; the frame's tail may type one char")
         assertNotNull(w.checkpointSnap)
         w.tick(emptyList())                    // drain pendingRemove
         assertNull(w.npcs.firstOrNull { it === e },

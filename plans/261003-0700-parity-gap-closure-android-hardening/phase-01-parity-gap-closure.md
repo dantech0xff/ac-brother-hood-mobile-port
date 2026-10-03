@@ -58,6 +58,7 @@ and lands with unit tests that would have caught it.
 | `j.t` is the jc12/13/31 frame-skip latch (veil latch bit 0, `K()` bit 4), not an input lock; `b(z2)` is one pass (head, `F()`, bubbles, gated `c()`, SKIP pill, un-gated tail) on play, dialog and `b(true)` frames; no black veil frame | done (Phase 2 branch) | [376](../261004-0130-slice376-jt-skip-latch/plan.md) |
 | the restart `a(z2)` step by step: `ap[1]` counts `a(true)` retries (`o(1)`), checkpoint arm keeps `ap[1]`/`dg` and reads `ap` from `bA`, `g.e(ax)` full meter, `aA` alert carry on a fresh stance, `i.bW/bX/bV` clears, `F(aj)`/`q()`/`T()`/`l(8)`/`B()`; one `k.bG`; player `az=100` | done (Phase 2 branch) | [377](../261004-0200-slice377-reload-a-z2/plan.md) |
 | `b()`'s `i.bQ` white/red flash (stepped once per pass) and `i.ce` white backdrop under the entities | done (Phase 2 branch) | [378](../261004-0230-slice378-bq-flash-ce-backdrop/plan.md) |
+| per-frame UI state steps in the world: claim cards + `cd[8]` banner (now drawn), `fS` marquee on play frames, pause icon, load-screen `dl` + typewriter, `an` black frame for a whole tick | done (Phase 2 branch) | [381](../261004-0300-slice381-ui-steps-in-world/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347
