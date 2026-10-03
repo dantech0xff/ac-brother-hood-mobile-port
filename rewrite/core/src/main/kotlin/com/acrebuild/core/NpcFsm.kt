@@ -24,9 +24,8 @@ import kotlin.math.abs
  *   Z[9..12]=absolute alert box (ak+Z15 .. ak+Z15+Z17, al+Z16 .. al+Z16+Z18),
  *   Z[19]=r8[18], Z[21]=r8[19] (corpse-drop link).
  *
- * Open gap (Phase 1 item 1.5 / G5): ax11's `aC()` attack scheduler is
- * ported only as its chase timeout; ax73 has the full scheduler
- * (`attackScheduler73`). Mining notes: `docs/gameplay-mining/npc-fsm.md`.
+ * ax11 and ax73 share the `aC()` attack scheduler (`attackSchedulerAC`).
+ * Mining notes: `docs/gameplay-mining/npc-fsm.md`.
  */
 class NpcFsm(val world: LevelCellSource) {
 
@@ -260,17 +259,6 @@ class NpcFsm(val world: LevelCellSource) {
      *  original's `a(this.W, aS.W)` is a rect-overlap test between the
      *  Z[9..12] zone and the player's collision box — not a point test —
      *  so a player hugging the zone edge still alerts. */
-    private fun seesPlayer(e: Entity, player: Entity): Boolean {
-        // same-row within one cell of height
-        if (abs(player.al - e.al) / 20 > 1) return false
-        if (player.W[2] < e.Z[9] || player.W[0] > e.Z[10]) return false
-        if (player.W[3] < e.Z[11] || player.W[1] > e.Z[12]) return false
-        // facing must cover the player
-        if (e.av && player.ak > e.ak) return false
-        if (!e.av && player.ak < e.ak) return false
-        return true
-    }
-
     // -- per-tick ------------------------------------------------------------
 
     /** `aH()` corpse-family set (i.java:7287-7298, proven): states that
@@ -356,21 +344,30 @@ class NpcFsm(val world: LevelCellSource) {
                 tail[2] = true
             }
             5 -> {
-                // L438 (i.java:5507, proven): `aL=this` claim + `r14`
-                // (j() intake) then `r()` → i(4)+aC=0 → L777.
+                // L438 (simple/i.java:5507-5517, proven): `aL=this` claim +
+                // `r14` (j() intake); `r()` → `aq!=0 → i(4)`, `G()`,
+                // `aC=0`, then the `aC()` scheduler picks the next state.
                 Entity.aL = e; tail[2] = true
-                if (e.animFinished()) { e.setAnim(4); e.aC = 0 }
+                if (e.animFinished()) {
+                    if (e.aq != 0) e.setAnim(4)
+                    e.releaseAe()                               // G()
+                    e.aC = 0
+                    attackSchedulerAC(e, world, player)         // aC()
+                }
             }
             23 -> {
-                // L444 windup-approach: ag=∓512 toward player; aF() done →
-                // strike anim 12 (the contact arm at L478 runs next).
-                // `z7 = true` (i.java:4651, proven): j() runs in the shared
-                // tail — the windup is the weakened guard's damage window.
+                // L444 (simple/i.java:5518-5532, proven): `Q()`, `a(true)`,
+                // `H()`, then back off — `ag = av ? 512 : -512` (away from
+                // the player Q() just faced) — `r14`, and `aC()` decides
+                // the next state (contact → S11 windup → S12 strike).
+                // `aF()` → `ai=ag=0`. `r14` is the guard's damage window.
                 facePlayer(e, player)
                 e.collideSides(world, true)
-                e.ag = if (e.av) -512 else 512
+                e.dropHeld()                                    // H()
+                e.ag = if (e.av) 512 else -512
                 tail[2] = true
-                if (e.animFinished()) e.setAnim(12)
+                attackSchedulerAC(e, world, player)             // aC()
+                if (crateEdge73(e, world)) { e.ai = 0; e.ag = 0 } // aF()
             }
             12 -> {
                 // L478-L502 (i.java:5580-5640, proven): prelude
@@ -1103,18 +1100,13 @@ class NpcFsm(val world: LevelCellSource) {
         e.collideSides(world, true)                     // L457 a(true)
         e.ag = if (e.S == 4) (if (e.av) -2048 else 2048)
                else (if (e.av) -512 else 512)
-        // a(aS.W,W) → af==null → aC=3 + i(23) attack windup (:5562)
+        // `a(aS.W,W) && af==null → aC=3 + i(23)` windup, else the `aC()`
+        // scheduler (simple/i.java:5562-5566, proven).
         player.refreshBoxes()
-        if (e.af == null && overlap(player.W, e.W)) {
+        if (Entity.overlapStrict(player.W, e.W) && e.af == null) {
             e.aC = 3
             e.setAnim(23)
-        }
-        // aC() subset: chase timeout — lose the player for 60 ticks → patrol
-        e.P = e.P or 16
-        if (e.aC > 0) e.aC--
-        else if (!seesPlayer(e, player) && e.aA != 0) {
-            e.aC = 60; e.aA = 0; e.k = false; e.setAnim(2)
-        }
+        } else attackSchedulerAC(e, world, player)
         return true
     }
 
@@ -8572,26 +8564,44 @@ private fun ceilingAmbush73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
     }
 }
 
-/** `i.aC()` (i.java:8893-9144, proven): the attack scheduler — `P|=16`,
- *  `k.aA=60`, face the player; `aq!=0` → leap-landing arm (ax69 bound
- *  i(138) + Z0==3 ceiling leap to i(165)); else the j-tier dispatch —
- *  0 stalk, 6/4 windup→S131, 3/1 approach→S154 via aG() edge check. */
-private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
+/** `i.c(int,int,int,int)` (structured/i.java:7146-7161, proven): the
+ *  per-type state pick of the shared schedulers — ax11 takes `s11`,
+ *  ax73 `s73`; `-1` (and every other type) leaves the state alone. */
+private fun cPick(e: Entity, s11: Int, s73: Int) {
+    when (e.ax) {
+        11 -> if (s11 != -1) e.setAnim(s11)
+        73 -> if (s73 != -1) e.setAnim(s73)
+    }
+}
+
+/** `i.aC()` (structured/i.java:7009-7136, proven): the attack scheduler
+ *  shared by ax11 and ax73 — `P|=16`, `k.aA=60`, face the player
+ *  (`Q()`); `aq!=0` → the leap-landing arm (a bound ax69 → `i(138)`;
+ *  ax73 `Z0==3` ceiling leap to `i(165)`; else marker reached →
+ *  `c(2,152)`); then the `j` tiers from `d()`: 0 far (>180 / >70) →
+ *  60-tick stalk `c(23,155)`, timeout or `!v()` → back to patrol (ax11
+ *  `i(k?3:2)`, ax73 `i(152)`); 6 contact → `c(23,155)`, `aC` spent →
+ *  `c(11,131)`; 4 close → `l++`, `aC` spent → `c(11,131)` else
+ *  `c(23,155)`; 3 mid → `aC` spent and no `aG()` edge → `c(22,154)`;
+ *  1 far → no edge → `c(4,154)`. Slice 357 widened the ax73-only port
+ *  to ax11 (it ran only a chase-timeout subset, so S11 was unreachable). */
+private fun attackSchedulerAC(e: Entity, w: LevelCellSource, p: Entity) {
     e.P = e.P or 16
     w.kAA = 60
     e.av = p.ak < e.ak                                    // Q()
-    var r7: Int; var r8: Int
+    val r7: Int; val r8: Int
     if (e.aq != 0) {
-        // L5: leap-landing arm — bound ax69 kill or Z0==3 ceiling probe.
+        // leap-landing arm — bound ax69 kill or the ax73 Z0==3 leaper.
         val af = e.af
-        if (af != null && af.ax == 69 && af.aA == 1 &&
-            Entity.overlapStrict(e.W, af.W)) { e.setAnim(138); return }
+        if (af != null && af.ax == 69 && af.aA == 1) {
+            if (Entity.overlapStrict(e.W, af.W)) e.setAnim(138)
+            return
+        }
         r7 = Math.abs(e.aq - e.ak); r8 = Math.abs(e.ar - e.al)
         e.av = e.aq < e.ak                                // face the marker
-        if (e.Z[0] == 3) {                                // L20-L42 leaper
-            // i.java:25336-25391 — leap when the marker is reached, the
-            // player is out of reach (>=140), a ceiling blocks the backing
-            // direction, or the floor ends under the trailing edge (aF).
+        if (e.ax == 73 && e.Z[0] == 3) {
+            // leap when the marker is reached, the player is out of reach
+            // (>=140), a ceiling blocks the backing column, or aF().
             var leap = r7 < 10 || Math.abs(p.ak - e.ak) >= 140
             if (!leap) {
                 val x0 = e.ak / 20 + if (e.av) 1 else -1
@@ -8599,47 +8609,48 @@ private fun attackScheduler73(e: Entity, w: LevelCellSource, p: Entity) {
                     if (e.e(w, x0, e.al / 20 - r9) >= 12) { leap = true; break }
                 if (!leap) leap = crateEdge73(e, w)
             }
-            if (leap && e.S == 155) {                     // Lf3
+            if (leap && e.S == 155) {
                 e.ar = 0; e.aq = 0; w.kAA = 0
                 e.setAnim(165); e.am = e.ak; w.gZ = false
             }
             return
         }
-        // L11f: marker reached → c(2,152) reset, then j-tier fallthrough.
-        if (r7 < 10) {
-            e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0; e.setAnim(152)
+        if (r7 < 10) {                                    // marker reached
+            e.ar = 0; e.aq = 0; w.kAA = 0; e.aA = 0
+            cPick(e, 2, 152)
         }
     } else {
         r7 = Math.abs(p.ak - e.ak); r8 = Math.abs(p.al - e.al)
     }
-    when (e.j) {
-        // L50: unaware → stalk the player until close, else countdown back
-        // to S152 idle.
-        0 -> if (r7 > 180 || r8 > 70) {
-            if (e.aC == 0) { e.aC = 60; e.setAnim(155) }
-            else {
-                e.aC--
-                if (e.aC <= 0 || !onscreen73(e, w)) {
-                    e.P = e.P and -17; w.kAA = 0; e.aA = 0
-                    e.setAnim(152)                        // L72 ax73 arm
-                }
+    if (e.j == 0 && (r7 > 180 || r8 > 70)) {
+        if (e.aC == 0) { e.aC = 60; cPick(e, 23, 155); return }
+        e.aC--
+        if (e.aC <= 0 || !e.inPlayV(w)) {
+            e.P = e.P and -17; w.kAA = 0; e.aA = 0
+            when (e.ax) {
+                11 -> { e.setAnim(if (e.k) 3 else 2); e.k = false }
+                73 -> e.setAnim(152)
             }
         }
-        6 -> {                                            // L76 contact tier
-            e.setAnim(155)
+        return
+    }
+    when (e.j) {
+        6 -> {
+            cPick(e, 23, 155)
             val was = e.aC; e.aC = was - 1
-            if (was <= 0) e.setAnim(131)                  // c(11,131) block
+            if (was <= 0) cPick(e, 11, 131)
         }
-        4 -> {                                            // L82 close tier
-            if (++e.l <= 0) e.l = 1
+        4 -> {
+            val l0 = e.l; e.l = l0 + 1
+            if (l0 <= 0) e.l = 1
             val was = e.aC; e.aC = was - 1
-            if (was >= 0) e.setAnim(155) else e.setAnim(131)
+            if (was < 0) cPick(e, 11, 131) else cPick(e, 23, 155)
         }
-        3 -> {                                            // L93 mid tier
+        3 -> {
             val was = e.aC; e.aC = was - 1
-            if (was <= 0 && !edgeAhead73(e, w)) e.setAnim(154)
+            if (was <= 0 && !edgeAhead73(e, w)) cPick(e, 22, 154)
         }
-        1 -> if (!edgeAhead73(e, w)) e.setAnim(154)       // L101 far tier
+        1 -> if (!edgeAhead73(e, w)) cPick(e, 4, 154)
     }
 }
 
@@ -8778,7 +8789,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
                 if (Entity.overlapStrict(p.W, e.W) && e.af == null) {
                     e.aC = 3; e.setAnim(155)
                 }
-                attackScheduler73(e, w, p)
+                attackSchedulerAC(e, w, p)
             }
         }
         155 -> {                                           // L68 attack commit
@@ -8791,7 +8802,7 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
                 e.ag = if (e.av) 512 else -512
                 r11 = true
             }
-            attackScheduler73(e, w, p)
+            attackSchedulerAC(e, w, p)
             if (crateEdge73(e, w)) { e.ai = 0; e.ag = 0 }  // L81 aF()
         }
         156 -> {                                           // L83 leap
