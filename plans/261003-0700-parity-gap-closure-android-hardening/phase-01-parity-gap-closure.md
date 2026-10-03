@@ -47,6 +47,7 @@ and lands with unit tests that would have caught it.
 | `setAnim` is `i.i(int)`; `enterStateMasked` x snaps are `i.a(int,int)`'s chain (found in Phase 2) | done (Phase 2 branch) | [361](../261003-1500-slice361-setanim-i-i/plan.md) |
 | ax44 door `bv()`: last frame's box, mode-1 polarity, resolve-tick promotion, `i.a`, crush arms (found in Phase 2) | done (Phase 2 branch) | [362](../261003-1600-slice362-ax44-door-bv/plan.md) |
 | below-the-camera kill is `i.B()`'s (flying player only) (found in Phase 2) | done (Phase 2 branch) | [363](../261003-1700-slice363-below-camera-kill-flying-only/plan.md) |
+| every `i.a(int[],int[])` port rejects point boxes (140 sites) (found in Phase 2; follow-ups open) | done (Phase 2 branch) | [364](../261003-1800-slice364-overlap-ia/plan.md) |
 | `g.e()` arm exits: post-tail only after L353d, `az()` in the head (found in Phase 2; follow-ups F1-F11 open) | done (Phase 2 branch) | [365](../261003-1900-slice365-ge-exits/plan.md) |
 | soldier melee gate reads `i.ab()` (running claim suppresses `aB()`) (found in Phase 3) | done (Phase 2 branch) | [367](../261003-2200-slice367-claim-ab-melee-gate/plan.md) |
 | soft keys: claim SKIP pill hit-test (m0 intro skippable), `ce/cf` wheel margins, pause icon on release (found in Phase 3) | done (Phase 2 branch) | [368](../261003-2230-slice368-soft-keys-back/plan.md) |
