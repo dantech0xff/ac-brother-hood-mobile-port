@@ -1948,12 +1948,13 @@ class Level0World(
     fun dlgSuppressed(): Boolean =
         pad.v(131072) && dlgU == 9 && kC?.cd?.get(2) == true
 
-    /** Render-side typewriter tick — the `bQ && !A()` arm of case-21
-     *  (k.java:947-955, proven): per frame `bR++`; `bT=(bR*bS)/16`;
-     *  `bT` past the page length → `bT=-1` (revealed). Fire press while
-     *  typing also forces `bT=-1` (:955-957) — world-side in the press
-     *  tail. Runs inside the original's render dispatch, so it lives
-     *  renderer-side here too. Returns `bT` for the text call. */
+    /** The typewriter step — the `bQ && !A()` arm of case-21 (k.java:
+     *  947-955, proven): `bR++`; `bT=(bR*bS)/16`; past the page length →
+     *  `bT=-1` (revealed). Once per frame, from the dialog block (the
+     *  original's case-21 paint is the frame); the renderer used to call
+     *  it per rendered frame, so text typed at the display rate (slice
+     *  374). A press while typing forces `bT=-1` (:955-957) in the same
+     *  arm. Returns `bT`. */
     fun dlgTypeTick(pageLen: Int): Int {
         if (dlgBQ && dlgBT != -1) {
             dlgBR++
@@ -5058,9 +5059,13 @@ class Level0World(
         // halted claimer while `cd[0]` holds. A press edge = the screen's
         // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
         if (dialogModal) {
-            // `b(false)` runs on every jC 21 frame (k.java:867): the
-            // entity pass's `ad()` bubbles step even behind the dialog,
-            // the auto-dismiss test harness included (slice 373).
+            // `b(false)` runs on every jC 21 frame (k.java:867): its
+            // draw-list build (`ae.s()`) and per-entity `F()` (simple
+            // k.java:3450-3760) and the `ad()` bubbles step even behind
+            // the dialog, the auto-dismiss test harness included (slices
+            // 373/374). F()'s player arm — `g.t--`, the RNG sparkle
+            // field — is gated on jC 8 inside `drawStyleF`.
+            drawStylePass()
             drawPassBubbles()
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
@@ -5103,6 +5108,10 @@ class Level0World(
                         z(23); dlgV = dlgW; stateL(8)         // l(8); v=w
                     } else {
                         if (dlgBQ && dlgBT != -1) {           // typing (:945)
+                            // the typewriter steps once per frame here,
+                            // after the page draw (:947-952) — the
+                            // renderer only reads bT (slice 374).
+                            dlgTypeTick(dlgBM.getOrNull(dlgV)?.length ?: 0)
                             if (pad.v(Pad.M_CONTEXT)) dlgBT = -1   // reveal (:953)
                         } else if (dlgU == 10) {
                             if (pad.v(Pad.M_CONTEXT)) {       // :956-961

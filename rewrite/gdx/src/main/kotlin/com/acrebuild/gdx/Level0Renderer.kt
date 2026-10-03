@@ -1751,8 +1751,7 @@ class Level0Renderer {
                         else if (world.bO == 1) bP = 137
                     }
                     dialogPanel(world, 0, bP)                 // i(0,bP) (:414-429)
-                    val bT = if (world.dlgSuppressed()) world.dlgBT  // gate (:946)
-                             else world.dlgTypeTick(page.length)     // (:947-955)
+                    val bT = world.dlgBT     // stepped by the world tick (slice 374)
                     if (world.dlgU == 6 || i3 == -1) {        // (:934-935)
                         dialogText(world, page, 200, bP + 34, 380, 3, bT)
                     } else {
@@ -2051,7 +2050,6 @@ class Level0Renderer {
         // palette alpha, chosen per ax before the (P&128)==0 blit.
         var palette = e.palette
         var alpha = e.paletteAlpha          // `aa.g` — F()'s palette alpha
-        val last = e.T >= clip.frameCount(e.S) - 1
         // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
         // draws the rope segments (object Z[7] of clip61) BEFORE the
         // standard blit; the ax13 entity skips the art-select `when`
@@ -2059,13 +2057,9 @@ class Level0Renderer {
         if (e.ax == 13) drawRopeSegments(e, pack, camX, camY)
         when {
             e.ax == 45 -> palette = e.Z.getOrElse(0) { 0 }
-            e.ax == 30 || e.ax == 32 -> {
-                palette = 0
-                if (e.cGCount > 0) {
-                    e.cGCount--
-                    if (e.cGCount % 2 != 0) palette = 1
-                }
-            }
+            // the cG hit-flash steps in the sim-side F() once per frame;
+            // its palette is read here, never stepped (slice 374).
+            e.ax == 30 || e.ax == 32 -> palette = e.palette
             e.ax == 11 -> palette =
                 if (e.Z.getOrElse(0) { 0 } == 1 || e.Z.getOrElse(0) { 0 } == 2) 1 else 0
             e.ax == 47 || e.ax == 17 || e.ax == 73 -> palette = 0
@@ -2074,7 +2068,6 @@ class Level0Renderer {
              (e.ax == 67 && e.Z.getOrElse(0) { 0 } == 11)) && !world.bh3 -> {
                 if (world.iCe) palette = 1
                 else if (e.ax == 9) {
-                    if (e.S == 21 || e.S == 22) e.ad = null
                     palette = when (world.kAj) {
                         2 -> 5; 3 -> 6; 5 -> 7; 6 -> 4; else -> 0
                     }
@@ -2085,11 +2078,10 @@ class Level0Renderer {
                         if (!world.kBK) return
                         palette = 5
                     }
-                    if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
-                    if (world.iCe && e.S == 2 && last) e.P = e.P or 64
-                    // S5 candle fade (i.java:3095): sim-side F() owns
-                    // `ak/al` snap, `P|=64`, `aC--`, removal — the
-                    // renderer only consumes `paletteAlpha`.
+                    // `ad = null` (S21/22), the S2/S4/S5 `P|=64`, the S5
+                    // screen lock, `aC--` and the `k.c()` removals are the
+                    // sim-side F()'s (`Entity.drawStyleF`, once per frame);
+                    // the renderer only consumes `paletteAlpha` (slice 374).
                 } else if (e.ax == 0 && world.kBL in boArt.indices) {
                     palette = boArt[world.kBL][0]
                     e.remapTable = boArt[world.kBL][1]
