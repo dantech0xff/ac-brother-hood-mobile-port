@@ -17618,7 +17618,10 @@ class Slice180Test {
         val p = w.player; p.setAnim(0); p.ah = 0
         w.stateL(8)
         w.playerFsm.tick(p, Pad())
-        assertNotEquals(2, p.aA, "aA stays grounded-default (no ax25 init)")
+        // aA==2 is the grounded default since the e() head's `k.aA<=0 →
+        // aA=2` (slice 360); the ax25 init's other marks stay absent.
+        assertNotEquals(202, p.az, "no ax25 init (az=202)")
+        assertTrue(p.clip !== w.clips[16], "grounded clip, not the glider suit")
     }
 }
 

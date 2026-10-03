@@ -106,7 +106,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             if (p.Z[0] <= 0) p.aA = (p.aA and -17) or 256
         }
         if (world.playerDead()) p.setAnim(50)               // g.java:576
-        if (world.kAA > 0 && p.aA > 1) p.aA = p.aA or 1   // g.java:581-583
+        // g.javap.txt e() 449-486 (proven): `k.aA > 0 → aA>1 ? aA|=1`;
+        // otherwise a stance of 0/1 is raised to 2.
+        if (world.kAA > 0) { if (p.aA > 1) p.aA = p.aA or 1 }
+        else if (p.aA <= 1) p.aA = 2
         // g.java:602-607 (proven): the terminal-velocity clamp lives in the
         // e() head — `cn` counts consecutive capped ticks and resets the
         // moment `ah` falls below 5120. (Write-only in the original —
@@ -1595,11 +1598,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.gcm = false
             if (world.mounted) p.releaseAe() else p.dropIndicator(world)
         }
-        // L2051-L2057 aA fixups; the L380d `o()?ao()` weapon-cycle gate
-        // already runs in postTail (:1021) — don't double-call it here
-        // (`k.at` latches, but the port keeps one call site).
-        if (p.aA == 0) p.aA = 1
-        if (p.aA and 4 != 0) p.aA = p.aA and -5
+        // The L1947 block falls straight into e()'s post-tail
+        // (g.javap.txt e() 14349): the `o()→ao()` cycle and the
+        // L2051-L2057 `aA` bookkeeping run there, once, in postTail.
     }
 
     // -- grounded family tail (L682) ----------------------------------------
@@ -1701,7 +1702,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     }
 
     // -- l() grounded input helper (proven) ----------------------------------
+    /** `g.l()` — the grounded input helper (bytecode g.javap.txt l()
+     *  offsets 0-588, proven; the simple view drops the jump after L124,
+     *  which made S11 look like it fell into the right-arm tail). */
     fun l(p: Entity, pad: Pad): Boolean {
+        if (world.kAT) return true                      // k.aT: camera on another target
+        p.bM = null
         p.aF = 0; p.cp = true; p.cq = true; p.z = true
         if (p.S == 79) {
             if (pad.u(Pad.M_LEFT)) {
@@ -1719,62 +1725,44 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     world.scrollWallClamp(p)   // g.java:5182 — i.f(this)
                 }
             }
-            // L41 tail: jump press continues to the shared L55 block
-            if (pad.u(Pad.M_UP)) return lShared(p, pad)
-            return if (p.aZ) true else p.standingOn != null
+            if (bn) { p.cq = false; p.z = false; return true }
+            // offsets 206-231: no jump press → done; UP continues below
+            if (!pad.u(Pad.M_UP)) return p.aZ || p.standingOn != null
         }
-        return lShared(p, pad)
-    }
-
-    // -- l() L55 block: non-79 states ----------------------------------------
-    private fun lShared(p: Entity, pad: Pad): Boolean {
+        val g = p.g                                     // offsets 232-262
+        if (g != null && g.ax == 73 && g.Z[0] == 3) p.cq = false
         when {
             pad.u(Pad.M_LEFT) || pad.x(Pad.M_LEFT) || pad.u(Pad.M_LEFT_ALT) -> {
                 if (p.av) return ax(p)
-                if (p.aA != 0) { p.av = true; return aw(p, pad) }
-                if (pad.x(Pad.M_LEFT)) {
+                if (p.aA != 0) p.av = true
+                // offsets 311-332: held past 4 ticks (k.bD) → turn west
+                else if (pad.bD > 4 && !pad.x(Pad.M_LEFT)) p.av = true
+                else if (pad.x(Pad.M_LEFT)) {
                     p.setAnim(10); p.ag = -4096
                     if (p.hitWall()) p.ag = 0
                     return true
                 }
-                return aw(p, pad)
             }
             pad.u(Pad.M_RIGHT) || pad.x(Pad.M_RIGHT) || pad.u(Pad.M_RIGHT_ALT) -> {
                 if (!p.av) return ax(p)
-                if (p.aA != 0) { p.av = false; return aw(p, pad) }
-                if (pad.x(Pad.M_RIGHT)) {
+                if (p.aA != 0) p.av = false
+                else if (pad.bD > 4 && !pad.x(Pad.M_RIGHT)) p.av = false
+                else if (pad.x(Pad.M_RIGHT)) {
                     p.setAnim(10); p.ag = 4096
                     if (p.hitWall()) p.ag = 0
                     return true
                 }
-                return aw(p, pad)
             }
             pad.u(Pad.M_DOWN) -> {
                 if (p.ag != 0) { p.ag = 0; p.setAnim(32); return true }
-                return aw(p, pad)
             }
-            else -> {
-                // L120/L124/L94 (proven, g.java:5042-5077): no dir held —
-                // `S==12 && co>=4` → i(11) brake; `S!=11` → aw();
-                // S==11 falls into the L94 right-arm tail: av → L98/L100
-                // (turn-face-e + x(8256) lunge, else aw()); !av → ax().
-                // The earlier S11→i(11)-then-aw() fold was wrong: the
-                // original drops airborne S11s facing east through ax(),
-                // which preserves ag (e.g. the ax72 fling's 2218 drift).
-                if (p.S == 12 && p.co >= 4) { p.setAnim(11); return true }
-                if (p.S != 11) return aw(p, pad)
-                if (p.av) {
-                    if (p.aA != 0) { p.av = false; return aw(p, pad) }
-                    if (pad.x(Pad.M_RIGHT)) {
-                        p.setAnim(10); p.ag = 4096
-                        if (p.hitWall()) p.ag = 0
-                        return true
-                    }
-                    return aw(p, pad)
-                }
-                return ax(p)
+            // offsets 535-583: no direction — a run past 4 ticks brakes
+            // (`i(11)`), and the brake holds until its anim ends.
+            (p.S == 12 && p.co >= 4) || p.S == 11 -> {
+                if (p.S != 11 || !p.animFinished()) { p.setAnim(11); return true }
             }
         }
+        return aw(p, pad)
     }
 
     // -- ax() sustained run (proven) ------------------------------------------
@@ -1828,17 +1816,20 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             return true
         }
         if (p.S != 2 && pad.u(Pad.M_DOWN)) {
+            if (p.aS == 9) { p.enterStateMasked(122, 8, world); return true }
             p.al += 20; p.probeCells(world); p.al -= 20
             val side = if (p.av) p.W[0] / 20 - 2 else p.W[2] / 20 + 2
             val below = p.W[3] / 20 + 1
             if ((p.aQ == 20 || p.aQ == 5) && p.aR == 0 &&
                 p.e(world, side, below) < 12) {
-                p.enterFall(0, world)   // a(257,8) ledge-drop → plain fall
+                p.enterStateMasked(257, 8, world)       // a(257,8) vault-drop
             } else {
                 p.setAnim(78)
             }
             return true
         }
+        // g.java:5257-5260: UP with a carry target in reach → i(6)
+        if (p.S != 6 && pad.u(Pad.M_UP) && p.isHolding()) { p.setAnim(6); return true }
         if (p.tick100()) { p.setAnim(1); return true }
         if (p.S == 1 && !p.animFinished()) return true
         p.setAnim(if (p.S == 81) 79 else 0)
@@ -2071,15 +2062,21 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     // -- post-switch tail (g.e() L2083 block, proven) -------------------------
     private fun postTail(p: Entity, pad: Pad) {
-        // g.java:7968-7974 (proven) — L3852: head cell 7/9 drops the jump
-        // latch before the cq-gate reads it (sits ahead of L38b8 in the
-        // original tail).
+        // e()'s post-switch tail in bytecode order (g.javap.txt e()
+        // offsets 14349-15124, proven).
+        // 14349 (L2048): `o()` gate → `ao()` weapon cycle
+        if (p.groundOrVehicle()) p.cycleEquip(world, pad)
+        // 14361-14415 (L2051-L2057): `aA==0 → aA=1`; bit 2 set → cleared
+        // and the `ap()` context dispatch skipped this tick; else
+        // `z && !i.bn && !E → ap()`.
+        if (p.aA == 0) p.aA = 1
+        if (p.aA and 4 != 0) p.aA = p.aA and 4.inv()
+        else if (p.z && !bn && !world.eFlag) p.contextDispatch(world, pad)
+        // 14418 (L3852): head cell 7/9 drops the jump latch
         if (p.aO == 7 || p.aO == 9) p.cq = false
-        // L3868 (g.java:7979-7992, proven): the g.A autowalk latch —
-        // armed by ax10 script zones (i.aV → g.A=1, g.B=facing, g.l=vel).
-        // Settles, faces g.B, zeroes ag, forces the S148 scripted-walk
-        // state and RETURNS — skips the whole tail (jump/back-dash/
-        // flag consumers).
+        // 14440 (L3868): the g.A autowalk latch — armed by ax10 script
+        // zones (i.aV → g.A=1, g.B=facing, g.l=vel). Settles, faces g.B,
+        // zeroes ag, forces the S148 scripted-walk state and RETURNS.
         if (p.gA) {
             p.eSettle(world)                 // E() — settle-sink to footing
             p.av = p.gB
@@ -2088,60 +2085,60 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             p.gA = false
             return
         }
-        // L388a (g.java:7993-7997, proven): g.f() = isHolding — hands
-        // full (carried entity in front within 120/20) kills the jump
-        // latch.
+        // 14474 (L388a): g.f() = isHolding — hands full kills the jump latch.
         if (p.isHolding()) p.cq = false
-        // L3895 (g.java:7998-8014, proven): standing on a crate (ax51)
-        // or moving platform (ax66) drops the jump latch.
+        // 14485 (L3895): standing on a crate (ax51) or moving platform
+        // (ax66) drops the jump latch.
         p.ac?.let { if (it.ax == 51 || it.ax == 66) p.cq = false }
-        // g.java:788 (proven): the shared jump tail is `cq && !E` — the
-        // ax10-S55 suppress zone holds `g.E` so wall-run-family arms
-        // (S102/332/317) keep their own `i(17)`/`i(50)` transitions.
-        if (p.cq && !Entity.gE && pad.v(Pad.M_ACTION_FAMILY)) {
-            if (pad.v(Pad.M_UP) || pad.v(Pad.M_TAP_L) || pad.v(Pad.M_TAP_R)) {
-                if (pad.v(Pad.M_TAP_L)) p.av = true
-                if (pad.v(Pad.M_TAP_R)) p.av = false
-                p.ah = 0
-                if (p.S == 79 || p.S == 32 || p.S == 199) {
-                    // headroom probe at hitbox top-1 (proven literal)
-                    if (p.e(world, ((p.W[0] + p.W[2]) / 2) / 20,
-                            p.W[1] / 20 - 1) <= 12) p.setAnim(21)
-                } else if (p.aZ || p.standingOn != null) {
-                    p.setAnim(233)
-                    // g.java:805 (proven): landing on an ax51 crate
-                    // records the crate-top level `i.bq = al + 20`.
-                    if (p.standingOn?.ax == 51) Entity.entBq = p.al + 20
-                } else if (pad.v(Pad.M_UP)) {
-                    p.setAnim(233)
-                } else {
-                    p.setAnim(22)
+        // 14520: the shared jump tail is `cq && !E` (the ax10-S55 suppress
+        // zone holds `g.E` so wall-run-family arms keep their own
+        // transitions); the back-dash lives under the same gate.
+        if (p.cq && !Entity.gE) {
+            if (pad.v(Pad.M_ACTION_FAMILY)) {
+                if (pad.v(Pad.M_UP) || pad.v(Pad.M_TAP_L) || pad.v(Pad.M_TAP_R)) {
+                    if (pad.v(Pad.M_TAP_L)) p.av = true
+                    else if (pad.v(Pad.M_TAP_R)) p.av = false
+                    p.ah = 0
+                    if (p.S == 79 || p.S == 32 || p.S == 199) {
+                        // headroom probe at hitbox top-1 (proven literal)
+                        if (p.e(world, ((p.W[0] + p.W[2]) / 2) / 20,
+                                p.W[1] / 20 - 1) <= 12) p.setAnim(21)
+                    } else {
+                        // 14673-14745: riding a moving ax66 (S11/S12) with
+                        // its `ac` partner on the facing side → no jump.
+                        val a = p.standingOn
+                        val ac = p.ac
+                        if (a != null && a.ax == 66 && (a.S == 11 || a.S == 12) &&
+                            ac != null && p.av == (ac.ak < p.ak)) return
+                        if (p.aZ || a != null) {
+                            p.setAnim(233)
+                            // g.java:805 (proven): landing on an ax51 crate
+                            // records the crate-top level `i.bq = al + 20`.
+                            if (a?.ax == 51) Entity.entBq = p.al + 20
+                        } else if (pad.v(Pad.M_UP)) {
+                            p.setAnim(233)
+                        } else {
+                            p.setAnim(22)
+                        }
+                    }
                 }
-            } else if (p.S != 233) {
-                p.ag = 0
+                // 14821: every press path ends here
+                if (p.S != 233) p.ag = 0
+            } else {
+                // 14839-14890 back-dash: double-tap `x()` toward facing →
+                // S25 while the `k.aA` alert latch is hot.
+                if ((p.av && pad.x(Pad.M_RIGHT)) || (!p.av && pad.x(Pad.M_LEFT))) {
+                    if (world.kAA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 }
+                }
             }
-        } else {
-            // back-dash (g.java:3650-3664, proven): double-tap `x()`
-            // toward facing → S25 while the `k.aA` alert latch is hot
-            // (set 60 by NPC `aC()`/respawn, cleared at level/dispatch).
-            if (p.av && pad.x(Pad.M_RIGHT)) { if (world.kAA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
-            if (!p.av && pad.x(Pad.M_LEFT)) { if (world.kAA > 0) { p.setAnim(25); p.ag = 0; p.ah = 0 } }
         }
-        // -- L2048-L2064 equip/context arms (g.java:~3711, proven) -------
-        // L2048: `o()` gate → `ao()` weapon cycle
-        if (p.groundOrVehicle()) p.cycleEquip(world, pad)
-        // L2051-L2054 (proven): `aA` counter bookkeeping — `aA==0 → aA=1`,
-        // then `aA&4 → aA&=-5` clears bit2 every tick.
-        if (p.aA == 0) p.aA = 1
-        if (p.aA and 4 != 0) p.aA = p.aA and 4.inv()
-        // L2057: `z && i.bn==false && E==false → ap()` context dispatch
-        if (p.z && !bn && !world.eFlag) p.contextDispatch(world, pad)
         // -- L3a2d-L3ad8 flag consumers (g.java:8197-8303, proven) -------
         // L3a2d: `cp && (aO==9||aP==9) && aQ==9` corner-9 gate skips the
         // whole consumer; otherwise `ct` fires the ledge-mount probes —
         // ak()/al() snap + i(60)/i(61) inside — and zeroes motion on a
         // mount (the probe side effects ARE the corner-stop).
-        if (!(p.cp && (p.aO == 9 || p.aP == 9) && p.aQ == 9) &&
+        // 14893-14958: requires `cp`; skipped on a 9-corner.
+        if (p.cp && !((p.aO == 9 || p.aP == 9) && p.aQ == 9) &&
             p.ct && (p.ledgeLipGrab(world) || p.ledgeHangGrab(world))) {
             p.ag = 0; p.ah = 0; p.aj = 0
         }

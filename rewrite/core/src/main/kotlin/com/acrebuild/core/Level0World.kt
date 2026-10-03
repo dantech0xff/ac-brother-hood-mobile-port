@@ -1618,7 +1618,12 @@ class Level0World(
     override var kAG = 0                         // k.aG — aE decay divider
     override var kBB = 0                         // k.bB — burst-phase int
     override var kBC = 0                         // k.bC
-    override var kBD = 0                         // k.bD — bank-anim tier
+    /** `k.bD` — ONE static: the input commit's hold-duration counter
+     *  (k.java:1599-1604), which `g.l()` reads for hold-to-turn and the
+     *  flying bank anims read and bump (g.java:5701-5776). */
+    override var kBD: Int
+        get() = pad.bD
+        set(v) { pad.bD = v }
     override var iBE = 0                         // i.bE static
     override var iBF = 0                         // i.bF static
     override var iBG = -1                        // i.bG static
