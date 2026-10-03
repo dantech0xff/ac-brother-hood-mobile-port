@@ -46,6 +46,13 @@ fixtures: 502 :core tests (30 Slice64Test); verifier ok:true; 57 unittests;
   :android:assembleDebug green
 ---
 
+> **Erratum (2026-10-03, slice 346):** the bodies below were transcribed
+> correctly but bound to the wrong types. The original dispatch is
+> `case 47 → aL()` (ledge sentinel) and `case 50 → aK()` (pouncer) —
+> `i.java:5181-5194`, bytecode `i.javap.txt:20024-20025` (proven), as
+> `docs/gameplay-mining/npc-fsm.md:16-17` already stated. Fixed in
+> [`plans/261003-0723-slice346-ax47-ax50-fsm-pairing`](../261003-0723-slice346-ax47-ax50-fsm-pairing/plan.md).
+
 # What this slice ports
 
 Completes the clip-7 NPC family: ax47 `aK()` (ledge sentinel — hangs under a

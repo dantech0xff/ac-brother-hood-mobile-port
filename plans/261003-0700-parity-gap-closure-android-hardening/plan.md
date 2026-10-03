@@ -6,7 +6,7 @@ description: >-
   attack scheduler, jC=28 ghost rows), re-validate the mission capstones and
   device evidence, then harden save/lifecycle, add CI, sync stale docs and set
   up the Android build for internal distribution. No store publication.
-status: pending
+status: in_progress
 priority: P1
 effort: large
 branch: ''
@@ -67,7 +67,7 @@ for internal use.
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | [Parity-gap closure](./phase-01-parity-gap-closure.md) | pending |
+| 1 | [Parity-gap closure](./phase-01-parity-gap-closure.md) | in_progress |
 | 2 | [Capstone re-validation and device evidence](./phase-02-capstone-revalidation-device-evidence.md) | pending |
 | 3 | [Save and lifecycle hardening](./phase-03-save-lifecycle-hardening.md) | pending |
 | 4 | [CI, docs sync and repo hygiene](./phase-04-ci-docs-hygiene.md) | pending |

@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: Parity-Gap Closure
-status: pending
+status: in_progress
 priority: P1
 dependencies: []
 ---
@@ -23,6 +23,19 @@ Fix the proven divergences G1–G6 from the baseline audit, one slice each
 verdict. Each fix cites the original `file:line`, carries a confidence label,
 and lands with unit tests that would have caught it.
 
+## Progress
+
+| Item | State | Slice |
+|---|---|---|
+| 1.1 ax47/ax50 FSM swap (G1) | done | [346](../261003-0723-slice346-ax47-ax50-fsm-pairing/plan.md) |
+| G9 ax46 S5/S6 re-pin missing (found re-validating 346) | done | [347](../261003-0730-slice347-ax46-fire-cycle-repin/plan.md) |
+| 1.6b `l()` containment for ax17/23/50 (G8, found in 346) | pending | — |
+| 1.2–1.7 | pending | — |
+
+Slice 346 changed the m3 capstone route (legC/legD now traverse the
+sentinel chain and the upper path); both legs pass unchanged once slice 347
+is in.
+
 ## Requirements
 
 - Mirror the original exactly; where the original is not yet mined, mine
@@ -34,7 +47,7 @@ and lands with unit tests that would have caught it.
 
 ## Work items
 
-### 1.1 ax47 / ax50 FSM swap (G1) — proven
+### 1.1 ax47 / ax50 FSM swap (G1) — proven · done (slice 346)
 
 - Original: `case 47 → aL()` (ledge sentinel: S0/80–84/93/94),
   `case 50 → aK()` (pouncer: S119–130) — `bytecode/i.javap.txt:20024-20025`,
@@ -109,6 +122,18 @@ and lands with unit tests that would have caught it.
   menu panel/rows; if so, stop `panelVisible` (`Level0World.kt:3095-3097`)
   or the renderer's panel pass from drawing rows for `jC==28 && kEc==121`.
 - Test: the jC=28 / kEc=121 frame produces no row rects or pills.
+
+### 1.6b `l()` camera gate for ax17/23/50 (G8) — proven, found in slice 346
+
+- Original `l()` (`simple/i.java:2255-2406`): `case 17/23 → L70`,
+  `case 50 → L77`; both arms are `bn → false; else b(this.W, k.ac)`, and
+  `b(int[],int[])` (`simple/i.java:665-676`) is **containment** (W ⊆ ac).
+- Port `losL` (`NpcFsm.kt`, the `17, 23, 50 ->` arm) uses
+  `Entity.overlapI(e.W, ac)` — overlap — so a half-visible ax17/23 already
+  "sees" the player in `spotB` (alert) and the L827 tail (counter-alert).
+  ax50 is unaffected in practice (`aK` uses `seen50`, which is containment).
+- Fix: containment in that arm; tests at the camera edge (overlap but not
+  contained → blind). Expect ax17 alert timing changes in capstones.
 
 ### 1.7 Deviations (G7) — verdict each
 

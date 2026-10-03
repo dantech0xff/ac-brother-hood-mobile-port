@@ -5971,12 +5971,17 @@ private fun ax46Touch(e: Entity, w: Level0World, p: Entity) {
     e.setAnim(7)
 }
 
-/** L33 fire-cycle arm (proven): X overlap → S328 pins again; on anim
- *  end S5 resets to i(3)+face-invert, S328 throws off to i(329),
+/** L33 fire-cycle arm (proven): X overlap → re-pin (S328 anim 330, S5/S6
+ *  anim 110); on anim end S5 resets to i(3)+face-invert, S328 throws off to i(329),
  *  S6 winds down to i(4). `Z[2]=Z[3]` rearms the 30-tick counter. */
 private fun ax46Cycle(e: Entity, w: Level0World, p: Entity) {
     if (!Entity.overlapStrict(p.W, e.X)) return                 // L34
-    if (e.S == 328) p.applyHit(24, 330, e, w)                   // L37
+    // L35/L37 (simple/i.java:13637-13639, :13680-13682, proven): every
+    // overlapping tick re-pins — S328 with anim 330, S5/S6 with 110. op24
+    // snaps the player onto W[0],W[1], keeping him inside the sweeping X
+    // box until the r() release below (slice 347: the 110 arm was missing).
+    if (e.S == 328) p.applyHit(24, 330, e, w)
+    else p.applyHit(24, 110, e, w)
     if (!e.animFinished()) return                               // L40
     when (e.S) {
         5 -> { e.setAnim(3); p.av = !e.av }                     // L41/L59 flip
@@ -8877,16 +8882,20 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
     e.pushContact(w)
 }
 
-// =====================================================================// Slice 64 — ax47 `aK()` ledge sentinel + ax50 `aL()` pouncer + the shared
+// =====================================================================// Slice 64 — ax50 `aK()` pouncer + ax47 `aL()` ledge sentinel + the shared
 // stealth-kill driver `i.k()` (i.java:2057-2255) both FSM tails funnel into.
 //
-//  aK() i.java:9910-10007 — S120 perch (ceiling-grab on the player drop-kill
-//      set → S119; else l() seen → 3x3 quadrant pounce pick 121-128);
-//      S121-128 pounce (T==1 sfx16, T==3 op4 on player, r()→S120);
-//      S119/S129/default → k();j();  S130 r()→k.c(this) despawn.
-//  aL() i.java:10008-10099 — S80/93 perch (93 = ceiling-grab variant +
-//      registerClaim), S81 countdown→S82→S80, S83 air-walk via M() → S84 →
-//      S0, S94 P|=512 + claim-release → despawn, default → k();j().
+//  Dispatch (i.java:5181-5194; bytecode i.javap.txt:20024-20025, proven):
+//      `case 47 → aL()`, `case 50 → aK()` — each method's only call site.
+//      Slice 64 ran the bodies the other way round (ax47 → aK, ax50 → aL);
+//      slice 346 restores the original pairing.
+//  aK() i.java:9910-10007 (ax50) — S120 perch (ceiling-grab on the player
+//      drop-kill set → S119; else l() seen → 3x3 quadrant pounce pick
+//      121-128); S121-128 pounce (T==1 sfx16, T==3 op4 on player,
+//      r()→S120); S119/S129/default → k();j();  S130 r()→k.c(this) despawn.
+//  aL() i.java:10008-10099 (ax47) — S80/93 perch (93 = ceiling-grab variant
+//      + registerClaim), S81 countdown→S82→S80, S83 air-walk via M() → S84
+//      → S0, S94 P|=512 + claim-release → despawn, default → k();j().
 //  k()  i.java:2057-2255  — backstab window L81 (player faces me, I don't
 //      face player, <80px, S38 split): prompt k.c(ak,al-85,aw) + 65568 edge
 //      → op6 victim anim (49 mid / 283 near); ax11 ceiling-kill arm (S24+
@@ -8900,10 +8909,10 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
 //  init i.java:3082 L134 (ax47 `az=r8[17]`) / :3017 L114 (ax50 `az=r8[13]`)
 //      — minimal inits; records arrive via retype ax11+S∈{80,93}→47 and
 //      ax17+S==120→50 (i.java:2644/2651) applied in Level0World.initNpcs.
-//  l()  i.java:2255 — ax47 → L83 default arm (r11/r12/r13 stay 0 →
-//      degenerate [ak,al,ak,al] sight rect = point-pierce only); ax50 →
-//      L77 `bn→false; b(W,k.ac)` W⊆cam rect; shared L88-L101 tail
-//      (LOS clear + player ∉ {284,285}).
+//  l()  i.java:2255 — only aK() calls it among these two, and aK() runs
+//      only for ax50, so it always takes the `case 50 → L77` arm: `bn` →
+//      false; else `b(W,k.ac)` W⊆cam rect; then the shared L88-L101 tail
+//      (LOS clear + player ∉ {284,285}). aL() (ax47) never calls l().
 //  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
 // =====================================================================
 private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
@@ -8941,23 +8950,6 @@ fun NpcFsm.initAx50(e: Entity, f: List<Int>) {
     e.Z[0] = rf(4)
     e.setAnim(rf(5))
     e.refreshBoxes()
-}
-
-/** `i.l()` ax47 arm (i.java:2255-2340, proven): `ai()` fast-path → true;
- *  `aA&8` → false. L83 default arm: r11/r12/r13 stay the head-initialized
- *  zeros (only ax11's arm populates them) → sight rect degenerates to
- *  `[ak,al,ak,al]` — a point-pierce check on the player mid-point. Then
- *  the shared tail: LOS clear (e(aS)==false) + player ∉ {284,285}. */
-private fun seen47(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (w.kAe?.ax == 10 && w.kAe?.S == 52) return true      // ai()
-    if ((p.aA and 8) != 0) return false                   // L10 → r0=false
-    val r0 = Entity.pointInBox(
-        p.ak, (p.W[1] + p.W[3]) shr 1,
-        intArrayOf(e.ak, e.al, e.ak, e.al))
-    if (!r0) return false                                 // L88
-    if (e.losBlocked(p, w)) return false                  // L90
-    if (p.S == 284) return false                          // L92
-    return p.S != 285                                     // L94-L101
 }
 
 /** `i.l()` ax50 arm (i.java:2395 L77, proven): `bn→false` (iBn kill-
@@ -9216,10 +9208,11 @@ private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Bool
     return true                                           // ax47 → L86
 }
 
-/** `i.aK()` (i.java:9910-10007, proven): ledge-sentinel FSM — transcribed
- *  arm for arm. `r7 = l()` runs first every tick. */
-fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
-    var r7 = seen47(e, w, p)                              // l()
+/** `i.aK()` (i.java:9910-10007, proven): the ax50 pouncer FSM — dispatch
+ *  `case 50 → aK()` (i.javap.txt:20025) — transcribed arm for arm.
+ *  `r7 = l()` runs first every tick; for ax50 `l()` takes L77 (`seen50`). */
+fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
+    var r7 = seen50(e, w, p)                              // l() → L77
     when (e.S) {
         120 -> {
             // L6: ceiling-grab on the player drop-kill set.
@@ -9275,9 +9268,9 @@ fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
     damageIntakeSentinel(e, w, p)
 }
 
-/** `i.aL()` (i.java:10008-10099, proven): pouncer FSM — transcribed arm
- *  for arm. */
-fun NpcFsm.tickAx50(e: Entity, w: LevelCellSource, p: Entity) {
+/** `i.aL()` (i.java:10008-10099, proven): the ax47 ledge-sentinel FSM —
+ *  dispatch `case 47 → aL()` (i.javap.txt:20024) — transcribed arm for arm. */
+fun NpcFsm.tickAx47(e: Entity, w: LevelCellSource, p: Entity) {
     when (e.S) {
         94 -> {
             // L43: claim-hold then release-and-despawn.
