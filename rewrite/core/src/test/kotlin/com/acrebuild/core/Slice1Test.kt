@@ -23232,6 +23232,12 @@ class Slice245Test {
             if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
             val stuck = p.aZ && p.ag in -256..256
             if (stuck) held = held or Pad.M_UP
+            // Floor east of the roof drop (y≈719) runs straight to cp7: a
+            // stuck-UP hop there (after a duel with floor guard uid524)
+            // grabs the y599 lip and climbs onto the ax44 crusher band
+            // (uid210/211 → S50).
+            if (p.aZ && p.al > 700 && p.ak in 9700..10010)
+                held = held and Pad.M_UP.inv()
             // S33 face-climb needs UP held — M_RIGHT alone slides down
             if (p.S == 33 || p.S == 92) held = Pad.M_UP
             if (w.kC != null && w.kC!!.claimActive()) {
