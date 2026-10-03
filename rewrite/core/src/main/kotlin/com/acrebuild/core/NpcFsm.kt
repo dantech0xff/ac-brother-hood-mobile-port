@@ -149,7 +149,9 @@ class NpcFsm(val world: LevelCellSource) {
      * `Z[1]=r8[9]` open timer, `Z[2]=r8[10]` closed timer, `Z[3]=0`
      * countdown, `Z[4]=r8[5]` base state, `Z[5]=r8[11]` linked ax58 uid.
      * Initial anim is the generic `i(r8[5])` (i.java:3733) — records with
-     * f5==8 spawn in the static-crusher bank S8-13.
+     * f5==8 spawn in the static-crusher bank S8-13 — then the ctor tail's
+     * `t()` (structured i.java:2900-2903): `bv()` never refreshes the box
+     * itself, so the first frame reads this one.
      */
     fun initDoor(e: Entity, f: List<Int>) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
@@ -161,59 +163,73 @@ class NpcFsm(val world: LevelCellSource) {
         e.Z[4] = rf(5)
         e.Z[5] = rf(11)
         e.setAnim(rf(5))
+        e.refreshBoxes()                 // ctor tail t() (i.java:2900-2903)
     }
 
     /**
-     * `bv()` door/gate FSM (i.java:16927, proven). Z[0] mode:
+     * `bv()` door/gate FSM (i.java:16927, proven; bytecode i.javap.txt
+     * bv() offsets 0-590). Z[0] mode:
      * 0 = timed cycle (link absent or `ac.bf()` running), 1 = slaved to
      * the linked ax58's anim, 2 = proximity auto (player inside keeps the
      * countdown reloaded). States S0-7 = two cycling banks anchored at
      * Z[4] (closed/opening/open/closing); S8-13 = static crusher bank.
-     * Crush arm (L64 + L75): player W ∩ door W while closed/closing/
-     * static → `k.aS.aj=0; ah=0; i(50)` — S50 zeroes x[1] → k.l(12).
+     * Crush: S0/S4 (offsets 453-506) `i.a(aS.W, W)` → `aS.aj = aS.ah = 0;
+     * aS.i(50); return`; S3/S7 and S8-13 (566-587) → `aS.i(50)` alone.
+     * S50 zeroes x[1] → k.l(12).
+     *
+     * Slice 362: `bv()` reads `W` and never calls `t()` (getfield W at
+     * 365/369, 471/475, 569/573) — the box is the one the previous
+     * frame's `I()` tail `if (b) t()` left (i.java:5293-5295), one anim
+     * step behind the S/T this frame's `s()` advanced to. The ax58
+     * promotion is evaluated only on the tick that resolves the link
+     * (87-175), and mode 1 opens from the base state while `ac.bf()` runs
+     * and returns to `Z[4]` once it stops (281-337).
      */
     fun tickDoor(e: Entity, player: Entity) {
-        // the original's t() recomputes W on every query; our cached copy
-        // needs a per-tick refresh since doors never take the probe paths.
-        e.refreshBoxes()
         when (e.S) {
             0, 2, 4, 6 -> {
                 e.P = e.P or 16
-                // link arm (L4): resolve Z[5] → ac once; ax58 with
-                // S∈{0,5,7} promotes Z[0] to slaved mode.
-                if (e.ac == null && e.Z[5] != -1)
+                // link arm: resolve Z[5] → ac once (`a(k.q(Z[5]))`, which
+                // also binds P|256); an ax58 resting in S0/5/7 at that
+                // moment promotes Z[0] to slaved mode.
+                if (e.ac == null && e.Z[5] != -1) {
                     e.ac = world.npcs.firstOrNull { it.aw == e.Z[5] }
+                    val q = e.ac
+                    if (q != null && q.ax == 58 && (q.S == 0 || q.S == 5 || q.S == 7))
+                        e.Z[0] = 1
+                }
                 val ac = e.ac
-                if (ac != null && ac.ax == 58 && (ac.S == 0 || ac.S == 5 || ac.S == 7))
-                    e.Z[0] = 1
                 when (e.Z[0]) {
-                    0 -> if (ac == null || bf(ac)) {
-                        if (e.Z[2] < 999 && e.Z[3] != -1) {
-                            e.Z[3]--
-                            if (e.Z[3] < 0) e.setAnim(e.S + 1)
-                        }
+                    0 -> if ((ac == null || bf(ac)) && e.Z[2] < 999 && e.Z[3] != -1) {
+                        e.Z[3]--
+                        if (e.Z[3] < 0) e.setAnim(e.S + 1)
                     }
+                    // the original dereferences `ac` unguarded here.
                     1 -> if (ac != null) {
-                        if (e.Z[4] == e.S) { if (!bf(ac)) e.setAnim(e.S + 1) }
-                        else if (bf(ac)) e.setAnim(e.Z[4])
+                        if (e.Z[4] == e.S) { if (bf(ac)) e.setAnim(e.S + 1) }
+                        else if (!bf(ac)) e.setAnim(e.Z[4])
                     }
                     2 -> if (e.Z[4] == e.S) {
-                        if (e.Z[3] == 0 && rectsOverlap(player.W, e.W))
+                        if (e.Z[3] == 0 && Entity.overlapStrict(player.W, e.W))
                             e.Z[3] = if (e.S == 0 || e.S == 4) e.Z[2] else e.Z[1]
                         if (e.Z[3] > 0) { e.Z[3]--; if (e.Z[3] <= 0) e.setAnim(e.S + 1) }
                     }
                 }
-                if (e.S == 0 || e.S == 4) crush(e, player)
+                if ((e.S == 0 || e.S == 4) && Entity.overlapStrict(player.W, e.W)) {
+                    player.aj = 0; player.ah = 0
+                    player.setAnim(50)
+                }
             }
             1, 5 -> if (e.animFinished()) { e.setAnim(e.S + 1); e.Z[3] = e.Z[1] }
             3, 7 -> {
                 if (e.animFinished()) { e.setAnim(e.S - 3); e.Z[3] = e.Z[2] }
-                crush(e, player)
+                if (Entity.overlapStrict(player.W, e.W)) player.setAnim(50)
             }
-            in 8..13 -> crush(e, player)
+            in 8..13 -> if (Entity.overlapStrict(player.W, e.W)) player.setAnim(50)
         }
         // P&16 keeps the door unintegrated (static prop); its one-per-tick
-        // anim advance comes from the I() preamble (i.java:15232).
+        // anim advance comes from the I() preamble (i.java:15232), its box
+        // refresh from the dispatch tail (defaultArm).
     }
 
     /** `bf()` (i.java:14608, proven): ax58 anim-running — true iff its S is
@@ -224,12 +240,6 @@ class NpcFsm(val world: LevelCellSource) {
 
     private fun rectsOverlap(a: IntArray, b: IntArray): Boolean =
         a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
-
-    private fun crush(e: Entity, player: Entity) {
-        if (!rectsOverlap(player.W, e.W)) return
-        player.aj = 0; player.ah = 0
-        player.setAnim(50)
-    }
 
     // -- helpers ------------------------------------------------------------
 
