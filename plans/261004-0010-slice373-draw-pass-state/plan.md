@@ -73,3 +73,13 @@ and owns the descriptor; a dead soldier's does not; the descriptor lasts
 the tick and clears with the bubble; the band heights 1, 1, 9, 25, 0 over
 five hovered frames; the jc20 slide with the real font. Full suite green
 (capstones unchanged).
+
+## Follow-up (PR #384 review)
+
+The bubble state is the entity's own (`cQ`/`cR`/`cS`/`cT`,
+i.java:18935-19010) and `ad()` draws inline after each owner's blit, so
+several speakers can show a bubble in one frame. The world kept a single
+`bubbleDraw`/`bubbleOwner` slot and the renderer drew only the last one;
+`drawPassBubbles` now also fills `bubbles` (owner → descriptor, draw-list
+order) and the renderer draws every owner's bubble. Test: two speakers in
+one frame both keep their bubble (`Slice373Test`, now 6).

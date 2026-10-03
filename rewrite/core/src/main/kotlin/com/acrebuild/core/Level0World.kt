@@ -2223,6 +2223,13 @@ class Level0World(
     var bubbleOwner: Entity? = null
         private set
 
+    /** Every bubble this pass's `ad()` calls emitted, by owner, in
+     *  draw-list order. The bubble state (`cQ`/`cR`/`cS`/`cT`) is the
+     *  entity's own (i.java:18935-19010), so several entities can speak
+     *  in one frame and each bubble draws after its owner's blit;
+     *  [bubbleDraw]/[bubbleOwner] keep only the last of them. */
+    val bubbles = LinkedHashMap<Entity, BubbleDraw>()
+
     /** `b(false)`'s per-entity `ad()` (structured k.java:2927-2929 =
      *  simple :3740-3749; bytecode k.javap.txt:14699, `b(Z)` offset 2118,
      *  proven — the only call site of `i.ad()`): `(ax!=11 && ax!=17) ||
@@ -2234,13 +2241,14 @@ class Level0World(
      *  [bPass] calls it right after [drawStylePass], over the same list:
      *  the original builds `bd[]` once per pass (slice 376). */
     private fun drawPassBubbles() {
-        bubbleDraw = null; bubbleOwner = null
+        bubbleDraw = null; bubbleOwner = null; bubbles.clear()
         for (i in 0 until drawCount) {
             val e = drawList[i] ?: continue
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) {
                 val before = bubbleDraw
                 npcFsm.tickBubble(e, this)
-                if (bubbleDraw != null && bubbleDraw !== before) bubbleOwner = e
+                val d = bubbleDraw
+                if (d != null && d !== before) { bubbleOwner = e; bubbles[e] = d }
             }
         }
     }

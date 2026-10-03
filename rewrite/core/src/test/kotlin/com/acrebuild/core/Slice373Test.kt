@@ -54,6 +54,25 @@ class Slice373Test {
         assertEquals(25, s.cQ!![2], "exactly one ad() per frame")
     }
 
+    @Test fun `two speakers in one frame both keep their bubble`() {
+        // the bubble state is per entity (i.java:18935-19010): each
+        // speaker's ad() draws its own bubble after its own blit
+        val w = world()
+        w.tick(emptyList())
+        val s = soldierInView(w)
+        val p = w.player
+        val s2 = w.npcs.first { it.ax == 11 && it.aB > 0 && it !== s }
+        s2.ag = 0; s2.ah = 0
+        s2.setPositionPx(p.ak - 60, p.al); s2.refreshBoxes()
+        assertTrue(s2.inPlayV(w), "precondition: the second soldier is in the view")
+        arm(s, 30); arm(s2, 30)
+        w.tick(emptyList())
+        assertEquals(29, s.cQ!![2]); assertEquals(29, s2.cQ!![2])
+        assertEquals(setOf(s, s2), w.bubbles.keys, "one bubble per speaker")
+        assertTrue(w.bubbles[s] !== w.bubbles[s2])
+        assertSame(w.bubbles[w.bubbleOwner], w.bubbleDraw, "the single slot is the last of them")
+    }
+
     @Test fun `a dead soldier's bubble does not step`() {
         val w = world()
         w.tick(emptyList())

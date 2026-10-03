@@ -3,6 +3,7 @@ package com.acrebuild.gdx
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
 import com.acrebuild.core.ScriptPrompt
+import com.acrebuild.core.BubbleDraw
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Trig
@@ -715,7 +716,7 @@ class Level0Renderer {
         }
     }
 
-    /** `i.ad()` draw (i.java:20649-20700, proven): consumes `w.bubbleDraw`
+    /** `i.ad()` draw (i.java:20649-20700, proven): one owner's bubble
      *  — bh3 `k.f` is a 120-wide white fill + black square outline at
      *  (x,y); non-bh3 `j.b`/`j.a` is a white roundrect fill + black
      *  roundrect outline at (x-20, y, 160, h). The tail wedge arms at the
@@ -723,8 +724,7 @@ class Level0Renderer {
      *  flipped the bubble below the entity); `flip` moves it to the
      *  right edge. Wrapped page text centers at `textX` on font `y`
      *  variant 1 (`k.y.l(1)`), align 17 = HCENTER|TOP. */
-    private fun drawBubble(w: Level0World) {
-        val b = w.bubbleDraw ?: return
+    private fun drawBubble(b: BubbleDraw) {
         if (b.bh3) {
             fillAr(b.x, b.y, 120, b.h, -1)
             outlineAr(b.x, b.y, 120, b.h, -0x1000000)
@@ -1366,7 +1366,8 @@ class Level0Renderer {
             // `i.ad()` draws inline in the entity pass, right after its
             // owner; the world ticks it once per frame and keeps the
             // descriptor up for every rendered frame of the tick (slice 373).
-            if (world.bubbleDraw != null && world.bubbleOwner === e) drawBubble(world)
+            // Each speaker has its own bubble state, so every one draws.
+            world.bubbles[e]?.let { drawBubble(it) }
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(world, ab, camX, camY)
