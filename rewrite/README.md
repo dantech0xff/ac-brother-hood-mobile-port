@@ -86,6 +86,17 @@ adb logcat -s AcLevel0:*
 
 Save nằm ở `files/asbr-save.bin` (+ `.bak`) trong thư mục app.
 
+Bản phát hành nội bộ (không lên store):
+
+```bash
+export RELEASE_STORE_FILE=/đường/dẫn/keystore RELEASE_STORE_PASSWORD=… \
+       RELEASE_KEY_ALIAS=… RELEASE_KEY_PASSWORD=…   # keystore không bao giờ commit
+./gradlew :android:assembleRelease   # thiếu biến ký → android-release-unsigned.apk
+```
+
+R8 tắt, app id giữ `com.acrebuild.spike`, release chỉ log lỗi — ADR
+`docs/decisions/android-internal-release.md`.
+
 ## Lịch sử: toolchain spike
 
 `rewrite/` bắt đầu là spike bắt buộc của ADR

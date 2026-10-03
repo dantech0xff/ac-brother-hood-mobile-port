@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: Android Internal-Release Configuration
-status: pending
+status: in_progress
 priority: P2
 dependencies: [3, 4]
 ---
@@ -21,6 +21,26 @@ Make the APK behave well on the devices it will actually be sideloaded to —
 phones with cutouts and gesture navigation, tablets and foldables under
 Android 16 — and produce a signed internal release build. Store work is out
 of scope (internal distribution only).
+
+## Progress (2026-10-03)
+
+Container-side steps done; ADR
+[`docs/decisions/android-internal-release.md`](../../docs/decisions/android-internal-release.md):
+
+- Step 1 manifest: `appCategory="game"`, `configChanges` +=
+  `smallestScreenSize|density|uiMode` (verified in the release APK with
+  `aapt dump xmltree`: `appCategory=0x0`, `configChanges=0x1ff0`). Cutout
+  check pending a punch-hole AVD.
+- Step 2 gesture navigation: pending device measurement (immersive mode is
+  on; exclusion rects only if gestures steal input).
+- Step 3 logging: release builds log errors only (`AndroidLauncher` sets
+  `logLevel` from `FLAG_DEBUGGABLE`); debug keeps the info lines the device
+  runs read.
+- Step 4: `:android:assembleRelease` builds (unsigned without the signing
+  env); R8 off recorded.
+- Step 5: app id kept, recorded.
+- Step 6: [`reports/perf-baseline.md`](./reports/perf-baseline.md) — APK
+  sizes and JVM tick cost per ground mission; device numbers pending.
 
 ## Implementation Steps
 
