@@ -5072,50 +5072,6 @@ class Level0World(
             kDg++; kAp[2]++
         }
 
-        // `i.I()` claim-suspension gate (i.java:15165 fallback La5→L108,
-        // proven): while `k.C` holds a LIVE claim script (`k.C.ab()`) — or
-        // a u9 dialog suspends — every entity without `P|512` except the
-        // claimer and ax8/ax24 returns before physics and the ax
-        // dispatch. The player ticks via `aS.I()` under the same gate, so
-        // during a bound ride (e.g. the mission-1 win claim) his `g.n()`
-        // — and therefore `i.B()`'s deadly-band probes — never runs;
-        // `aa()` drives `ak`/`al` directly. `s()` (advanceAnim) stays
-        // outside: suspended entities still advance anims (the L34-L81
-        // arm runs before the gate).
-        val claimSuspended = claimSuspendsPlayer()
-        if (!claimSuspended) {
-            // The wall rescan `a(an())` also runs inside `g.e()`'s head
-            // (g.java:1282, proven); this pre-tick `a(true)` is a slice-2
-            // superset the bot legs were proven against — removing it
-            // stalls proven crossings (gate row, canyon shaft), so it
-            // stays until a proven arm covers those states.
-            player.collideSides(this, true)
-            playerFsm.tick(player, pad)
-            player.integrate()
-        }
-        player.advanceAnim()
-        // `I()` L1f35 shared tail for the player slot (i.java:18904-18922,
-        // proven): in the original every dispatched entity — the player
-        // (ax0, via i.I()) included — ends its I() with `if (b) t()` +
-        // the `av→P&1` facing sync, so npc arms ticking later this frame
-        // read the post-integrate bounds. Without it the player is the
-        // only entity left stale — asymmetric W shrinks catch/mount
-        // windows (ax10-S36 bound-catch, ax51 crate mounts).
-        player.b = true
-        player.refreshBoxes()
-        player.P = if (player.av) player.P or 1 else player.P and -2
-
-        // `k.I()` player-link tail (k.java:8798-8810 L2df-L32a,
-        // proven): immediately after `aS.I()` the player's `ac`/`ab`
-        // links tick UNCONDITIONALLY — no au/P&256/P&32 gate — and
-        // `ad` ticks when `ax == -999`. This is what lets an
-        // ax10-S16 destination door run `bi()`: `bindAc` holds it
-        // via `P|256` so the generic entity loop skips it, but the
-        // player's own link chain still ticks it each frame.
-        player.ac?.let { tickNpc(it) }
-        player.ab?.let { tickNpc(it) }
-        player.ad?.let { if (it.ax == -999) tickNpc(it) }
-
         if (bh3) {
             // `k.I()` bh3 arm (k.java:2529-2572, proven): every entity
             // re-scores `au` via `u()`; only eligible entities
@@ -5207,6 +5163,33 @@ class Level0World(
             npcs += pendingInsert
             pendingInsert.clear()
         }
+
+        // `aS.I()` + the player-link tail (k.java:2589-2600, proven): the
+        // player slot ticks AFTER the entity loop, through the same
+        // `i.I()` every entity runs (i.java:3853-3925): the L34 anim
+        // advance, `b = true`, the claim gate (ax0: `k.E.P |= 128`), the
+        // `i.cu` freeze, the head integrator + `g.d()` (= `b(a)`, the
+        // ax43 ride snap, g.java:346-360), `bh3 → bF()`, `case 0 →
+        // g.e()` (`case 25 → n()` flying), then the L1f35 tail (`if (b)
+        // t()` + the `av → P&1` bit). Entities ticked this frame read the
+        // player as the previous frame's `g.e()` left him.
+        tickPlayerI()
+        // immediately after `aS.I()` the player's `ac`/`ab` links tick
+        // UNCONDITIONALLY — no au/P&256/P&32 gate — and `ad` ticks when
+        // `ax == -999`. This is what lets an ax10-S16 destination door
+        // run `bi()`: `bindAc` holds it via `P|256` so the entity loop
+        // skips it, but the player's own link chain still ticks it.
+        player.ac?.let { tickNpc(it) }
+        player.ab?.let { tickNpc(it) }
+        player.ad?.let { if (it.ax == -999) tickNpc(it) }
+        if (pendingRemove.isNotEmpty()) {
+            npcs.removeAll(pendingRemove)
+            pendingRemove.clear()
+        }
+        if (pendingInsert.isNotEmpty()) {
+            npcs += pendingInsert
+            pendingInsert.clear()
+        }
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
         // k.m(cJ) per-tick (k.java:3320 proven, `bh[aj]!=3` gate):
@@ -5270,6 +5253,45 @@ class Level0World(
         } finally {
             lastTouchX = -1; lastTouchY = -1     // k.H/k.I live one frame
         }
+    }
+
+    /** `aS.I()` — the player slot's `i.I()` (i.java:3853-3925, proven);
+     *  see the call site in [tick] for the order. */
+    private fun tickPlayerI() {
+        val p = player
+        if (jC == 14) return
+        if (!kAl || p.clip === clips[12]) {                     // L34
+            if (p.y > 0) {
+                if (p.y < 100) p.y--
+                if (p.y == 0) p.y--
+            } else if (!Entity.icu && p.S >= 0 &&
+                (!iAH || jG % maxOf(1, iAI) == 0L)) {
+                p.advanceAnim()                                 // s()
+            }
+        }
+        p.b = true
+        if (claimSuspendsPlayer()) {                            // L108
+            // during a bound ride the player's `g.e()` — and therefore
+            // `i.B()`'s deadly-band probes — never runs; the claimer's
+            // `aa()` drives `ak`/`al` directly.
+            kE?.let { it.P = it.P or 128 }
+            return
+        }
+        if (Entity.icu) return                                  // `i.cu`
+        p.integrate(if (!iAH) 1 else maxOf(1, iAI))
+        p.gMountAlign(p.ga)                                     // g.d()
+        if (bh3) p.posToWaypoint(this)                          // bF()
+        // The wall rescan `a(an())` also runs inside `g.e()`'s head
+        // (g.java:1282, proven); this pre-dispatch `a(true)` is a
+        // slice-2 superset the bot legs were proven against — removing
+        // it stalls proven crossings (gate row, canyon shaft), so it
+        // stays until a proven arm covers those states.
+        p.collideSides(this, true)
+        playerFsm.tick(p, pad)                                  // g.e()
+        // L1f35 tail (i.java:18904-18922): every dispatched entity ends
+        // its `I()` with `if (b) t()` + the `av → P&1` facing sync.
+        if (p.b) p.refreshBoxes()
+        p.P = if (p.av) p.P or 1 else p.P and -2
     }
 
     /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
