@@ -23832,9 +23832,13 @@ class Slice245Test {
         // starving the leg ~1500px short of the window — fidelity bug).
         // With the gate the au window (camY 8000-8480) is reached inside
         // the fuel budget, `aY()` writes the checkpoint, and the next
-        // respawn lands AT cp1 (respawnAl == 8360). Fuel stalls still
-        // kill a naive-climb bot — deaths stay in the design.
-        assertTrue(snapFired && minAl < 8360 && respawnAl == 8360,
+        // respawn lands AT cp1. Fuel stalls still kill a naive-climb bot
+        // — deaths stay in the design. aY()'s bh3 gate fires on the first
+        // frame the glider is at-or-above the checkpoint (`e.al >= aS.al`)
+        // and stamps the GLIDER's own position (writeIX), so the respawn
+        // lands within one climb step above cp1's y8360 — under k.I()'s
+        // order the climb samples 8362 → 8358 and the stamp is 8358.
+        assertTrue(snapFired && minAl < 8360 && respawnAl in 8344..8360,
             "canyon legs: the fixed conveyor keeps ~7px/t so camY reaches " +
             "cp1's au window (8000-8480) before the k.aE cap — the " +
             "checkpoint fires (snap) and respawns land at cp1 (8360) — " +
