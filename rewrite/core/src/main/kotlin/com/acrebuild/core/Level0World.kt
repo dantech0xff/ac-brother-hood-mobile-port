@@ -299,6 +299,12 @@ class Level0World(
     // `bb[]` at the drain after the npc pass — never iterate-mutated.
     val pendingInsert = ArrayList<Entity>()     // k.b() drain buffer
     override fun removeEntity(e: Entity) {
+        // k.c(iVar) (k.java:4563-4587): a removed scroll holder releases
+        // k.ah + R/S/T/U via k.n(); k.F drops it; its bb[] slot is nulled
+        // at once, so the entity loops skip it for the rest of the frame
+        // (`pendingRemove` membership — the list itself drains after).
+        if (kAh === e) kN()
+        if (kF === e) kF = null
         pendingRemove += e
         // k.c(iVar) (k.java:4576): `bg[as]=-99` — the record's save-image
         // slot tombstones immediately; the next aY() propagates it to bf.
@@ -583,35 +589,10 @@ class Level0World(
     var gV = false                            // g.v — full camera warp flag
     var kDz = 120                             // k.dz — fade counter
 
-    /** ax37 scroll-bound trigger (i.java:7053 al()).
-     *  W = zone rect ak+f7,al+f8,+f9,+f10 ; X = bound rect ak+f11..f14 ;
-     *  mask = Z[0]=f15 ; mode = Z[3]=f18 (1: fire while overlap a(),
-     *  0: fire on full containment b()); `linkCond` = Z[1]=f16,
-     *  `linkUid` = Z[2]=f17 — the linked-entity gate (i.java:5764-5811;
-     *  all level-0 records carry -1 → unexercised but ported verbatim). */
-    data class ScrollTrigger(val zone: IntArray, val bound: IntArray,
-                             val mask: Int, val mode: Int,
-                             val linkCond: Int, val linkUid: Int)
-
-    /** Rebuilt from `level.entities` on every spawn — a mission switch
-     *  rebinds `level`, so the trigger set must recompute with it. */
-    var scrollTriggers: MutableList<ScrollTrigger> = mutableListOf()
-        private set
-
     private fun rebuildRecordStructs() {
         checkpoints = level.entities
             .filter { it.size >= 4 && it[0] == 2 }
             .map { Checkpoint(it[1], it[2], it[3], if (it.size > 7) it[7] else -1) }
-        scrollTriggers = level.entities
-            .filter { it.size >= 19 && it[0] == 37 }
-            .map { f ->
-                ScrollTrigger(
-                    intArrayOf(f[2] + f[7], f[3] + f[8],
-                               f[2] + f[7] + f[9], f[3] + f[8] + f[10]),
-                    intArrayOf(f[2] + f[11], f[3] + f[12],
-                               f[2] + f[11] + f[13], f[3] + f[12] + f[14]),
-                    f[15], f[18], f[16], f[17])
-            }.toMutableList()
     }
 
     // k.R/k.T/k.S/k.U — camera scroll bounds written by ax37 triggers
@@ -2007,14 +1988,9 @@ class Level0World(
         queueInsert(e)
         return e
     }
-    /** `k.n()` (k.java:2861, proven): `ah=null; R=S=T=U=0`. `scrollHolder`
-     *  tracks the ax37 trigger standing in for `k.ah`, so it must release
-     *  here too — otherwise a level reload (which rebuilds `scrollTriggers`
-     *  with fresh instances) leaves a stale holder whose `===` checks never
-     *  match, wedging the claim lock and zeroing the bounds every tick. */
+    /** `k.n()` (k.java:2224-2230, proven): `ah=null; R=S=T=U=0`. */
     override fun kN() {
         kAh = null; kR = 0; kT = 0; kSBound = 0; kU = 0
-        scrollHolder = null
     }
 
     /** `k.l(int,int)` (k.java:2844, proven): `clamp(d/2, -k, k)` —
@@ -4232,11 +4208,12 @@ class Level0World(
         visX0 = vx0; visY0 = vy0; visX1 = vx1; visY1 = vy1
     }
 
-    /** `k.ah?.I()` (i.java:14444-14446, proven): tick the scroll-wall
-     *  holder inside `bi()`'s door-arrival path — `k.ah` is written
-     *  only by `k.a(this)` under `al()`; our equivalent is the ax37
-     *  bounds refresh. */
-    override fun refreshScrollBounds() = fireScrollTriggers()
+    /** `k.ah?.I()` (i.java:14444-14446, proven): re-run the scroll-wall
+     *  holder inside `bi()`'s door-arrival path. `k.ah` is only ever an
+     *  ax37 (`k.a(this)` under `al()`, i.java:5815), whose `I()` is the
+     *  integrator (no velocity), `al()` and the box tail (a no-op for
+     *  ax37) — so this is its `al()`. */
+    override fun refreshScrollBounds() { kAh?.let { scrollTriggerAl(it) } }
     /** `B()` (k.java:2021, proven) — mission music: `aJ==1 → z(9)`,
      *  else `ee[aj]` when != -1. */
     private fun missionInit() {
@@ -4443,109 +4420,52 @@ class Level0World(
     }
 
     /**
-     * ax37 `al()` (i.java:7053) — scroll-bound trigger.
-     * mode==1 (Z[3]): fire while player W overlaps the zone (`a()`);
-     * mode==0: fire when player W is fully inside (`b()` = contained).
-     * Payload per Z[0] bits, each gated on zone∩viewport `a(this.W,k.ac)`:
-     * &1→k.R=X[0] (camX floor), &4→k.T=X[1] (camY floor),
-     * &2→k.S=X[2] (camX+400 ceiling), &8→k.U=X[3] (camY+240 ceiling).
-     * Z[2]==-1 records skip the linked-entity gate (all level-0 data).
-     * `k.ah` claim + `k.n()` release and the L8 holder-reset are ported in
-     * `fireScrollTriggers` (i.java:7053-7159) including the `Z[2]!=-1`
-     * linked-entity gate (i.java:5764-5811): six `Z[1]` modes gate or
-     * self-destruct the trigger on the `k.q(Z[2])` link's state.
+     * ax37 `al()` (structured/i.java:5739-5828, proven) — the scroll-bound
+     * trigger, run from the entity loop (dispatch `case 37`), so the loop's
+     * gates apply: `P&256` disabled, parked `P&32` without `P|16` waits for
+     * a script, and a script `k.c` removal ends it. On the trigger entity
+     * `W` is the zone, `X` the bound rect, `Z = {mask, link mode, link uid,
+     * overlap mode}` (initAx37).
+     *
+     * Order as in the original: player in S9/S50 → nothing; the holder
+     * (`k.ah == this`) zeroes R/S/T/U; then the ZONE test (`Z[3]==1`
+     * overlap `a()`, else containment `b()`) — a miss releases a holding
+     * trigger via `k.n()`; only then the `Z[2]!=-1` link gate (modes 0-2
+     * skip, 3-5 `k.n()` + `k.c(this)` self-remove); containment claims
+     * `k.ah` unless another overlap-mode holder stands; each mask bit
+     * writes its bound while the zone overlaps the view `k.ac`.
      */
-    /** The `k.ah` claimant — the trigger holding the wall slot (k.a(this),
-     *  i.java:7176 `b(k.aS.W, this.W)` containment arm). Released via k.n()
-     *  when its zone stops firing while it holds the slot (i.java:7068
-     *  /:7230). */
-    private var scrollHolder: ScrollTrigger? = null
-
-    fun fireScrollTriggers() {  // internal-visible for tests
-        val view = intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
-        for (t in scrollTriggers) {
-            val pw = player.W
-            // i.java:7062 (L8): the k.ah holder clears R/S/T/U at the head
-            // of its own al() each tick, then re-writes below — so bounds
-            // always reflect the currently-firing set while a holder
-            // stands, and vanish entirely on release.
-            if (scrollHolder === t) {
-                boundMinX = 0; boundMinY = 0; boundMaxX = 0; boundMaxY = 0
-            }
-            // i.java:5764-5811 — `Z[2]!=-1` linked-entity gate:
-            //  Z[1]=0: live combatant mid-anim OR non-combatant link → skip;
-            //  Z[1]=1: link gone OR P|32 → skip; Z[1]=2: gone OR P&~32 →
-            //  skip; Z[1]=3: gone-or-dead → `k.n()+k.c(this)` self-remove;
-            //  Z[1]=4/5: P-bit polarity → self-remove. `k.c(this)` defers
-            //  like pendingRemove — collected, drained after the loop.
-            if (t.linkUid != -1) {
-                val q = findByAw(t.linkUid)                       // k.q(Z[2])
-                when (t.linkCond) {
-                    0 -> {
-                        if (q != null && !Entity.isDeadCheck(q) &&
-                            q.animFinished()) continue
-                        if (q != null && q.ax != 73 && q.ax != 17 &&
-                            q.ax != 11 && q.ax != 29) continue
-                    }
-                    1 -> if (q == null || (q.P and 32) != 0) continue
-                    2 -> if (q == null || (q.P and 32) == 0) continue
-                    3 -> if (q == null || Entity.isDeadCheck(q)) {
-                             kN(); deadTriggers += t
-                             if (scrollHolder === t) scrollHolder = null
-                             continue
-                         }
-                    4 -> if (q != null && (q.P and 32) == 0) {
-                             kN(); deadTriggers += t
-                             if (scrollHolder === t) scrollHolder = null
-                             continue
-                         }
-                    5 -> if (q != null && (q.P and 32) != 0) {
-                             kN(); deadTriggers += t
-                             if (scrollHolder === t) scrollHolder = null
-                             continue
-                         }
-                }
-            }
-            val fired = if (t.mode == 1) rectsOverlap(pw, t.zone)
-                        else rectContains(pw, t.zone)
-            if (!fired) {
-                // i.java:7068/:7230: zone lost while holding k.ah → k.n().
-                if (scrollHolder === t) scrollHolder = null
-                continue
-            }
-            // i.java:7131-7143 (L79/L85): full containment claims k.ah —
-            // unless a mode-1 (overlap) holder already stands.
-            if (rectContains(pw, t.zone) &&
-                (scrollHolder == null || scrollHolder === t ||
-                 scrollHolder!!.mode != 1)) {
-                scrollHolder = t
-                // k.a(this) → k.ah = the trigger entity: W = its ZONE rect;
-                // aF is the record flag — every level-0 ax37 record carries
-                // aF=0, so m()'s L282 wall clamp (k.java:2406 `aF != 1 →
-                // skip`) never engages for ax37 — the trigger only drives
-                // R/T/S/U bounds. (Previous rev forced aF=1 + W=bound →
-                // camA pinned between wall ceiling and R floor.)
-                kAh = Entity(37, null).apply {
-                    W[0] = t.zone[0]; W[1] = t.zone[1]
-                    W[2] = t.zone[2]; W[3] = t.zone[3]
-                }
-            }
-            if (!rectsOverlap(t.zone, view)) continue
-            if (t.mask and 1 != 0) boundMinX = t.bound[0]
-            if (t.mask and 4 != 0) boundMinY = t.bound[1]
-            if (t.mask and 2 != 0) boundMaxX = t.bound[2]
-            if (t.mask and 8 != 0) boundMaxY = t.bound[3]
+    fun scrollTriggerAl(e: Entity) {
+        if (player.S == 9 || player.S == 50) return
+        if (kAh === e) { kR = 0; kSBound = 0; kT = 0; kU = 0 }
+        val pw = player.W
+        val inZone = if (e.Z[3] == 1) rectsOverlap(pw, e.W) else rectContains(pw, e.W)
+        if (!inZone) {
+            if (kAh === e) kN()
+            return
         }
-        if (scrollHolder == null) kAh = null
-        if (deadTriggers.isNotEmpty()) {
-            scrollTriggers.removeAll(deadTriggers)
-            deadTriggers.clear()
+        if (e.Z[2] != -1) {
+            val q = findByAw(e.Z[2])                                    // k.q(Z[2])
+            when (e.Z[1]) {
+                0 -> {
+                    if (q != null && !Entity.isDeadCheck(q) && q.animFinished()) return
+                    if (q != null && q.ax != 73 && q.ax != 17 && q.ax != 11 && q.ax != 29) return
+                }
+                1 -> if (q == null || (q.P and 32) != 0) return
+                2 -> if (q == null || (q.P and 32) == 0) return
+                3 -> if (q == null || Entity.isDeadCheck(q)) { kN(); removeEntity(e); return }
+                4 -> if (q != null && (q.P and 32) == 0) { kN(); removeEntity(e); return }
+                5 -> if (q != null && (q.P and 32) != 0) { kN(); removeEntity(e); return }
+            }
         }
+        val h = kAh
+        if ((h == null || (h !== e && h.Z[3] != 1)) && rectContains(pw, e.W)) kAh = e   // k.a(this)
+        val view = camRect                                              // k.ac
+        if ((e.Z[0] and 1) != 0 && rectsOverlap(e.W, view)) kR = e.X[0]
+        if ((e.Z[0] and 4) != 0 && rectsOverlap(e.W, view)) kT = e.X[1]
+        if ((e.Z[0] and 2) != 0 && rectsOverlap(e.W, view)) kSBound = e.X[2]
+        if ((e.Z[0] and 8) != 0 && rectsOverlap(e.W, view)) kU = e.X[3]
     }
-
-    /** `k.c(this)` deferral for scroll triggers — same late-remove
-     *  pattern as pendingRemove (i.java:5764-5811 arms). */
-    private val deadTriggers = mutableListOf<ScrollTrigger>()
 
     /** `i.f(i)` (i.java:5382-5430, proven): the player scroll-wall
      *  clamp — while the ax37 scroll-holder is in overlap mode
@@ -4557,11 +4477,11 @@ class Level0World(
      *  8 bottom). Player-only in the original — all 16 call sites sit
      *  inside g's motion arms. */
     override fun scrollWallClamp(e: Entity) {
-        val h = scrollHolder ?: return                          // k.ah == null
-        if (h.mode != 1) return                                 // k.ah.Z[3] != 1
+        val h = kAh ?: return                                   // k.ah == null
+        if (h.Z[3] != 1) return                                 // k.ah.Z[3] != 1
         if (e.ag == 0 && e.ah == 0) return
-        val X = h.bound                                         // k.ah.X
-        val m = h.mask                                          // k.ah.Z[0]
+        val X = h.X                                             // k.ah.X
+        val m = h.Z[0]                                          // k.ah.Z[0]
         if (e.ag <= 0 && (e.Y[0] shl 8) + e.ag <= (X[0] shl 8) && (m and 1) != 0) {
             e.ag = 0; e.ai = 0
             e.ak = (e.ak - e.Y[0]) + X[0]
@@ -5202,6 +5122,7 @@ class Level0World(
             // player, and `dT` together.
             var consumed = 0
             for (n in npcs) {
+                if (n in pendingRemove) continue          // k.c: bb[i] = null
                 n.recomputeAu(camX, camY, ::kBk)
                 if ((n.P and 256) == 0 &&
                     ((n.au < 2 && (n.P and 32) == 0) || (n.P and 16) != 0)) {
@@ -5221,6 +5142,7 @@ class Level0World(
                     if (n.ay == -1) {
                         consumed++
                         tickNpc(n)
+                        if (n in pendingRemove) continue      // bb[i3] == null
                         // `bb[i3].ac/.ab.I()` — linked entities tick via
                         // the link even when they sit in `bb[]` too
                         // (verbatim double-tick quirk, kept).
@@ -5251,6 +5173,10 @@ class Level0World(
             // the `ac.ax!=10` guard exists ONLY in the bh3 arm
             // (verbatim asymmetry).
             for (n in npcs) {
+                // each `bb[i7] != null` check (k.java:2575-2588): a k.c
+                // removal earlier this frame — or by the entity's own
+                // tick or its ac link — ends its turn here
+                if (n in pendingRemove) continue
                 n.recomputeAu(camX, camY, ::kBk)
                 if ((n.P and 256) != 0) continue
                 if (n.au < 2) {
@@ -5261,7 +5187,9 @@ class Level0World(
                 if (n.ax == 71) continue
                 if (n.hasTrail()) n.pushTrail()
                 tickNpc(n)
+                if (n in pendingRemove) continue
                 n.ac?.let { tickNpc(it) }
+                if (n in pendingRemove) continue
                 n.ab?.let { tickNpc(it) }
             }
         }
@@ -5275,7 +5203,6 @@ class Level0World(
             npcs += pendingInsert
             pendingInsert.clear()
         }
-        fireScrollTriggers()
         // k.aO message countdown (k.java:5527): `aO -= j.f` per tick.
         if (kAO >= 0) kAO -= 62
         // k.m(cJ) per-tick (k.java:3320 proven, `bh[aj]!=3` gate):
@@ -5440,6 +5367,7 @@ class Level0World(
         else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
         else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
         else if (n.ax == 2) fireCheckpoint(n)
+        else if (n.ax == 37) scrollTriggerAl(n)                  // case 37 → al()
 
         else { npcFsm.tick(n, player); claimed = false }
         // `I()` dispatch tail L1f35 (i.java:18904-18934, proven): every

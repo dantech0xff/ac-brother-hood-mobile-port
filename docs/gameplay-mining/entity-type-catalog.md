@@ -36,7 +36,7 @@ Constructor route (`level-record-formats.md`, `proven`): raw `0`/`25` →
 | 30,54 | `ax()` | 169L/11 st | flying-mode entity | inferred | 4 / 1,4 |
 | 34 | `ak()` | 42L | player-proximity effect (42 refs) | inferred | — |
 | 35 | `bQ()` | 415L/32 st | NPC/enemy variant (msg:8) | inferred | 0,2,3,6,7 |
-| 37 | `al()` | 93L/6 st | **pickup** (msg:5 — potion/soul/memory) | inferred | 0,1,2,3,5,6,7 |
+| 37 | `al()` | 93L/6 st | **Scroll-bound trigger**: zone `W` (r8[7..10]) / bound `X` (r8[11..14]), `Z={mask, link mode, link uid, overlap mode}`; player trong zone → ghi `k.R/S/T/U` = `X` theo mask khi zone chạm `k.ac`, containment claim `k.ah` (scroll wall `i.f()`); link gate `Z[2]` (6 mode, 3-5 tự `k.c`). Record `P&32` ngủ tới khi script xóa bit (`i.java:2570-2580`, `:5739-5828`) | proven | 0,1,2,3,5,6,7 |
 | 40 | `bx()` | 127L | player-proximity interactable | inferred | 0,3,5 |
 | 41 | `n()` | 75L | **knockable prop**: gravity `aj=1536`, cap 2560, đẩy entity khác, `k.ae=aS` | proven | 0,2,3,5,6,7 |
 | 42 | `bz()` | 76L | helper (1 msg) | inferred | 0,2,3,5,6,7 |

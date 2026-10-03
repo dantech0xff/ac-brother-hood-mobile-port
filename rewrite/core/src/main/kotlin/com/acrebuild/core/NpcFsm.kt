@@ -9963,13 +9963,22 @@ fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
 }
 
 /** ax37 `L633` (i.java:8074, proven): scroll-bound trigger init —
- *  `Z[0..3]=r8[15..18]`; `P|=0x200`; `(P&0x20)==0 → P|=0x10`. L1bea
- *  skips ax37 (no `i()` finish) — this arm has no setAnim call. */
+ *  `Z[0..3]=r8[15..18]` (wall/bound mask, link mode, link uid, overlap
+ *  mode); `P|=0x200`; `(P&0x20)==0 → P|=0x10`, so live triggers tick
+ *  every frame and parked ones wait for a script to clear `P&32`. L1bea
+ *  skips ax37 (no `i()` finish). The constructor tail (structured/
+ *  i.java:2913-2926) stages the zone `W = (ak+r8[7], al+r8[8], +r8[9],
+ *  +r8[10])` and the bound `X = (ak+r8[11], al+r8[12], +r8[13], +r8[14])`;
+ *  `t()` returns them untouched for ax37. */
 fun NpcFsm.initAx37(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.Z[0] = rf(15); e.Z[1] = rf(16); e.Z[2] = rf(17); e.Z[3] = rf(18)
     e.P = e.P or 512
     if ((e.P and 32) == 0) e.P = e.P or 16
+    e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
+    e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
+    e.X[0] = e.ak + rf(11); e.X[1] = e.al + rf(12)
+    e.X[2] = e.X[0] + rf(13); e.X[3] = e.X[1] + rf(14)
 }
 
 /** ax75 `Ldb1` (i.java:9206, proven): `az=r8[7]` only. */
