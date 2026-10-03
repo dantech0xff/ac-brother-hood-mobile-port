@@ -27082,6 +27082,7 @@ class Slice289Test {
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
         w.kO = 12080; w.kP = 780
         var reached = false; var maxAk = 12280; var prevS = -1; var stall = 0; var lastAk = 12280
+        var settle = 0; var wasS90 = false
         for (t in 0..60000) {
             p.gJ = 7
             val foe = w.npcs.firstOrNull {
@@ -27096,7 +27097,15 @@ class Slice289Test {
             // aF intent latch keeps arming the wall-grabs.
             val inMarker = p.ak in 13469..13554 && p.al in 1052..1104 && p.S != 214 && p.S != 215
             val inChimney = p.ak in 13460..13565 && p.al in 740..1140
+            // slice 356: the S90 air kill now ends when the pinned victim's
+            // corpse lands (family head `aS.a(0)`, Q==24), ~5 ticks earlier
+            // than before, so the bot met foe 534 mid-swing and was beaten
+            // back. Standing 16 ticks after the release re-phases the run
+            // (deterministic replay: 15-17 pass, 14 and 18+ do not).
+            if (wasS90 && p.S != 90) settle = 16
+            wasS90 = p.S == 90
             val mask = when {
+                settle > 0 -> { settle--; 0 }
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
                 p.S == 65 -> Pad.M_UP                          // ax22: vault east
                 p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN

@@ -2196,14 +2196,6 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     }
 
     /**
-     * L1341 combo arm (subset of the g.java S67/68/69 + S112..115 arms):
-     * `aj()` runs the cj/ck matchers — while S==row.anim, a 65568 tap with
-     * `T >= row.minFrame` opens the window (`cl`) and queues `R = next anim`;
-     * the consumed `R` fires `i(R)` at the window/end boundary; otherwise the
-     * arm settles to `i(0)` (the `l()` call). The `i.aN` weakened-target
-     * assassination shortcut (R=183/184 via rand) is omitted — needs lock-on.
-     */
-    /**
      * `ay()` (g.java:5363-5421, proven) — the sword-combo advance step:
      * ledge-guard ahead of the player (never steps off the support
      * edge), ±1792 steps on the flagged anim ticks while the `i.V`
@@ -2272,19 +2264,28 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         w.queueInsert(aK)
     }
 
+    /**
+     * L1341 combo arm (g.java S67/68/69 + S112..115, :2469-2525): `aj()`
+     * runs the cj/ck matchers — while S==row.anim, a 65568 tap with
+     * `T >= row.minFrame` opens the window (`cl`) and queues `R = next
+     * anim`; the consumed `R` fires `i(R)` at the window/end boundary;
+     * otherwise the arm settles to `i(0)` (the `l()` call). A tap in S67/68
+     * on a weakened lock (`i.aN`: ax11, `Z[0]==2`, `aB <= bw[k.au]`) picks
+     * the assassination finisher `R = |j.j.nextInt()| % 2 ? 184 : 183`.
+     */
     private fun comboArm(p: Entity, pad: Pad) {
         // L2469-2475 (proven): attack step → wall-stop → footing-loss
         // fall through the same case body, then the combo logic.
         attackStep(p)
         if (p.ag != 0 && p.forwardWall()) p.ag = 0
         if (!p.aZ && p.standingOn == null) { p.enterFall(); return }
-        // L2480-2486 (proven): tap 65568 in S67/68 with a weakened lock
-        // (ax11, Z0==2, aB<=bw, a==null) → R = rand%2 ? 184 : 183
+        // L2480-2486 (g.java:2479, proven): tap 65568 in S67/68 with a
+        // weakened lock (ax11, Z0==2, aB<=bw[k.au], a==null) → R = rand%2 ?
+        // 184 : 183. No `aB > 0` term — a dead lock is handled by the tail.
         val t = world.lockTarget
         if (pad.v(Pad.M_CONTEXT) && (p.S == 67 || p.S == 68) &&
             p.standingOn == null &&
-            t != null && t.ax == 11 && t.Z[0] == 2 && t.aB <= BW_MOCK &&
-            t.aB > 0) {
+            t != null && t.ax == 11 && t.Z[0] == 2 && t.aB <= BW) {
             p.cl = false
             if (p.R == -1) p.R = if ((rng?.nextInt() ?: 0) % 2 != 0) 184 else 183
         } else if (pad.v(Pad.M_CONTEXT)) {
@@ -2739,7 +2740,8 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
          *  4 rows × {anim, then next-anim at +1, min-frame at +n, key at +2n}. */
         private val CJ = intArrayOf(67, 68, 69, 112, 6, 5, 100, 100, 65568, 65568, 65568, 65568)
         private val CK = intArrayOf(112, 113, 114, 115, 9, 5, 5, 100, 65568, 65568, 65568, 65568)
-        /** `bw[k.au]` normal-hit reference for the weaken check (au=0). */
-        private const val BW_MOCK = 80
+        /** `i.bw[k.au]` (i.java:171, proven): `{80,80,80}` — the weaken
+         *  threshold is 80 at every difficulty. */
+        private const val BW = 80
     }
 }

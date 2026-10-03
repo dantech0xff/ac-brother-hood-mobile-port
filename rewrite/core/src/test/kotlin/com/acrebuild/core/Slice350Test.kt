@@ -2,6 +2,7 @@ package com.acrebuild.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -15,8 +16,9 @@ import kotlin.test.assertTrue
  * `e(aS)` and player ∉ {284,285}.
  *
  * Port before this slice:
- *  - `losL`'s `17, 23, 50` arm used overlap, so a half-visible ax23 (the
- *    only one of the three routed through `losL`) already spotted.
+ *  - `losL`'s `17, 23, 50` arm used overlap, so a half-visible ax23
+ *    already spotted (ax23 then still ran the ax11 arms; since slice 356
+ *    it takes `case 23 → L849` and runs none).
  *  - the civilian tick `aA()` L12 calls the full `l()`
  *    (simple/i.java:8742-8745), but `tickAx17` ported only the L70
  *    camera gate: no `ai()`, no `aA&8` blind, no LOS, no S284/285.
@@ -114,7 +116,7 @@ class Slice350Test {
         assertTrue(noticed(e), "ai() fast path → l() true, got S${e.S}")
     }
 
-    // -- ax23 through losL (spotB in the patrol arm) ----------------------------
+    // -- ax23 and l() ------------------------------------------------------------
     private fun patroller(w: Level0World): Entity {
         val e = Entity(23, w.clips[7])
         e.aB = 300; e.setAnim(2); e.k = false; e.aA = 0
@@ -122,16 +124,23 @@ class Slice350Test {
         return e
     }
 
-    @Test fun `ax23 - spots only when fully on camera`() {
+    @Test fun `ax23 - l() needs W fully on camera`() {
         val w = world(); w.npcs.clear()
         val e = stage(w, solidMid = false, ::patroller)
-        w.npcFsm.tick(e, w.player)
-        assertEquals(1, e.aA, "control: W inside k.ac → b() spot → aA=1")
+        assertTrue(losL(e, w.player, w), "control: W inside k.ac → b() true")
 
         val w2 = world(); w2.npcs.clear()
         val e2 = stage(w2, solidMid = false, ::patroller)
         w2.kO = ((e2.W[0] + e2.W[2]) shr 1) - 400      // half on camera
-        w2.npcFsm.tick(e2, w2.player)
-        assertEquals(0, e2.aA, "overlap is not b(W, k.ac) → no spot")
+        assertFalse(losL(e2, w2.player, w2), "overlap is not b(W, k.ac)")
+    }
+
+    @Test fun `ax23 - runs no arm (case 23 goes straight to L849)`() {
+        // slice 356: simple/i.java:5180 — the family head, then au()/L897
+        val w = world(); w.npcs.clear()
+        val e = stage(w, solidMid = false, ::patroller)
+        w.npcFsm.tick(e, w.player)
+        assertEquals(0, e.aA, "no patrol arm → never spots")
+        assertEquals(2, e.S)
     }
 }

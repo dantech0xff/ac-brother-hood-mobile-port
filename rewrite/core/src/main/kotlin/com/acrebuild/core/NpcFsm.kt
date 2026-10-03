@@ -3,43 +3,30 @@ package com.acrebuild.core
 import kotlin.math.abs
 
 /**
- * Slice-2 NPC FSM: the ax11 soldier patrol subset of `i.I()` (simple
- * decompile `reconstructed-project/src/simple/i.java`), plus the shared
- * physics tail.
+ * Entity FSMs dispatched from `i.I()` (`reconstructed-project/src/
+ * {structured,simple}/i.java`; each function cites its own lines).
  *
- * Record → Z init (proven, `i.java` L120 arm, ax 11 and 73 share it):
+ * Soldier family (`case 11/17/23/47/50/73`): every member first runs the
+ * shared head `familyHead` (structured/i.java:3982-4004 — `if (!P()) t()`,
+ * corpse landing, `g.h`). `tick` then runs ax11's L174 arms
+ * (`armsAndL777`) and the L849/L897 tail; ax23 goes straight to that tail
+ * (`case 23 → L849`). ax17/47/50/73 run their own procs from
+ * `Level0World.tickNpc` — `tickAx17` = `aA()`, `tickAx47` = `aL()`,
+ * `tickAx50` = `aK()`, `tickAx73` = `aJ()`. Every other type has an
+ * `initAxNN`/`tickAxNN` pair further down; types without a case get
+ * `defaultArm` (the L1f35 tail).
+ *
+ * Record → Z init for ax11/73 (proven, `i.java` L120 arm):
  *   az=r8[17] (hp), aB=az, Z[14]=r8[4] (script), Z[0]=r8[10] (variant),
  *   Z[1]=0, Z[2]=-1, Z[3]=ak (patrol home), Z[4]=al, Z[5]=r8[7],
  *   Z[6]=r8[8] (patrol range cells left/right of home), Z[7]=r8[9] (link),
  *   Z[8]=r8[11], Z[15..18]=r8[12..15] (alert zone rect rel),
  *   Z[9..12]=absolute alert box (ak+Z15 .. ak+Z15+Z17, al+Z16 .. al+Z16+Z18),
- *   Z[19]=r8[18].  Initial anim `i(0)` (i.java `d(i)` case 11).
+ *   Z[19]=r8[18], Z[21]=r8[19] (corpse-drop link).
  *
- * Arms ported verbatim:
- * - L357 (S∈{2,3,92} patrol): S3 sets `k=true`, `ag=av?-512:512`, `aC=20`;
- *   while `k`, ledge-ahead `am()`/edge-ahead `aG()` route to the 3px nudge
- *   path; else the home-range check `((ak-Z[3])/20)` vs `Z[5]`/`Z[6]` gates
- *   `i(2)` + the 20-tick leg timer → `i(3)` + `av=!av` ping-pong.  Player
- *   spot (`b(k.aS)` simplified — see below) → `aA=1` + ax11 `i(5)`.
- * - L451 (S∈{4,22} chase): `Q()` face player; `aG()` edge → drop alert back
- *   to `i(k?3:2)`; `a(true)`; S4 runs at `ag=±2048`, others at `ag=±512`;
- *   hitbox overlap with player W → `aC=3; i(23)` (attack windup).
- * - L438 (S5 attack): on `r()` → `aq==0 → i(4)`; `aC=0`.
- * - L444 (S23 windup-approach): `ag=±512`; anim end → back to chase.
- * - L475 (S11?): `r()` → `i(12)`.  (S12 arm = contact/attack — replaced by
- *   windup→chase fallback; player damage via `aB()` requires the
- *   damage-floatie spawner — deferred.)
- * - L777 common tail reduced to: `h()` ledge-fall (`i(25)` when no ground
- *   under the anchor row or the row below while no platform link),
- *   gravity via `aj=1536` when `!aZ`.
- *
- * Simplifications (flagged): `b(i)` (LOS) → same-row within ±1 cell AND
- * player inside the Z[9..12] alert box AND NPC facing covers the player.
- * The stealth-state gates are ported (`losL`/`spotB`: `aA&8` hide flag,
- * blind poses S∈{267,268,291}, the ax69-ride blind arm, `iBn` notice).
- * `aC()` chase-timeout: ported as the 60-tick countdown → `i(k?3:2)`.
- * `aE()` assassination QTE, `j()`/`k()` damage/stealth-kill intake, `aD()`
- * platform links — omitted this slice.
+ * Open gap (Phase 1 item 1.5 / G5): ax11's `aC()` attack scheduler is
+ * ported only as its chase timeout; ax73 has the full scheduler
+ * (`attackScheduler73`). Mining notes: `docs/gameplay-mining/npc-fsm.md`.
  */
 class NpcFsm(val world: LevelCellSource) {
 
@@ -59,6 +46,48 @@ class NpcFsm(val world: LevelCellSource) {
         }
         e.Z[21] = -1
     }
+
+    /**
+     * `I()`'s family head for `case 11/17/23/47/50/73` (structured/
+     * i.java:3982-4004; bytecode i.javap.txt I() offsets 1377-1578,
+     * proven), run before the per-type switch:
+     *  - `if (!P()) t()` — a dead member releases its `ae` marker
+     *    (`G()`) instead of refreshing boxes;
+     *  - corpse landing: in a corpse state (S21, S0 unless entered from
+     *    25/184, S135/20/69/106/107/164/168/94/117/78/184, S85 at
+     *    `aB<=0`), on screen, at `T==1 && U==0` → `k.A(24)`, and if the
+     *    body came out of a player carry (`Q` 175/24; S20 not while the
+     *    player is in S157) the player drops (`aS.a(0)`, `bl=0`);
+     *  - `g.h`: the member `f()` picks for the player's S38/S203 ledge
+     *    kill (`f() && g.h==null → g.h=this`, `!f() && g.h==this → null`).
+     */
+    fun familyHead(e: Entity, p: Entity) {
+        if (!e.deadRelease()) e.refreshBoxes()
+        val s = e.S
+        val corpse = s == 21 || (s == 0 && e.Q != 25 && e.Q != 184) ||
+            s == 135 || s == 20 || s == 69 || s == 106 || s == 107 ||
+            s == 164 || s == 168 || s == 94 || s == 117 || s == 78 ||
+            s == 184 || (s == 85 && e.aB <= 0)
+        if (corpse && e.inPlayV(world) && e.T == 1 && e.U == 0) {
+            val carried = e.Q == 175 || e.Q == 24
+            if (if (s == 20) p.S != 157 && carried else carried) {
+                p.flingAirborne(0, world)                       // aS.a(0)
+                e.bl = 0
+            }
+            world.sfx(24)                                       // k.A(24)
+        }
+        val f = ledgeKillF(e, p)
+        if (f && world.grabHolder == null) world.grabHolder = e
+        else if (!f && world.grabHolder === e) world.grabHolder = null
+    }
+
+    /** `i.f()` (structured/i.java:1232-1234, proven): player S38 hanging
+     *  just below this member (`dy` 1..39, `|dx| < 20`), or player S203
+     *  with its `X` box on this `W` (`i.a`). */
+    private fun ledgeKillF(e: Entity, p: Entity): Boolean =
+        if (p.S == 38) p.al > e.al && kotlin.math.abs(p.al - e.al) < 40 &&
+            kotlin.math.abs(p.ak - e.ak) < 20
+        else p.S == 203 && Entity.overlapStrict(p.X, e.W)
 
     companion object {
         // i clinit difficulty tables (proven, i.java static{}):
@@ -269,6 +298,18 @@ class NpcFsm(val world: LevelCellSource) {
         // dispatch head already ran it for `I()`-entered entities; this
         // fallback covers direct arm calls.
         if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
+        familyHead(e, player)
+        // `case 23: goto L849` (simple/i.java:5180, proven): ax23 shares
+        // the family head but no arm — straight to the L849/L897 tail.
+        // (Only the ax10 S30 wave grid spawns ax23, flavour Z[6]==2; no
+        // record carries that flavour, so it is unreached with this data.)
+        if (e.ax == 23) {
+            corpseDrop(e)                                    // au() (11/17/73 only)
+            e.refreshBoxes()                                 // t()
+            if (e.av) e.P = e.P or 1 else e.P = e.P and -2
+            pushL897(e, player)
+            return
+        }
         // S25 runs WITHOUT a(true) in the original (i.java:4711-4736 — the
         // arm carries no side-collide, so the feet penetrate the landing
         // row until its own anchor-cell check snaps + resumes). The port's
@@ -10395,7 +10436,7 @@ private fun sightPriorityD(e: Entity, p: Entity, w: LevelCellSource): Int {
  *       rect (`b(W, k.ac)`, containment) → seen.
  *  4. `e(aS)` LOS clear (Bresenham above) and player S∉{284,285}.
  *  Result feeds `aS.a(32)` in the L827 tail branch — the counter-alerts. */
-private fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
+internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     val ae = w.kAe
     if (ae != null && ae.ax == 10 && ae.S == 52) return true   // ai()
     if ((p.aA and 8) != 0) return false                        // L10 → blind

@@ -4267,7 +4267,11 @@ class Level0World(
     override var iBf = false                       // i.bf engage latch
     override var iX = 0                            // i.x — every-3rd-hit static
     override var iBx: Entity? = null               // i.bx grab-QTE holder
-    override var grabHolder: Entity? = null         // g.h — grab holder
+    /** `g.h` — one static: the family head's ledge-kill pick, read by
+     *  the player's S203 arm as `player.gh`. */
+    override var grabHolder: Entity?
+        get() = player.gh
+        set(v) { player.gh = v }
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
     override var iL = -1                           // i.L
@@ -4439,7 +4443,7 @@ class Level0World(
         if (player.S == 9 || player.S == 50) return
         if (kAh === e) { kR = 0; kSBound = 0; kT = 0; kU = 0 }
         val pw = player.W
-        val inZone = if (e.Z[3] == 1) rectsOverlap(pw, e.W) else rectContains(pw, e.W)
+        val inZone = if (e.Z[3] == 1) Entity.overlapStrict(pw, e.W) else rectContains(pw, e.W)
         if (!inZone) {
             if (kAh === e) kN()
             return
@@ -4461,10 +4465,10 @@ class Level0World(
         val h = kAh
         if ((h == null || (h !== e && h.Z[3] != 1)) && rectContains(pw, e.W)) kAh = e   // k.a(this)
         val view = camRect                                              // k.ac
-        if ((e.Z[0] and 1) != 0 && rectsOverlap(e.W, view)) kR = e.X[0]
-        if ((e.Z[0] and 4) != 0 && rectsOverlap(e.W, view)) kT = e.X[1]
-        if ((e.Z[0] and 2) != 0 && rectsOverlap(e.W, view)) kSBound = e.X[2]
-        if ((e.Z[0] and 8) != 0 && rectsOverlap(e.W, view)) kU = e.X[3]
+        if ((e.Z[0] and 1) != 0 && Entity.overlapStrict(e.W, view)) kR = e.X[0]
+        if ((e.Z[0] and 4) != 0 && Entity.overlapStrict(e.W, view)) kT = e.X[1]
+        if ((e.Z[0] and 2) != 0 && Entity.overlapStrict(e.W, view)) kSBound = e.X[2]
+        if ((e.Z[0] and 8) != 0 && Entity.overlapStrict(e.W, view)) kU = e.X[3]
     }
 
     /** `i.f(i)` (i.java:5382-5430, proven): the player scroll-wall
@@ -5358,14 +5362,18 @@ class Level0World(
         else if (n.ax == 60) npcFsm.tickAx60(n, this, player)
         else if (n.ax == 43) npcFsm.tickAx43(n, this, player)
         else if (n.ax == 69) npcFsm.tickAx69(n, this, player)
-        else if (n.ax == 73) npcFsm.tickAx73(n, this, player)
-        else if (n.ax == 47) npcFsm.tickAx47(n, this, player)
-        else if (n.ax == 50) npcFsm.tickAx50(n, this, player)
+        else if (n.ax == 73) {
+            npcFsm.familyHead(n, player)
+            npcFsm.tickAx73(n, this, player)                // aJ()
+            npcFsm.corpseDrop(n)                            // L849 au()
+        }
+        else if (n.ax == 47) { npcFsm.familyHead(n, player); npcFsm.tickAx47(n, this, player) }
+        else if (n.ax == 50) { npcFsm.familyHead(n, player); npcFsm.tickAx50(n, this, player) }
         else if (n.ax == 64) npcFsm.tickAx64(n, this, player)
         else if (n.ax == 74) npcFsm.tickAx74(n, this, player)
         else if (n.ax == 76) npcFsm.tickAx76(n, this, player)
         else if (n.ax == 34) npcFsm.tickAx34(n, this, player)
-        else if (n.ax == 17) npcFsm.tickAx17(n, this, player)
+        else if (n.ax == 17) { npcFsm.familyHead(n, player); npcFsm.tickAx17(n, this, player) }
         else if (n.ax == 2) fireCheckpoint(n)
         else if (n.ax == 37) scrollTriggerAl(n)                  // case 37 → al()
 

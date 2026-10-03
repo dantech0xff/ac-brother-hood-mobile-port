@@ -206,9 +206,9 @@ class Level0Game : ApplicationAdapter() {
                 Gdx.app.error(TAG, "tick failed, quarantining", t)
             }
         }
-        // `z()`/`e.b()` audio commands (e.java:50-87): pack-17 SFX
-        // WAVs (slots 10–33 set) play via AudioBridge; MIDI slots
-        // (0–9,17,21,28) log-skip — undecoded on this pipeline.
+        // `z()`/`e.b()` audio commands (e.java:50-87): AudioBridge plays
+        // the pack-17 SFX WAVs and the MIDI slots (0–9,17,21,28) from
+        // their offline OGG renders (`audio/music-N.ogg`).
         // `audioTrack` mirrors e.e.
         val commands = world.drainCommands()
         audio.execute(commands)

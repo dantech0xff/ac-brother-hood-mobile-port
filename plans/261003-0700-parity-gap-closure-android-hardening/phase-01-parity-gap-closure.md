@@ -39,7 +39,8 @@ and lands with unit tests that would have caught it.
 | G11 pickup sparkle field in `i.F()` (RNG gate, rays, `f` advance) | done | [354](../261003-1000-slice354-pickup-sparkle-field/plan.md) |
 | 1.7 ax37 scroll triggers as entities (+ `k.c` holder release / same-frame skip) | done | [355](../261003-1030-slice355-ax37-triggers-as-entities/plan.md) |
 | G12 frame order: `k.I()` ticks `bb[]` before `aS.I()` (port: player first) | open | — |
-| 1.5, 1.7 (ax23, comments) | pending | — |
+| 1.7 ax23 `case 23 → L849` + stale comments; G13 family head (`t()`, corpse landing, `g.h` → S203 ledge kill), ax73 `au()` | done | [356](../261003-1100-slice356-family-head-ax23/plan.md) |
+| 1.5 ax11 `aC()` scheduler | pending | — |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

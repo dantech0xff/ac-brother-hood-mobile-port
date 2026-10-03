@@ -8,15 +8,20 @@ clip 7 (xem `state-animation-map.md`).
 
 ```
 I() → case {11,17,23,47,50,73}:
-    shared preamble (death->i(139)/remove, g.h air-assassination target,
-                     sound A(24) landing)
+    shared preamble (i.java:3982-4004, bytecode I() 1377-1578):
+        if (!P()) t()            // chết → G() nhả marker ae, không t()
+        corpse landing           // S xác chết + v() + T==1,U==0 → k.A(24);
+                                 // Q∈{24,175} (player đứng trên đầu / đang
+                                 // giữ) → aS.a(0), bl=0 (S20: trừ aS.S==157)
+        g.h ← f()                // mục tiêu ledge-kill S38/S203 của player
+    (port: NpcFsm.familyHead — slice 356)
     switch (ax):
         11 → inline mega-FSM (~95 state arms, 4005-5172)
         17 → aA()   civilian flee
         47 → aL()   ledge sentinel / pouncer variant
         50 → aK()   pouncer (knockdown từ trên)
         73 → aJ()   heavy guard (grab/struggle QTE)
-        23 → (không có case) chỉ preamble + au() = scripted/civilian, no AI
+        23 → goto L849: chỉ preamble + au() = scripted/civilian, no AI
     au()  // corpse drop: entity liên kết Z[21] nhảy ra khi chết
 ```
 
