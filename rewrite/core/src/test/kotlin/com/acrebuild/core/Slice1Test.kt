@@ -15962,15 +15962,19 @@ class Slice151Test {
         assertEquals(-1, Entity.M)
     }
 
-    @Test fun `gcm latch stays when mount request absent`() {
-        // J&4 == 0 → mountEntry returns before the consumer — latch held
+    @Test fun `gcm latch drains when mount request absent`() {
+        // Slice 365 (g.javap.txt e() 13741-13755 → 14204 → 14322, proven):
+        // J&4 == 0 skips only the scan (`goto 14204`); r98 stays 0, so the
+        // L37f2 arm still drains `g.cm` and refreshes the indicator. The
+        // slice-151 reading (return before the consumer, latch held) was
+        // a misread of the jump target.
         val w = S151World(cell = 12)
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
         p.S = 0; p.gJ = 0
         p.gcm = true
         fsm.mountEntry(p, Pad())
-        assertTrue(p.gcm)
+        assertFalse(p.gcm, "J&4==0 → goto 14204 → cm drained at 14322")
     }
 }
 
@@ -19756,6 +19760,10 @@ class Slice196Test {
         val t = Entity(10, null); t.S = 0
         p.af = t
         val gg = Entity(11, null); gg.ak = p.ak + 10
+        // a live, level target: az() runs in e()'s head (g.javap.txt e()
+        // 617, slice 365) before this arm and drops a g with aB <= 0 or
+        // |Δal| >= 60.
+        gg.aB = 1; gg.al = p.al
         p.g = gg
         val pad = Pad(); pad.bB = 65568
         fsm.tick(p, pad)
