@@ -27661,6 +27661,14 @@ class Slice291Test {
                         // committed gap-edge hops on the mass tops
                         p.aZ && p.al < 290 && p.ak in 8820..8900 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
                         p.aZ && p.al < 290 && p.ak in 9100..9165 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                        // pillar top x9240-9339@y139 past the rope: walk off
+                        // its east edge (S26 → fall) so the drop lands in
+                        // door uid166's box [9374,9429] and the held UP
+                        // fires it. Under G12 the rope dismount lands on
+                        // the pillar and the hops overshoot the door to
+                        // x9469, where the ax35 volleys kill the bot.
+                        (p.aZ || p.S == 5) && p.al in 130..145 &&
+                            p.ak in 9240..9340 -> Pad.M_RIGHT
                         // inside a gap — drift toward the east face
                         !p.aZ && p.al > 240 && p.ak in 8850..9250 -> Pad.M_RIGHT
                         // bound on an ax66 lift — ride ≥4 ticks then hop toward the next point
@@ -27781,6 +27789,14 @@ class Slice291Test {
                 p.S == 65 || p.S == 228 || p.S == 358 -> 16396
                 p.S == 101 -> Pad.M_RIGHT or Pad.M_UP
                 p.ga != null && p.ga!!.ax == 66 -> Pad.M_RIGHT
+                // Under G12 launcher uid176's bm() mount (i(260)) and the
+                // player's own S260 arm run in the same frame, so the
+                // input held while flying into it picks the launch: UP
+                // fires the straight-up S259 (which drops back onto the
+                // launcher, forever); RIGHT fires S261 east.
+                !p.aZ && w.npcs.any { it.aw == 176 && it.ax == 66 &&
+                    kotlin.math.abs(it.ak - p.ak) < 60 &&
+                    p.al - it.al in -60..120 } -> Pad.M_RIGHT
                 foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 -> {
                     if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
                 }
