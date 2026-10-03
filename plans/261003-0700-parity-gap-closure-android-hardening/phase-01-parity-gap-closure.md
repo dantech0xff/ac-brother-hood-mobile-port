@@ -64,6 +64,7 @@ and lands with unit tests that would have caught it.
 | no knockout check in `k.I()`: the death screen opens at the end of the S50 (ground) / S2 (flight) death anim | done (Phase 2 branch) | [379](../261004-0430-slice379-death-anim/plan.md) |
 | `k.N` tap prompt: one object, ticked in `k.I()` (a tap fires the context press — the touch assassination), drawn, outlives a reload | done (Phase 2 branch) | [383](../261004-0500-slice383-tap-prompt/plan.md) |
 | `i.s()` gates: anims freeze on the pause screen (except `A[3]`); a wrap under a non-u8 dialog stops/settles the player and freezes the entity while a claim is bound | done (Phase 2 branch) | [386](../261004-0530-slice386-anim-advance-gates/plan.md) |
+| slice-371 leftovers: `bB()` S28 replaces a foreign `ae` with a pinned 71, one `i.p()` (`ab`/`c`/`cr` released), one `u()` | done (Phase 2 branch) | [384](../261004-0600-slice384-npc-leftovers/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

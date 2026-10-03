@@ -3675,16 +3675,17 @@ class NpcFsm(val world: LevelCellSource) {
                 val r02 = player.ak - ((e.W[0] + e.W[2]) shr 1)
                 if (Entity.overlapStrict(e.X, player.W) &&
                     !e.inPlayV(world)) {             // bB() @432 v()
+                    // bB() @438-537 (proven): no ae, or one that isn't a
+                    // 71 → `aS.G(); aS.a(71, ak, al)`; then pin it and
+                    // return. The port fell through to the shove check
+                    // when the ae was not a 71 (slice 384).
                     val ae = player.ae
-                    if (ae == null) {
-                        player.releaseAe()               // aS.G() then a(71)
+                    if (ae == null || ae.S != 71) {
+                        player.releaseAe()               // aS.G()
                         player.ae = world.spawnPickup(71, e.ak, e.al)
-                        pinAe(player.ae!!, r02, e.al); return
                     }
-                    if (ae.S == 71) {                    // L53→L56 re-pin
-                        pinAe(ae, r02, e.al); return
-                    }
-                    // ae exists but isn't a 71 → fall to the shove check
+                    pinAe(player.ae!!, r02, e.al)        // @483-534
+                    return
                 }
                 // L62: player inside the body → hard shove out
                 if (Entity.overlapStrict(e.W, player.W)) {

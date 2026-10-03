@@ -25586,7 +25586,7 @@ class Slice277Test {
 // - Below 25 the conveyor halves: `i.aJ = k.X; k.X = aJ>>1`
 //   (g.java:13963-13979); the ax24-S20 shrine fire restores
 //   `k.X = i.aJ` (NpcFsm.kt:7129, i.java:39330-39335 proven).
-// - `projSweepBc` (NpcFsm.kt:6919+) has NO `au` filter — the player's
+// - `Entity.bc()` (the one `i.bc()` port since slice 371) has NO `au` filter — the player's
 //   flap-emitted ax24-S6 drop-lines convert S19→S20 shrines at any
 //   camera distance, and kill ax54/56/30 runners on contact.
 // - Camera: `kP` IS `camY` (view top). Player dies when

@@ -289,7 +289,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `i.H()` (i.java:4847, proven): release the ab-link entity and drop
      *  the reference — the mount consume path (g.h calls i.at.H()). */
     fun consumeH() {
-        ab?.releaseCascade()
+        ab?.deactivate()
         ab = null
     }
 
@@ -896,15 +896,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         wallProbe(w)
     }
 
-    /** `i.p()` (i.java:214, proven): full release — clears the W/X/Y
-     *  boxes + ab, cascades ad.p(), drops ae/af/c, and flushes the cr
-     *  scratch grid (unmodeled — cr is not part of the port). */
-    fun releaseCascade() {
-        W.fill(0); X.fill(0); Y.fill(0)
-        ab = null
-        ad?.releaseCascade(); ad = null
-        ae = null; af = null; c = null
-    }
 
     /**
      * `i(n)` (`i.java:240`): set anim/state. Out-of-range indices are
@@ -1669,15 +1660,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.p()` (i.java:214, proven): deactivate — release collision boxes,
-     * cascade to the `ad` child, drop ae/af links. The original's `aS()`
-     * tail only flushes the `cr` scratch-grid cache — unmodeled. The entity
-     * stays listed but inert (zero W → no overlap arms fire).
+     * `i.p()` (i.java:214-227, proven): `W = X = Y = null` (zeroed boxes
+     * here — no overlap arm fires on them), `ab = null`, `ad.p()` and
+     * `ad = null`, `ae = af = c = null`, then `aS()` — the `cr` pursuer
+     * pool drop ([poolDrain]). Slice 384 folded a second port
+     * (`releaseCascade`) into this one; this one had missed `ab`, `c`
+     * and `aS()`.
      */
     fun deactivate() {
         W.fill(0); X.fill(0); Y.fill(0)
-        ad?.deactivate()
-        ad = null; ae = null; af = null
+        ab = null
+        ad?.deactivate(); ad = null
+        ae = null; af = null; c = null
+        poolDrain()                                   // aS()
     }
 
     /** `i.a(int,int,int)` (i.java:9810, proven): bind `ae` to a fresh
@@ -1758,7 +1753,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  (`ab.p()` + `ab = null`); the drop-half of the `cu && v(33024)`
      *  arm in the grounded tail. */
     fun dropHeld() {
-        ab?.releaseCascade()
+        ab?.deactivate()
         ab = null
     }
 
@@ -3859,17 +3854,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `|ak-(k.O+200)|/400 + |al-(k.P+120)|/240` for ax13/ax21 (and ax67
      *  riding `k.bk[Z[0]]==49`), `r6/400+r7/120` otherwise, ax67-on-27 →
      *  `r6/800+r7/240` (bytecode i.javap.txt u() @0-175, proven). */
-    fun offscreenScore(world: LevelCellSource) {
-        var r6 = ak - (world.kO + 200); if (r6 < 0) r6 = -r6
-        var r7 = al - (world.kP + 120); if (r7 < 0) r7 = -r7
-        au = when {
-            ax == 21 || (ax == 13 && aG == 4) -> (r6 / 400) + (r7 / 240)
-            ax == 67 && world.kBk(Z[0]) == 49 -> (r6 / 400) + (r7 / 240)
-            ax == 67 -> if (world.kBk(Z[0]) == 27) (r6 / 800) + (r7 / 240)
-                        else (r6 / 400) + (r7 / 120)
-            else -> (r6 / 400) + (r7 / 120)
-        }
-    }
+    fun offscreenScore(world: LevelCellSource) =
+        recomputeAu(world.kO, world.kP, world::kBk)   // one u() (slice 384)
 
     /** `i.v()` — THE port of v() (bytecode i.javap.txt v() @0-336,
      *  proven). Every ported bytecode call site of `v:()Z` (39 in
