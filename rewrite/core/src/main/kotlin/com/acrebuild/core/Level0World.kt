@@ -5456,9 +5456,14 @@ class Level0World(
             kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
         }
 
-        // knockout: d() → x[1]<=0 → k.l(12) (proven)
-        if (player.x1 <= 0) stateL(12)
-        // Slice 363: there is no below-the-camera kill here. The original's
+        // There is no knockout check here (slice 379): `x[1] <= 0` is read
+        // by the player's own head — `g() → i(50)` (g.java:576-578) on the
+        // ground, `g() → i(2)` in `g.n()` (g.java:5648-5649) in flight —
+        // and `k.l(12)` comes from those arms when the death anim ends
+        // (S50/S241 `r()`, g.java:2200-2219; S2/S24 `r() || !v()`,
+        // g.java:5833-5841). The port opened the death screen the frame
+        // the meter hit 0 and never showed the death anim.
+        // Slice 363: there is no below-the-camera kill here either. The original's
         // `!v() && al > k.P + 240 → k.l(12)` lives only in `i.B()`
         // (structured i.java:1034-1035), whose one caller is `g.n()`
         // (g.javap.txt:17406), whose one caller is `I()`'s `case 25`

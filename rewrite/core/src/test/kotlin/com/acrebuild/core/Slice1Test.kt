@@ -244,6 +244,14 @@ private fun overlapCheckpoint(w: Level0World, cp: Level0World.Checkpoint) {
     w.npcs.firstOrNull { it.ax == 2 && it.aw == cp.aw }?.let(::keepLive)
 }
 
+/** Slice 379: the death screen opens when the death anim ends (S50
+ *  `r()` → `k.l(12)`, g.java:2200-2219), not the frame the meter hits 0 —
+ *  and a running claim keeps the player's head (and so `i(50)`) off. */
+fun tickUntilFailed(w: Level0World, limit: Int = 300) {
+    var t = 0
+    while (!w.failed && t++ < limit) w.tick(emptyList())
+}
+
 fun settleIntro(w: Level0World) {
     // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
     // even with auto-dismiss dialogs; the `I()` L108 gate suspends
@@ -658,8 +666,8 @@ class Level0WorldTest {
             w.player.gt = 0; w.iBh = 0
         }
         assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
-        // KO → k.l(12): fail screen freezes the world until the context tap
-        w.tick(emptyList())
+        // KO → S50 → k.l(12): fail screen freezes the world until the tap
+        tickUntilFailed(w)
         assertTrue(w.failed, "x1<=0 must raise the mission-fail screen")
         assertEquals(1, w.deaths)
         val pos = w.player.ak to w.player.al
@@ -681,7 +689,7 @@ class Level0WorldTest {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -705,7 +713,7 @@ class Level0WorldTest {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -942,8 +950,8 @@ class Level0WorldTest {
         w.player.refreshBoxes()
         w.tick(emptyList())
         assertEquals(50, w.player.S)
-        w.tick(emptyList())
-        assertTrue(w.failed, "x1=0 after S50 → k.l(12) mission fail")
+        tickUntilFailed(w)
+        assertTrue(w.failed, "S50 r() → k.l(12) mission fail (g.java:2218)")
     }
 
     @Test fun `ax10 triggers spawn with record W and S-bank i11800`() {
@@ -8738,7 +8746,7 @@ class Slice68Test {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -11426,8 +11434,7 @@ class Slice95Test {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        var g2 = 0                                     // l(21) dialogs eat ticks
-        while (!w.failed && g2++ < 40) w.tick(emptyList())
+        tickUntilFailed(w)                             // dialogs + the S50 anim
         assertTrue(w.failed)
         var g3 = 0                                     // j.t frame skip
         while (w.jT != 0 && g3++ < 10) w.tick(emptyList())
@@ -13446,7 +13453,7 @@ class Slice128Test {
             p.applyHit(18, 0, null, w)
             p.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
