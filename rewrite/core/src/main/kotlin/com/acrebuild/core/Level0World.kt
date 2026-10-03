@@ -2970,6 +2970,9 @@ class Level0World(
         Entity.gE = false                           // g.E=false (same teardown)
         Entity.icu = false                          // i.cu=false (same teardown)
         iBV = 0; iBW = false; iBX = 0               // i.bV/bW/bX (:5099-5101)
+        // `bd[i] = null` for every slot, `be` untouched (:5121-5126): the
+        // first `I()` after the next load scans an all-null list (slice 385).
+        drawList.fill(null)
         kDe = false                                 // de = false (:5131)
         jT = jT and 16.inv()                        // j.b(4,false) (:5132)
     }

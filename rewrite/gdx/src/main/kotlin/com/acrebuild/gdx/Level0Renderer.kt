@@ -1343,9 +1343,11 @@ class Level0Renderer {
         // k.b(z2) entity draw pass (k.java:2904-2934, proven): iterate the
         // `bd[]` sorted list; `ad` child draws BEFORE the parent except
         // ax76/ax29 (after + `ad.s()`); `E` held entity + `ab` overlay.
-        world.buildDrawList()
+        // The list is the one the world's last `b()` pass built — the
+        // sim reads that same list next tick (slice 385), so the renderer
+        // must not rebuild it; `W()` leaves null slots (k.java:5121-5126).
         for (i32 in 0 until world.drawCount) {
-            val e = world.drawList[i32]!!
+            val e = world.drawList[i32] ?: continue
             if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(world, e.ad!!, camX, camY)
             // `s()` advances live in drawStylePass (once per tick,
             // k.java:3696-3745) — never per rendered frame.

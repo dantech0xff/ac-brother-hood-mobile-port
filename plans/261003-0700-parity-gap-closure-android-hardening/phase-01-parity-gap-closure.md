@@ -66,6 +66,7 @@ and lands with unit tests that would have caught it.
 | `k.N` tap prompt: one object, ticked in `k.I()` (a tap fires the context press — the touch assassination), drawn, outlives a reload | done (Phase 2 branch) | [383](../261004-0500-slice383-tap-prompt/plan.md) |
 | `i.s()` gates: anims freeze on the pause screen (except `A[3]`); a wrap under a non-u8 dialog stops/settles the player and freezes the entity while a claim is bound | done (Phase 2 branch) | [386](../261004-0530-slice386-anim-advance-gates/plan.md) |
 | slice-371 leftovers: `bB()` S28 replaces a foreign `ae` with a pinned 71, one `i.p()` (`ab`/`c`/`cr` released), one `u()` | done (Phase 2 branch) | [384](../261004-0600-slice384-npc-leftovers/plan.md) |
+| sim neighbour scans walk `k.bd` (the last paint's list: on-screen, player, `ae`), not `bb[]`; renderer no longer rebuilds it; `W()` nulls it; per-method bytecode fixes (`n()` ax11 arm + self-match, `be()`/`c(Z)`/`bu()` first-hit ends, `bl()` cz, `br()` z2, `bQ()` S12) | done (Phase 2 branch) | [385](../261004-0630-slice385-bd-scans/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

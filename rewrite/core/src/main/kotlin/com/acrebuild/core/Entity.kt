@@ -3672,12 +3672,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  any `S!=79` take `aB -= H[au]`; death → ax17 `i(129)`/ax23
      *  `i(79)`, alive → `i(68)`/`i(73)`. The one bd() port: since slice
      *  371 `ba()` (@738) calls it too (its private copy tested
-     *  `r0.ax==23 && r0.S==79` for the sweeper-is-ax23 arm @100-115). The
-     *  self-skip is inert (an ax16/ax24 sweeper matches no arm). */
+     *  `r0.ax==23 && r0.S==79` for the sweeper-is-ax23 arm @100-115).
+     *  Domain: `k.bd` — the last paint's list (slice 385); no self-skip in
+     *  the original, and an ax16/ax24 sweeper matches no arm itself. */
     fun sweepNeighbors(w: LevelCellSource): Boolean {
         var r6 = false
-        for (r0 in w.npcs) {
-            if (r0 === this) continue
+        for (r0 in w.drawn) {
             if (!overlapStrict(r0.W, X)) continue
             if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); r6 = true }
             if (S != 17) continue
@@ -3732,12 +3732,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `af` is the thrower `k.aS` at every call (bb() @322, ba() @683, the
      *  S6 puff's `af = aS`); a null `af` would NPE in the original
      *  (@45/@194/@341) — the port skips that prop arm instead (inferred).
-     *  Iteration domain: `k.bd[]` is the last paint's draw list; the port
-     *  scans `npcs` (systemic, see the slice 371 plan). */
+     *  Iteration domain: `k.bd[]`, the last paint's draw list (slice 385). */
     fun sweepNeighborsB(w: LevelCellSource): Boolean {
         var r1 = false
         val afAx = af?.ax
-        for (r3 in w.npcs) {
+        for (r3 in w.drawn) {
             when {
                 r3.ax == 54 -> {                                       // @35
                     if (afAx == null || afAx == 54 || afAx == 30) continue
@@ -4907,6 +4906,14 @@ interface LevelCellSource {
      *  for ax40 siblings (`bd[i].ax==40 && bd[i].s==rope`). */
     val drawList: Array<Entity?> get() = emptyArray()
     val drawCount: Int get() = 0
+    /** `for (i = 0; i < k.be; i++) … k.bd[i]` — the domain of every sim
+     *  neighbour scan in `i`/`g` (slice 385): the LAST `b()` pass's draw
+     *  list, not the `bb[]` pool. Only what that paint drew is there —
+     *  on-screen (`v()`) entities, the player and the `ae` children, in
+     *  `az` order — and an entity removed since keeps its slot until the
+     *  next `b()` rebuild. `W()` nulls the slots without resetting `be`
+     *  (k.java:5121-5126); the null-checked scans skip those, as here. */
+    val drawn: Iterable<Entity> get() = DrawnView(this)
     /** `k.c(e)` — mark entity removed; applied after the npc tick pass
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
@@ -5623,6 +5630,23 @@ interface LevelCellSource {
 /* `g.c(int)` (g.java:404, proven): interact-eligible player states —
  * the grounded/normal set ax19 pickups gate on (or `bh[aj]==3` levels). */
 val INTERACTABLE_STATES = intArrayOf(0, 1, 7, 11, 12, 26, 79)
+
+/** [LevelCellSource.drawn]: walks `bd[0 until be]` live (`be` re-read
+ *  per step, like the original's `i < k.be` head), skipping null slots. */
+private class DrawnView(private val w: LevelCellSource) : Iterable<Entity> {
+    override fun iterator() = object : Iterator<Entity> {
+        private var i = 0
+        override fun hasNext(): Boolean {
+            val list = w.drawList
+            while (i < w.drawCount && list[i] == null) i++
+            return i < w.drawCount
+        }
+        override fun next(): Entity {
+            if (!hasNext()) throw NoSuchElementException()
+            return w.drawList[i++]!!
+        }
+    }
+}
 
 /**
  * Class `a` (the prompt/hint sprite) — the script-QTE prompt ops 107/112

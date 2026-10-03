@@ -103,6 +103,7 @@ class Slice364Test {
         val n = Entity(19, null); n.S = 2
         intArrayOf(120, 120, 120, 120).copyInto(n.W)              // point inside X
         w.npcs += n
+        w.paint(n)
         e.sweepNeighbors(w)
         assertEquals(2, n.S, "bd() @43 i.a(bd[i].W, X): a point W is never hit")
         intArrayOf(115, 115, 125, 125).copyInto(n.W)

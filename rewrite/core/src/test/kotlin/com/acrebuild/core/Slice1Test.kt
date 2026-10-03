@@ -252,6 +252,14 @@ fun tickUntilFailed(w: Level0World, limit: Int = 300) {
     while (!w.failed && t++ < limit) w.tick(emptyList())
 }
 
+/** Slice 385: the sim's neighbour scans walk `k.bd` — the list the last
+ *  `b()` pass drew — not the `bb[]` pool. A unit test that places the
+ *  neighbours by hand "paints" them: the last pass drew exactly these. */
+fun Level0World.paint(vararg es: Entity) {
+    drawCount = 0
+    for (e in es) drawList[drawCount++] = e
+}
+
 fun settleIntro(w: Level0World) {
     // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
     // even with auto-dismiss dialogs; the `I()` L108 gate suspends
@@ -1196,6 +1204,7 @@ class Level0WorldTest {
         owner.ad = child
         w.npcs += owner; w.npcs += child
         child.refreshBoxes(); e.refreshBoxes()
+        w.paint(owner, child, e)
         w.npcFsm.tickDecor(e, w.player)
         // faithful double i(S+1): the bounce arm bumps 21→22, then the
         // bd[]-scan arm reads the CURRENT S and bumps 22→23 (i.java:17620
@@ -3046,6 +3055,7 @@ class Level0WorldTest {
         val p = w.player
         p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
         val e = knockableAt(w, 300, 150, 4)
+        w.paint(e, p)                               // the player is drawn too
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(9, p.S, "r0==0 overlap -> bd.i(9)")
     }
@@ -3057,6 +3067,7 @@ class Level0WorldTest {
         }
         w.npcs.add(soldier)
         val e = knockableAt(w, 300, 150, 4)
+        w.paint(e, soldier)
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(0, soldier.S, "s==null -> bd.i(0)")
         soldier.S = 5; soldier.s = Entity(51, null)
@@ -3064,7 +3075,8 @@ class Level0WorldTest {
         assertEquals(5, soldier.S, "s.ax==51 -> skip")
         soldier.s = Entity(4, null)
         w.npcFsm.tickKnockable(e, w, w.player)
-        assertEquals(5, soldier.S, "s.ax!=51 but this.S==4 != 6 -> no i(7)")
+        assertEquals(0, soldier.S,
+            "n() @201-237: s.ax!=51 -> bd.i(0) (the i(7) arm is the dead case 15)")
     }
 
     @Test fun `ax41 S4 attributes k ae to the player near anim end`() {
@@ -3107,6 +3119,7 @@ class Level0WorldTest {
         w.npcs.add(soldier)
         val e = knockableAt(w, 300, 150, 6)
         e.ah = 400                                  // moving via ah
+        w.paint(soldier)
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(4, e.S, "moving + i(bd) -> i(4)")
     }
@@ -3350,6 +3363,7 @@ class Level0WorldTest {
         val stale = platformAt(w, p.ak - 300, p.al, 13)  // behind, out of reach
         p.ac = stale
         val near = platformAt(w, p.ak + 100, p.al, 12)
+        w.paint(e, stale, near, p)
         w.npcFsm.tickPlatform(e, w, p)
         assertSame(near, p.ac, "dead claim released; nearer crate claimed")
         assertTrue(near.P and 256 != 0, "claim sets P|256")
@@ -4005,6 +4019,7 @@ class Level0WorldTest {
         val s = Entity(11, w.clips[7])
         s.setAnim(3); s.setPositionPx(e.ak, e.al); s.refreshBoxes()
         w.npcs.add(s)
+        w.paint(e, s)
         w.npcFsm.tickAx40(e, w, w.player)
         assertEquals(0, s.S, "d(bd) → i(0) death chain")
         assertEquals(1, e.S, "gondola -> reset arm")
@@ -4636,6 +4651,7 @@ class Slice44Test {
             aB = 100; setPositionPx(330, 200); refreshBoxes() }
         w.npcs.add(o)
         e.refreshBoxes()
+        w.paint(o, e)
         w.npcFsm.tickAx35(e, w, p)
         assertEquals(0, o.aB, "as() zeroes aB on overlap")
         assertEquals(0, o.S, "ax11 -> i(0) death anim")
@@ -5549,6 +5565,7 @@ class Slice49Test {
         val m = Entity(66, null); m.setPositionPx(130, 140)
         box(m, 90, 130, 170, 160)
         w.npcs.add(m)
+        w.paint(e, m)
         w.npcFsm.tickAx15(e, w, w.player)
         assertEquals(131, e.al, "L167 mount → al=n.W[1]+1")
         assertNull(e.s,
@@ -6423,6 +6440,7 @@ class Slice56Test {
         w.npcs.add(victim)
         e.X[0] = 190; e.X[1] = 190; e.X[2] = 210; e.X[3] = 210   // real X box
         e.ap = 99999                            // skip the al>ap arm
+        w.paint(victim)
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(10, victim.S, "ax54 W∩X → i(10)")
         assertEquals(9, e.S)
@@ -6438,6 +6456,7 @@ class Slice56Test {
         victim.W[0] = 195; victim.W[1] = 195; victim.W[2] = 205; victim.W[3] = 205
         e.X[0] = 190; e.X[1] = 190; e.X[2] = 210; e.X[3] = 210
         w.npcs.add(victim)
+        w.paint(victim)
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(-5, victim.aB, "aB -= 20")
         assertEquals(10, victim.S, "aB<=0 → i(10)")
@@ -6570,8 +6589,8 @@ class Slice58Test {
         return e
     }
 
-    // be(): player overlap short-circuits true; else marks every overlapping
-    // ax11/15 npc P|16 and stays true.
+    // be(): player overlap short-circuits true; else marks the first drawn
+    // overlapping ax11/15 P|16 and reports true (slice 385).
     @Test fun `be() occupied by player`() {
         val w = world()
         w.npcs.clear()
@@ -6602,6 +6621,7 @@ class Slice58Test {
         guard.setPositionPx(300, 150); guard.refreshBoxes()
         guard.W[0] = 295; guard.W[1] = 145; guard.W[2] = 305; guard.W[3] = 155
         w.npcs.add(guard)
+        w.paint(e, guard)
         w.npcFsm.tickAx58(e, w, w.player)
         assertTrue(guard.P and 16 != 0, "k.bd[] overlap -> P|=16")
         assertEquals(1, e.S)
@@ -6859,6 +6879,7 @@ class Slice60Test {
         val pair = ax60At(w, 115, 200, 4, 11, 0, -1, 0, 0) // S11 member
         val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
         e.ag = 1024
+        w.paint(pair, e)
         w.npcFsm.tickAx60(e, w, w.player)
         assertEquals(1024, pair.ag, "pair gets Z[1]<<8 push")
         assertEquals(-1024, e.ag, "self reverses")
@@ -6874,6 +6895,7 @@ class Slice60Test {
         // zone inside the lift's real W corridor
         zone.W[0] = e.W[0] + 1; zone.W[1] = e.W[1] + 1
         zone.W[2] = e.W[2] - 1; zone.W[3] = e.W[3] - 1
+        w.paint(zone, e)
         w.npcFsm.tickAx60(e, w, w.player)
         assertTrue(e.k, "S10 + Z[4]==3 + zone → latch k")
     }
@@ -6973,6 +6995,7 @@ class Slice69Test {
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false                                 // facing right = away
         victim.refreshBoxes()
+        w.paint(e, victim)
         w.npcFsm.tickAx69(e, w, w.player)
         assertSame(victim, e.af, "victim bound")
         assertNotNull(e.ae, "hand marker spawned")
@@ -7000,6 +7023,7 @@ class Slice69Test {
         w.player.setPositionPx(100, 163)
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false; victim.refreshBoxes()
+        w.paint(e, victim)
         w.npcFsm.tickAx69(e, w, w.player)
         assertSame(victim, e.af)
         victim.setPositionPx(250, 190); victim.refreshBoxes()   // >40px out
@@ -7015,6 +7039,7 @@ class Slice69Test {
         w.player.setPositionPx(100, 163)
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false; victim.refreshBoxes()
+        w.paint(e, victim)
         w.pad.commit(65568)                               // v() edge
         w.npcFsm.tickAx69(e, w, w.player)
         assertEquals(244, w.player.S, "aS.i(244) leap")
@@ -16320,6 +16345,7 @@ class Slice160Test {
         pad.W.copyInto(ad.W)
         val r0 = Entity(30, null); r0.ad = ad
         w.npcs += r0
+        w.paint(r0, pad)
         w.npcFsm.tickDecor(pad, w.player)
         assertEquals(20, pad.S)                          // S+1 armed
         assertEquals(2, ad.S)                            // ad.i(2)
@@ -16466,6 +16492,7 @@ class Slice163Test {
         // player OUT of X so applyHit doesn't fire
         w.player.setPositionPx(d.X[2] + 500, d.X[3] + 500)
         w.player.refreshBoxes()
+        w.paint(d, s, sib, g15, boss)
         w.npcFsm.tickDestructible(d, w.player)
         assertTrue(s.aB <= 100 - 600, "ax11 aB drained by bu[au]<<1, got ${'$'}${'{'}s.aB}")
         assertEquals(29, sib.S)
@@ -24262,6 +24289,11 @@ class Slice245Test {
             var mask = 0
             if (p.ak < 405) mask = mask or 8256           // M_RIGHT
             if (p.al > 8500) mask = mask or 16388         // M_UP
+            // Slice 385: `bc()` sweeps `k.bd` — only what the last paint
+            // drew — so the probe holds the camera on the S19 column
+            // until it arms (the teleport left the drift camera ~600px
+            // below it; a real pilot reaches it with the camera).
+            if (shrinesArmed == 0) { w.kO = 397 - 200; w.kP = 8437 - 120 }
             w.pad.e(mask)
             w.tick(emptyList())
             for (n in w.npcs) {

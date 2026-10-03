@@ -249,6 +249,7 @@ class Slice371Test {
         intArrayOf(110, 110, 130, 130).copyInto(ad.W)        // the child hits
         r3.ad = ad
         w.npcs += r3
+        w.paint(r3)
         val kills = w.kAp[0]
         assertTrue(s.sweepNeighborsB(w), "@86 i.a(ad.W, X) → hit")
         assertEquals(10, r3.S); assertEquals(2, ad.S); assertEquals(9, s.S)
@@ -263,6 +264,7 @@ class Slice371Test {
         val deco = Entity(67, null).apply { S = 19; aB = 5 }
         intArrayOf(110, 110, 130, 130).copyInto(deco.W)
         w.npcs += wall; w.npcs += deco
+        w.paint(wall, deco)
         w.cFFlag = false
         assertFalse(s.sweepNeighborsB(w), "@625-646: S∈[21,27] && !cF → END")
         assertEquals(5, deco.aB); assertEquals(16, s.S)
@@ -279,6 +281,7 @@ class Slice371Test {
         intArrayOf(110, 110, 130, 130).copyInto(d1.W)
         intArrayOf(110, 110, 130, 130).copyInto(d2.W)
         w.npcs += d1; w.npcs += d2
+        w.paint(d1, d2)
         assertTrue(s.sweepNeighborsB(w))
         assertEquals(4, d1.aB)
         assertEquals(5, d2.aB, "@555 goto 864: one decor per sweep")
@@ -288,6 +291,7 @@ class Slice371Test {
         intArrayOf(110, 110, 130, 130).copyInto(f1.W)
         intArrayOf(110, 110, 130, 130).copyInto(f2.W)
         w.npcs += f1; w.npcs += f2
+        w.paint(f1, f2)
         assertTrue(s.sweepNeighborsB(w))
         assertEquals(20, f1.S)
         assertEquals(19, f2.S, "@604 goto 864: one shrine per sweep")
@@ -299,6 +303,7 @@ class Slice371Test {
         val r3 = Entity(56, null).apply { aw = 78 }
         intArrayOf(110, 110, 130, 130).copyInto(r3.W)
         w.npcs += r3
+        w.paint(r3)
         val kills = w.kAp[0]
         w.npcFsm.tickRequestMarker(s, w.player, Pad())
         assertEquals(10, r3.S)
@@ -318,6 +323,7 @@ class Slice371Test {
         intArrayOf(110, 110, 130, 130).copyInto(r54.W)
         r54.ad = Entity(55, null).also { intArrayOf(110, 110, 130, 130).copyInto(it.W) }
         w.npcs += r54
+        w.paint(r54)
         val kills = w.kAp[0]
         w.npcFsm.tickAx24(shot(), w, p)
         assertEquals(kills + 1, w.kAp[0])
@@ -326,6 +332,7 @@ class Slice371Test {
         val r30 = Entity(30, null).apply { aB = 100 }
         intArrayOf(110, 110, 130, 130).copyInto(r30.W)
         w.npcs += r30
+        w.paint(r30)
         val sh = shot()
         w.npcFsm.tickAx24(sh, w, p)
         assertEquals(80, r30.aB); assertEquals(6, r30.cGCount)
