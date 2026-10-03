@@ -669,7 +669,7 @@ class Level0WorldTest {
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
         assertFalse(w.failed, "YES row tap should dismiss the fail screen")
-        assertEquals(90, w.player.x1, "reload refills the meter")
+        assertEquals(w.kAx, w.player.x1, "reload refills the meter: g.e(ax) (k.java:5225)")
         assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
     }
 
@@ -8975,7 +8975,7 @@ class Slice71WinTest {
         w.pad.queuePress(Pad.M_CONTEXT); w.tick(emptyList())
         w.pad.queuePress(Pad.M_CONTEXT); w.tick(emptyList())
         assertFalse(w.won, "YES on the win dialog should advance")
-        assertEquals(90, w.player.x1, "reload refills the meter")
+        assertEquals(w.kAx, w.player.x1, "reload refills the meter: g.e(ax) (k.java:5225)")
     }
 
     @Test fun `screenL(13) is idempotent`() {
@@ -9912,10 +9912,12 @@ class Slice80Test {
         assertEquals(24, w.jC)
     }
 
-    @Test fun `deaths feed ap1 through the l12 arm`() {
+    @Test fun `the death screen does not feed ap1`() {
+        // `ap[1]` counts `a(true)` retries — `o(1)` (k.java:5175); `l(12)`
+        // has no ap write (k.java:1656-1660). Slice 377 (Slice377Test).
         val w = world()
         w.stateL(12)
-        assertEquals(1, w.kAp[1])
+        assertEquals(0, w.kAp[1])
     }
 
     @Test fun `typewriter emits the next-mission string`() {
@@ -11429,7 +11431,7 @@ class Slice95Test {
         while (w.jT != 0 && g3++ < 10) w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
-        assertFalse(w.kDe, "f() reload clears de (k.java:5131)")
+        assertTrue(w.kDe, "de survives a(z2) — only W() clears it (k.java:5131)")
     }
 
     @Test fun `resolvePadZone mounted arm - circles then pad box`() {

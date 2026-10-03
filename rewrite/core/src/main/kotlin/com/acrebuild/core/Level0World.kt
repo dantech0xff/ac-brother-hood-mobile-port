@@ -634,18 +634,11 @@ class Level0World(
         // aY() snapshot (bA[18..24]) when a checkpoint fired, else level spawn
         val s = checkpointSnap
         if (s != null) {
+            // k.java:5182-5184 (proven, the a(true) restore arm):
+            // `ak = bA[18]; al = bA[20]; av = bA[22]==1` — the rest of
+            // that arm runs in [reload].
             player.setPositionPx(s.ak, s.al)
             player.av = s.av
-            player.x1 = s.x1
-            // k.java:5185-5203 (proven, k.a(z2) restore arm): g.I/g.J,
-            // ap[0..5], the mission globals (ax/ay/az/aN/aL), aZ/bn flags.
-            player.gJ = s.gJ; player.gI = s.gI
-            for (i in kAp.indices) kAp[i] = s.ap[i]
-            kAx = s.kAx; kAy = s.kAy; kAz = s.kAz
-            kAN = s.kAN; kAL = s.kAL
-            kAZ = s.kAZ; iBn = s.iBn
-            // bA[76+i] → i.br[i] restore (structured k.java:5200).
-            for (i in 0..2) hintPending[i] = s.br[i]
             // `k.G` rides the snapshot — the reload's q(G) arm re-fires
             // the checkpoint's linked ax5 director (k.java:5177).
             kG = s.kG
@@ -701,6 +694,14 @@ class Level0World(
                 }
             } else {
                 player.ad = null
+                // i.java:1971-1981 (proven) — the ax0 arm of the fresh
+                // `aS`'s init: `az=100` (its draw depth — the port kept
+                // the default 0, drawing the player under every NPC),
+                // `aA=2`, `aB=3`, `Z={0,0}` (alert timers). `g.e(k.ax)`
+                // is overwritten by the jc9 exit and by `a(z2)`'s tail.
+                player.az = 100
+                player.aA = 2; player.aB = 3
+                player.Z[0] = 0; player.Z[1] = 0
             }
         }
         player.gt = 0; player.bh = 0
@@ -1049,13 +1050,6 @@ class Level0World(
         }
     }
 
-    /**
-     * `k.l(12)` mission fail (i.java:1389 proven — player below the camera
-     * bottom, or `d()` knockout with x[1]<=0): the original swaps to the
-     * j.c=12 fail screen via `k.l(12)` = `stateL(12)`; confirm
-     * (`v(65568)`, k.java:1804) then runs `f(false)` = reload().
-     */
-
     /** `k.l(15)` mission-complete → `stateL(15)` (stats screen arm:
      *  medal stamps, medal/next-mission redirects). */
     var missionWon = false
@@ -1276,18 +1270,18 @@ class Level0World(
         parallaxX = i2; parallaxY = i3
     }
 
-    /** `a(false)` (k.java:5173, proven): the fail-retry full reload —
-     *  `X();I(aj)` pack swap + `V();d(z2)` entity/stat restore. Called
-     *  by the `eC==25` restart-confirm arm via `reloadCheckpoint`. */
+    /** `a(false)` (k.java:5139-5232, proven): the full restart — the
+     *  pause menu's restart-confirm via `reloadCheckpoint`, and the
+     *  mission switch tests drive. `a(bA,16,(short)0)` drops the
+     *  checkpoint pointer (the original clears it after `d(false)`,
+     *  which ignores it; a mission switch must not respawn into a prior
+     *  mission's snapshot), `X(); I(aj)` reloads the pack (before the
+     *  spawn here, for the switch), then [reload]. */
     fun loadMission(mission: Int) {
         kAj = mission
-        // a(bA,16,(short)0) parity (k.java:6735 L54 fresh arm): a mission
-        // switch drops the checkpoint pointer — without this a prior
-        // mission's snapshot would respawn the player mid-level in the
-        // new pack.
         checkpointSnap = null; kG = 0; kBA[16] = 0
         loadPackI(mission)
-        reload()
+        reload(false)
     }
     /** Slice-43b claim-script VM state (aa() arms): world bounds for the
      *  op11/12 camera clamp, `j.g` tick, `k.bb/bc` follower scan, and
@@ -1450,7 +1444,6 @@ class Level0World(
     var kDC = 30                       // k.dC — sync byte (bA[46]; :226 init 30)
     var kDD = 0                        // k.dD — progress (bA[32]/az)
     var kDF = 0                        // k.dF — misc byte (bA[48])
-    var kBG = 0                        // k.bG — score flag (Q case14)
     var kEJ = false                    // k.eJ — tutorial done (bA[10])
     var kLoading = false               // `f.bF` — the IGP-thread loadingMsg
                                        //  (d(0,24)="LOADING") painted centered
@@ -2580,7 +2573,9 @@ class Level0World(
                 i == 12 || i == 13 -> {              // L12 → L17 tail
                     bPass(true)                      // k.b(true) (:1656-1657)
                     kAD = null
-                    if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
+                    // `ap[1]` counts `a(true)` retries (`o(1)`, k.java:5175),
+                    // not death screens; `deaths` is port instrumentation
+                    if (i == 12 && ex != 12) deaths++
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
                     kEc = 25; bannerK(3); kEb = 59   // L17 (simple decompile —
                                                      // structured omits; high-confidence)
@@ -2997,6 +2992,8 @@ class Level0World(
         Entity.gf = null                            // g.f=null (same teardown)
         Entity.gE = false                           // g.E=false (same teardown)
         Entity.icu = false                          // i.cu=false (same teardown)
+        iBV = 0; iBW = false; iBX = 0               // i.bV/bW/bX (:5099-5101)
+        kDe = false                                 // de = false (:5131)
         jT = jT and 16.inv()                        // j.b(4,false) (:5132)
     }
     /** `k.x()`→`e.a()` (e.java:32, proven): a slot is still within its
@@ -3012,8 +3009,7 @@ class Level0World(
      *  reload (`X();I(aj)` + `V();d(z2)`); `true` = `a(true)`
      *  checkpoint restore (no `I(aj)`). */
     private fun reloadCheckpoint(full: Boolean) {
-        if (full) { kK(); reload() }               // a(true): K() (:5174)
-        else loadMission(kAj)
+        if (full) reload(true) else loadMission(kAj)
     }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm
@@ -3429,7 +3425,7 @@ class Level0World(
                 when (kEc) {
                     13 -> jC = 11                    // exit-confirm → app
                     25 -> {                          // restart-confirm
-                        kBG = 0
+                        kBg = 0                       // bG = 0 (:3782)
                         if (jC != 12 && jC != 13) {
                             menuP(); reloadCheckpoint(false); kAz = kDD
                         } else { kBx = -1; reloadCheckpoint(true); kBv = 0 }
@@ -3984,10 +3980,10 @@ class Level0World(
         if (jG == 8L) kK()                   // G(8) opens with K() (:4834)
         if (jG == 164L) {
             // `G(164)=d(false)` (k.java:4741+) — mission-entry spawn is a
-            // FRESH `new i` at the pack record, never a checkpoint restore.
-            // reload()'s order (spawnEntities→statsReset→resetPlayerToSpawn→
-            // postSpawn) is the same fresh path; skipping resetPlayerToSpawn
-            // left the player at his previous position → m3/m6 insta-fail.
+            // FRESH `new i` at the pack record, never a checkpoint restore
+            // (spawnEntities→resetPlayerToSpawn→postSpawn, as in `a(z2)`);
+            // skipping resetPlayerToSpawn left the player at his previous
+            // position → m3/m6 insta-fail.
             checkpointSnap = null; kG = 0; kBA[16] = 0
             spawnEntities(); statsReset(); resetPlayerToSpawn(); postSpawn()
         }
@@ -4579,31 +4575,75 @@ class Level0World(
         kAz = 0; kAx = kDB; kAz = kDD; kAy = kDC; kAN = kDF
     }
 
-    private fun reload() {
-        // Original order: i.D() full static reset → k.a(z2) bA/stat
-        // restore → respawn. Reversed, D() would clobber the restore.
-        // `d(bA[16]!=0)` — the checkpoint pointer decides the spawn mode:
-        // snap!=null → d(true) restore-from-image, else d(false) fresh.
-        spawnEntities(checkpointSnap != null)   // i.D()
-        statsReset()                            // L() + a(z2) restore arm
-        resetPlayerToSpawn()                    // bA pos/globals restore
-        postSpawn()                             // k.b ctor inserts
-        // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — the
-        // checkpoint's linked ax5 director re-binds script context.
-        if (checkpointSnap != null && kG > 0) {
-            val q = findByAw(kG)
-            if (q != null && q.ax == 5) { q.P = q.P or 16; q.bindContext(this) }
+    /**
+     * `a(z2)` (structured k.java:5139-5232, proven) — the restart. `z2` is
+     * the checkpoint retry `a(true)` (death-screen YES, the S147 fall);
+     * `!z2` the full restart `a(false)` ([loadMission]).
+     *
+     * Head: `i = aS.aA` (z2), `i.bV = 0` (!z2), `i.bW = false; i.bX = 0`,
+     * `e.b()` twice; `V(); d(z2)` — the respawn with a fresh `aS`
+     * ([spawnEntities], [resetPlayerToSpawn], [postSpawn]); `aS.aA |= 256`
+     * when the old stance held the alert (256) or its cooldown (16); the
+     * `g.*`/`C`/`D`/`aD` sweep (in [spawnEntities]). `a(true)` then runs
+     * `K(); o(1)` — `ap[1]` counts retries — and with a checkpoint
+     * (`bA[16] != 0`) the restore arm: the ax5 director, position,
+     * `g.J/g.I` + `q()`, `ap[0,3,4,5]` and `ap[2] = bA[40] << 4` from `bA`
+     * (`ap[1]` and `dg` stay), the mission globals, `aZ`, `i.bn`,
+     * `i.br[]`, and the stopwatch slide-in while `aL != -1`; without one
+     * — and on `a(false)` — `L(); F(aj)` and the stash globals. Tail:
+     * `g.e(ax)` (a full meter), `C(); T(); l(8)`, `B()` when `bG >= 0`.
+     *
+     * The port used to keep `ap[1]` as a death-screen count and restore it
+     * with the rest of `ap[]` from the snapshot, reset `dg` on every
+     * retry, restore the meter the player had at the checkpoint, keep the
+     * previous `aA`/`i.bW`/`i.bX`, skip `F(aj)`/`q()`/`T()`/`B()` and the
+     * stopwatch re-entry, set `j.c = 8` without `l(8)`'s input reset, and
+     * clear `de` (that is `W()`'s, k.java:5131) (slice 377).
+     */
+    private fun reload(z2: Boolean) {
+        val aA0 = player.aA                                    // :5143
+        if (!z2) iBV = 0                                       // :5145
+        iBW = false; iBX = 0                                   // :5147-5148
+        audioStop(); audioStop()                               // e.b() ×2
+        val snap = if (z2) checkpointSnap else null
+        spawnEntities(snap != null)                            // V(); d(z2)
+        resetPlayerToSpawn()
+        postSpawn()                                            // ctor inserts
+        if (z2 && ((aA0 and 256) != 0 || (aA0 and 16) != 0))
+            player.aA = player.aA or 256                       // :5153-5155
+        if (z2) {
+            kK()                                               // K() (:5174)
+            kAp[1]++                                           // o(1) (:5175)
         }
-        jC = 8                                   // back to play (j.c==8)
-        kAl = false
-        kDe = false                               // f() `de=false` (:5131)
-        // a(false)→C() tail (k.java:6619 L55 → k.java:1851-1875 proven):
-        // the bh3 arm snaps `cA=O=aS.ak-200`, `cB=P=aS.al-230`, re-arms
-        // `X=V=-7`, `Q=230`, resets the conveyor (`dU/dR/aR=-1/dS/dT`).
-        // `m(ad)` was the wrong sub-arm — it runs the `!kZ` non-bh3
-        // tracker (`camB=p.al-150`), never the flying respawn snap.
-        // C() itself branches on bh3 — call it verbatim.
+        if (snap != null) {
+            // k.java:5177-5181: `G>0 && q(G).ax==5 → P|=16; N()` — the
+            // checkpoint's linked ax5 director re-binds script context.
+            if (kG > 0) {
+                val q = findByAw(kG)
+                if (q != null && q.ax == 5) { q.P = q.P or 16; q.bindContext(this) }
+            }
+            player.gJ = snap.gJ; player.gI = snap.gI           // :5185-5186
+            rebuildEquip()                                     // q() (:5187)
+            kAp[0] = kBA[36]; kAp[3] = kBA[38]                 // :5188-5192 —
+            kAp[2] = kBA[40] shl 4                             // stored ÷16
+            kAp[4] = kBA[42]; kAp[5] = kBA[52 + (kAj shl 1)]
+            kAx = snap.kAx; kAy = snap.kAy; kAz = snap.kAz     // :5193-5197
+            kAN = snap.kAN; kAL = snap.kAL
+            kAZ = snap.kAZ; iBn = snap.iBn                     // :5198-5199
+            for (i in 0..2) hintPending[i] = snap.br[i]        // :5200-5202
+            if (kAL != -1) { kAJ = 1; kAK = -40 }              // :5203-5206
+        } else {
+            statsReset()                                       // L() + stash
+            missionF(kAj)                                      // F(aj)
+        }
+        player.x1 = kAx                                        // g.e(ax) (:5225)
+        // C() (k.java:1851-1875): the bh3 arm snaps `cA=O=aS.ak-200`,
+        // `cB=P=aS.al-230`, re-arms `X=V=-7`, `Q=230` and the conveyor;
+        // the ground arm runs `n(); m(ad)`.
         camResetC()
+        hudIndicatorT()                                        // T()
+        stateL(8)                                              // l(8)
+        if (kBg >= 0) missionInit()                            // B()
     }
 
     /**
