@@ -2225,12 +2225,32 @@ class Level0World(
      *  117..230px above camB, then `O+=l(cA-O,4); P+=l(cB-P,30)`.
      *  Dead code on level 0 (bh=4); reachable via tests.
      */
-    /** `k.b(z2)` draw-pass bubble arm (k.java:2927, proven): `(z2==0 &&
-     *  (ax!=11 && ax!=17 || aB>0)) → iVar2.ad()`. The ax!=11/17 half is
-     *  already ticked per-sim-tick; this call adds the `aB>0` soldier/
-     *  civilian increment during the draw pass. */
-    fun drawPassBubble(e: Entity) {
-        npcFsm.tickBubble(e, this)
+    /** The entity whose `ad()` emitted the current [bubbleDraw] — the
+     *  renderer draws the bubble right after that entity's blit, which is
+     *  where `ad()` draws inside `b(false)`'s loop. */
+    var bubbleOwner: Entity? = null
+        private set
+
+    /** `b(false)`'s per-entity `ad()` (structured k.java:2927-2929 =
+     *  simple :3740-3749; bytecode k.javap.txt:14699, `b(Z)` offset 2118,
+     *  proven — the only call site of `i.ad()`): `(ax!=11 && ax!=17) ||
+     *  aB>0 → ad()`, once per frame in draw-list order. `b(false)` runs
+     *  after `I()` on jC 8 and over the dialog on jC 21, and returns at
+     *  entry on jC ∈ {12,13,31} (k.java:2682-2686). The bubble timers
+     *  therefore step once per tick — never per rendered frame — and the
+     *  descriptor stays up for every frame of the tick (slice 373). */
+    private fun drawPassBubbles() {
+        if (jC == 12 || jC == 13 || jC == 31) return
+        bubbleDraw = null; bubbleOwner = null
+        buildDrawList()
+        for (i in 0 until drawCount) {
+            val e = drawList[i] ?: continue
+            if ((e.ax != 11 && e.ax != 17) || e.aB > 0) {
+                val before = bubbleDraw
+                npcFsm.tickBubble(e, this)
+                if (bubbleDraw != null && bubbleDraw !== before) bubbleOwner = e
+            }
+        }
     }
 
     /** `i.h(iVar)` (simple/i.java:20791-20822, proven — the structured
@@ -3696,7 +3716,6 @@ class Level0World(
      *  (load screen) + z(23). */
     private fun menuJc20() {
         kCb = true
-        footerQ()                                   // NEXT/SKIP (:1299-1301)
         when (kCu) {
             0 -> { kCT = 10; kCu = 1 }
             1 -> {
@@ -3740,6 +3759,15 @@ class Level0World(
                 scrollPanel(kFb, 85, 120, 390, false)
             }
         }
+        // `cu∈2..4` text block (:1289-1296): `y.a(str,null)` measures it
+        // and a block taller than the 120px window slides `eZ` up —
+        // world state (`fd = eZ` reads it at cu4→5), so it is computed
+        // here once per frame, not by the renderer (slice 373).
+        if (kCu in 2..4) {
+            val h = footerFont?.linesHeight(storyText().count { it == '\n' } + 1) ?: 0
+            if (h > 120) kEz = 85 - (h - 120)
+        }
+        footerQ()                                   // a(d(0,16),d(0,18)) (:1299)
         if (pad.v(Pad.M_CYCLE) || (pad.v(Pad.M_PAUSE) && kCu == 5)) {
             stateL(9); z(23)                        // (:1300-1305)
         }
@@ -4075,7 +4103,32 @@ class Level0World(
         }
     }
 
+    /** The band height the renderer draws in the hovered row this frame —
+     *  `fI` as the row paint read it, before the step (0 = no band). */
+    var menuBandDraw = 0
+        private set
+
+    /** The hovered row's band animation (k.java:6005-6013, proven): inside
+     *  the panel paint, before `L()`/`Q()` run — `fI>0` → draw a band of
+     *  height `fI`, then `fI += fH; fH += 8; fI >= i4 → 0`. Once per
+     *  frame per hovered row; the renderer used to step it per rendered
+     *  frame (slice 373). */
+    private fun menuRowBandStep() {
+        menuBandDraw = 0
+        if ((jC == 12 || jC == 13) && kJT != 0) return     // `j.i()` skips the frame
+        if (!menuPanelDrawn || kFI <= 0) return
+        val rects = menuRowRects()
+        for (r in rects) {
+            if (kFI <= 0) break
+            if (!pointerMoveIn(r[0], r[1], r[2], r[3])) continue
+            if (menuBandDraw == 0) menuBandDraw = kFI
+            kFI += kFH; kFH += 8
+            if (kFI >= r[3]) kFI = 0
+        }
+    }
+
     private fun menuFrame(pressY: Int): Boolean {
+        menuRowBandStep()
         when (jC) {
             12, 13 -> {
                 if (kJT != 0) {                      // `j.i()` (:1109) —
@@ -5005,6 +5058,10 @@ class Level0World(
         // halted claimer while `cd[0]` holds. A press edge = the screen's
         // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
         if (dialogModal) {
+            // `b(false)` runs on every jC 21 frame (k.java:867): the
+            // entity pass's `ad()` bubbles step even behind the dialog,
+            // the auto-dismiss test harness included (slice 373).
+            drawPassBubbles()
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
             } else {
@@ -5012,9 +5069,9 @@ class Level0World(
                 // `E(65568)` (:874-876): a screen tap feeds the context
                 // edge the arms read — consume() marks presses but the
                 // dialog's own `v(65568)` checks are the only consumers.
-                // `b(false)` runs first (k.java:867): its claim SKIP pill
-                // (`u==9 && C.cd[2]`) arms E(131072) and sets the `ce/cf`
-                // that `j()` reads next (slice 368).
+                // `b(false)` (k.java:867) ends with its claim SKIP pill
+                // (`u==9 && C.cd[2]`): it arms E(131072) and sets the
+                // `ce/cf` that `j()` reads next (slice 368).
                 claimFooter()
                 if (pointerStrip()) padE(Pad.M_CONTEXT)
                 // `J()` (k.java:1040-1063, proven): `c(354,0,46,37)` →
@@ -5301,6 +5358,7 @@ class Level0World(
         // release point, and E() lands in bB at the next frame's commit,
         // so the pause opens the frame after the release, once the world
         // has run that frame (slice 368).
+        drawPassBubbles()
         claimFooter()
         if (jC != 12 && jC != 13) {                          // J() (:2653)
             if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
@@ -5357,8 +5415,7 @@ class Level0World(
         p.P = if (p.av) p.P or 1 else p.P and -2
     }
 
-    /** One entity's `i.I()` — the ax dispatch table + the `i.ad()`
-     *  per-frame bubble tick (k.java:3740-3749 proven: all but ax11/17). */
+    /** One entity's `i.I()` — the ax dispatch table. */
     private fun tickNpc(n: Entity) {
         // `I()` head guards (i.java:15167 L9 + :15173 L21, proven):
         // j.c==14 skips the entity tick outright; so does ax21 while a
@@ -5469,9 +5526,9 @@ class Level0World(
         // branch is excluded: `npcFsm.tick` already runs the same tail —
         // the L849 superset for soldiers or defaultArm for unclaimed ax.
         if (claimed) npcFsm.defaultArm(n, player)
-        // i.ad() per-frame bubble tick (k.java:3740-3749 proven):
-        // every entity except soldiers (11) and civilians (17).
-        if (n.ax != 11 && n.ax != 17) npcFsm.tickBubble(n, this)
+        // No bubble tick here: `i.ad()` has one call site, the `b(false)`
+        // draw pass (bytecode k.javap.txt:14699; simple k.java:3740-3749
+        // is that same loop) — see [drawPassBubbles] (slice 373).
     }
 
     // Second init block: runs after every property initializer, so the

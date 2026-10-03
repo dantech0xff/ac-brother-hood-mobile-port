@@ -541,12 +541,8 @@ class Level0Renderer {
         }
         clipScissor(0, 85, 400, 120)
         if (world.kCu <= 4) {
-            // :1290-1296 — `y.a(str,null)` measure, tall text slides
-            // eZ up (`eZ = 85-(b.e-120)`), then draws at eZ; the write-
-            // back is verbatim so `fd = eZ` at cu4→5 inherits it.
-            val h = world.footerFont?.linesHeight(
-                world.storyText().count { it == '\n' } + 1) ?: 0
-            if (h > 120) world.kEz = 85 - (h - 120)
+            // :1290-1296 — the tall-text `eZ` slide is world state, set in
+            // the jc20 proc (slice 373); the renderer only draws at it.
             drawText(world.storyText(), 5, world.kEz, 0)
         } else {
             drawText(world.storyText(), 5, world.kFd, 0)
@@ -1053,12 +1049,12 @@ class Level0Renderer {
                     fj.a = (i + w) - ((w - i5) shr 1); fj.b = i9
                     fj.tick(frameMs)
                 }
-                if (world.kFI > 0) {
+                // band (k.java:6005-6013): the world steps fI/fH once per
+                // frame and hands over the height this frame drew (slice 373).
+                val band = world.menuBandDraw
+                if (band > 0) {
                     fillAr(i, i9, w, i4, 1879048192)
-                    clipScissor(0, i9 + ((i4 - world.kFI) shr 1),
-                                400, world.kFI)
-                    world.kFI += world.kFH; world.kFH += 8
-                    if (world.kFI >= i4) world.kFI = 0
+                    clipScissor(0, i9 + ((i4 - band) shr 1), 400, band)
                 }
                 fj?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
                 clipReset()
@@ -1390,14 +1386,10 @@ class Level0Renderer {
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
                 drawEntity(world, kE, camX, camY)
             }
-            if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
-            // `i.ad()` draws inline in the entity pass — the descriptor
-            // tickBubble emitted for this entity is consumed now (one
-            // active cQ dialog at a time; clear so a stale one can't
-            // linger past its last draw tick).
-            if (world.bubbleDraw != null) {
-                drawBubble(world); world.bubbleDraw = null
-            }
+            // `i.ad()` draws inline in the entity pass, right after its
+            // owner; the world ticks it once per frame and keeps the
+            // descriptor up for every rendered frame of the tick (slice 373).
+            if (world.bubbleDraw != null && world.bubbleOwner === e) drawBubble(world)
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(world, ab, camX, camY)
