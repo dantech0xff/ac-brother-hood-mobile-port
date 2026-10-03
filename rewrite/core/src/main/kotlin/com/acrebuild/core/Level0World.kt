@@ -2556,7 +2556,7 @@ class Level0World(
                     kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
-                    scrollBounds()                   // k.b(true) — window + veil latch
+                    backdropB()                      // k.b(true) (:1656-1657)
                     kAD = null
                     if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
@@ -2603,7 +2603,7 @@ class Level0World(
                     if (jC !in intArrayOf(2, 3, 4, 5, 6, 18, 19, 20, 22, 28, 29, 30)) { audioStop(); z(0) }
                 }
                 i == 14 -> {
-                    if (jC == 8 || jC == 21) scrollBounds()
+                    if (jC == 8 || jC == 21) backdropB()   // k.b(true) (:1790-1792)
                     bannerK(1); kAo = false; kAn = false
                     // k.java:5180 (proven): `if (!e.a()) k.fi = -1` —
                     // silence the music slot only when no track is live,
@@ -4128,7 +4128,32 @@ class Level0World(
         }
     }
 
+    /** `b(true)` — the world paint behind the pause, death, mission-end
+     *  and help-from-pause screens (k.java:1110 jc12/13 unless `j.i()`,
+     *  :1123 jc14, :1454 jc31 while `bx >= 0` and !`j.i()`, :2415 G()
+     *  when `cy == 14`, plus the l(12)/l(13) and l(14)-from-play
+     *  transitions :1657/:1792). `b(z2)` (simple k.java:3450) is the
+     *  window/veil head ([scrollBounds]) plus the draw-list build and
+     *  every entity's `F()` ([drawStylePass]) — the same per-frame
+     *  effects a play frame has, minus the `ad()` bubbles (`z2` is true).
+     *  The port used to run only the head here (slice 375). */
+    private fun backdropB() {
+        scrollBounds()
+        drawStylePass()
+    }
+
+    /** The per-frame `b(true)` of the menu-state procs that paint the
+     *  world behind them (jc12/13 call it inside their own arm). */
+    private fun menuBackdrop() {
+        when {
+            jC == 14 -> backdropB()                               // case 14 (:1123)
+            jC == 31 && kBx >= 0 && kJT == 0 -> backdropB()       // case 31 (:1452-1454)
+            jC == 5 && kCy == 14 -> backdropB()                   // G() (:2414-2415)
+        }
+    }
+
     private fun menuFrame(pressY: Int): Boolean {
+        menuBackdrop()
         menuRowBandStep()
         when (jC) {
             12, 13 -> {
@@ -4136,7 +4161,7 @@ class Level0World(
                     kJT = 0                          // held pad bits flush
                     return true                      // → `j.t=0`, skip frame
                 }
-                scrollBounds()                       // k.b(true) — window + veil latch
+                backdropB()                          // k.b(true) (:1109-1110)
                 kEg = 0
                 menuL(kEy)
                 menuQ(pressY)
