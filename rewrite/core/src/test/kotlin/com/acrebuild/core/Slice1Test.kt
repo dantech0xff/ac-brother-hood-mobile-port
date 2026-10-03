@@ -237,7 +237,10 @@ private fun keepLive(e: Entity) { e.P = e.P or 16 }
  *  the (unmoved) camera arrives (k.java L25f eligibility). In real
  *  play the camera delivers the same tick on approach. */
 private fun overlapCheckpoint(w: Level0World, cp: Level0World.Checkpoint) {
-    w.player.setPositionPx(cp.ak, cp.al + 5)
+    // A teleport between frames must leave the boxes a finished frame
+    // would: the entity loop now ticks before the player (G12), so stale
+    // spawn boxes would bind the intro claim on the next tick.
+    w.player.setPositionPx(cp.ak, cp.al + 5); w.player.refreshBoxes()
     w.npcs.firstOrNull { it.ax == 2 && it.aw == cp.aw }?.let(::keepLive)
 }
 
@@ -556,9 +559,14 @@ class Level0WorldTest {
         // lands — same in the original.
         w.player.setPositionPx(s.ak - 20, s.al + 4)
         // Land a normal hit to trip the weaken: H=50 → aB=70 → hitReact
-        // Z0==1 → Z0=2 + S144 + claims the aN lock.
-        w.player.setAnim(67)
-        w.tick(emptyList())
+        // Z0==1 → Z0=2 + S144 + claims the aN lock. The soldier ticks
+        // before the player (G12) and reads the boxes the player's last
+        // t() left — refresh them as a finished frame would.
+        w.player.setAnim(67); w.player.refreshBoxes()
+        // the swing lands on the frame the attack box is live — one tick
+        // later than under the old player-first order
+        var hitT = 0
+        while (hitT++ < 8 && s.Z[0] != 2) w.tick(emptyList())
         assertTrue(s.Z[0] == 2 && s.S == 144,
             "hit on Z0==1 soldier should weaken: Z0=2+S144 (got Z0=${s.Z[0]}, S=${s.S})")
         assertTrue(w.lockTarget === s,
@@ -567,7 +575,7 @@ class Level0WorldTest {
         // h() (i.java:1271) — S144 ∉{11,12,6} → i() forces the player to
         // S8 and takes S17 (aC=16) itself, preempting j().
         for (i in 0 until 30) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             val (cx, cy) = w.cellPoint(4)
             w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
                           InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
@@ -581,14 +589,14 @@ class Level0WorldTest {
         // player — including the dive — so strike once the arm advances to
         // S11 (Z0==2 → i(11)), where tail[2] arms j() intake instead.
         for (i in 0 until 60) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             w.tick(emptyList())
             if (s.S != 17) break
         }
         assertTrue(s.S != 17, "counter-engage should resolve (sS=${s.S})")
         w.player.setAnim(216)
         for (i in 0 until 60) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             w.tick(emptyList())
             if (s.aB <= 0) break          // check the launch before friction decays it
         }
@@ -6283,7 +6291,7 @@ class Slice55Test {
         e.runnerBz = true
         e.setAnim(5)
         e.T = 2; e.U = e.clip!!.frameDuration(5, 2) - 1   // s() wraps → T=3,U=0
-        w.player.setPositionPx(400, 500)
+        w.player.setPositionPx(400, 500); w.player.refreshBoxes()
         w.tick(emptyList())
         assertNotNull(w.projectilePool)
         assertEquals(1, e.aF, "aF reset to Z[7]=1")
@@ -8976,6 +8984,7 @@ class Slice72ScrollReleaseTest {
         val w = world()
         val p = w.player
         p.ak = 3000   // teleport past the wall as the agent did
+        p.refreshBoxes()   // entities tick first (G12): no stale spawn boxes
         repeat(30) { w.tick(emptyList()) }
         assertTrue(w.camX > 9)
     }
@@ -16955,6 +16964,7 @@ class Slice172Test {
         p.ak = 12300; p.al = 500
         p.N = p.ak shl 8; p.O = p.al shl 8
         p.ag = 0; p.ah = 0
+        p.refreshBoxes()                      // entities tick first (G12)
         w.tick(listOf())
         assertEquals(15, w.jC)                // screenL(15) fired
         assertFalse(w.npcs.contains(zone))    // zone consumed itself
@@ -20666,7 +20676,7 @@ class Slice213Test {
         val p = w.player
         // a free-anim standing state inside the zone's clip rect
         p.setPositionPx(e.ak, e.al)
-        p.S = 0; p.ah = 0; p.ag = 0
+        p.S = 0; p.ah = 0; p.ag = 0; p.refreshBoxes()   // a finished frame's t()
         var captured = false
         repeat(40) {
             w.tick(emptyList())
@@ -20686,6 +20696,7 @@ class Slice213Test {
         keepLive(e)
         val p = w.player
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        p.refreshBoxes()                               // a finished frame's t()
         var t2 = 0
         while (p.S != 65 && t2++ < 40) w.tick(emptyList())
         assertEquals(65, p.S)
@@ -20821,9 +20832,11 @@ class Slice214Test {
 }
 
 class Slice215Test {
-    /** slice 215 — the ax7 mouth-throw landing wedge is verbatim original
-     *  behavior, not a port divergence. The full release chain was traced
-     *  against the source:
+    /** slice 215 — the ax7 mouth-throw release chain. ERRATUM (G12): the
+     *  "verbatim wedge" verdict below was traced under the port's old
+     *  player-first frame order; with `k.I()`'s order (entities, then
+     *  `aS.I()`) the release reads the swing one step on and the throw
+     *  clears the corner — no soft-lock. The chain as first traced:
      *  - record P=0 -> `e.av=false` -> release `aS.ag = 2048` east
      *    (i.java:15695-15710);
      *  - the S1 capture arm re-snaps `p.ak/al` to the mouth's CURRENT
@@ -20842,7 +20855,7 @@ class Slice215Test {
      *    original ALSO wedges input-immune here. The mouth-plant is a
      *    trap at this corner — an original-game softlock, kept verbatim.
      *  Same outcome reproduced for uid=30 at (4801,674). */
-    @Test fun `ax7 mouth throw wedges into the wall verbatim`() {
+    @Test fun `ax7 mouth throw clears the wall corner`() {
         val w = world()
         settleIntro(w)
         val e = w.npcs.first { it.ax == 7 && it.aw == 12 }
@@ -20873,14 +20886,16 @@ class Slice215Test {
         assertTrue(sawMouthEast, "swing carries the mouth past x1480")
         assertTrue(released, "r() releases at the last S1 frame")
         val (rx, ry) = releasePos!!
-        // release point verbatim: mask-32 stale-u compensation lands the
-        // anchor ~(1468,501), deep inside the wall's top-east corner
-        assertTrue(rx in 1460..1480, "release x inside wall corner: $rx")
+        // G12 (k.I() ticks the mouth before aS.I()): the release reads the
+        // swing one step on — ~(1488,501), past the wall's top-east corner
+        // — and the throw lands the player on the floor beyond it. The
+        // slice-215 "verbatim wedge" (deep embed → forced S79) only
+        // happened under the port's old player-first order.
+        assertTrue(rx in 1480..1500, "release x past the wall corner: $rx")
         assertTrue(ry in 495..505, "release y below wall top: $ry")
-        // deep embed -> forced S79, input-immune, collideSides dead
-        assertEquals(79, p.S)
-        assertEquals(20, p.aO); assertEquals(20, p.aR); assertEquals(20, p.aP)
-        assertFalse(p.bd)
+        assertTrue(p.S != 79 && !(p.aO == 20 && p.aR == 20 && p.aP == 20),
+            "no deep embed: S=${p.S} aO=${p.aO} aR=${p.aR} aP=${p.aP}")
+        assertTrue(p.ak > 1500, "thrown clear of the corner: ${p.ak}")
     }
 }
 
