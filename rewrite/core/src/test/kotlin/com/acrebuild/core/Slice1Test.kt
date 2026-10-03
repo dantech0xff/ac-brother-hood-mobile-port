@@ -29201,13 +29201,17 @@ class Slice318Test {
         // strikes → it dies. This is the actual fightable path the
         // "unfightable posted guard" repro was missing: the sentry was
         // still parked, not broken.
+        // slice 357: the woken guard runs the real aC() scheduler, so it
+        // `Q()`-faces the player and backs off in S23 — the scripted
+        // player now faces the guard (it struck the guard's back before,
+        // which only worked while S23 never turned it around).
         val w = world(aj = 2)
         val g = w.npcs.first { it.aw == 313 }
         g.P = g.P and -33                                  // wake: P&~32
         var ticks = 0
         while (g.aB > 0 && g.S != 139 && ticks++ < 800) {
             w.player.setPositionPx(g.ak + 20, g.al)
-            w.player.av = g.av
+            w.player.av = true                             // face the guard (west)
             if (w.player.S !in intArrayOf(67, 68, 69, 112, 113, 114, 115))
                 w.player.setAnim(67)
             w.tick(emptyList())

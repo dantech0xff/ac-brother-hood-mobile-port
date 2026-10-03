@@ -3895,16 +3895,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (au > i) return false
         if (ax == 60) return true
         if (ax == 11 && Z[8] == 888) return true
+        // every overlap here is `i.a(int[],int[])` — `overlapStrict`
+        // (point boxes never count), as in structured/i.java:619-636
         if (ax == 14) {
             if (S == 76) return true
             if (W.isEmpty()) return true
             if (world.missionBh() == 3 || S == 69 || S == 70 || S == 71)
-                return overlapI(world.camRect, W)
-            return overlapI(world.playerRect(), W)
+                return overlapStrict(world.camRect, W)
+            return overlapStrict(world.playerRect(), W)
         }
         if (ax == 37 || ax == 10 || ax == 60 || (ax == 78 && S == 3))
-            return overlapI(world.camRect, W)
-        return overlapI(world.camRect, Y)
+            return overlapStrict(world.camRect, W)
+        return overlapStrict(world.camRect, Y)
     }
 
     /** `i.f(int)` static (i.java:18023, proven): one-shot phase gate —
