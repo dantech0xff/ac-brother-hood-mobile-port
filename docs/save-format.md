@@ -168,3 +168,16 @@ Layout/endianness đã khóa; ý nghĩa domain chính xác còn thấp confidenc
 trúc mạnh, không phải declaration rõ trong artifact được phép. Những điểm này
 phải giữ raw ID/confidence trong legacy importer của bản rewrite, không được tự
 đặt tên như fact.
+
+## 7. Bản port `rewrite/` (2026-10-03)
+
+Bản port giữ đúng *chính sách* save của bản gốc (chỉ progression + settings,
+ghi tại cùng các call site `e(true)`), nhưng thay vỏ chứa: record `kBA`
+320 B (offset gốc `i` ↔ byte `2i..2i+1`, LE16) nằm trong container v1 `ACBA`
+có version, schema, revision, độ dài và SHA-256, ghi atomic qua file tạm +
+`.bak`; file raw 320 B cũ vẫn đọc được và được ghi lại thành v1. Các mục
+"không checksum/backup/rollback" ở §5 vì vậy chỉ còn đúng với bản gốc. Chi
+tiết và lý do: `docs/decisions/save-policy.md`. Tám call site `e(true)` của
+bản gốc (k.java:1415, :3443, :3636, :3673, :3825, :3872, :3916, :5674) đều
+có `saveFlush()` tương ứng trong `Level0World` (đối chiếu 2026-10-04;
+`g.java:5871` là `g.e(boolean)`, không phải save).
