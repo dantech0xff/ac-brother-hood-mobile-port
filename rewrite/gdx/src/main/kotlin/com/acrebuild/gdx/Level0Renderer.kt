@@ -897,10 +897,14 @@ class Level0Renderer {
         val (cap, fill) = if (z3) {
             if (z2) 16 to 17 else 14 to 15
         } else if (z2) 12 to 13 else 10 to 11
-        val fM = clip.moduleWidth(
-            clip.frameDraw(cap, 0, 0).module and 0x3FFF)
-        val fN = clip.moduleWidth(
-            clip.frameDraw(fill, 0, 0).module and 0x3FFF)
+        // `e(d(anim,0))` (k.java:7583): the width is the OBJECT's bounds
+        // quad `ak[obj*4+2]`, not the leaf module's width — for the cap
+        // objects (obj24..31) those are 25-32px, while module[objIdx]
+        // resolves to unrelated modules (m24=110px → the giant gap bug).
+        val fM = clip.bounds.getOrElse(
+            (clip.frameDraw(cap, 0, 0).module and 0x3FFF) * 4 + 2) { 0 }
+        val fN = clip.bounds.getOrElse(
+            (clip.frameDraw(fill, 0, 0).module and 0x3FFF) * 4 + 2) { 0 }
         if (fM <= 0 || fN <= 0) return
         drawFrame(93, cap, 0, x, y, 0)
         var i7 = x + fM
@@ -943,11 +947,11 @@ class Level0Renderer {
         val i5 = if (pressed) 42 else 44
         if (pillCQ == -1) {
             val fd = clip.frameDraw(i4, 0, 0)
-            pillCQ = clip.moduleWidth(fd.module and 0x3FFF)
+            pillCQ = clip.bounds.getOrElse((fd.module and 0x3FFF) * 4 + 2) { 0 }
         }
         if (pillCR == -1) {
             val fd = clip.frameDraw(i5, 0, 0)
-            pillCR = clip.moduleWidth(fd.module and 0x3FFF)
+            pillCR = clip.bounds.getOrElse((fd.module and 0x3FFF) * 4 + 2) { 0 }
         }
         drawFrame(93, i4, 0, x, yBottom, 0)
         var i7 = x + pillCQ
@@ -1039,14 +1043,9 @@ class Level0Renderer {
             if (i13 == 1 && world.jC == 2) i9 += 13
             val zD = world.pointerMoveIn(i, i9, w, i4)
             if (zD) {
-                fillAr(i, i9, w, i4, 1879048192)
-                panelEdge(i + ((w - i5) shr 1), i9 + (i4 shr 1), i5,
-                          false, i13 == 0 && world.jC == 2)
-                val icon = if (world.jC == 30) i13 + 5
-                           else if (i13 == 0 && world.jC == 2) 9 else 5
-                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
-                fontW.l(0)
-            } else {
+                // pressed/hovered row (k.java:7816-7853): fJ arrow at the
+                // strip's right edge, black (r12+r18)>>1 underlay, the
+                // z2=true bright strip, fK, font palette 1.
                 val fj = menuFj
                 if (fj != null) {
                     if (i13 == 0 && world.jC == 2) {
@@ -1079,8 +1078,18 @@ class Level0Renderer {
                     if (fk.stopped()) fk.arm(20, -1)
                     fk.a = i; fk.b = i9 + (i4 shr 1)
                     drawFrame(93, fk.e, fk.currentFrame, fk.a, fk.b, fk.c)
-                    fontW.l(1)
                 }
+                fontW.l(1)
+            } else {
+                // idle row (k.java:7669-7679): translucent fill + the
+                // z2=false faint strip, icon, font palette 0 — no arrow.
+                fillAr(i, i9, w, i4, 1879048192)
+                panelEdge(i + ((w - i5) shr 1), i9 + (i4 shr 1), i5,
+                          false, i13 == 0 && world.jC == 2)
+                val icon = if (world.jC == 30) i13 + 5
+                           else if (i13 == 0 && world.jC == 2) 9 else 5
+                drawFrame(93, icon, 0, i + 40, i9 + (i4 shr 1), 0)
+                fontW.l(0)
             }
             val (strD, pal) = world.menuRowText(i13)
             val strA = fitText(strD, zD, i5 - 50)
