@@ -60,6 +60,7 @@ and lands with unit tests that would have caught it.
 | `b()`'s `i.bQ` white/red flash (stepped once per pass) and `i.ce` white backdrop under the entities | done (Phase 2 branch) | [378](../261004-0230-slice378-bq-flash-ce-backdrop/plan.md) |
 | per-frame UI state steps in the world: claim cards + `cd[8]` banner (now drawn), `fS` marquee on play frames, pause icon, load-screen `dl` + typewriter, `an` black frame for a whole tick | done (Phase 2 branch) | [381](../261004-0300-slice381-ui-steps-in-world/plan.md) |
 | one `k.e(0,aw)` (`countKill`, six NPC kill sites fed a dead counter) and one `k.o(n)` (`kCount`, mission-7 guard on every `o(3)`) | done (Phase 2 branch) | [382](../261004-0330-slice382-kill-tally/plan.md) |
+| case 8/21 is one body: the world runs under u8 tips, `H()` behind flying-mission dialogs, the dialog switch on its opening frame, dialog time counts | done (Phase 2 branch) | [380](../261004-0400-slice380-case-8-21-body/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

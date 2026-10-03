@@ -5261,111 +5261,20 @@ class Level0World(
             return
         }
 
-        // j.c==21 dialog modal (k.l(21), i.java:20190): screen 21 isn't
-        // the play state — the original suspends the entity sim behind
-        // the dialog, which is what stops `ao()`/`N()` from re-arming the
-        // halted claimer while `cd[0]` holds. A press edge = the screen's
-        // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
-        if (dialogModal) {
-            // `b(false)` runs on every jC 21 frame (k.java:867), the
-            // whole pass ([bPass]): the veil head, the draw-list build
-            // (`ae.s()`) and per-entity `F()`, the `ad()` bubbles, `c()`
-            // under the claim gate, the claim SKIP pill (`u==9 &&
-            // C.cd[2]` arms E(131072) and the `ce/cf` that `j()` reads
-            // below) and the tail counters — behind the dialog, the
-            // auto-dismiss test harness included (slices 373/374/376).
-            // F()'s player arm — `g.t--`, the RNG sparkle field — is
-            // gated on jC 8 inside `drawStyleF`.
+        // case 8 / case 21 (k.java:859-1063, proven) — one body for play
+        // and dialog frames: `I()` on jC 8 and under a u==8 dialog (the
+        // in-play tips: the world keeps running, k.java:861-863), else
+        // `H()` on a flying mission (:864-866); `b(false)`; the dialog
+        // switch whenever `j.c == 21` — also on the frame whose sim opened
+        // the dialog (:868-1019); then the tail ([frameTail]). The port
+        // froze the world under every dialog and ran the switch only from
+        // the next frame on (slice 380).
+        if (jC == 8 || jC == 21) {
+            if ((jC == 21 && dlgU == 8) || jC == 8) simI()
+            else if (bh3) simH()
             bPass(false)
-            if (autoDismissDialog) {                 // test harness: instant tap
-                kC?.resumeScript(); leaveDialog()
-            } else {
-                // case-21 u-machine (k.java:877-1019, proven). `j()` →
-                // `E(65568)` (:874-876): a screen tap feeds the context
-                // edge the arms read — consume() marks presses but the
-                // dialog's own `v(65568)` checks are the only consumers.
-                if (pointerStrip()) padE(Pad.M_CONTEXT)
-                // `J()` (k.java:1040-1063, proven): `c(354,0,46,37)` →
-                // E(262144) on jC∈{8,21} — the original runs J() AFTER
-                // the j()→E(65568) arm, and E() clears+re-arms (k.java:553
-                // — `clearLatches()` in pad.e), so the pause edge must be
-                // armed after the context edge here, not in consume().
-                if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
-                if (dlgU == 0 || dlgU == 4 || dlgU == 5 || dlgU == 7) {
-                    // u∈{0,4,5,7} full-screen panels (:878-904): press →
-                    // u7→l(2), u5→l(15), else l(8); `z(23)` on all.
-                    if (pad.v(Pad.M_CONTEXT)) {
-                        when (dlgU) {
-                            7 -> stateL(2)
-                            5 -> stateL(15)
-                            else -> stateL(8)
-                        }
-                        z(23)
-                    }
-                } else {
-                    // u∈{1,2,3,6,8,9,10} line dialogs (:905-1019). The
-                    // skip gate (:944): `v(131072) && C!=null && u==9 &&
-                    // C.cd[2]` → `C.Z(); C.cd[1]=true; bh!=3 → m(ad);
-                    // z(23); l(8); v=w`.
-                    if (dlgSuppressed()) {
-                        kC?.resumeScript()                    // C.Z()
-                        kC?.cd?.set(1, true)                  // C.cd[1]=true
-                        if (!bh3) kM(kAd)
-                        z(23); dlgV = dlgW; stateL(8)         // l(8); v=w
-                    } else {
-                        if (dlgBQ && dlgBT != -1) {           // typing (:945)
-                            // the typewriter steps once per frame here,
-                            // after the page draw (:947-952) — the
-                            // renderer only reads bT (slice 374).
-                            dlgTypeTick(dlgBM.getOrNull(dlgV)?.length ?: 0)
-                            if (pad.v(Pad.M_CONTEXT)) dlgBT = -1   // reveal (:953)
-                        } else if (dlgU == 10) {
-                            if (pad.v(Pad.M_CONTEXT)) {       // :956-961
-                                dlgD(dlgV + 1); kCz = true; z(23)
-                            }
-                        } else {
-                            // 3568-3601 (k.java): a press edge on
-                            // u∈{1,2,3,6,9} jumps straight to the 3604
-                            // advance; u8 instead ticks its x countdown
-                            // every advance-block tick and expiry falls
-                            // through to the same arm.
-                            var advance = false
-                            if (pad.v(Pad.M_CONTEXT) && dlgU != 8) {
-                                advance = true
-                            } else if (dlgU == 8) {
-                                val x6 = kDlgX; kDlgX = x6 - 1   // 3592-3598
-                                advance = x6 <= 0                // 3601
-                            }
-                            if (advance) {
-                                // 3604-3629: x=48; D(v+1); v(65568) → z(23)
-                                kDlgX = 48
-                                dlgD(dlgV + 1)
-                                if (pad.v(Pad.M_CONTEXT)) z(23)
-                            }
-                        }
-                        if (dlgV == dlgW) {                   // :975-1007
-                            when {
-                                dlgU == 9 -> { kC?.resumeScript(); stateL(8) }
-                                dlgU == 3 -> if (kAj != 7) stateL(15) else stateL(24)
-                                dlgU == 1 -> if (kAj != 8) stateL(8)
-                                             else { kAj = 0; teardown(); stateL(2) }
-                                else -> { if (dlgU == 8) kCz = true; stateL(8) }
-                            }
-                        }
-                    }
-                }
-            }
-            marqueeFS()
-            // `J()` read (k.java:1056-1063, proven): the rect release was
-            // armed above (E(262144)); `v(262144)` → `C.Y();bw=0;l(14)`.
-            if (jC != 12 && jC != 13) {                       // J() (:2653)
-                pauseIconStep()
-                if (pad.v(Pad.M_PAUSE)) {
-                    kC?.pauseScript()                         // C.Y() (:1057)
-                    kBw = 0
-                    stateL(14)                                // l(14) (:1061)
-                }
-            }
+            if (jC == 21) dialogSwitch()
+            frameTail()
             tickIndex++; jG++
             return
         }
@@ -5381,13 +5290,17 @@ class Level0World(
         if (jC == 22) { jG++; medalAh(events); tickIndex++; return }
         if (jC == 15) { jG++; winStatsM(); tickIndex++; return }
 
-        // mission timer + ap[2] frame counter (k.java:1652-1655,
-        // proven): ticks while unpaused and not dialog-suspended.
-        if ((player.P and 512) != 0 ||
-            (kC?.claimActive() != true && (jC != 21 || dlgU != 9))) {
-            kDg++; kAp[2]++
+        tickIndex++; jG++
+        } finally {
+            lastTouchX = -1; lastTouchY = -1     // k.H/k.I live one frame
+            backKey = false
         }
+    }
 
+    /** `k.I()` (structured k.java:2516-2650, proven) — the world sim of a
+     *  play frame (and of a u==8 dialog frame): the entity loop, the
+     *  player slot, the camera, the `bJ` flash, the knockout. */
+    private fun simI() {
         if (bh3) {
             // `k.I()` bh3 arm (k.java:2529-2572, proven): every entity
             // re-scores `au` via `u()`; only eligible entities
@@ -5552,18 +5465,116 @@ class Level0World(
         // (i.javap.txt:19687 → 19877) — the flying player. That path is
         // `Entity.canyonCollide` (L1f7) inside `flightTick`; a ground
         // player (`case 0 → aS.e()`) never runs it.
+    }
 
-        // case 8 after `I()` (k.java:859-1063, proven): `b(false)` — the
-        // whole world pass ([bPass]: veil head, draw list + every `F()`
-        // with its `i.e--`/`g.t--`/sparkle counters, the `ad()` bubbles,
-        // `c()` under the claim gate, the claim SKIP pill, the tail
-        // counters; it returns at entry when the sim just opened jC
-        // 12/13/31) — then `J()`: `c(354,0,46,37)` → E(262144);
-        // `v(262144)` → `C.Y(); bw=0; l(14)`. Both read the release
-        // point, and E() lands in bB at the next frame's commit, so the
-        // pause opens the frame after the release, once the world has
-        // run that frame (slice 368).
-        bPass(false)
+    /** `H()` (k.java:2507-2513, proven): behind a dialog other than u==8
+     *  on a flying mission, only the ax24 shots in S8/9/10 tick. */
+    private fun simH() {
+        for (n in npcs.toList()) {
+            if (n in pendingRemove) continue
+            if (n.ax == 24 && (n.S == 9 || n.S == 10 || n.S == 8)) tickNpc(n)
+        }
+        if (pendingRemove.isNotEmpty()) {
+            npcs.removeAll(pendingRemove)
+            pendingRemove.clear()
+        }
+        if (pendingInsert.isNotEmpty()) {
+            npcs += pendingInsert
+            pendingInsert.clear()
+        }
+    }
+
+    /** The case-21 switch (k.java:868-1019, proven), run whenever
+     *  `j.c == 21` after `b(false)`. */
+    private fun dialogSwitch() {
+        if (autoDismissDialog) {                 // test harness: instant tap
+            kC?.resumeScript(); leaveDialog()
+        } else {
+            // case-21 u-machine (k.java:877-1019, proven). `j()` →
+            // `E(65568)` (:874-876): a screen tap feeds the context
+            // edge the arms read — consume() marks presses but the
+            // dialog's own `v(65568)` checks are the only consumers.
+            if (pointerStrip()) padE(Pad.M_CONTEXT)
+            if (dlgU == 0 || dlgU == 4 || dlgU == 5 || dlgU == 7) {
+                // u∈{0,4,5,7} full-screen panels (:878-904): press →
+                // u7→l(2), u5→l(15), else l(8); `z(23)` on all.
+                if (pad.v(Pad.M_CONTEXT)) {
+                    when (dlgU) {
+                        7 -> stateL(2)
+                        5 -> stateL(15)
+                        else -> stateL(8)
+                    }
+                    z(23)
+                }
+            } else {
+                // u∈{1,2,3,6,8,9,10} line dialogs (:905-1019). The
+                // skip gate (:944): `v(131072) && C!=null && u==9 &&
+                // C.cd[2]` → `C.Z(); C.cd[1]=true; bh!=3 → m(ad);
+                // z(23); l(8); v=w`.
+                if (dlgSuppressed()) {
+                    kC?.resumeScript()                    // C.Z()
+                    kC?.cd?.set(1, true)                  // C.cd[1]=true
+                    if (!bh3) kM(kAd)
+                    z(23); dlgV = dlgW; stateL(8)         // l(8); v=w
+                } else {
+                    if (dlgBQ && dlgBT != -1) {           // typing (:945)
+                        // the typewriter steps once per frame here,
+                        // after the page draw (:947-952) — the
+                        // renderer only reads bT (slice 374).
+                        dlgTypeTick(dlgBM.getOrNull(dlgV)?.length ?: 0)
+                        if (pad.v(Pad.M_CONTEXT)) dlgBT = -1   // reveal (:953)
+                    } else if (dlgU == 10) {
+                        if (pad.v(Pad.M_CONTEXT)) {       // :956-961
+                            dlgD(dlgV + 1); kCz = true; z(23)
+                        }
+                    } else {
+                        // 3568-3601 (k.java): a press edge on
+                        // u∈{1,2,3,6,9} jumps straight to the 3604
+                        // advance; u8 instead ticks its x countdown
+                        // every advance-block tick and expiry falls
+                        // through to the same arm.
+                        var advance = false
+                        if (pad.v(Pad.M_CONTEXT) && dlgU != 8) {
+                            advance = true
+                        } else if (dlgU == 8) {
+                            val x6 = kDlgX; kDlgX = x6 - 1   // 3592-3598
+                            advance = x6 <= 0                // 3601
+                        }
+                        if (advance) {
+                            // 3604-3629: x=48; D(v+1); v(65568) → z(23)
+                            kDlgX = 48
+                            dlgD(dlgV + 1)
+                            if (pad.v(Pad.M_CONTEXT)) z(23)
+                        }
+                    }
+                    if (dlgV == dlgW) {                   // :975-1007
+                        when {
+                            dlgU == 9 -> { kC?.resumeScript(); stateL(8) }
+                            dlgU == 3 -> if (kAj != 7) stateL(15) else stateL(24)
+                            dlgU == 1 -> if (kAj != 8) stateL(8)
+                                         else { kAj = 0; teardown(); stateL(2) }
+                            else -> { if (dlgU == 8) kCz = true; stateL(8) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** The case-8/21 tail (k.java:1022-1063, proven): the mission timer
+     *  `dg++; ap[2]++` (gate re-read after the switch: player `P&512`, or
+     *  no running claim and not a u9 dialog — dialog time counts, the
+     *  port used to stop it on every dialog frame and ran it before the
+     *  sim); the `fS` marquee; `J()` — the pause icon step, the
+     *  `c(354,0,46,37)` → E(262144) arm (after the dialog's `j()` arm:
+     *  the last `E()` wins, k.java:553) and `v(262144)` →
+     *  `C.Y(); bw=0; l(14)`. E() lands in bB at the next frame's commit,
+     *  so the pause opens the frame after the release (slice 368). */
+    private fun frameTail() {
+        if ((player.P and 512) != 0 ||
+            (kC?.claimActive() != true && (jC != 21 || dlgU != 9))) {
+            kDg++; kAp[2]++
+        }
         marqueeFS()
         if (jC != 12 && jC != 13) {                          // J() (:2653)
             pauseIconStep()
@@ -5573,12 +5584,6 @@ class Level0World(
                 kBw = 0
                 stateL(14)                                   // l(14) (:1061)
             }
-        }
-
-        tickIndex++; jG++
-        } finally {
-            lastTouchX = -1; lastTouchY = -1     // k.H/k.I live one frame
-            backKey = false
         }
     }
 

@@ -12532,7 +12532,9 @@ class Slice114Test {
     }
 
     @Test fun `u8 auto-advances pages on the 48-frame countdown`() {
-        val w = armDialog(world(), 8, 0, 2, "p1", "p2", "p3")
+        // the world runs under a u8 dialog (slice 380): settle the m0
+        // intro claim first, or it opens its own dialog over this one
+        val w = armDialog(world().also { settleIntro(it) }, 8, 0, 2, "p1", "p2", "p3")
         repeat(49) { w.tick(emptyList()) }             // x6=48→…→x6=0 → D(v+1)
         assertEquals(1, w.dlgV, "x<=0 → x=48; D(v+1) (:964-968)")
         assertEquals(48, w.kDlgX)
@@ -17493,6 +17495,10 @@ class Slice178Test {
         val w = world(aj = 1)
         tickPlay(w, 2)
         w.npcs.clear()                                  // nothing to consume
+        // …and no running claim: the intro claim's u9 dialog is switched
+        // (auto-dismissed) on the frame that opens it (slice 380), so the
+        // claim runs again and would suspend the player (I() L108)
+        w.kC = null
         // slice 180: flightTick's z3 tail holds ah at kY — integrate drifts
         // al by kY>>8 = -7/tick. Seat the latch + pin ah=kY so the drift is
         // exact (O's sub-256 residue would otherwise alternate -3/-4).
