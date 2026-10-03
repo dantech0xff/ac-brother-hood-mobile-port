@@ -416,10 +416,19 @@ class Level0World(
     private var kCh = -1                     // k.ch — release x
     private var kCi = -1                     // k.ci — release y
     private var kCl = false                  // k.cl — release latch
-    /** `j.t` (j.java:105, proven) — pad-bits-0-4 held latch: `j.a(i)` ∨=
-     *  `1<<i` on press, `j.b(i)` clears on release; `j.i()`=`t!=0` lets
-     *  the fail/win screens force-flush held input (`j.t=0`, :1119). */
-    var kJT = 0
+    /** `j.t` (j.java:105, proven) — the "skip the next fail/win/stats
+     *  frame" latch. Only `j.a(i,false)` with `i<5` sets bits
+     *  (j.java:1334-1342): bit 0 from the veil latch at the head of
+     *  `b(z2)` (k.java:2697, [scrollBounds]) and bit 4 from `K()`
+     *  (k.java:2674) — the level loader's step 8 (:4834) and the
+     *  checkpoint reload `a(true)` (:5174). Cleared by `k.p()` (bit 0,
+     *  :2666-2667), `W()` (bit 4, :5132), `j.h()` (all, j.java:1322) and
+     *  by the skipped frame itself (`j.t=0`, :1119 jc12/13, :1470 jc31).
+     *  `j.i()` (`t != 0`) is its only reader, at those two skips
+     *  (:1109, :1453). The pointer and key handlers never touch it
+     *  (k.java:486-516, :5578-5584) — the port used to latch it on pad
+     *  presses and gate all input on it (slice 376). */
+    override var jT = 0
     /** `k.bh[]` (k.java:263, proven): per-mission phase flags — `bh[aj]==3`
      *  = autoscroll/flying on missions 1 and 4. */
     val kBh = intArrayOf(4, 3, 4, 4, 3, 4, 4, 4, 4)
@@ -2239,11 +2248,11 @@ class Level0World(
      *  after `I()` on jC 8 and over the dialog on jC 21, and returns at
      *  entry on jC ∈ {12,13,31} (k.java:2682-2686). The bubble timers
      *  therefore step once per tick — never per rendered frame — and the
-     *  descriptor stays up for every frame of the tick (slice 373). */
+     *  descriptor stays up for every frame of the tick (slice 373).
+     *  [bPass] calls it right after [drawStylePass], over the same list:
+     *  the original builds `bd[]` once per pass (slice 376). */
     private fun drawPassBubbles() {
-        if (jC == 12 || jC == 13 || jC == 31) return
         bubbleDraw = null; bubbleOwner = null
-        buildDrawList()
         for (i in 0 until drawCount) {
             val e = drawList[i] ?: continue
             if ((e.ax != 11 && e.ax != 17) || e.aB > 0) {
@@ -2556,7 +2565,7 @@ class Level0World(
                     kDg = 0; kAp.fill(0)             // L() (:3273-3280)
                 }
                 i == 12 || i == 13 -> {              // L12 → L17 tail
-                    backdropB()                      // k.b(true) (:1656-1657)
+                    bPass(true)                      // k.b(true) (:1656-1657)
                     kAD = null
                     if (i == 12 && ex != 12) { deaths++; kAp[1]++ }
                     if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
@@ -2603,7 +2612,7 @@ class Level0World(
                     if (jC !in intArrayOf(2, 3, 4, 5, 6, 18, 19, 20, 22, 28, 29, 30)) { audioStop(); z(0) }
                 }
                 i == 14 -> {
-                    if (jC == 8 || jC == 21) backdropB()   // k.b(true) (:1790-1792)
+                    if (jC == 8 || jC == 21) bPass(true)   // k.b(true) (:1790-1792)
                     bannerK(1); kAo = false; kAn = false
                     // k.java:5180 (proven): `if (!e.a()) k.fi = -1` —
                     // silence the music slot only when no track is live,
@@ -2975,6 +2984,7 @@ class Level0World(
         Entity.gf = null                            // g.f=null (same teardown)
         Entity.gE = false                           // g.E=false (same teardown)
         Entity.icu = false                          // i.cu=false (same teardown)
+        jT = jT and 16.inv()                        // j.b(4,false) (:5132)
     }
     /** `k.x()`→`e.a()` (e.java:32, proven): a slot is still within its
      *  `h.a[e]` duration window. */
@@ -2989,7 +2999,8 @@ class Level0World(
      *  reload (`X();I(aj)` + `V();d(z2)`); `true` = `a(true)`
      *  checkpoint restore (no `I(aj)`). */
     private fun reloadCheckpoint(full: Boolean) {
-        if (full) reload() else loadMission(kAj)
+        if (full) { kK(); reload() }               // a(true): K() (:5174)
+        else loadMission(kAj)
     }
 
     /** `Q()` (structured :3576-3940, proven) — menu back/confirm
@@ -3615,7 +3626,10 @@ class Level0World(
         when (kCu) {
             0 -> { kCu = 1; kDu = jG }
             1 -> kCu = 2
-            2 -> if (jG - kDu >= 49) { kCu = 3; kDu = jG }
+            2 -> if (jG - kDu >= 49) {
+                kCu = 3; kDu = jG
+                jT = 0                       // j.h() (k.java:4010) — t=0
+            }
             3 -> if (jG - kDu >= 49) { kCu = 4; kDu = jG }
             4 -> kCu = 5
             5 -> {
@@ -3954,6 +3968,7 @@ class Level0World(
         // entity spawn — run on their `j.g` ticks; every other stage is
         // a resource load the converter already emitted.
         if (jG == 3L) loadPackI(kAj)
+        if (jG == 8L) kK()                   // G(8) opens with K() (:4834)
         if (jG == 164L) {
             // `G(164)=d(false)` (k.java:4741+) — mission-entry spawn is a
             // FRESH `new i` at the pack record, never a checkpoint restore.
@@ -4116,7 +4131,7 @@ class Level0World(
      *  frame (slice 373). */
     private fun menuRowBandStep() {
         menuBandDraw = 0
-        if ((jC == 12 || jC == 13) && kJT != 0) return     // `j.i()` skips the frame
+        if ((jC == 12 || jC == 13) && jT != 0) return      // `j.i()` skips the frame
         if (!menuPanelDrawn || kFI <= 0) return
         val rects = menuRowRects()
         for (r in rects) {
@@ -4128,27 +4143,50 @@ class Level0World(
         }
     }
 
-    /** `b(true)` — the world paint behind the pause, death, mission-end
-     *  and help-from-pause screens (k.java:1110 jc12/13 unless `j.i()`,
-     *  :1123 jc14, :1454 jc31 while `bx >= 0` and !`j.i()`, :2415 G()
-     *  when `cy == 14`, plus the l(12)/l(13) and l(14)-from-play
-     *  transitions :1657/:1792). `b(z2)` (simple k.java:3450) is the
-     *  window/veil head ([scrollBounds]) plus the draw-list build and
-     *  every entity's `F()` ([drawStylePass]) — the same per-frame
-     *  effects a play frame has, minus the `ad()` bubbles (`z2` is true).
-     *  The port used to run only the head here (slice 375). */
-    private fun backdropB() {
+    /** `K()` (k.java:2672-2676, proven): `j.a(0,0,400,240)` is a dead
+     *  stub (j.java:1355); `j.a(cd,-1,-1,1,1,true)` collapses the clip
+     *  for the rest of the current frame's paint only (the next `b()`
+     *  resets it, k.java:2860 — the renderer draws each frame fresh);
+     *  `j.a(4,false)` sets `j.t` bit 4, so the next jc12/13/31 frame is
+     *  skipped. Called by the loader's step 8 (:4834) and the checkpoint
+     *  reload `a(true)` (:5174) (slice 376). */
+    private fun kK() { jT = jT or 16 }
+
+    /** `b(z2)` (structured k.java:2679-3253, proven) — the world pass of
+     *  every frame that paints the world: `b(false)` after `I()` on jC 8
+     *  and over the dialog on every jC 21 frame (:867); `b(true)` behind
+     *  the pause, death, mission-end and help-from-pause screens (:1110
+     *  jc12/13 unless `j.i()`, :1123 jc14, :1454 jc31 while `bx >= 0`
+     *  and !`j.i()`, :2415 G() when `cy == 14`, the l(12)/l(13) and
+     *  l(14)-from-play transitions :1657/:1792). One pass, in order:
+     *  `b(false)` returns at entry on jC 12/13/31 (:2682-2690); the head
+     *  (veil latch + visible window, [scrollBounds]); the draw-list build
+     *  and every entity's `F()` ([drawStylePass]); the `ad()` bubbles
+     *  when `!z2` (:2927); `c(z2)` under `(C==null || !C.cd[6] ||
+     *  !C.ab())` (:3131-3132, [hudStep]); the claim SKIP pill when `!z2`
+     *  (:3160-3162); then the un-gated tail counters (:3163-3253,
+     *  [overlayTailStep]). The port used to run only parts of it per
+     *  call site: the head nowhere on play/dialog frames (so the veil
+     *  latch never fired there), and `c()`/the tail only on play frames,
+     *  with the tail inside `c()`'s gate (slice 376). */
+    private fun bPass(z2: Boolean) {
+        if (!z2 && (jC == 12 || jC == 13 || jC == 31)) return
         scrollBounds()
         drawStylePass()
+        if (!z2) drawPassBubbles()
+        val hc = kC
+        if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep(z2)
+        if (!z2) claimFooter()
+        overlayTailStep()
     }
 
     /** The per-frame `b(true)` of the menu-state procs that paint the
      *  world behind them (jc12/13 call it inside their own arm). */
     private fun menuBackdrop() {
         when {
-            jC == 14 -> backdropB()                               // case 14 (:1123)
-            jC == 31 && kBx >= 0 && kJT == 0 -> backdropB()       // case 31 (:1452-1454)
-            jC == 5 && kCy == 14 -> backdropB()                   // G() (:2414-2415)
+            jC == 14 -> bPass(true)                               // case 14 (:1123)
+            jC == 31 && kBx >= 0 && jT == 0 -> bPass(true)        // case 31 (:1452-1454)
+            jC == 5 && kCy == 14 -> bPass(true)                   // G() (:2414-2415)
         }
     }
 
@@ -4157,11 +4195,11 @@ class Level0World(
         menuRowBandStep()
         when (jC) {
             12, 13 -> {
-                if (kJT != 0) {                      // `j.i()` (:1109) —
-                    kJT = 0                          // held pad bits flush
-                    return true                      // → `j.t=0`, skip frame
+                if (jT != 0) {                       // `j.i()` (:1109) —
+                    jT = 0                           // `j.t=0` (:1119), the
+                    return true                      // frame is skipped
                 }
-                backdropB()                          // k.b(true) (:1109-1110)
+                bPass(true)                          // k.b(true) (:1109-1110)
                 kEg = 0
                 menuL(kEy)
                 menuQ(pressY)
@@ -4220,6 +4258,7 @@ class Level0World(
             in menuStates -> { menuL(kEy); menuQ(pressY) }
             31 -> {
                 if (kBx < 0) stateL(13)
+                else if (jT != 0) jT = 0              // `j.i()` (:1453) → `j.t=0` (:1470)
                 else if (pad.v(Pad.M_CONTEXT) || pressY >= 0) {
                     stateL(13); kBx = -1
                 }
@@ -4242,20 +4281,21 @@ class Level0World(
     val statsVisible get() = kAl && jC == 31 && kBx >= 0
     fun statsText(): String? = if (kBx >= 0) d0(kBx) else null
     /**
-     * `k.b(boolean)` (k.java:9062-9340, proven). Every port caller passes
-     * `true` (`stateL(12/13)` :2224, `stateL(14)`-in-jc8/21 :2271, the
-     * jc12/13 tick arm :3596) — the `b(false)` early-out `jc∈{12,13,31}`
-     * (:9064-9072) is unreachable from those sites; kept as a `full`
-     * param anyway for the verbatim shape.
+     * The head of `k.b(boolean)` (simple k.java:9062-9340, structured
+     * :2679-2860, proven), run by [bPass] on every world pass.
      *
-     * (1) input-lock veil latch: `k.am && !k.dd → k.dd=1` then four
-     *     `j.a` ops (:9080-9101, proven): `j.a(0,0,400,240)` 4-arg and
-     *     `j.a(0,100,1)` 3-arg are dead stubs (j.java:1355-1359);
-     *     `j.a(cd,-1,-1,1,1,true)` = 6-arg setClip → collapses the
-     *     clip to a 1×1 offscreen rect so all subsequent draws land
-     *     nowhere (`veilVoid` one-shot — the latch frame voids);
-     *     `j.a(0,false)` = input-mask `t |= 1` (`inputLockT` —
-     *     `j.i()`-gates input until `unlockInput`/`j.b(0)` clears).
+     * (1) veil latch: `k.am && !k.dd → k.dd=1` then four `j.a` ops
+     *     (:2692-2698): `j.a(0,0,400,240)` 4-arg and `j.a(0,100,1)`
+     *     3-arg are dead stubs (j.java:1355-1359);
+     *     `j.a(cd,-1,-1,1,1,true)` = 6-arg setClip (j.java:890-907) —
+     *     collapses the clip so the tile blit below lands nowhere, until
+     *     `if (am)` restores it right after (:2820-2822): the latch frame
+     *     keeps the previous frame's background under this frame's
+     *     entities. The renderer draws every frame fresh and does not
+     *     reproduce that one-frame smear (it used to black the whole
+     *     frame out instead). `j.a(0,false)` sets `j.t` bit 0 ([jT]):
+     *     the next jc12/13/31 frame is skipped — it never gated input
+     *     (slice 376).
      * (2) visible et-cell window: `camX/20 .. (camX+399)/20` ×
      *     `camY/20 .. (camY+239)/20`; the `(bt-21)/(bp-21)`,
      *     `(bu-13)/(bq-13)` rescales are proven 1 (`bt=bp`, `bu=bq` at
@@ -4274,22 +4314,10 @@ class Level0World(
     internal var visX0 = 0; internal var visY0 = 0
     internal var visX1 = 0; internal var visY1 = 0
     internal var visDirty = false              // k.dM
-    /** `j.a(cd,-1,-1,1,1,true)` effect (j.java:890-907, proven): the
-     *  latch frame's clip collapses to a 1×1 rect — the renderer
-     *  consumes this one-shot to void the frame (not a dim overlay). */
-    var veilVoid = false
-    /** `j.t` bit-0 (j.java:1334-1342, proven): `j.a(0,false)` arms
-     *  `t|=1` and `j.i()` gates pointer/key input. `unlockInput`
-     *  (j.b(0)) clears it. */
-    override var inputLockT = false
-    private fun scrollBounds() = scrollBounds(true)
-    private fun scrollBounds(full: Boolean) {
-        if (!full && (jC == 12 || jC == 13 || jC == 31)) return  // L1c
+    private fun scrollBounds() {
         if (kAm && !kDd) {
             kDd = true                                   // veil latch
-            veilVoid = true                              // setClip(-1,-1,1,1) —
-                                                         // voids the frame
-            inputLockT = true                            // j.a(0,false) → t|=1
+            jT = jT or 1                                 // j.a(0,false) → t|=1
         }
         var sy = camY
         if (sy < 0) sy -= 20                    // :9084 floor-div bias
@@ -4787,7 +4815,7 @@ class Level0World(
      *  `aP` line (the `aO-=62` itself lives in the tick already), and the
      *  `at==1→0` weapon-corner latch. Only runs while no claim overlay holds
      *  the screen — the orig call site gates identically. */
-    private fun hudStep() {
+    private fun hudStep(z2: Boolean) {
         if (kAx == 0) kAx = 30                     // k.java:4177
         player.x1 = minOf(player.x1, kAx)          // g.f(ax) :4180
         if (bh3) {
@@ -4840,9 +4868,9 @@ class Level0World(
         }
         // aO/aP timed line (k.java:4337-4343): expired or absent → null
         if (kAO < 0 || kAP == null) kAP = null
-        // weapon-corner latch (k.java:4277): at==1 → 0 inside the gate
-        if (weaponCornerArmed() && kAt == 1) kAt = 0
-        overlayTailStep()
+        // weapon-corner latch (k.java:4276-4279): at==1 → 0 inside the
+        // gate, which opens with `!z2` — b(true) never clears it
+        if (!z2 && weaponCornerArmed() && kAt == 1) kAt = 0
     }
 
     /** The `b(z2)` draw-tail counters (k.java:3166-3239, proven) — the
@@ -4966,7 +4994,6 @@ class Level0World(
     /** Raw InputQueue events are screen px in the 400x240 view.
      *  `pointerPressed/Dragged/Released` (k.java:486-519, proven). */
     private fun consume(events: List<InputQueue.Event>) {
-        if (inputLockT) return                 // `j.i()` = `t != 0`
         for (e in events) {
             when (e.type) {
                 InputQueue.Type.DOWN -> {
@@ -4976,8 +5003,7 @@ class Level0World(
                     // inside their frame procs — `J()` and `a(str,str2)`
                     // (slice 368).
                     val iJ = resolvePadZone(e.x, e.y)
-                    if (iJ != -1) { padE(2 shl iJ)             // E(2<<iJ)
-                        if (iJ < 5) kJT = kJT or (1 shl iJ) }
+                    if (iJ != -1) padE(2 shl iJ)               // E(2<<iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                     // panel-drag arm for the bv4 overflow scroll: a DOWN
@@ -4994,7 +5020,6 @@ class Level0World(
                 InputQueue.Type.MOVE -> {                     // pointerDragged
                     val iJ = resolvePadZone(e.x, e.y)
                     if (iJ != -1 && pad.bB and (2 shl iJ) == 0) padE(2 shl iJ)
-                    if (iJ in 0..4) kJT = kJT or (1 shl iJ)
                     pointerDown = true
                     kCj = e.x; kCk = e.y
                     if (menuDragPrevY >= 0) {
@@ -5008,9 +5033,6 @@ class Level0World(
                     kCh = e.x; kCi = e.y
                     kCl = true
                     pad.releaseFlush()                        // eN=eL; eL=0
-                    kJT = 0                                    // b(i) — all
-                                                                 // held bits
-                                                                 // release
                     pointerDown = false
                     kCj = e.x; kCk = e.y
                     // A cancelled gesture un-holds but must not confirm
@@ -5084,14 +5106,16 @@ class Level0World(
         // halted claimer while `cd[0]` holds. A press edge = the screen's
         // dismiss → `k.C.Z()` (cd[0]=false) → back to play next tick.
         if (dialogModal) {
-            // `b(false)` runs on every jC 21 frame (k.java:867): its
-            // draw-list build (`ae.s()`) and per-entity `F()` (simple
-            // k.java:3450-3760) and the `ad()` bubbles step even behind
-            // the dialog, the auto-dismiss test harness included (slices
-            // 373/374). F()'s player arm — `g.t--`, the RNG sparkle
-            // field — is gated on jC 8 inside `drawStyleF`.
-            drawStylePass()
-            drawPassBubbles()
+            // `b(false)` runs on every jC 21 frame (k.java:867), the
+            // whole pass ([bPass]): the veil head, the draw-list build
+            // (`ae.s()`) and per-entity `F()`, the `ad()` bubbles, `c()`
+            // under the claim gate, the claim SKIP pill (`u==9 &&
+            // C.cd[2]` arms E(131072) and the `ce/cf` that `j()` reads
+            // below) and the tail counters — behind the dialog, the
+            // auto-dismiss test harness included (slices 373/374/376).
+            // F()'s player arm — `g.t--`, the RNG sparkle field — is
+            // gated on jC 8 inside `drawStyleF`.
+            bPass(false)
             if (autoDismissDialog) {                 // test harness: instant tap
                 kC?.resumeScript(); leaveDialog()
             } else {
@@ -5099,10 +5123,6 @@ class Level0World(
                 // `E(65568)` (:874-876): a screen tap feeds the context
                 // edge the arms read — consume() marks presses but the
                 // dialog's own `v(65568)` checks are the only consumers.
-                // `b(false)` (k.java:867) ends with its claim SKIP pill
-                // (`u==9 && C.cd[2]`): it arms E(131072) and sets the
-                // `ce/cf` that `j()` reads next (slice 368).
-                claimFooter()
                 if (pointerStrip()) padE(Pad.M_CONTEXT)
                 // `J()` (k.java:1040-1063, proven): `c(354,0,46,37)` →
                 // E(262144) on jC∈{8,21} — the original runs J() AFTER
@@ -5366,11 +5386,6 @@ class Level0World(
             kDf = (255 shl 24) or (c shl 16) or (c shl 8) or c
         }
 
-        // c(z2) draw-side mutations (k.java:4176+): orig runs them inside
-        // the paint under `(C==null||!C.cd[6]||!C.ab())` — same gate here.
-        val hc = kC
-        if (hc == null || !hc.cd[6] || !hc.claimAb()) hudStep()
-
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
         // Slice 363: there is no below-the-camera kill here. The original's
@@ -5381,19 +5396,17 @@ class Level0World(
         // `Entity.canyonCollide` (L1f7) inside `flightTick`; a ground
         // player (`case 0 → aS.e()`) never runs it.
 
-        // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
-        // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`
-        // companion tick — `i.e--`/`g.t--`/sparkles/counters live here.
-        drawStylePass()
-
-        // case 8 after `I()` (k.java:859-1063, proven): `b(false)` — its
-        // claim SKIP pill hit-test — then `J()`: `c(354,0,46,37)` →
-        // E(262144); `v(262144)` → `C.Y(); bw=0; l(14)`. Both read the
-        // release point, and E() lands in bB at the next frame's commit,
-        // so the pause opens the frame after the release, once the world
-        // has run that frame (slice 368).
-        drawPassBubbles()
-        claimFooter()
+        // case 8 after `I()` (k.java:859-1063, proven): `b(false)` — the
+        // whole world pass ([bPass]: veil head, draw list + every `F()`
+        // with its `i.e--`/`g.t--`/sparkle counters, the `ad()` bubbles,
+        // `c()` under the claim gate, the claim SKIP pill, the tail
+        // counters; it returns at entry when the sim just opened jC
+        // 12/13/31) — then `J()`: `c(354,0,46,37)` → E(262144);
+        // `v(262144)` → `C.Y(); bw=0; l(14)`. Both read the release
+        // point, and E() lands in bB at the next frame's commit, so the
+        // pause opens the frame after the release, once the world has
+        // run that frame (slice 368).
+        bPass(false)
         if (jC != 12 && jC != 13) {                          // J() (:2653)
             if (pointerDownIn(354, 0, 46, 37)) padE(Pad.M_PAUSE)
             if (pad.v(Pad.M_PAUSE)) {

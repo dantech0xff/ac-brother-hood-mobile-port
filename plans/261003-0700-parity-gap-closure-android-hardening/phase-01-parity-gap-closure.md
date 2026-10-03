@@ -54,6 +54,7 @@ and lands with unit tests that would have caught it.
 | draw-pass state steps once per frame in the world: `i.ad()` bubbles (one call site), row band, jc20 `eZ` (found in Phase 4 renderer audit) | done (Phase 2 branch) | [373](../261004-0010-slice373-draw-pass-state/plan.md) |
 | dialog typewriter + the jC 21 frame's `b(false)` `F()` pass in the world; renderer drops duplicated `F()` writes | done (Phase 2 branch) | [374](../261004-0030-slice374-dialog-frame-pass/plan.md) |
 | `b(true)` runs the draw-list build + `F()` pass behind pause/death/end screens, not only its head | done (Phase 2 branch) | [375](../261004-0100-slice375-btrue-world-pass/plan.md) |
+| `j.t` is the jc12/13/31 frame-skip latch (veil latch bit 0, `K()` bit 4), not an input lock; `b(z2)` is one pass (head, `F()`, bubbles, gated `c()`, SKIP pill, un-gated tail) on play, dialog and `b(true)` frames; no black veil frame | done (Phase 2 branch) | [376](../261004-0130-slice376-jt-skip-latch/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

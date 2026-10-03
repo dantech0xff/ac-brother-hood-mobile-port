@@ -1401,19 +1401,11 @@ class Level0Renderer {
         // speech bubble, sparkle dots; emitted in screen space already.
         fxOverlay(world)
 
-        // `k.b(true)` input-lock veil (k.java:9080-9101, proven): the
-        // latch frame's `j.a(cd,-1,-1,1,1,true)` is the recovered 6-arg
-        // form = Graphics.setClip(-1,-1,1,1) — clip collapse, voiding
-        // the frame (j.java:890-907); `j.a(0,false)` is the q/t input
-        // bitflag (j.java:1334-1341). The 3/4-arg `j.a` forms are
-        // unrecovered stubs. Our renderer is a single pass after the
-        // sim tick, so consume the `veilVoid` one-shot as a full black
-        // frame (input stays locked via `inputLockT`).
-        if (world.veilVoid) {
-            world.veilVoid = false
-            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
-                   0xFF000000.toInt())
-        }
+        // The `b()` veil latch (k.java:2692-2698) collapses the clip only
+        // for the tile blit of that one frame (`if (am)` restores it at
+        // :2820) — the previous frame's background stays under the new
+        // entities. Each frame here is drawn fresh, so there is nothing to
+        // do (this used to black the whole frame out; slice 376).
 
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side

@@ -4181,11 +4181,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `k.o()` (k.java:3429, proven): input-lock arm `am=true,dd=false`. */
     fun lockInput(w: LevelCellSource) { w.kAm = true; w.kDd = false }
-    /** `k.p()` (k.java:3434, proven head): release `am=false,dd=false`
-     *  plus `j.b(0,false)` — the input-mask release (`t &= ~1`,
-     *  j.java:1344). */
+    /** `k.p()` (k.java:2662-2669, proven): `if (am) { am=false;
+     *  dd=false; j.b(0,false); j.i(0) }` — both `j` calls clear `j.t`
+     *  bit 0 (j.java:1326-1349), the veil latch's frame-skip bit. */
     fun unlockInput(w: LevelCellSource) {
-        w.kAm = false; w.kDd = false; w.inputLockT = false
+        if (!w.kAm) return
+        w.kAm = false; w.kDd = false; w.jT = w.jT and 1.inv()
     }
 
     /** `i.p(int,int)` (i.java:18031, proven): damage-number popup —
@@ -5437,8 +5438,9 @@ interface LevelCellSource {
     /** `k.am`/`k.dd` — `k.o()`/`k.p()` input-lock flags (k.java:3429). */
     var kAm: Boolean get() = false; set(_) {}
     var kDd: Boolean get() = false; set(_) {}
-    /** `j.t` bit-0 — input-mask latch (j.java:1334-1342, proven). */
-    var inputLockT: Boolean get() = false; set(_) {}
+    /** `j.t` (j.java:105, proven) — the jc12/13/31 frame-skip latch
+     *  (see `Level0World.jT`). */
+    var jT: Int get() = 0; set(_) {}
     /** `i.f(i)` (i.java:5382, proven) — the scroll-wall clamp called at
      *  the tail of the player's motion arms (16 call sites, all on g):
      *  while the ax37 holder is in overlap mode it pins the entity's Y

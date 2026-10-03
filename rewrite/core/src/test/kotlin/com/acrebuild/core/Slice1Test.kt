@@ -10378,44 +10378,45 @@ class Slice87Test {
     }
 }
 
-/** Slice 88 — `j.t` pad-held latch + `j.i()` fail/win input flush
- *  (j.java:105-345, k.java:1109, proven). */
+/** Slice 88 — `j.t` + `j.i()` fail/win frame skip (j.java:105-345,
+ *  k.java:1109, proven). Slice 376 corrected the reading: the pointer
+ *  handlers never touch `j.t` (k.java:486-516); only the veil latch
+ *  (bit 0) and `K()` (bit 4) set it. */
 class Slice88Test {
 
-    @Test fun `pad press latches jT release clears it`() {
+    @Test fun `pad presses and releases leave jT alone`() {
         val w = world()
         val (x, y) = w.cellPoint(0)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
-        assertTrue(w.kJT != 0, "DOWN in a pad zone latches j.t")
+        assertEquals(0, w.jT, "pointerPressed has no j.t write (k.java:486-494)")
         w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, x, y)))
-        assertEquals(0, w.kJT)
+        assertEquals(0, w.jT)
     }
 
-    @Test fun `fail screen flushes a held pad bit for one frame`() {
+    @Test fun `fail screen skips its first frame after K()`() {
         val w = world()
-        val (x, y) = w.cellPoint(0)
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
-        assertTrue(w.kJT != 0)
-        // the fatal press stays latched when the screen flips to 12 —
-        // `j.i()` true → `j.t=0` and the frame's menu is skipped
+        w.jT = 16                                // K() at load (k.java:2674)
         w.stateL(12)
-        w.tick(emptyList())
-        assertEquals(0, w.kJT)
-        assertEquals(12, w.jC)
-        // next frames dispatch normally (NO row → menu)
+        // the skipped frame: `j.i()` true → `j.t=0`, no b(true)/L()/Q()
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
             InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
+        assertEquals(0, w.jT)
+        assertEquals(12, w.jC, "the tap on the skipped frame is not read")
+        // next frames dispatch normally (NO row → menu)
+        w.tick(listOf(
+            InputQueue.Event(2, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(3, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 
     @Test fun `a manually latched bit flushes on the next frame`() {
         val w = world()
         w.stateL(12)
-        w.kJT = 1 shl 2                       // simulate a held pad bit
+        w.jT = 1 shl 2                        // any bit: `j.i()` = `t != 0`
         w.tick(emptyList())
         // `j.i()` true → `j.t=0`, frame skipped; next tap dispatches
-        assertEquals(0, w.kJT)
+        assertEquals(0, w.jT)
         assertEquals(12, w.jC)
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
@@ -11407,8 +11408,8 @@ class Slice95Test {
         var g2 = 0                                     // l(21) dialogs eat ticks
         while (!w.failed && g2++ < 40) w.tick(emptyList())
         assertTrue(w.failed)
-        var g3 = 0                                     // j.t held-bits flush
-        while (w.kJT != 0 && g3++ < 10) w.tick(emptyList())
+        var g3 = 0                                     // j.t frame skip
+        while (w.jT != 0 && g3++ < 10) w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
         assertFalse(w.kDe, "f() reload clears de (k.java:5131)")
@@ -11682,8 +11683,12 @@ class Slice98Test {
     @Test fun `vignette gated off play state`() {
         val w = world(); w.npcs.clear(); w.stateL(8)
         w.iBh = 8; w.stateL(12)
+        // l(12)'s b(true) (k.java:1657) runs before `j.c = 12` is
+        // committed, so its tail still sees j.c==8 and steps fs once
+        // (:3190-3196, slice 376)
+        assertEquals(70, w.kFs, "the transition's b(true) steps fs")
         tickClean(w, 1)
-        assertEquals(80, w.kFs, "j.c!=8 → fs frozen")
+        assertEquals(70, w.kFs, "j.c!=8 → fs frozen")
     }
 
     @Test fun `letterbox dz opens via av and chases aw`() {

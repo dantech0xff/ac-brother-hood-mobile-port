@@ -6,6 +6,12 @@ status: done
 
 # Slice 88 — the held-pad flush on fail/win screens
 
+> **Superseded by slice 376**
+> (`plans/261004-0130-slice376-jt-skip-latch/plan.md`): `j.a(i,z)` is not
+> a key handler — its only callers are the `b()` veil latch (bit 0) and
+> `K()` (bit 4), and the pointer/key handlers never write `j.t`. The
+> mapping below was a misread.
+
 Ports `j.t` / `j.i()` (j.java:105-345, proven): a bitmask latch of held
 pad bits 0-4 that the fail/win screen cases (`k.java:1109`) flush so a
 key held through the transition can't instantly confirm the dialog.
