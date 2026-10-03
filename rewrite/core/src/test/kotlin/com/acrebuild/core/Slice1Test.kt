@@ -22163,6 +22163,17 @@ class Slice245Test {
             // Scoped x>1100 so the x930-1040 pit keeps its tap-fall route.
             if (!p.aZ && p.ak > 1100 && p.ak < 1560)
                 held = held or Pad.M_UP
+            // G12 re-route: the zone vaults' S19/S43 flights reach the
+            // x1400 face 11px higher than before (the zone's vault and the
+            // player's integration now share a frame), so a grab on first
+            // contact (y523) kicks the S36 arc over the ax7 slot's box
+            // [1318,456..1334,472]. Keep aF unarmed (no UP/taps — it
+            // persists until a grab) and arm it only once the slide down
+            // the face reaches y530: the grab lands at the old y~534.
+            if (!p.aZ && (p.S == 19 || p.S == 43) && p.ak in 1240..1395 &&
+                p.al in 400..640)
+                held = if (p.ak >= 1370 && p.al >= 530)
+                    Pad.M_RIGHT or Pad.M_UP else Pad.M_RIGHT
             // x900-face climb + roof-edge jump into ax22 zone1: the
             // designed route climbs the x900-1120 building's west face
             // to its y780 roof, then vaults east off the lip into
