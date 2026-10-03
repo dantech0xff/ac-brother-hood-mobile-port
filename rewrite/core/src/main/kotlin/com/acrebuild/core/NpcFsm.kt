@@ -243,12 +243,11 @@ class NpcFsm(val world: LevelCellSource) {
         return if (v < 12) v >= 5 else true
     }
 
-    /** `am()` (i.java, proven): wall/ledge within 3 cells above foot row. */
-    private fun wallAhead(e: Entity): Boolean {
-        val cx = e.ak / 20 + (if (e.av) -1 else 1)
-        for (r in 1..3) if (e.e(world, cx, e.al / 20 - r) >= 12) return true
-        return false
-    }
+    /** `i.am()` (structured/i.java:5832-5843, proven) — one function for
+     *  every type: no wall while riding a support (`s != null`), else a
+     *  solid cell (`e() >= 12`) in the 3 rows above the feet on the
+     *  facing side. */
+    private fun wallAhead(e: Entity): Boolean = ceilingProbe73(e, world)
 
     /** `i.aG()` (structured/i.java:7258-7274, proven) — the same
      *  function for every type: the crate-edge rule while riding an ax51
@@ -864,8 +863,8 @@ class NpcFsm(val world: LevelCellSource) {
             val s0 = e.s
             if (s0 != null && s0.ax == 51 && s0.ag != 0) e.ag = s0.ag
         }
-        if (e.s == null && e.standingOn == null &&
-            !h(e.ak / 20, e.al / 20) && !h(e.ak / 20, e.al / 20 + 1)) {
+        if (!h(e.ak / 20, e.al / 20) && !h(e.ak / 20, e.al / 20 + 1) &&
+            e.s == null) {
             e.setAnim(25)                               // open cells → fall
             world.sfx(24)                               // k.A(24)
         }
@@ -973,7 +972,8 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
-    // -- L357 patrol (proven structure) ----------------------------------------
+    // -- L357 patrol: `case 2/3/92` (structured/i.java:4104-4135; bytecode
+    //    i.javap.txt I() offsets 4019-4523, proven) ----------------------------
     private fun patrolArm(e: Entity, player: Entity, tail: BooleanArray) {
         if (e.S == 3) {
             e.k = true
@@ -982,31 +982,27 @@ class NpcFsm(val world: LevelCellSource) {
         }
         if (e.k) {
             val home = e.Z[3]; val rangeL = e.Z[5]; val rangeR = e.Z[6]
-            val inWalk: Boolean
-            if (wallAhead(e) || edgeAhead(e)) {
-                // L370: edge path — nudge away then still allowed to walk
+            // z4 = "turn here": a wall or edge ahead (an edge with `ag != 0`
+            // first steps back 3 px), or past the patrol range on the side
+            // it faces (offsets 4149-4202).
+            val turn: Boolean
+            if (wallAhead(e) || edgeAhead(e)) {             // am() || aG()
                 if (edgeAhead(e) && e.ag != 0) e.ak += if (e.av) -3 else 3
-                inWalk = true
+                turn = true
             } else {
-                inWalk = if (((e.ak - home) / 20) >= -rangeL && e.av) true
-                    else if (((e.ak - home) / 20) > rangeR) e.av
-                    else false
+                val cells = (e.ak - home) / 20
+                turn = (cells < -rangeL && e.av) || (cells > rangeR && !e.av)
             }
-            if (inWalk) {
-                if (e.platform == null || e.Z[7] <= 0) {
+            // A soldier linked to a crate (`Z[7]` → ax51) it is not riding
+            // yet never stops to turn (offsets 4206-4259).
+            if (turn) {
+                val q = if (e.s == null && e.Z[7] > 0) world.findByAw(e.Z[7]) else null
+                if (q == null || q.ax != 51) {
                     e.setAnim(2)
                     if (e.aC > 0) e.aC--
                     else { e.aC = 20; e.setAnim(3); e.av = !e.av }
                 }
             }
-        }
-        // i.java:4165-4170 (proven): the crate/carrier ride helper runs
-        // every patrol tick while not in hit-react — a moving crate feeds
-        // its velocity into the soldier.
-        if (e.S != 85) {
-            crateRide11(e)
-            val s = e.s
-            if (s != null && s.ax == 51 && s.ag != 0) e.ag = s.ag
         }
         // L410-L436 flag/kill arms (i.java:6010-6040, proven) — runs
         // every patrol tick:

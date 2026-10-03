@@ -106,7 +106,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var standingOn: Entity?
         get() = ga
         set(v) { ga = v }
-    var platform: Entity? = null     // `s` — linked platform/rope (null here)
     /** `ac` — resolved link target; writes run `i.a(i)` (i.java:229,
      *  proven): clear `P|256` on the old target, set it on the new. */
     var ac: Entity? = null
