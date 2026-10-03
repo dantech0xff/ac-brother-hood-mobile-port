@@ -899,10 +899,13 @@ class NpcFsm(val world: LevelCellSource) {
         // `r14 → j()` player→NPC damage intake (i.java:6234; port :1305-1403)
         e.refreshBoxes(); player.refreshBoxes()
         if (tail[2] && jIntake(e, player, world)) return    // → L849
-        // `k.C != null && k.C.ab() → r13=false` (i.java:6238-6240, proven):
-        // a live script-claim suppresses the melee application.
+        // `k.C != null && k.C.ab() → r13=false` (simple/i.java:6251-6253,
+        // proven): a running script claim suppresses the melee application.
+        // `i.ab()` = `ca>=0 && !cd[0] && cK>=0` with `cK` the script step
+        // (i.javap.txt:68769-68793) — `claimAb()`; a paused claim (`cd[0]`)
+        // does not suppress (slice 367).
         val kc = world.kC
-        if (kc != null && kc.claimLive()) tail[1] = false
+        if (kc != null && kc.claimAb()) tail[1] = false
         // `r13 → aB()` (i.java:6244; ax11/ax73 arms :8845-8918)
         if (tail[1]) meleeApply(e, player, world)
         // L827+ aA-branch (i.java:6245-6250): non-attacker drops the

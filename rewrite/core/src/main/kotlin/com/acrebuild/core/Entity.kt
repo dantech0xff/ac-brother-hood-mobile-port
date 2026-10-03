@@ -1694,13 +1694,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  clear) && `cK >= 0` (not the -1/-2 terminal latch). */
     fun claimActive(): Boolean = ca >= 0 && !cd[0] && scriptStep >= 0
 
-    /** `i.ab()` (i.java:20564-20577, proven): bound-claim LIVE — a
-     *  counter bound (`ca>=0`), the claim flag bit set (`cd[0]==true`),
-     *  and a live claim step (`cK>=0`). Read by the L777 tail
-     *  (`k.C.ab()`) to suppress aB() melee while a script claim runs —
-     *  note cd[0] is INVERTED vs claimActive()'s `!cd[0]`. */
-    fun claimLive(): Boolean = ca >= 0 && cd[0] && cK >= 0
-
     /** `g.c()` (g.java:421, proven): player mid-combo anims
      *  {112, 113, 114, 115} — `k.m` early-returns while true. */
     fun aSC(): Boolean = S == 112 || S == 113 || S == 114 || S == 115
