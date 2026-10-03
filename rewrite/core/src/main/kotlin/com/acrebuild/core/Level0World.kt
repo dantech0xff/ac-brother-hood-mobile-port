@@ -5240,17 +5240,13 @@ class Level0World(
 
         // knockout: d() → x[1]<=0 → k.l(12) (proven)
         if (player.x1 <= 0) stateL(12)
-        // below camera bottom (B(), i.java:1386-1389, proven):
-        // `if (!v()) { if (al > k.P + 240) l(12) }` — in the original this
-        // sits inside n(), the player's own tick, so it runs BEFORE any
-        // entity's claim ops and can never see the post-op camera pan: a
-        // script that binds a hold on the player while snapping the camera
-        // away (mission-4 script 41's op11 snap + op21 hold) skips it.
-        // The equivalent here is a LIVE re-check (not the tick-top local):
-        // on the bind tick the claim is already bound by the time the pan
-        // lands, so the gate is closed.
-        else if (!claimSuspendsPlayer() && !player.inPlayV(this) &&
-                 player.al > camY + VIEW_H) stateL(12)
+        // Slice 363: there is no below-the-camera kill here. The original's
+        // `!v() && al > k.P + 240 → k.l(12)` lives only in `i.B()`
+        // (structured i.java:1034-1035), whose one caller is `g.n()`
+        // (g.javap.txt:17406), whose one caller is `I()`'s `case 25`
+        // (i.javap.txt:19687 → 19877) — the flying player. That path is
+        // `Entity.canyonCollide` (L1f7) inside `flightTick`; a ground
+        // player (`case 0 → aS.e()`) never runs it.
 
         // k.I()'s SECOND `bd[]` pass (k.java:10032-10150, proven):
         // buildDrawList + per-entry `ad.F()`/`F()` + the gated `k.E`
