@@ -1982,7 +1982,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
 
     private fun carryClaimable(e: Entity): Boolean {
         val r = world.kAc ?: return false
-        if (!Entity.overlapI(e.W, r)) return false
+        if (!Entity.overlapStrict(e.W, r)) return false      // h(i) @13 i.a(W, k.ac)
         return when (e.ax) {
             11, 73 -> !e.deadRelease() && e.aA >= 1
             17, 50 -> true
@@ -2802,10 +2802,12 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     /** `i.v()` ax25 tail (i.java:597-640, proven subset) — the flying
      *  player stays "alive" while its `Y` box overlaps the camera rect
      *  `k.ac` (`ax!=14 → a(k.ac, this.Y)` on bh3). The `u()`/`au>i`
-     *  screen-score guard is `offscreenScore`/`inPlayV` on Entity. */
+     *  screen-score guard is `offscreenScore`/`inPlayV` on Entity.
+     *  `a(k.ac, Y)` is `i.a(int[],int[])` (v() offset 331): a point `Y`
+     *  never overlaps (slice 364 — was an inline plain overlap). */
     private fun flightAliveV(p: Entity): Boolean {
         val ac = world.kAc ?: return true
-        return p.Y[0] <= ac[2] && p.Y[2] >= ac[0] && p.Y[1] <= ac[3] && p.Y[3] >= ac[1]
+        return Entity.overlapStrict(ac, p.Y)
     }
 
     companion object {

@@ -2240,7 +2240,7 @@ class Level0Renderer {
         val free = p.af == null || p.af === e
         val near = p.S != 9 &&
             ((p.af === e && p.ak > wa[0] && p.ak < wa[2]) ||
-             Entity.overlapI(p.W, wa))
+             Entity.overlapStrict(p.W, wa))                     // aU() @142 i.a(aS.W, W)
         var i10 = -1; var i3 = wa[1] - camY; var i11 = 0
         if (near) {
             if (p.ak >= wa[0] && p.ak <= wa[2]) i10 = p.ak - camX

@@ -785,7 +785,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         cB -= cF shr 8
         if (cy in (Trig.N + 1) until Trig.O) cy += cx else if (cy > Trig.O || cy < Trig.N) cy -= cx
         orbitPosition()
-        if (overlapI(W, f.W)) {
+        if (overlapStrict(W, f.W)) {
             setAnim(22)
             ag = -(cF shr 8) * Trig.cos(cy)
             ah = (cF shr 8) * Trig.cos(Trig.N - cy)
@@ -806,7 +806,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         cB -= cF shr 8
         if (cy in (Trig.N + 1) until Trig.O) cy += cx else if (cy > Trig.O || cy < Trig.N) cy -= cx
         orbitPosition()
-        if (overlapI(W, f.W)) { F = null; Entity.at = null }
+        if (overlapStrict(W, f.W)) { F = null; Entity.at = null }
         wallProbe(w)
     }
 
@@ -1360,10 +1360,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `i.v()` player arm (i.java:2155-2160 L144, proven): entity types
      *  not whitelisted fall to `a(k.ac, Y)` — the Y box vs the camera
-     *  active rect (same predicate `flightAliveV` uses for `g.n()`). */
+     *  active rect (same predicate `flightAliveV` uses for `g.n()`).
+     *  That is `i.a(int[],int[])` (v() offset 331), so a point `Y` never
+     *  overlaps (slice 364 — was an inline plain overlap). */
     private fun yOverlapsCam(world: LevelCellSource): Boolean {
         val ac = world.kAc ?: return true
-        return Y[0] <= ac[2] && Y[2] >= ac[0] && Y[1] <= ac[3] && Y[3] >= ac[1]
+        return overlapStrict(ac, Y)
     }
 
     /**
@@ -3283,17 +3285,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (au > i) return false               // offscreen score
         if (ax == 60) return true
         if (ax == 11 && Z[8] == 888) return true
+        // Slice 364: each test below is one of v()'s four `i.a(int[],int[])`
+        // calls (bytecode v() offsets 251/265/320/331) and reads the same
+        // boxes through `overlapStrict` — point boxes never count.
+        // Known non-overlap divergences (follow-up, slice 364 plan): v()
+        // gates the @251 arm on `k.bh[k.aj]==3` (offsets 206-214), not
+        // `inPlay` (= !k.al), and also sends ax78 S3 to the @320 W arm
+        // (offsets 296-313); `inPlayV` is the faithful v().
         if (ax == 14) {                        // L51 ax14 arm
             if (S == 76) return true
             if (W.contentEquals(ZERO_RECT)) return true
-            val view = world.camRect
             if (world.inPlay || S == 69 || S == 70 || S == 71)
-                return overlapI(view, Y)
-            return overlapI(world.playerRect(), W)
+                return overlapStrict(world.camRect, W)   // @251 i.a(k.ac, W)
+            return overlapStrict(world.playerRect(), W)  // @265 i.a(aS.W, W)
         }
-        // L73: ax∈{37,10,60} → a(k.ac, W); ax==78&&S!=3 → a(k.ac,Y)
-        if (ax == 37 || ax == 10 || ax == 60) return overlapI(world.camRect, W)
-        return overlapI(world.camRect, Y)      // L85 — ax67 lands here
+        // L73: ax∈{37,10,60} → a(k.ac, W); else a(k.ac, Y)
+        if (ax == 37 || ax == 10 || ax == 60)
+            return overlapStrict(world.camRect, W)       // @320 i.a(k.ac, W)
+        return overlapStrict(world.camRect, Y)           // @331 i.a(k.ac, Y) — ax67 lands here
     }
 
     companion object {
@@ -3438,18 +3447,22 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  `e()` (g.java:580) and cleared on the arm at g.java:3757;
          *  NEVER READ anywhere — write-only. Ported for parity. */
         var gCn = 0
-        /** `i.a(int[],int[])` (i.java:632, proven) — inclusive-edge overlap. */
         /** `i.a(int,int,int[])` (i.java:684, proven): inclusive
          *  point-in-rect — `x∈[W0,W2] && y∈[W1,W3]`. */
         fun pointInBox(x: Int, y: Int, W: IntArray): Boolean =
             x >= W[0] && x <= W[2] && y >= W[1] && y <= W[3]
 
+        /** Plain inclusive overlap WITHOUT the point-box rejects. Not a
+         *  port of anything: the original's rect test is `i.a(int[],int[])`
+         *  = [overlapStrict]. Kept only for test/bot-side geometry; port
+         *  code must not use it (slice 364 moved every call site off it). */
         fun overlapI(a: IntArray, b: IntArray): Boolean =
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
 
-        /** `i.a(int[],int[])` (i.java:632, proven): `overlapI` plus the
-         *  point-box rejects — a fully-degenerate rect on either side
-         *  (x0==x2 && y0==y3) never overlaps. */
+        /** `i.a(int[],int[])` (structured i.java:540-558, simple :632,
+         *  bytecode `a:([I[I)Z`, proven): null → false; inclusive overlap;
+         *  then the point-box rejects — a fully-degenerate rect on either
+         *  side (`[0]==[2] && [1]==[3]`) never overlaps. */
         fun overlapStrict(a: IntArray?, b: IntArray?): Boolean =
             a != null && b != null &&
             a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1] &&
@@ -3732,7 +3745,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         var r6 = false
         for (r0 in w.npcs) {
             if (r0 === this) continue
-            if (!overlapI(r0.W, X)) continue
+            if (!overlapStrict(r0.W, X)) continue
             if (r0.ax == 19 && r0.S == 2) { r0.setAnim(3); r6 = true }
             if (S != 17) continue
             if (r0.ax == 17 && r0.S != 69) { sweepHit(w, r0); r6 = true; continue }
@@ -3765,12 +3778,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val afAx = af?.ax
         scan@ for (r0 in w.npcs) {
             if (r0 === this) continue
-            if (!overlapI(r0.W, X)) continue
+            if (!overlapStrict(r0.W, X)) continue
             when (r0.ax) {
                 54 -> {
                     if (afAx == 54 || afAx == 30) continue
                     r0.ad?.let { a ->
-                        if (overlapI(a.W, X)) {
+                        if (overlapStrict(a.W, X)) {
                             a.setAnim(2)
                             spawnDebris24(w, 8, a.ak, a.al)   // d(8, ak, al)
                         }
@@ -4563,7 +4576,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     w.iR[2] = link.ak + 10; w.iR[3] = link.al + 10
                     val ps = w.player.S
                     if (ps != 233 && ps != 22 && ps != 23 &&
-                        overlapI(w.player.X, w.iR)) {
+                        overlapStrict(w.player.X, w.iR)) {
                         // L3033-L3046: walk the af-chain; at the first
                         // S==10 hop write iv.Z[4..7] = span-to-hop coords,
                         // unbind af.Z[0], and tombstone the double-hop

@@ -238,8 +238,9 @@ class NpcFsm(val world: LevelCellSource) {
         e.ax == 58 && (e.S == 1 || e.S == 3 || e.S == 4 ||
                        e.S == 6 || e.S == 8 || e.S == 10 || e.S == 12)
 
-    private fun rectsOverlap(a: IntArray, b: IntArray): Boolean =
-        a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
+    // Slice 364: every rect test here ports `i.a(int[],int[])`
+    // (structured i.java:540-558) and goes through `Entity.overlapStrict`,
+    // which keeps its point-box rejects; the private plain overlap is gone.
 
     // -- helpers ------------------------------------------------------------
 
@@ -388,7 +389,7 @@ class NpcFsm(val world: LevelCellSource) {
                 // Z0==0 && aB>bu/2 → L849; Z0==0 && aB<=bu/2 → L495 tail.
                 // r() → g.g()? i(2) : i(23)+aC=10 → L777.
                 tail[2] = true
-                if (Entity.overlapI(player.W, e.X) &&
+                if (Entity.overlapStrict(player.W, e.X) &&
                     player.inFrontOf(e) && player.S == 6) {
                     player.applyHit(34, 0, e, world)            // aS.a(34,0,0,this)
                     e.setAnim(18)
@@ -952,7 +953,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.ax == 0) return                                    // L909
         if (e.P and 4096 == 0) return                            // L5
         val r9 = e.W
-        if (!Entity.overlapI(p.W, r9)) return                    // L7
+        if (!Entity.overlapStrict(p.W, r9)) return                    // L7
         if (p.ah > 0 || e.ah < 0) {                              // → L11
             if (p.W[1] < r9[1] && p.W[3] < r9[3] &&
                 p.ak > r9[0] && p.ak < r9[2]) {
@@ -1062,7 +1063,7 @@ class NpcFsm(val world: LevelCellSource) {
             if (e.Z[7] > 0) {
                 val q = world.findByAw(e.Z[7])
                 if (q != null && (q.ax == 51 || q.ax == 43) &&
-                    Entity.overlapI(e.W, q.W)) {
+                    Entity.overlapStrict(e.W, q.W)) {
                     e.s = q
                     if (e.S != 3) { e.setAnim(2); e.aA = 0 }
                     e.al = q.W[1] + 1
@@ -1072,7 +1073,7 @@ class NpcFsm(val world: LevelCellSource) {
         } else if (s.ax == 51 || s.ax == 43) {
             if (s.ax == 51 && s.S == 2) {
                 e.setAnim(96)
-            } else if (Entity.overlapI(e.W, s.W)) {
+            } else if (Entity.overlapStrict(e.W, s.W)) {
                 if (!Entity.grabLatch && e.aA != 0) {       // !g.j (:7180)
                     e.av = world.player.ak < e.ak           // Q() (:6207)
                 }
@@ -1235,7 +1236,7 @@ class NpcFsm(val world: LevelCellSource) {
             // invisible zone clears BOTH globals — verbatim quirk: with
             // several S0 zones the last-ticked loser wins the wipe.
             0 -> {
-                if (rectsOverlap(player.W, e.W) && e.wasHitRecently(w)) {
+                if (Entity.overlapStrict(player.W, e.W) && e.wasHitRecently(w)) {
                     if (e.pv != 0) w.camAf = e.pv                    // L5c7
                     if (e.aG == 0) return                          // → L1ec7
                     w.camAg = e.aG                                 // L5d7
@@ -1254,7 +1255,7 @@ class NpcFsm(val world: LevelCellSource) {
             // zone removes itself via `k.c(this)` either way.
             2 -> {
                 if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L13b5
-                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                    if (!Entity.overlapStrict(player.W, e.W)) return       // → L1ec7
                 }
                 if (e.Z[0] == 2) {                                 // L13c5
                     if (e.Z[2] == 0) return                        // → L1ec7
@@ -1287,7 +1288,7 @@ class NpcFsm(val world: LevelCellSource) {
             // director "re-activate" bit. One-shot: self-removes.
             3 -> {
                 if (e.Z[0] == 1 || e.Z[0] == 2) {                  // L14bb
-                    if (!rectsOverlap(player.W, e.W)) return       // → L1ec7
+                    if (!Entity.overlapStrict(player.W, e.W)) return       // → L1ec7
                 }
                 if (e.Z[0] == 2) {                                 // L14cb
                     if (e.Z[2] == 0) return                        // → L1ec7
@@ -1306,29 +1307,33 @@ class NpcFsm(val world: LevelCellSource) {
             // = the `i`-typed claim owner, NOT the Image aQ at k.java:79
             // — JADX letter collision).
             47 -> { w.kAQ = null; return }                         // L219
-            // S48 = L166: when the player's tight rect overlaps, copy
-            // `p` (record f13 = "boss speed") onto the o-uid target's
-            // aG and remove. Debug print "Set Boss Speed=" omitted
-            // (proven-dead dev trace).
+            // S48 = L166: when the o-uid TARGET's own `Y` overlaps the
+            // zone, copy `p` (record f13 = "boss speed") onto its aG and
+            // remove. Debug print "Set Boss Speed=" omitted (proven-dead
+            // dev trace). Slice 364: the test is `i.a(r8.Y, W)` with
+            // r8 = k.q(o) (aV() offsets 358-381, `aload_1` = the target)
+            // — the port tested the player's Y.
             48 -> {
                 val t = w.findByAw(e.oId) ?: return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(t.Y, e.W)) return        // i.a(r8.Y, W)
                 t.aG = e.pv                                        // L19d
                 w.removeEntity(e); return                          // L1bb
             }
-            // S49 = L1bc: overlap → linked entity `i(20)`, remove.
+            // S49 = L1bc: the target's own `Y` overlaps → target `i(20)`,
+            // remove (aV() offsets 444-480: `i.a(r8.Y, W)`, slice 364).
             49 -> {
                 val t = w.findByAw(e.oId) ?: return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(t.Y, e.W)) return        // i.a(r8.Y, W)
                 t.setAnim(20)                                      // L1d8
                 w.removeEntity(e); return                          // L1e0
             }
             // S54 = L136: overlap + linked entity still at S29 →
-            // `i(30)`, remove. One-shot mission-step advance.
+            // `i(30)`, remove. One-shot mission-step advance. Here the
+            // test IS the player's Y: `i.a(k.aS.Y, W)` (offsets 331-341).
             54 -> {
                 val t = w.findByAw(e.oId) ?: return                // L165
                 if (t.S != 29) return
-                if (!rectsOverlap(player.Y, e.W)) return
+                if (!Entity.overlapStrict(player.Y, e.W)) return
                 t.setAnim(30)
                 w.removeEntity(e); return
             }
@@ -1375,7 +1380,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 // L3e7 — outside the band
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (!w.iBB || w.iBF < e.Z[2] || w.iBF > e.Z[3]) {
                         // L46b — abort: marker 71 + suppress + S34
                         player.releaseAe()
@@ -1433,10 +1438,10 @@ class NpcFsm(val world: LevelCellSource) {
             // (Slice 137/138 called this arm "S10" — the real S10 is L318
             // above; L1e1 is the dispatch's `case 46` target.)
             46 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     Entity.gq = true; player.gd = e
                 }
-                if (!rectsOverlap(player.W, e.W) && player.gd === e) {
+                if (!Entity.overlapStrict(player.W, e.W) && player.gd === e) {
                     Entity.gq = false; player.gd = null
                 }
             }
@@ -1445,7 +1450,7 @@ class NpcFsm(val world: LevelCellSource) {
             // overlap publishes `k.aB = k.d(1+k.aj, aF)` (level string)
             // + `k.aC = -1`; leaving clears `k.aB` when `aC <= 0`.
             4 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     w.kAB = w.levelString(1 + w.kAj, e.aF)          // L15b9
                     w.kAC = -1
                 } else if (w.kAC <= 0) w.kAB = null                 // L15dd
@@ -1455,7 +1460,7 @@ class NpcFsm(val world: LevelCellSource) {
             // (fire `u(16388)`/`v(16388)` OR direction-held matching
             // facing: `av ? u(2) : u(8)`) → player `i(22)` rise anim.
             5 -> {
-                if (rectsOverlap(e.W, player.W) &&
+                if (Entity.overlapStrict(e.W, player.W) &&
                     (w.padDown(16388) || pad.v(16388) ||
                      (player.av && w.padDown(2)) ||
                      (!player.av && w.padDown(8))))
@@ -1465,14 +1470,14 @@ class NpcFsm(val world: LevelCellSource) {
             // S6/S7 = L162e/L1643 (i.java:12173-12194): persisted flag
             // zones — overlap writes `k.aZ = 1` / `k.aZ = 0` (save byte
             // 68 — event-done toggles).
-            6 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = true; return }
-            7 -> { if (rectsOverlap(e.W, player.W)) w.kAZ = false; return }
+            6 -> { if (Entity.overlapStrict(e.W, player.W)) w.kAZ = true; return }
+            7 -> { if (Entity.overlapStrict(e.W, player.W)) w.kAZ = false; return }
             // S8 = L152b (i.java:12052-12076): alert-toggle zone —
             // overlap flips `i.bn` and self-removes; `bn` now true →
             // `i(0)` + `E()` + `i(79)` + `g.z=0`; now false → `i(80)` +
             // `g.z=1` + `k.v()`.
             8 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     w.iBn = !w.iBn                                  // L1546
                     w.removeEntity(e)
                     if (w.iBn) {
@@ -1494,7 +1499,7 @@ class NpcFsm(val world: LevelCellSource) {
             // S12 = L175c (i.java:12309-12321): one-shot screen
             // transition `k.n(aF)` (cO/cP) + self-remove.
             12 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     w.kNSet(e.aF)                                   // k.n(aF)
                     w.removeEntity(e)
                 }
@@ -1515,7 +1520,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val t = player.af ?: return                         // L1659
                 if (t.ax != 69) return
                 if (t.Z[0] != 0 && t.Z[0] != 1 && t.Z[0] != 2) return
-                if (!rectsOverlap(t.W, e.W)) return                 // L169c
+                if (!Entity.overlapStrict(t.W, e.W)) return                 // L169c
                 t.ah = 0; t.ag = 0
                 player.setAnim(0)
                 player.P = player.P and -65                         // ~64
@@ -1539,7 +1544,7 @@ class NpcFsm(val world: LevelCellSource) {
             // `ag=-p`, `av=1`, `ak=camR+width`; else `ag=p`, `av=0`,
             // `ak=camL-width`), `al=camT+70`, `aA=1`.
             18 -> {
-                if (!rectsOverlap(player.W, e.W)) return            // L1c98
+                if (!Entity.overlapStrict(player.W, e.W)) return            // L1c98
                 if (e.oId == -1) return
                 val t = w.findByAw(e.oId) ?: return                 // L1cb9
                 if (t.ax != 4 || t.S != 33) return                  // L1cd2
@@ -1562,7 +1567,7 @@ class NpcFsm(val world: LevelCellSource) {
             // true → `k.l(21)` dialog screen; then `k.x = 48` +
             // self-remove regardless.
             21 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (w.kBMark(8, 1 + w.kAj, e.aF, e.pv))
                         w.screenL(21)                               // L187f
                     w.kDlgX = 48                                    // k.x=48 (:12851)
@@ -1575,7 +1580,7 @@ class NpcFsm(val world: LevelCellSource) {
             // else `k.A(aF)` = `z(aF)` (the ==2 branch is verbatim
             // redundant — `A` delegates to `z`). Then `k.c(this)`.
             22 -> {
-                if (rectsOverlap(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     if (e.aF < 0) w.audioStop()                     // k.w()
                     else w.audioTrackPlay(e.aF)                     // z/A(aF)
                     w.removeEntity(e)
@@ -1589,7 +1594,7 @@ class NpcFsm(val world: LevelCellSource) {
             23 -> {
                 if (e.oId == -1) return                             // L1889
                 val t = w.findByAw(e.oId) ?: return                 // L18c7
-                if (t.ax == 11 && rectsOverlap(t.W, e.W))
+                if (t.ax == 11 && Entity.overlapStrict(t.W, e.W))
                     t.cq = !t.deadRelease()                         // P()→cq
                 else t.cq = false
                 return
@@ -1608,7 +1613,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (w.kC != null && w.kC!!.claimAb() && e.aA == 1)
                     return                                          // L1b44
                 if (e.aA == 0) {
-                    if (rectsOverlap(player.W, e.W)) {              // entry
+                    if (Entity.overlapStrict(player.W, e.W)) {              // entry
                         e.aA = 1
                         player.setAnim(297)
                         player.ak = (e.W[0] + e.W[2]) shr 1         // pin x
@@ -1616,7 +1621,7 @@ class NpcFsm(val world: LevelCellSource) {
                         player.ah = 0; player.ag = 0
                         player.aj = 0; player.ai = 0                // L1b9a
                     }
-                } else if (e.aA == 1 && !rectsOverlap(player.W, e.W))
+                } else if (e.aA == 1 && !Entity.overlapStrict(player.W, e.W))
                     e.aA = 2                                        // L1bca
                 if (e.aA == 1 && player.S != 298 && player.S != 293) {
                     when {                                          // L1be7
@@ -1650,7 +1655,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val eligible = player.af !== e &&
                     player.S != 291 && player.S != 270 && player.S != 271 &&
                     player.S != 90 && player.S != 89 && player.S != 43 &&
-                    rectsOverlap(player.W, e.W) && !enemiesAlert(w, player)
+                    Entity.overlapStrict(player.W, e.W) && !enemiesAlert(w, player)
                 if (!eligible) {                               // L313
                     e.releaseAe()                              // G()
                     return
@@ -1704,7 +1709,7 @@ class NpcFsm(val world: LevelCellSource) {
             // (also zeroes `ai/aj`) + `k.b()`.
             30 -> {
                 while (true) {
-                    if (!rectsOverlap(e.W, player.W)) return        // La72
+                    if (!Entity.overlapStrict(e.W, player.W)) return        // La72
                     e.P = e.P or 16
                     if (e.Z[6] == 3) { e.Z[1] = -1; e.Z[2] = 3 }
                     e.pv = e.Z[1]; e.aG = e.Z[2]                     // p/aG
@@ -1842,13 +1847,13 @@ class NpcFsm(val world: LevelCellSource) {
             // arm via `goto L1be7` — folded in by ordering.)
             28 -> {
                 if (player.gg == null && (player.aA and 8) == 0 &&
-                    rectsOverlap(player.W, e.W) && e.Z[0] == 0) {
+                    Entity.overlapStrict(player.W, e.W) && e.Z[0] == 0) {
                     player.aA = player.aA or 8                        // L1aba
                     player.z = false                                // g.z = 0
                     e.Z[0] = 1
                     if (w.iBn) player.az = -1                       // L1b0b
                 }
-                if ((player.aA and 8) != 0 && !rectsOverlap(player.W, e.W)
+                if ((player.aA and 8) != 0 && !Entity.overlapStrict(player.W, e.W)
                     && e.Z[0] == 1) {
                     player.aA = player.aA and -9                    // ~8
                     player.z = true                                 // g.z = 1
@@ -1896,7 +1901,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.claimAb()) { e.runClaimScript(w); return }       // L5f5
                 if (e.P and 8192 != 0) { w.removeEntity(e); return }   // L601
                 e.P = e.P or 128                                       // L611
-                if (!rectsOverlap(e.W, player.W)) {
+                if (!Entity.overlapStrict(e.W, player.W)) {
                     Entity.gE = false; return
                 }
                 val kc = w.kC                                          // L632
@@ -2028,7 +2033,7 @@ class NpcFsm(val world: LevelCellSource) {
             55 -> {
                 val boss = w.kAU ?: return                            // k.aU
                 if (boss.S != 13) return                              // Lf4 gate
-                if (!rectsOverlap(boss.Y, e.W)) return                // a(aU.Y, W)
+                if (!Entity.overlapStrict(boss.Y, e.W)) return                // a(aU.Y, W)
                 boss.setAnim(25)                                      // aU.i(25)
                 boss.ak = e.ak                                        // aU.ak ← zone x
                 boss.ah = 0                                           // zero velocities
@@ -2042,7 +2047,7 @@ class NpcFsm(val world: LevelCellSource) {
             // zone's center — `al = cy + 10*(halfW-|dx|)/halfW`,
             // `ah = 0`.
             32 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (player.ac == null) {
                         player.bindAc(e)                               // aS.a(r7) — bind + P|256
                         player.setAnim(38)                             // i(38)
@@ -2062,16 +2067,16 @@ class NpcFsm(val world: LevelCellSource) {
             // player's held entity `ga` is ax51 and overlaps → remove.
             41 -> {
                 val ga = player.ga ?: return
-                if (ga.ax != 51 || !rectsOverlap(ga.W, e.W)) return
+                if (ga.ax != 51 || !Entity.overlapStrict(ga.W, e.W)) return
                 w.removeEntity(e); return
             }
             // S42 = L1d75 (i.java:13074): overlap → `k.c(this)`
             // (one-shot remove trigger).
-            42 -> { if (rectsOverlap(player.W, e.W)) w.removeEntity(e); return }
+            42 -> { if (Entity.overlapStrict(player.W, e.W)) w.removeEntity(e); return }
             // S44 = L1a59 (i.java:12683-12696): meter-write zone —
             // overlap → `k.W = k.V - aE`, remove.
             44 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     w.kW = w.kV - e.aE                                 // L1a67
                     w.removeEntity(e)
                 }
@@ -2081,13 +2086,13 @@ class NpcFsm(val world: LevelCellSource) {
             // overlap → `bh[k.aj]==3` → player `i(34)` (hit react);
             // else `k.l(12)` mission-fail + remove.
             45 -> {
-                if (rectsOverlap(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     if (w.missionBh() == 3) player.setAnim(34)           // L1a97
                     else { w.screenL(12); w.removeEntity(e) }          // L1aad
                 }
                 return
             }
-            33 -> if (rectsOverlap(player.W, e.W)) {
+            33 -> if (Entity.overlapStrict(player.W, e.W)) {
                 if (player.S != 148 && player.S != 149 && player.S != 150) {
                     player.gB = e.av
                     player.gL = if (e.aG != 0)
@@ -2095,7 +2100,7 @@ class NpcFsm(val world: LevelCellSource) {
                     player.gA = true
                 }
             } else player.gA = false
-            36 -> if (rectsOverlap(player.W, e.W)) {
+            36 -> if (Entity.overlapStrict(player.W, e.W)) {
                 player.gn = e.W[0] + ((e.W[2] - e.W[0]) shr 1)
                 player.go = e.W[3]
                 if (e.aE >= 0) player.gk = e.aE
@@ -2106,7 +2111,7 @@ class NpcFsm(val world: LevelCellSource) {
                 player.gn = 0; player.go = 0; player.gk = -1
                 e.P = e.P and -17
             }
-            43 -> if (rectsOverlap(player.W, e.W) &&
+            43 -> if (Entity.overlapStrict(player.W, e.W) &&
                       (player.S == 60 || player.S == 61))
                 player.setAnim(203)
             // S34: `aV()`'s tick arm is the trivial L5e9
@@ -2138,7 +2143,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return                                             // L17cf
                 }
                 if (e.oId == -1) return                                // L17d0
-                if (rectsOverlap(player.W, e.W) && player.g == null) { // L17d9
+                if (Entity.overlapStrict(player.W, e.W) && player.g == null) { // L17d9
                     player.spawnMarker(w, 105,
                         (e.W[0] + e.W[2]) shr 1, e.al)                 // aS.a(105,…)
                     if (w.padHeld(16388) && !w.playerAttacking() &&
@@ -2156,7 +2161,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val ga = player.ga
                 if (ga != null && ga.ax == 43 &&
                     (ga.S == 1 || ga.S == 4)) {                  // L854/L860
-                    if (rectsOverlap(player.W, e.W)) {
+                    if (Entity.overlapStrict(player.W, e.W)) {
                         e.spawnMarker(world, 7, player.ak, player.al - 50)
                         e.ae?.let { it.ak = player.ak; it.al = player.al - 50 }
                         player.cFlag = false                     // g.C = false
@@ -2178,7 +2183,7 @@ class NpcFsm(val world: LevelCellSource) {
                 else if (world.cv === e && !Entity.overlapStrict(world.kAc, e.W))
                     world.cv = null
             }
-            53 -> if (player.gD && rectsOverlap(player.W, e.W) &&
+            53 -> if (player.gD && Entity.overlapStrict(player.W, e.W) &&
                       (player.S == 0 || player.S == 1 || player.S == 5)) {
                 player.setAnim(360)
                 player.ag = 0; player.ah = 0
@@ -2266,13 +2271,13 @@ class NpcFsm(val world: LevelCellSource) {
             5, 7 -> {
                 // L5 (i.java:6733): player mid-attack + body overlap arms it.
                 if (PlayerFsm.isAttackState(player.S)) {
-                    if (rectsOverlap(player.W, e.W)) {
+                    if (Entity.overlapStrict(player.W, e.W)) {
                         e.setAnim(e.S + 1); world.sfx(14); return
                     }
                 } else {
                     ctxZone(player)
                     if (player.S == 37 || player.S == 38 ||
-                        !rectsOverlap(e.W, ctxZone)) {
+                        !Entity.overlapStrict(e.W, ctxZone)) {
                         // L14: zone exit releases our claim (k.m()) and
                         // clears the marker popup (k.k(aw)).
                         if (world.claimed === e) {
@@ -2286,7 +2291,7 @@ class NpcFsm(val world: LevelCellSource) {
                     pushOut(e, player, world) // L18: a() solid-side helper
                 }
                 // L24: the player's attack hitbox reaching W also arms it.
-                if (rectsOverlap(player.X, e.W)) {
+                if (Entity.overlapStrict(player.X, e.W)) {
                     e.setAnim(e.S + 1); world.sfx(14)
                 }
             }
@@ -2313,10 +2318,10 @@ class NpcFsm(val world: LevelCellSource) {
                 // draw-list sweep over ax∈{4,11,17,73,15,23,29} ∩ X with
                 // per-type effects (ax4-S30→i(29) chain, ax29≠S20 → -50hp
                 // +i(20), melee set → `-bu[au]<<1`, ax15-S6 → i(7)+Z[3]=1).
-                if (rectsOverlap(player.W, e.X)) player.applyHit(4, 0, e, world)
+                if (Entity.overlapStrict(player.W, e.X)) player.applyHit(4, 0, e, world)
                 for (o in world.npcs) {
                     val hit = when (o.ax) {
-                        4, 11, 17, 73, 15, 23, 29 -> rectsOverlap(o.W, e.X)
+                        4, 11, 17, 73, 15, 23, 29 -> Entity.overlapStrict(o.W, e.X)
                         else -> false
                     }
                     if (!hit) continue
@@ -2335,10 +2340,10 @@ class NpcFsm(val world: LevelCellSource) {
                 // L78 (i.java:5570-5581, proven): blast proximity re-arm —
                 // player hitbox ∩W or mid-S295 (body ∩W || grapple link
                 // ∩W) → i(29) restarts the sweep.
-                if (rectsOverlap(player.X, e.W)) e.setAnim(29)
+                if (Entity.overlapStrict(player.X, e.W)) e.setAnim(29)
                 if (player.S == 295 &&
-                    (rectsOverlap(player.W, e.W) ||
-                     (player.ga != null && rectsOverlap(player.ga!!.W, e.W)))) {
+                    (Entity.overlapStrict(player.W, e.W) ||
+                     (player.ga != null && Entity.overlapStrict(player.ga!!.W, e.W)))) {
                     e.setAnim(29)
                 }
             }
@@ -2385,7 +2390,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (e.S == 18 && p.S != 12) return           // L16-21: player S12
                                                    // proceeds (i.java:926)
         if (e.S == 131 || e.S == 146) return
-        if (!rectsOverlap(p.W, e.W)) return
+        if (!Entity.overlapStrict(p.W, e.W)) return
         if (p.ga != null) return
         if (p.S > 43) return
         val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
@@ -2399,9 +2404,6 @@ class NpcFsm(val world: LevelCellSource) {
         p.collideSides(w, true)      // a(true) side-strip rescan + snap
         p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
     }
-
-    private fun overlap(a: IntArray, b: IntArray): Boolean =
-        a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1]
 
     // ============================================================ ax41 = n()
     // Knockable prop (i.java:6414, proven): vases/crates the player knocks
@@ -2420,7 +2422,7 @@ class NpcFsm(val world: LevelCellSource) {
             else -> false
         }
         if (carrier && kotlin.math.abs(o.al - e.al) > 20) return false
-        return Entity.overlapI(o.W, e.W)
+        return Entity.overlapStrict(o.W, e.W)
     }
 
     fun tickKnockable(e: Entity, w: Level0World, p: Entity) {
@@ -2436,7 +2438,7 @@ class NpcFsm(val world: LevelCellSource) {
                         continue                                    // L36
                     // `bd.W==null || this.W==null` — port W is never null;
                     // an all-zero box fails the overlap identically.
-                    if (!Entity.overlapI(o.W, e.W)) continue
+                    if (!Entity.overlapStrict(o.W, e.W)) continue
                     when (r0) {
                         0 -> o.setAnim(9)                             // L25
                         11 -> {                                       // L27
@@ -2505,7 +2507,7 @@ class NpcFsm(val world: LevelCellSource) {
     private fun grabZone(e: Entity, p: Entity): Boolean {
         if (!((e.ax == 51 && e.S == 8) || (e.ax == 66 && e.S == 13)))
             return false
-        return Entity.overlapI(p.W, e.W)
+        return Entity.overlapStrict(p.W, e.W)
     }
 
     /** `i.bn()` (i.java:~16272, proven): player carries a claim →
@@ -2521,7 +2523,7 @@ class NpcFsm(val world: LevelCellSource) {
     private fun platformGrabCheck(e: Entity, w: LevelCellSource,
                                   p: Entity): Boolean {
         var r5 = false
-        if (!Entity.overlapI(p.W, e.W) && !grabZone(e, p)) return false
+        if (!Entity.overlapStrict(p.W, e.W) && !grabZone(e, p)) return false
         if (!grabEligible(e)) return false
         if (p.ac != null) {
             // L11/L13/L18 — ac==this or dead claim → release then scan;
@@ -2560,7 +2562,7 @@ class NpcFsm(val world: LevelCellSource) {
         when (e.S) {
             // -- L5 board: overlap + alive + not mid-throw → ride -----
             6, 24 -> {
-                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (!Entity.overlapStrict(p.W, e.W)) return@run
                 if (p.x1 <= 0) return@run                          // g.g()
                 if (p.S == 50) return@run
                 e.setAnim(if (e.S == 6) 7 else 25)                  // L14
@@ -2571,7 +2573,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
             // -- L21 ride: bind, clamp upward vel, S43 snap, timer ---
             7, 25 -> {
-                if (!Entity.overlapI(p.W, e.W)) {
+                if (!Entity.overlapStrict(p.W, e.W)) {
                     if (p.ga === e) p.ga = null                     // L34
                 } else {
                     p.ga = e
@@ -2613,12 +2615,12 @@ class NpcFsm(val world: LevelCellSource) {
                 if (p.S == 252 && p.ga === e) { p.ga = null; return } // L115
                 platformGrabCheck(e, w, p)                          // br()
                 // L121 — falling into the grab zone mid-236/239 → aid
-                if (Entity.overlapI(p.W, e.X) && p.ah > 0 &&
+                if (Entity.overlapStrict(p.W, e.X) && p.ah > 0 &&
                     (p.S == 236 || p.S == 239)) platformSpawnAid(e, w, p)
                 val r8 = if (e.Z[4] != -1) w.findByAw(e.Z[4]) else null
                 // L131/L143 — player boards/attacks onto the crate
                 if (p.ga !== e && e.S != 13 &&
-                    Entity.overlapI(p.W, e.W) &&
+                    Entity.overlapStrict(p.W, e.W) &&
                     (p.gB() || p.S == 236 || p.S == 239)) {             // g.b(k.aS.S)
                     if (r8 != null && r8.ax == 66 && r8.S == 16) {
                         p.flingAirborne(p.ah, w); p.ga = null       // L143
@@ -2668,14 +2670,14 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                 }
                 // L232 — drift release (ran in every path)
-                if (p.ga === e && !Entity.overlapI(p.W, e.X) &&
+                if (p.ga === e && !Entity.overlapStrict(p.W, e.X) &&
                     p.S != 209) { p.ga = null; e.releaseAe() }
             }
             // -- L241 → S20 after aC countdown ----------------------
             14 -> { e.aC--; if (e.aC <= 0) e.setAnim(20) }
             // -- L75 link-check: target crate holds player → arm ---
             15 -> {
-                if (!Entity.overlapI(p.W, e.W)) return@run
+                if (!Entity.overlapStrict(p.W, e.W)) return@run
                 if (e.Z[0] == -1) return@run
                 val r03 = w.findByAw(e.Z[0])
                 if (r03 == null || r03.ax != 66 || r03.S != 12) return@run
@@ -2702,13 +2704,13 @@ class NpcFsm(val world: LevelCellSource) {
             19, 20, 21, 22 -> {
                 if (p.ga !== e) {                                   // L254
                     if (p.gB() &&                                     // g.b(k.aS.S)
-                        Entity.overlapI(p.W, e.W)) {
+                        Entity.overlapStrict(p.W, e.W)) {
                         p.setAnim(if (p.S == 264) 262 else 260)     // L260
                         p.aj = 0; p.ai = 0; p.ah = 0; p.ag = 0      // L261
                         p.ak = e.ak; p.al = e.al; p.ga = e
                     }
                 }
-                if (p.ga === e && !Entity.overlapI(p.W, e.W) &&     // L263
+                if (p.ga === e && !Entity.overlapStrict(p.W, e.W) &&     // L263
                     p.S != 261 && p.S != 259) p.ga = null
                 if (e.S == 19) {                                    // L274
                     if (e.Z[1] >= 0) { e.aC--; if (e.aC <= 0) e.setAnim(21) }
@@ -2731,7 +2733,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  `g.a == null` — player pressed against the crate while j-set. */
     private fun crateContact(e: Entity, w: LevelCellSource,
                              p: Entity): Boolean =
-        w.gj && Entity.overlapI(p.W, e.W) && p.ga == null
+        w.gj && Entity.overlapStrict(p.W, e.W) && p.ga == null
 
     /** `i.bp()` (i.java:15567, proven): `if (g.j) return false` — then
      *  `aS.S∈{43,35}` && `ah>0` && `W[0] < aS.ak < W[2]` &&
@@ -2745,7 +2747,7 @@ class NpcFsm(val world: LevelCellSource) {
         if (p.S == 284) return                                     // L6
         if (e.claimActive()) e.runClaimScript(w)                   // ab()→aa()
         // L9/L22 — walked off while carried → release
-        if (p.ga === e && !Entity.overlapI(p.W, e.W) &&
+        if (p.ga === e && !Entity.overlapStrict(p.W, e.W) &&
             p.S != 235 && p.S != 238 && p.S != 50 && p.S != 9) {
             p.ga = null; e.releaseAe()
         }
@@ -2756,7 +2758,7 @@ class NpcFsm(val world: LevelCellSource) {
                 p.S != 146 && p.S != 236 && p.S != 239 &&
                 p.S != 235 && p.S != 238 && p.S != 237 &&
                 p.S != 240 && p.S != 0 && p.S != 277 &&
-                Entity.overlapI(p.W, e.W) && e.S != 8) {           // L30
+                Entity.overlapStrict(p.W, e.W) && e.S != 8) {           // L30
                 if (p.S == 16 || p.Q == 16 ||
                     ((e.al - p.gy) / 20) < 20 || w.gH()) {         // L62
                     p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
@@ -2779,7 +2781,7 @@ class NpcFsm(val world: LevelCellSource) {
         }
         // L84/L94 — board arm: ac null or claimed-on-this + S236/239
         if (p.ga !== e && e.S != 8 && (p.ac == null || p.ac === e) &&
-            Entity.overlapI(p.W, e.W) &&
+            Entity.overlapStrict(p.W, e.W) &&
             (p.S == 236 || p.S == 239)) {
             p.setAnim(if (p.S == 236) 237 else 240)                // L103
             p.ah = 0; p.ag = 0; p.ga = e
@@ -2823,7 +2825,7 @@ class NpcFsm(val world: LevelCellSource) {
                     if (p.P and 1024 == 0) w.gc = e               // L192
                 }
                 if (p.ga === e) {                                 // L195/L197
-                    if (!Entity.overlapI(p.W, e.W) &&
+                    if (!Entity.overlapStrict(p.W, e.W) &&
                         p.S != 50 && p.S != 9) {
                         e.P = e.P and -17; p.ga = null; e.releaseAe()
                         return
@@ -2838,7 +2840,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
             2 -> {                                                // L213
                 e.releaseAe()
-                if (!Entity.overlapI(p.W, e.W)) {
+                if (!Entity.overlapStrict(p.W, e.W)) {
                     e.P = e.P and -17; p.ga = null; e.releaseAe()
                 }
                 if (e.animFinished()) { e.P = e.P or 64 or 32 }   // L217
@@ -2854,11 +2856,11 @@ class NpcFsm(val world: LevelCellSource) {
     // -1 keep, 0 → av=true, else av=false.
 
     fun tickZoneInteract(e: Entity, w: LevelCellSource, p: Entity) {
-        if (!Entity.overlapI(p.W, e.W) && e.S != 0) e.setAnim(0)
+        if (!Entity.overlapStrict(p.W, e.W) && e.S != 0) e.setAnim(0)
         when (e.S) {
             0 -> {                                        // L10
                 if (!p.gB()) return                       // g.b(S) gate
-                if (!Entity.overlapI(p.W, e.W)) return    // L49 (dropped)
+                if (!Entity.overlapStrict(p.W, e.W)) return    // L49 (dropped)
                 p.ak = e.ak; p.al = e.al                  // L12 snap
                 p.ah = 0; p.ag = 0
                 if (e.Z[3] != -1) p.av = e.Z[3] == 0      // L14/L18/L19
@@ -2922,7 +2924,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  aG!=-1 + Z[0] gate (Z0==1 requires the 65568 edge); sets `aS.P`
      *  facing bit by `aS.av`, then the `k.C` slot claim = `N()` body. */
     private fun eventBind(e: Entity, w: LevelCellSource, p: Entity) {
-        if (!Entity.overlapI(p.W, e.W)) return               // L5
+        if (!Entity.overlapStrict(p.W, e.W)) return               // L5
         if (e.aG == -1) return                               // L7
         when (e.Z[0]) {                                      // L7/L11
             0 -> {}
@@ -2997,7 +2999,7 @@ class NpcFsm(val world: LevelCellSource) {
                     return
                 }
                 // L11 — proximity arm
-                if (!Entity.overlapI(p.W, e.W)) return       // L224
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L224
                 e.eventArm(e.eventN, w)                      // b(this.n)
                 if (w.iAI <= 0) w.iAI = 1                    // L15
                 e.aC = e.aF * e.eventN
@@ -3007,7 +3009,7 @@ class NpcFsm(val world: LevelCellSource) {
             4 -> {                                           // L178
                 if (p.S == 50) return                        // L180
                 if (w.gG()) return                           // player dead
-                if (!Entity.overlapI(p.W, e.W)) return       // L228
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L228
                 w.screenL(15)                                // k.l(15)
                 return
             }
@@ -3016,7 +3018,7 @@ class NpcFsm(val world: LevelCellSource) {
             // ---------- S9 — claim stepper ----------
             9 -> {                                           // L186
                 if (e.Z[1] != 16) return                     // L229
-                if (!Entity.overlapI(p.W, e.W)) return       // L188
+                if (!Entity.overlapStrict(p.W, e.W)) return       // L188
                 if (e.Z[2] == -1) return                     // L231
                 val r02 = w.findByAw(e.Z[2]) ?: return       // L194
                 if (r02 !== w.kC) return                     // L196 gate
@@ -3145,7 +3147,7 @@ class NpcFsm(val world: LevelCellSource) {
     /** `i.h(i)` (i.java:20791, proven): dangerous on-screen enemy —
      *  `W ∩ k.ac` && (ax∈{17,50} → true; ax∈{11,73} → `!P() && aA>=1`). */
     private fun enemyDanger(r3: Entity, w: LevelCellSource): Boolean {
-        if (!Entity.overlapI(r3.W, w.camRect)) return false
+        if (!Entity.overlapStrict(r3.W, w.camRect)) return false
         return when (r3.ax) {
             17, 50 -> true
             11, 73 -> !r3.deadRelease() && r3.aA >= 1
@@ -3171,7 +3173,7 @@ class NpcFsm(val world: LevelCellSource) {
      *  `ax==27` callers skip the vertical inner gates (fire entity). */
     private fun pushApart(r7: Entity, P: Int, r9: IntArray, self: Entity) {
         if (P and 4096 == 0) return                          // L5
-        if (!Entity.overlapI(r7.W, r9)) return               // L7
+        if (!Entity.overlapStrict(r7.W, r9)) return               // L7
         // L7 head → L11b: from-above landing runs when r7 rises or self
         // falls; its W gates fall through to L24 on failure.
         if (r7.ah > 0 || self.ah < 0) {
@@ -3244,7 +3246,7 @@ class NpcFsm(val world: LevelCellSource) {
                 var engage = false
                 if (p.S != 267) {
                     if (p.S == 89 || p.S == 90) {            // L12→L20
-                    } else if (!Entity.overlapI(p.W, e.W)) {
+                    } else if (!Entity.overlapStrict(p.W, e.W)) {
                     } else if (enemiesAlert(w, p)) {
                     } else engage = true
                 }
@@ -3342,7 +3344,7 @@ class NpcFsm(val world: LevelCellSource) {
             15 -> {                                          // L91
                 e.P = e.P or 4096
                 if (p.X[0] != p.X[2] &&
-                    Entity.overlapI(e.W, p.X)) {             // L91-L94
+                    Entity.overlapStrict(e.W, p.X)) {             // L91-L94
                     e.aB -= 10
                     if (e.aB > 0) e.setAnim(5) else e.setAnim(12)
                 }
@@ -3465,7 +3467,7 @@ class NpcFsm(val world: LevelCellSource) {
             else -> return                                   // L123 default
         }
         // ---- L22-L53 S0 ride/board head -----------------------------
-        if (Entity.overlapI(p.W, e.W) && e.ah == 0) {        // L22+L24
+        if (Entity.overlapStrict(p.W, e.W) && e.ah == 0) {        // L22+L24
             if (p.ac === e) {                                // riding
                 val hop = w.padHeld(16388) ||                // L28 context tap
                     (p.av && w.padHeld(2)) ||                // L30 tap left
@@ -3531,7 +3533,7 @@ class NpcFsm(val world: LevelCellSource) {
             }
         }
         // L88 — player walked off the platform → unlink.
-        if (p.ac === e && !Entity.overlapI(p.W, e.W)) p.ac = null
+        if (p.ac === e && !Entity.overlapStrict(p.W, e.W)) p.ac = null
         // L93 — parked → done.
         if (e.ah == 0) return
         // L95 — departure fall: gravity, capped.
@@ -3542,7 +3544,7 @@ class NpcFsm(val world: LevelCellSource) {
         // L102 — crush any ax11 the falling gondola overlaps.
         for (n in w.npcs) {
             if (n.ax != 11) continue
-            if (!Entity.overlapI(n.W, e.W)) continue
+            if (!Entity.overlapStrict(n.W, e.W)) continue
             killByType(n)                                    // d(k.bd[r8])
             e.setAnim(1)
             return
@@ -3602,7 +3604,8 @@ class NpcFsm(val world: LevelCellSource) {
 
     /**
      * ax67 `bB()` (i.java:17584, proven transcription). Overlap checks use
-     * `i.a()` — INCLUSIVE edges (i.java:632, differs from `overlap`).
+     * `i.a(int[],int[])` = `Entity.overlapStrict` — INCLUSIVE edges plus
+     * the point-box rejects (structured i.java:540-558).
      * - bk==27 springboard: S∈{19,21,23,32,35,38} armed; W∩playerW →
      *   `ah=768+k.Y` + op40 grab + `i(S+1)`; then for S∈{19,21,23} the
      *   `bd[]` scan arms ax68-linked children (`ad.i(2)`, `d(8,…)`
@@ -3620,7 +3623,7 @@ class NpcFsm(val world: LevelCellSource) {
             when (e.S) {
                 19, 21, 23, 32, 35, 38 -> {
                     // L7: player body reaches the pad → bounce + grab
-                    if (Entity.overlapI(e.W, player.W)) {
+                    if (Entity.overlapStrict(e.W, player.W)) {
                         player.ah = 768 + world.kY
                         player.applyHit(40, 0, e, world)   // a(40,0,0,this)
                         if (e.S != 39) e.setAnim(e.S + 1)
@@ -3631,7 +3634,7 @@ class NpcFsm(val world: LevelCellSource) {
                     for (r0 in world.npcs) {
                         val ad = r0.ad ?: continue
                         if (ad.ax != 68) continue
-                        if (!Entity.overlapI(e.W, ad.W)) continue
+                        if (!Entity.overlapStrict(e.W, ad.W)) continue
                         if (e.S != 39) e.setAnim(e.S + 1)
                         ad.setAnim(2)
                         e.spawnFloatie(world, 8, ad.ak, ad.al)   // d(8,…)
@@ -3652,7 +3655,7 @@ class NpcFsm(val world: LevelCellSource) {
             28 -> {
                 // L46: r02 = player side vs prop centerline
                 val r02 = player.ak - ((e.W[0] + e.W[2]) shr 1)
-                if (Entity.overlapI(e.X, player.W) &&
+                if (Entity.overlapStrict(e.X, player.W) &&
                     !e.wasHitRecently(world)) {
                     val ae = player.ae
                     if (ae == null) {
@@ -3666,7 +3669,7 @@ class NpcFsm(val world: LevelCellSource) {
                     // ae exists but isn't a 71 → fall to the shove check
                 }
                 // L62: player inside the body → hard shove out
-                if (Entity.overlapI(e.W, player.W)) {
+                if (Entity.overlapStrict(e.W, player.W)) {
                     player.setAnim(309)
                     player.aC = 5
                     if (r02 >= 0) { player.ag = 2560; player.av = true }
@@ -3680,7 +3683,7 @@ class NpcFsm(val world: LevelCellSource) {
             12 -> {
                 if (e.Z[1] != 1) return                  // L72
                 // L74: un-guarded + overlap → bind (aA|=8, g.e, az-1)
-                if (player.gg == null && Entity.overlapI(e.W, player.W)) {
+                if (player.gg == null && Entity.overlapStrict(e.W, player.W)) {
                     player.aA = player.aA or 8
                     player.ge = e
                     player.az = e.az - 1
@@ -3742,7 +3745,7 @@ class NpcFsm(val world: LevelCellSource) {
     fun tickPickup(e: Entity, player: Entity) {
         // anim advance: I() preamble (i.java:15232)
         if (e.W.contentEquals(Entity.ZERO_RECT)) return      // L6 W==null
-        if (Entity.overlapI(player.Y, e.W) && !player.isHolding()) {
+        if (Entity.overlapStrict(player.Y, e.W) && !player.isHolding()) {
             e.aF = 1
             e.P = e.P and -129
         }
@@ -3761,7 +3764,7 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.aC <= 0) world.removeEntity(e)
                 return
             }
-            if (e.aF == 1 && !Entity.overlapI(player.Y, e.W))
+            if (e.aF == 1 && !Entity.overlapStrict(player.Y, e.W))
                 e.P = e.P or 128
             if (r5.S != e.j) return                          // watch state
             if (e.aA == 1) return                            // persistent
@@ -3769,7 +3772,7 @@ class NpcFsm(val world: LevelCellSource) {
             return
         }
         if (e.aF != 1) return                                // never touched
-        if (Entity.overlapI(player.Y, e.W)) return           // still inside
+        if (Entity.overlapStrict(player.Y, e.W)) return           // still inside
         if (e.aA == 1) { e.P = e.P or 128; return }          // hide, keep
         world.removeEntity(e)                                // collected
     }
@@ -3793,7 +3796,7 @@ class NpcFsm(val world: LevelCellSource) {
         // anim advance: I() preamble (i.java:15232)
         when (e.S) {
             30, 38 -> {                   // L9/L15 — equip pickups
-                if (!Entity.overlapI(player.W, e.W)) return
+                if (!Entity.overlapStrict(player.W, e.W)) return
                 val bit = if (e.S == 30) 2 else 8
                 player.requestAction(bit, world)
                 player.requestH(bit, world)
@@ -3803,7 +3806,7 @@ class NpcFsm(val world: LevelCellSource) {
                 world.removeEntity(e)
             }
             39 -> {                       // L21 — mount-request pickup
-                if (!Entity.overlapI(player.W, e.W)) return
+                if (!Entity.overlapStrict(player.W, e.W)) return
                 player.requestAction(4, world)
                 world.removeEntity(e)
             }
@@ -3830,11 +3833,11 @@ class NpcFsm(val world: LevelCellSource) {
                 if (world.missionBh() == 3) {
                     e.ah = 0; e.ag = 0
                     if (e.af === player) e.sweepNeighborsB(world)
-                    else if (Entity.overlapI(e.X, player.W))
+                    else if (Entity.overlapStrict(e.X, player.W))
                         player.applyHit(38, 0, e, world)
                 } else {
                     e.sweepNeighbors(world)
-                    if (Entity.overlapI(e.X, player.W))
+                    if (Entity.overlapStrict(e.X, player.W))
                         player.applyHit(4, 0, e, world)
                 }
                 e.af = null
@@ -3853,7 +3856,7 @@ class NpcFsm(val world: LevelCellSource) {
                 e.aj = 512
                 if (e.ah == 0 && e.ag != 0) e.spawnMarker(world, 4, e.ak, e.al - 60)
                 var r9 = false
-                if (Entity.overlapI(player.W, e.X)) {
+                if (Entity.overlapStrict(player.W, e.X)) {
                     if (!world.playerAttacking()) {
                         player.applyHit(4, 0, e, world); r9 = true
                     } else if (!e.bR) {
@@ -3876,7 +3879,7 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                 }
                 if (e.bR && e.af?.ax == 23 &&
-                    Entity.overlapI(e.W, e.af!!.W)) {
+                    Entity.overlapStrict(e.W, e.af!!.W)) {
                     e.af!!.aB = 0; e.af!!.setAnim(79); r9 = true
                 }
                 if (r9) {
@@ -3913,7 +3916,7 @@ class NpcFsm(val world: LevelCellSource) {
             // `v()` view check.
             22, 23 -> {
                 if (e.W.contentEquals(Entity.ZERO_RECT)) { world.removeEntity(e); return }
-                if (Entity.overlapI(player.W, e.W)) {
+                if (Entity.overlapStrict(player.W, e.W)) {
                     player.applyHit(4, 0, e, world)
                     world.removeEntity(e); return
                 }
@@ -3932,7 +3935,7 @@ class NpcFsm(val world: LevelCellSource) {
             // indicator; a 65568 tap teleports the player into `i(216)`
             // + A(29).
             31 -> {
-                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (!Entity.overlapStrict(player.W, e.W)) { e.releaseAe(); return }
                 if (player.S == 216 || player.S == 50 || world.playerAttacking() ||
                     (player.gJ and 2) == 0) { e.releaseAe(); return }
                 e.spawnMarker(world, 8, e.ak, e.al - 85)
@@ -3945,7 +3948,7 @@ class NpcFsm(val world: LevelCellSource) {
             // L172 — left/right kill prompts: same shape → `i(214)`;
             // S32 pins `aS.ak = ak-45, av=false`; S33 `ak+45, av=true`.
             32, 33 -> {
-                if (!Entity.overlapI(player.W, e.W)) { e.releaseAe(); return }
+                if (!Entity.overlapStrict(player.W, e.W)) { e.releaseAe(); return }
                 if (player.S == 214 || player.S == 215 || player.S == 50 ||
                     (player.gJ and 2) == 0) { e.releaseAe(); return }
                 e.spawnMarker(world, 8, e.ak, e.al - 85)
@@ -4613,7 +4616,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         else -> r0 = false
     }
     // L23 — counter/stagger eligibility (box overlap + r0)
-    if (r0 && Entity.overlapI(e.W, p.X)) {
+    if (r0 && Entity.overlapStrict(e.W, p.X)) {
         when (w.iBy) {
             1 -> {
                 // L29 — RNG counter vs stagger (200+cn / 1000)
@@ -4621,7 +4624,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                     // L32 r02 arm — counter pose + player-punish
                     e.ah = 0; e.ag = 0
                     e.setAnim(21)
-                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                    if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                         w.playerAttacking() && p.S != 8) {
                         p.setAnim(8)
                         w.kE?.let { it.P = it.P or 128 }
@@ -4666,7 +4669,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                         }
                     }
                 } else if (e.S != 20 && e.S != 26) {
-                    if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+                    if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                         w.playerAttacking() && p.S != 8) {
                         p.setAnim(8)
                         w.kE?.let { it.P = it.P or 128 }
@@ -4752,7 +4755,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L220 — S14/35 barrage: face, punish-check, spawn knives
         14, 35 -> {
             e.facePlayer(w)
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -4791,7 +4794,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L300+L302 — S15/16/6: inert + punish-check + r()→i(0)
         15, 16, 6 -> {
             e.ah = 0; e.ag = 0
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -4885,7 +4888,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L388 — S4 strike: lunge, W∩aS.W → i(6)+e(2); r()→trail-end+i(0)
         4 -> {
             e.ag = if (e.av) 2560 else -2560
-            if (Entity.overlapI(e.W, p.W)) {
+            if (Entity.overlapStrict(e.W, p.W)) {
                 e.ah = 0; e.ag = 0
                 e.setAnim(6)
                 e.bossAura(w, 2, e.ak, e.al, 300)
@@ -4904,7 +4907,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
             e.facePlayer(w)
             w.kE?.let { it.P = it.P or 128 }
             e.spawnMarker(w, 80, e.ak, e.al - 85)
-            if (Entity.overlapI(e.W, p.W) || Entity.overlapI(e.W, p.X)) {
+            if (Entity.overlapStrict(e.W, p.W) || Entity.overlapStrict(e.W, p.X)) {
                 if (pad.v(65568)) {
                     p.ah = 0; p.ag = 0
                     e.releaseAe()
@@ -4924,7 +4927,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         }
         // L255 — S21 counter pose: punish-check + r()→Q+aQ
         21 -> {
-            if (p.X[0] != p.X[2] && Entity.overlapI(e.W, p.X) &&
+            if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
                 w.kE?.let { it.P = it.P or 128 }
@@ -5042,7 +5045,7 @@ private fun NpcFsm.bossPushPast(e: Entity) {
     if (e.S == 18 && p.S != 12) return           // L16-21: player S12
                                                    // proceeds (i.java:926)
     if (e.S == 131 || e.S == 146) return
-    if (!Entity.overlapI(p.W, e.W)) return
+    if (!Entity.overlapStrict(p.W, e.W)) return
     if (p.S > 43) return
     val pHalf = (p.W[2] - p.W[0]) / 2
     val eHalf = (e.W[2] - e.W[0]) / 2
@@ -5486,7 +5489,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
         9 -> if (e.animFinished()) w.removeEntity(e)             // k.c(this)
         // L13 — contact-harm shell (S10)
         10 -> {
-            if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+            if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W)) {
                 p.applyHit(4, 0, e, w)                           // aS.a(4,0,0,this)
             }
             if (e.animFinished()) w.removeEntity(e)
@@ -5501,7 +5504,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
         // L50 — S15 catch: Y-overlap grabs the player into S375 + the
         // weapon-table drain `g.d(g.u[k.au])`; S0/S6 → r()→despawn only.
         0, 6, 15 -> {
-            if (e.S == 15 && Entity.overlapI(e.Y, p.Y) && p.S != 375) {
+            if (e.S == 15 && Entity.overlapStrict(e.Y, p.Y) && p.S != 375) {
                 p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
                 p.setAnim(375)
                 p.al = e.al
@@ -5614,7 +5617,7 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
  *  S2 only — the grab snap `i(375)` + vel0 + boss-y (L44); S17 instead
  *  lands at L39 after the hit (av=false, no snap). r() → P|=128|32. */
 fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
-    if (e.X[0] != e.X[2] && Entity.overlapI(e.X, p.W)) {
+    if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W)) {
         if (p.S != 9 && p.S != 375 && p.S != 376 && p.S != 377) {
             if (p.ak < (w.kAU?.ak ?: 0)) {
                 p.av = false                                       // L39
@@ -7787,7 +7790,7 @@ private fun hGate(e: Entity, p: Entity): Boolean {
  *  its value is the side-effect — leaving ATTACK_ANIMS preempts this
  *  tick's `j()` damage exactly like the source. */
 private fun iEngage(e: Entity, p: Entity, w: LevelCellSource): Boolean {
-    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X) ||
+    if (p.X[0] == p.X[2] || !Entity.overlapStrict(e.W, p.X) ||
         p.S !in ATTACK_ANIMS) return false
     if (p.S != 8) {
         p.setAnim(8)
@@ -7832,7 +7835,7 @@ private fun jIntake(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             w.iBf = true
         }
     }
-    if (p.X[0] == p.X[2] || !Entity.overlapI(e.W, p.X)) return false
+    if (p.X[0] == p.X[2] || !Entity.overlapStrict(e.W, p.X)) return false
     e.av = p.ak < e.ak                                          // Q()
     val au = w.weaponSlot
     if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217) {
@@ -10334,13 +10337,13 @@ private fun meleeApply(e: Entity, p: Entity, w: LevelCellSource) {
     when (e.ax) {
         11 -> {
             if (e.X[0] == e.X[2]) return                       // degenerate X
-            if (!Entity.overlapI(p.W, e.X)) return             // a(aS.W, X)
+            if (!Entity.overlapStrict(p.W, e.X)) return             // a(aS.W, X)
             if (p.S == 43 || p.S == 22) p.applyHit(20, e.l, e, w)
             else p.applyHit(4, e.l, e, w)
         }
         73 -> {
             if (e.X[0] == e.X[2]) return
-            if (!Entity.overlapI(p.W, e.X)) return
+            if (!Entity.overlapStrict(p.W, e.X)) return
             when {
                 e.S == 165 -> {
                     e.releaseAe()                              // G()
@@ -10410,7 +10413,7 @@ private fun sightPriorityD(e: Entity, p: Entity, w: LevelCellSource): Int {
     var r6 = p.al - e.al
     if ((p.aA and 8) != 0) return 0
     // L21: player W or X touching own W → the L25 close branch.
-    if (Entity.overlapI(p.W, e.W) || Entity.overlapI(p.X, e.W)) {
+    if (Entity.overlapStrict(p.W, e.W) || Entity.overlapStrict(p.X, e.W)) {
         val ga = p.ga                                 // g.a — ax15 link
         if (ga != null && ga.ax == 15 && Math.abs(r6) > 15) return 0
         if ((p.aA and 256) != 0) {
@@ -10474,10 +10477,12 @@ internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
                         if (af.S == 7 || af.S == 1) { resolved = true; r0 = false }
                         else if (af.S == 6) {
                             resolved = true
-                            r0 = Entity.overlapI(
-                                intArrayOf(
-                                    if (e.av) e.Z[9] else e.ak, e.Z[11],
-                                    if (e.av) e.ak else e.Z[10], e.Z[12]),
+                            // `i.a(x0,y0,x1,y1,af.W)` — the edges variant
+                            // (l() offsets 336-350, `a:(IIII[I)Z`): both
+                            // point rejects apply (slice 364).
+                            r0 = Entity.edgeRectOverlap(
+                                if (e.av) e.Z[9] else e.ak, e.Z[11],
+                                if (e.av) e.ak else e.Z[10], e.Z[12],
                                 af.W)
                         }
                     }
@@ -10486,7 +10491,7 @@ internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
                 else {
                     // L54/L83: own W overlap → seen; else Z[9..12] rect
                     // vs the player's box center.
-                    if (Entity.overlapI(p.W, e.W)) true
+                    if (Entity.overlapStrict(p.W, e.W)) true
                     else pointInRect(
                         p.ak, (p.W[1] + p.W[3]) shr 1,
                         intArrayOf(
@@ -10496,7 +10501,7 @@ internal fun losL(e: Entity, p: Entity, w: LevelCellSource): Boolean {
             }
         }
         73 -> {
-            if (Entity.overlapI(p.W, e.W)) true
+            if (Entity.overlapStrict(p.W, e.W)) true
             else pointInRect(
                 p.ak, (p.W[1] + p.W[3]) shr 1,
                 intArrayOf(
@@ -10647,7 +10652,7 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
         // `m`/`aA==Z[3]` prompt checks that latch `n`, the cyan
         // progress bar (fill `j.b` + outline `j.c`), then the armed
         // `bA[4-aD..3]` cards positioned at y=160 and ticked 62ms.
-        if (!Entity.overlapI(e.W, player.W) || (e.P and 128) != 0) return
+        if (!Entity.overlapStrict(e.W, player.W) || (e.P and 128) != 0) return
         val colW = 400 / (e.aD + 1)
         val off = 4 - e.aD
         if (e.m >= 10) {
@@ -10691,7 +10696,7 @@ internal fun aUDraw(e: Entity, w: LevelCellSource, player: Entity) {
     val near = player.S != 9 &&
         ((player.af === e &&
           player.ak > wa[0] && player.ak < wa[2]) ||
-         Entity.overlapI(player.W, wa))
+         Entity.overlapStrict(player.W, wa))
     if (near) {
         val inside = player.ak >= wa[0] && player.ak <= wa[2]
         val slope = ((wa[3] - wa[1]) shl 8) / (wa[2] - wa[0])

@@ -2087,7 +2087,9 @@ class Level0World(
                 if (ae.ax == 43 && (ae.S == 1 || ae.S == 4)) {      // L224-L278
                     val z1 = ae.Z[1]
                     val dx = ae.ak - camX
-                    val inView = Entity.overlapI(p.Y, camRect)      // i.b(aS.Y, ac)
+                    // `i.b(aS.Y, k.ac)` — CONTAINMENT, not overlap (k.m()
+                    // offsets 1392 and 1675 `i.b:([I[I)Z`, slice 364).
+                    val inView = Entity.containRect(p.Y, camRect)   // i.b(aS.Y, ac)
                     if (ae.av) {                                    // L228 arm
                         if (!inView)                                // L251
                             camCC = if (ae.Y[2] <= camRect[2]) z1 * 150 / 100
@@ -4420,7 +4422,7 @@ class Level0World(
         // sits at-or-below the player; other levels take the real
         // `a(W, aS.W)` box overlap (clip1 gives the entity real boxes).
         if (bh3) { if (kAk != 0 || e.al < player.al) return }
-        else if (!rectsOverlap(e.W, player.W)) return
+        else if (!Entity.overlapStrict(e.W, player.W)) return    // aY() @41 i.a(W, aS.W)
         val cp = checkpoints.firstOrNull { it.aw == e.aw }
         // `k.c(this)` already tombstoned the slot → aY() is idempotent
         // bookkeeping-wise; `cp.consumed` is the port's dedup marker
@@ -4563,9 +4565,6 @@ class Level0World(
             e.al = (e.al - e.Y[3]) + X[3]
         }
     }
-
-    private fun rectsOverlap(a: IntArray, b: IntArray) =
-        a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1]
 
     private fun rectContains(inner: IntArray, outer: IntArray) =
         inner[0] >= outer[0] && inner[1] >= outer[1] &&

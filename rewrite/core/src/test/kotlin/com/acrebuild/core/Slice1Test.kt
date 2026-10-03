@@ -1174,8 +1174,11 @@ class Level0WorldTest {
         val e = Entity(67, w.clips[27])
         w.npcFsm.initDecor(e, listOf(67, 901, 200, 400, 0, 21, 0, 1, 0))
         e.setPositionPx(100, 920)                 // inside the tracked view
-        // fabricate an ax68-linked child overlapping W (the k.bd[] scan)
-        val child = Entity(68, w.clips[27])
+        // fabricate an ax68-linked child overlapping W (the k.bd[] scan).
+        // The child uses its own clip (bi[68]=26): its S0 frame carries a
+        // real W rect — clip27's S0 is an anchor point, which `i.a`
+        // rejects (slice 364).
+        val child = Entity(68, w.clips[26])
         child.setPositionPx(e.ak, e.al)
         val owner = Entity(11, w.clips[7])
         owner.ad = child
@@ -1190,23 +1193,23 @@ class Level0WorldTest {
         assertEquals(10, owner.S)  // r0.i(10)
     }
 
-    // Synthetic-clip convention for kind-5 arms: the FSM dispatches on
-    // Z[0], not the bound clip, so a prop bound to clip27 (populated rect
-    // pool + bounds quads) while kind=5 exercises the arms with real W/X
-    // geometry. The real kind5→clip35 pairing carries an EMPTY rect pool
-    // — its W/X degenerate to anchor-point rects, and `i.a()` being
-    // inclusive-edge means they fire only when the anchor lands inside
-    // the player's box (proven; tests below use clip27 for readability).
+    // Synthetic-geometry convention for kind-5 arms: the FSM dispatches on
+    // Z[0], not the bound clip. The real kind5→clip35 pairing carries an
+    // EMPTY rect pool for S12/S28 — its W/X are anchor points, and
+    // `i.a(int[],int[])` rejects a point box (structured i.java:540-558,
+    // slice 364), so on real data these arms never fire; no shipped level
+    // places kind-5 decor in S12 or S28 either. The tests below keep the
+    // arm logic covered with a CLIPLESS prop whose W/X/Y are staged by
+    // hand (`refreshBoxes()` leaves a clipless entity's boxes alone).
 
     @Test fun `kind-5 S12 hide spot binds player when unused`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         // record [67,aw,x,y,f4,f5,P,kind,az]: f4=1 → Z[1]=1 (L3530 arm)
         w.npcFsm.initDecor(e, listOf(67, 902, 300, 500, 1, 12, 0, 5, 7))
         assertEquals(12, e.S); assertEquals(1, e.Z[1]); assertEquals(5, e.Z[0])
-        e.setPositionPx(300, 500); e.refreshBoxes()
-        // W degenerates to the anchor point — the inclusive i.a() overlap
-        // still binds whenever the player box contains (300,500).
+        e.setPositionPx(300, 500)
+        intArrayOf(280, 460, 320, 510).copyInto(e.W)      // staged real box
         w.player.setPositionPx(300, 500); w.player.refreshBoxes()
         w.player.gg = null
         w.npcFsm.tickDecor(e, w.player)
@@ -1218,13 +1221,14 @@ class Level0WorldTest {
 
     @Test fun `kind-5 S28 spawner arms a 71 pickup pinned to view edge`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         w.npcFsm.initDecor(e, listOf(67, 903, 500, 500, 0, 28, 0, 5, 0))
         assertEquals(28, e.S)
-        e.setPositionPx(500, 500); e.refreshBoxes()
-        // X degenerates to the anchor point (clip27 obj0 has no rects) —
-        // place the player so its W contains that point; offscreen cam
-        // keeps v()=false so the spawn arm fires.
+        e.setPositionPx(500, 500)
+        intArrayOf(490, 480, 510, 520).copyInto(e.W)      // staged real boxes
+        intArrayOf(490, 480, 510, 520).copyInto(e.X)
+        // place the player so its W overlaps X; the offscreen cam keeps
+        // v()=false so the spawn arm fires.
         w.player.setPositionPx(e.X[0] + 1, (e.X[1] + e.X[3]) / 2)
         w.player.refreshBoxes()
         w.npcFsm.tickDecor(e, w.player)
@@ -1244,13 +1248,16 @@ class Level0WorldTest {
 
     @Test fun `kind-5 S28 shove arm pushes player out of W`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         w.npcFsm.initDecor(e, listOf(67, 904, 500, 500, 0, 28, 0, 5, 0))
-        e.setPositionPx(500, 500); e.refreshBoxes()
         // Shove needs v()==true (else the spawn arm eats the tick): put
         // the prop beside the player in view — the camera follows the
         // player on real ticks so one tick centers the view on them.
+        // Staged W/X/Y box centered on the player's x (r02 = 0 → +2560).
         e.setPositionPx(300, 150)
+        intArrayOf(280, 110, 320, 160).copyInto(e.W)
+        intArrayOf(280, 110, 320, 160).copyInto(e.X)
+        intArrayOf(280, 110, 320, 160).copyInto(e.Y)
         w.player.setPositionPx(300, 150)
         w.kM(2)                              // m(ad) snap → shove in view
         w.player.refreshBoxes()
@@ -2343,7 +2350,10 @@ class Level0WorldTest {
         val (px, py) = damageSpot(w)
         p.setPositionPx(px, py); p.refreshBoxes()
         val e = requestMarkerAt(w, 16, px + 2, py)
-        e.X[0] = px - 5; e.X[1] = py - 5; e.X[2] = px + 10; e.X[3] = py + 10
+        // The arm's own t() rebuilds X from the clip: clip10 S16 frames
+        // T0-T4 carry an anchor-point X (rejected by `i.a`, slice 364);
+        // T5 has the real impact box [x+3,y-8,x+8,y-3].
+        e.T = 5
         e.af = p                                              // bh[0]=4 path
         w.npcFsm.tickRequestMarker(e, p, Pad())
         assertNull(e.af, "L27 clears af")
@@ -15116,17 +15126,23 @@ class Slice142Test {
         assertNull(w.kAQ)
     }
 
+    // S48/S49 test the LINKED target's own Y: `i.a(r8.Y, W)` with
+    // r8 = k.q(o) (aV() offsets 358-381 / 444-467, `aload_1`) — slice 364.
+    private fun targetIn(t: Entity) {
+        t.Y[0] = 190; t.Y[1] = 110; t.Y[2] = 210; t.Y[3] = 130
+    }
+
     @Test fun `S48 copies pv onto the linked entity aG L166`() {
-        val w = S142World(); overlapped(w)
-        val boss = Entity(29, null); boss.aw = 7
+        val w = S142World()
+        val boss = Entity(29, null); boss.aw = 7; targetIn(boss)
         w.npcs += boss
         NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
         assertEquals(12, boss.aG)
         assertEquals(1, w.removed.size)
     }
 
-    @Test fun `S48 requires player-Y overlap`() {
-        val w = S142World()
+    @Test fun `S48 requires the target's Y overlap, not the player's`() {
+        val w = S142World(); overlapped(w)
         val boss = Entity(29, null); boss.aw = 7
         w.npcs += boss
         NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
@@ -15134,8 +15150,8 @@ class Slice142Test {
     }
 
     @Test fun `S49 advances the linked entity to S20 L1bc`() {
-        val w = S142World(); overlapped(w)
-        val t = Entity(21, null); t.aw = 7
+        val w = S142World()
+        val t = Entity(21, null); t.aw = 7; targetIn(t)
         w.npcs += t
         NpcFsm(w).tickTrigger(trig(49), w, w.player, Pad())
         assertEquals(20, t.S)
@@ -16367,7 +16383,9 @@ class Slice163Test {
         val w = world()
         settleIntro(w)                 // I() L108 gate: tests run post-intro
         val d = w.npcs.first { it.ax == 4 }
-        d.S = 29; d.refreshBoxes()
+        // clip3 S29 carries a real blast box only on T2-T5 (T0/T1/T6/T7
+        // are anchor points, which `i.a` rejects — slice 364): sweep on T3.
+        d.S = 29; d.T = 3; d.refreshBoxes()
         // ax11 melee inside X, aB>0 -> -bu[au]<<1 (kAu=0 -> 600)
         val s = Entity(11, null).apply {
             aB = 100; ak = (d.X[0] + d.X[2]) / 2; al = (d.X[1] + d.X[3]) / 2
@@ -16389,25 +16407,27 @@ class Slice163Test {
             W[0] = s.W[0]; W[1] = s.W[1]; W[2] = s.W[2]; W[3] = s.W[3]
         }
         w.npcs += s; w.npcs += sib; w.npcs += g15; w.npcs += boss
-        // player OUT of X so applyHit doesn't fire; advanceAnim wraps
-        // T5->6 at U0 so the arm reads T==6&&U==0 -> sfx12. advanceAnim is
-        // explicit — the I() preamble owns s() now (i.java:15232).
+        // player OUT of X so applyHit doesn't fire
         w.player.setPositionPx(d.X[2] + 500, d.X[3] + 500)
         w.player.refreshBoxes()
-        d.T = 5; d.U = 999
-        d.advanceAnim()
         w.npcFsm.tickDestructible(d, w.player)
         assertTrue(s.aB <= 100 - 600, "ax11 aB drained by bu[au]<<1, got ${'$'}${'{'}s.aB}")
         assertEquals(29, sib.S)
         assertEquals(7, g15.S); assertEquals(1, g15.Z[3])
         assertEquals(150, boss.aB); assertEquals(20, boss.S)
+        // advanceAnim wraps T5->6 at U0 so the arm reads T==6&&U==0 ->
+        // sfx12. advanceAnim is explicit — the I() preamble owns s() now
+        // (i.java:15232).
+        d.T = 5; d.U = 999
+        d.advanceAnim()
+        w.npcFsm.tickDestructible(d, w.player)
         assertTrue(12 in w.sfxLog)
     }
 
     @Test fun `ax4 S29 player overlap routes op4 hit`() {
         val w = world()
         val d = w.npcs.first { it.ax == 4 }
-        d.S = 29; d.refreshBoxes()
+        d.S = 29; d.T = 3; d.refreshBoxes()          // T3: real blast box
         w.player.setPositionPx((d.X[0] + d.X[2]) / 2, (d.X[1] + d.X[3]) / 2)
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
@@ -16418,9 +16438,11 @@ class Slice163Test {
         val w = world()
         val d = w.npcs.first { it.ax == 4 }
         d.S = 30; d.refreshBoxes()
-        // player.X (attack box) reaching W -> i(29)
+        // player.X (attack box) reaching W -> i(29). The S67 swing has a
+        // real attack box only on T1 (T0/T2-T4 are anchor points, which
+        // `i.a` rejects — slice 364).
         w.player.setPositionPx(d.W[0] + 1, d.W[3] - 1)
-        w.player.setAnim(67)
+        w.player.setAnim(67); w.player.T = 1
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
         assertEquals(29, d.S)
@@ -17965,15 +17987,15 @@ class Slice184Test {
     @Test fun `S12 player roll into the bind claims the lock`() {
         val w = world(); w.npcs.clear()
         val e = guard(w, 300, 150); e.Z[0] = 2
-        e.setAnim(12); e.refreshBoxes()
+        // The tick's own t() rebuilds X from clip7 S12: T0/T6 carry an
+        // anchor-point X (rejected by `i.a`, slice 364), T1-T5 the real
+        // strike box — start on T2 so the I() preamble's s() stays inside.
+        e.setAnim(12); e.T = 2; e.refreshBoxes()
         val p = w.player
         // park the player inside e's X attack box, facing it, rolling
         p.setAnim(6)
         p.setPositionPx(e.ak, e.al); p.refreshBoxes()
         p.av = e.ak < p.ak                            // player faces e
-        // place e's X box so overlapI(player.W, e.X) holds
-        e.X[0] = p.W[0]; e.X[2] = p.W[2]
-        e.X[1] = p.W[1]; e.X[3] = p.W[3]
         w.npcFsm.tick(e, p)
         assertEquals(18, e.S, "counter-bind → i(18) finisher-offer")
         assertSame(e, w.lockTarget, "aN = this")
@@ -17986,16 +18008,27 @@ class Slice184Test {
         val w = world(); w.npcs.clear()
         val e = guard(w, 300, 150); e.Z[0] = 0
         e.aB = BU73_HALF - 10                          // aB <= bu/2 → L495
-        e.setAnim(12); e.refreshBoxes()
+        // The strike box exists on T1-T5 only (slice 364): on T4 the bind
+        // lands and the L495 tail runs without an anim-end r().
+        e.setAnim(12); e.T = 4; e.refreshBoxes()
         val p = w.player
         p.setAnim(6); p.setPositionPx(e.ak, e.al); p.refreshBoxes()
         p.av = e.ak < p.ak
-        e.X[0] = p.W[0]; e.X[2] = p.W[2]
-        e.X[1] = p.W[1]; e.X[3] = p.W[3]
-        finish(e)
         w.npcFsm.tick(e, p)
         assertEquals(18, e.S, "bind still lands i(18)")
         assertTrue(w.lockTarget !== e, "Z0==0 skips aN claim")
+        // On the last frame (T6) the strike box is an anchor point: no
+        // bind, and the anim-end r() routes to i(23) (L495).
+        val w2 = world(); w2.npcs.clear()
+        val e2 = guard(w2, 300, 150); e2.Z[0] = 0
+        e2.aB = BU73_HALF - 10
+        e2.setAnim(12); e2.refreshBoxes()
+        val p2 = w2.player
+        p2.setAnim(6); p2.setPositionPx(e2.ak, e2.al); p2.refreshBoxes()
+        p2.av = e2.ak < p2.ak
+        finish(e2)
+        w2.npcFsm.tick(e2, p2)
+        assertEquals(23, e2.S, "T6 point X: no bind, r() → i(23)")
     }
 
     // -- S11 windup-2 (L475, i.java:5578-5585) ----------------------------
