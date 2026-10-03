@@ -26406,6 +26406,14 @@ class Slice288Test {
                         w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
                         w.tick(emptyList())
                     }
+                    // The respawn puts the player back at the last
+                    // checkpoint, below legs already flown: resume the
+                    // route at the first leg above it. (Under G12 the
+                    // bot reaches the top claim on x1 5 and dies there;
+                    // left in "claim" mode it never re-bound the aw324
+                    // perch and fell behind the camera on every retry.)
+                    val back = route.indexOfFirst { p.al > it.second - 60 }
+                    if (back in 0 until leg) leg = back
                     continue
                 }
                 w.jC == 21 -> {
