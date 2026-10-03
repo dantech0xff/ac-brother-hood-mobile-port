@@ -418,7 +418,7 @@ class Level0World(
     /** `k.u` — screen-21 dialog sub-state (j() gate needs u∈{8,10};
      *  the orig's u is written by script ops — `k.b(IIII)` at
      *  k.java:349-372 assigns `u = slot` (the panel kind), proven). */
-    var dlgU = 0
+    override var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
      *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
@@ -4121,6 +4121,29 @@ class Level0World(
             kFI += kFH; kFH += 8
             if (kFI >= r[3]) kFI = 0
         }
+    }
+
+    /** `k.A[3]` — clip 95 (the `Level0Game` map, `A[3]`). */
+    override val clipA3: Clip? get() = clips[95]
+
+    /** `i.s()`'s wrap tail (i.java:315-330, proven): a cycle that wraps
+     *  while a jc21 dialog other than u8 is up stops the ground player
+     *  (`ag = ah = 0`) and settles an airborne `g.b(S)`/S79 one (`i(0)`
+     *  unless S79, then `E()`); with a claim bound the entity then holds
+     *  frame 0 (`P |= 64`, ax67 exempt) until its state changes. The port
+     *  looped every anim through dialogs (slice 386). */
+    override fun animWrapped(e: Entity) {
+        if (jC != 21 || dlgU == 8) return
+        if (!bh3) {
+            val p = player
+            p.ag = 0; p.ah = 0
+            if (!p.aZ && (p.gB() || p.S == 79)) {
+                if (p.S != 79) p.setAnim(0)
+                p.settleToGround(this)
+            }
+        }
+        if (kC == null || e.ax == 67) return
+        e.P = e.P or 64
     }
 
     /** `C.cd[8] && cb[3] > 0` drew `d(0,91)` this frame (k.java:3117-3128):

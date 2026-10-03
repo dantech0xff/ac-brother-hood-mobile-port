@@ -979,6 +979,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun advanceAnim() {
         val c = clip ?: return
+        val hw = hostWorld
+        // `i.s()` head (i.java:294, proven): on the pause screen only
+        // `k.A[3]`'s anims run (slice 386)
+        if (hw != null && hw.jC == 14 && c !== hw.clipA3) return
         if (P and 64 != 0 || U < 0 || V > 0) {
             if (V > 0) V--
             return
@@ -990,7 +994,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (dur > U) return
         U = 0
         T++
-        if (T >= c.frameCount(S)) T = 0
+        if (T >= c.frameCount(S)) {
+            T = 0
+            hw?.animWrapped(this)                    // i.java:315-330
+        }
     }
 
     /**
@@ -5460,6 +5467,13 @@ interface LevelCellSource {
     /** `j.c` (j.java static, proven) — the screen state (21 = dialog).
      *  Read-only interface view; `Level0World` owns the var. */
     val jC: Int get() = 0
+    /** `k.u` — the jc21 dialog kind (`i.s()` reads it, i.java:315). */
+    val dlgU: Int get() = 0
+    /** `k.A[3]` — the one clip whose anims still run on the pause screen
+     *  (`i.s()` head, i.java:294). */
+    val clipA3: Clip? get() = null
+    /** `i.s()`'s wrap tail (i.java:315-330) — see `Level0World`. */
+    fun animWrapped(e: Entity) {}
     /** `k.x(mask)` (k.java:7224, proven): double-tap-window edge (`eM`). */
     fun padTap(mask: Int): Boolean = false
     /** `k.w(mask)` (k.java:7217, proven): released-input `(eM & mask) != 0`
