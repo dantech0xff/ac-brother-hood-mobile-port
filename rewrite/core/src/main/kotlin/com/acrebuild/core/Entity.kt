@@ -3431,12 +3431,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
             150, 157, 165, 233, 242, 243, 263, 264, 265, 266)
     }
 
+    /**
+     * `i.a(IIILi;)V` (i.javap.txt:18292, raw bytes, proven): the hit intake. Slice 410 re-read
+     * every arm. The shipped code only ever sends ops 4, 6 (see [applyHit6]), 11, 18, 20, 21,
+     * 24, 32, 34, 38 and 40 (an enumeration of every `invokevirtual a:(IIILi;)V` in i/g.javap);
+     * 8, 9, 19, 25, 28, 29 and 30 are ported for completeness, 17 is a bare `return`, and 39 / 41
+     * (the `k.Y` marker-engage pair) are dead and not ported. `g.s`, the cheat flag in the
+     * head's gate, is always false here (`LevelCellSource.godMode`).
+     */
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
         var r10 = op
-        // i.java:4446 head (proven): op4 upgraded to op18 when the struck
-        // entity is the player mid-attack-anim without iframes/cutscene;
-        // the upgrade also zeroes the victim's vx.
-        if (r10 == 4 && PlayerFsm.isAttackState(S) && gt == 0) {
+        // i.javap a(IIILi;)V @0-37 (raw bytes, proven): op4 is upgraded to op18 when
+        // `g.b(aS.S)` — the (I)Z overload, the airborne / hanging / climbing set
+        // {18,19,20,22..25,35,36,43,150,157,165,233,242,243,263..266}, NOT the no-arg
+        // `g.b()` attack test — and `g.t == 0` (no hit lock) and `!g.s` (the cheat
+        // flag): a hit on a player who is off the ground knocks him down; the upgrade also
+        // zeroes the victim's vx. (Slice 410: the port tested the attack anims here.)
+        if (r10 == 4 && PlayerFsm.isAirAction(S) && gt == 0) {
             r10 = 18; ag = 0
         }
         when (r10) {
@@ -3464,7 +3475,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
             // gates apply (S67 clash drains nothing) — then `i(43)`
             // unconditionally.
             18 -> { playerDamageable(g, world); setAnim(43) }
-            20 -> setAnim(43)
+            // @622: `g.b = null; i(43)` (ops 20 and 28)
+            20, 28 -> { world.playerLinkB = null; setAnim(43) }
             // op21 fall damage (i.java:4535 L55, proven): raw drain —
             // bypasses d() gates; caller (land) already checked h()+the
             // 20-cell gate
@@ -3475,12 +3487,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 ah = -4096; aj = 1536
                 enterStateMasked(43, 32, world)
             }
+            // @348-391 (raw bytes): `av = !r4.av` (the victim turns to the attacker), i(10),
+            // `ag = av ? 1536 : -1536`; no shipped caller uses op 29 / 30 (kept exact).
             29 -> {
-                if (attacker != null) av = attacker.av
+                if (attacker != null) av = !attacker.av
                 setAnim(10)
                 ag = if (av) 1536 else -1536
             }
-            34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+            30 -> {
+                setAnim(arg)
+                ag = if (ag > 0) 1792 else -1792                // @322-347
+            }
+            // @204-262 (raw bytes): the parried-hit feedback — velocities zeroed, the clip-5
+            // anim-14 spark `a(8, 5, 14, av, ak, midY + 30, 300)` and `k.A(11)`. (Slice 410:
+            // the port zeroed the velocities and counted a hit; no spark, no clash sound.)
+            34 -> {
+                aj = 0; ah = 0; ag = 0
+                hitsTaken++
+                spawnFx8(world, 5, 14, av, ak, ((W[1] + W[3]) shr 1) + 30, 300)
+                world.sfx(11)
+            }
             // op32 (i.java:4639-4652 L16, proven): stance-break — aA<=1
             // with the attacker within ±150px clears aA to 0; aA>1 with
             // the 16-flag sets Z[0]=3000 (counter-bleed reset). Ops from
@@ -3509,21 +3535,37 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     ag = attacker.Z[0]
                 }
             }
-            // op24 (i.java:4520 L49, proven): pin the player at the
-            // source's top-left corner playing anim r11, all velocities
-            // zeroed — the trap-grabbed pose (ax46 uses 330/110).
-            24 -> {
+            // op24 (i.java:4520 L49, proven; the same arm @444 serves op 8): pin the player at
+            // the source's top-left corner playing anim r11, all velocities zeroed — the
+            // trap-grabbed pose (ax46 uses 330/110).
+            8, 24 -> {
                 if (attacker != null) {
                     setAnim(arg); aj = 0; ah = 0; ag = 0
                     ak = attacker.W[0]; al = attacker.W[1]
                 }
             }
+            // @487-570 (raw bytes, ops 9 and 25): only while `S == arg` — slide to the source's
+            // top-left corner (`ag/ah = Δ << 8`, then snapped there), `aj = 1536`, `a(43, 32)`.
+            9, 25 -> {
+                if (attacker != null && S == arg) {
+                    ag = (attacker.W[0] - ak) shl 8
+                    ah = (attacker.W[1] - al) shl 8
+                    ak = attacker.W[0]; al = attacker.W[1]
+                    aj = 1536
+                    enterStateMasked(43, 32, world)
+                }
+            }
+            // @1413: `ah = aj = 0; az = 99` (op 19).
+            19 -> { ah = 0; aj = 0; az = 99 }
             // L75 (proven structure): marker-engage — `g.b = r13`, `aB=3`,
             // `o()?i(3)`, face + push ±512 toward the marker. The `g.a()`
             // damage-gate chain ported as `playerDamageable`.
+            // @703-798 (raw bytes): `S == 3 → return; if (!g.a()) return; S == 6 → return;
+            // S == 7 → return` — the damage gate (and its drain) runs BEFORE the S6/S7 exits.
             38 -> {
-                if (S == 3 || S == 6 || S == 7) return
+                if (S == 3) return
                 if (!playerDamageable(g, world)) return   // g.a() gate now
+                if (S == 6 || S == 7) return
                 world.playerLinkB = attacker               // ported
                 aB = 3
                 if (oState()) setAnim(3)

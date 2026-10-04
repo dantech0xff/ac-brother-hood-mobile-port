@@ -150,7 +150,9 @@ class Slice407Test {
         val m = knife(w, bR = true)
         w.npcFsm.tickRequestMarker(m, p, Pad())
         assertEquals(16, m.S, "r2 = 1 → i(16) rest")
-        assertEquals(43, p.S, "aS.a(4) on an attacking player is upgraded to op 18: knocked down")
+        // slice 410: the op-4 head upgrade tests `g.b(aS.S)` — the AIR set, not the attack anims —
+        // so a grounded attacking player takes the normal path: `c(r4)` → the S9 flinch.
+        assertEquals(9, p.S, "aS.a(4) on a grounded attacking player: hit-react S9, not a knock-down")
     }
 
     @Test fun `bb S17 - a knife hits a player who is not attacking`() {

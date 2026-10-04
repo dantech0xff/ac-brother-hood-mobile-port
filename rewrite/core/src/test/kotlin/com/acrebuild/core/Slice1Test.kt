@@ -27969,6 +27969,32 @@ class Slice289Test {
                 (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
                     Math.abs(it.ak - p.ak) < 90 && Math.abs(it.al - p.al) < 60
             }
+            // Slice 410 — `i.a(IIILi;)V`'s head knocks a player down only when he is OFF the
+            // ground (`g.b(aS.S)`, the air/hang set); a grounded player — mid-combo included —
+            // takes the normal arm and flinches (S9). The old bot leaned on the other reading: a
+            // soldier strike during S67-69 threw it into S43, which dropped `al` 12 px and the
+            // camera with it, so the ax50 pouncers up at y783-789 stayed outside `k.ac` (`l()`
+            // L77 wants their W fully inside it). The S9 hop is `al-1`: the lerped camera settles
+            // one pixel higher (kP 790 → 789) and the next perch frame at W[1]=789 sees the player
+            // — every pounce after that is 5 HP, for good. A human plays the lip by keeping out
+            // of a soldier's strike instead (S11 winds up for 8 ticks, the S12 hit frame is T1,
+            // X ≈ [ak-47, ak-13]; the heavy's S131/S146/S155 counter boxes reach ~74 px), so the
+            // bot does too: back off while a strike is imminent, never walk INTO a windup, poke
+            // only from inside its own reach (≈ 48 px) and hold the heavy at ~120 px until it
+            // recovers (S171/S156). Input only.
+            val heavy = w.npcs.firstOrNull {
+                it.ax == 73 && it.aB > 0 && it.ak - p.ak in 0..220 && Math.abs(it.al - p.al) < 60
+            }
+            val imminent = w.npcs.any {
+                (it.ax == 11 && it.aB > 0 && ((it.S == 11 && it.T >= 3) || (it.S == 12 && it.T <= 1)) &&
+                    it.ak - p.ak < 85 && Math.abs(it.al - p.al) < 60) ||
+                (it.ax == 73 && it.aB > 0 && (it.S == 131 || it.S == 146 || it.S == 155) &&
+                    Math.abs(it.ak - p.ak) < 140 && Math.abs(it.al - p.al) < 60)
+            }
+            val winding = w.npcs.any {
+                it.ax == 11 && it.aB > 0 && (it.S == 11 || it.S == 12) &&
+                    it.ak - p.ak in 0..120 && Math.abs(it.al - p.al) < 60
+            }
             // kill-dive marker uid246 W=[13469,1052,13554,1104] — the shaft
             // entry: tap context inside it → teleport into the chimney at
             // (13508,1080); then the S101/S36 auto-bounce climbs between
@@ -28022,8 +28048,19 @@ class Slice289Test {
                 // those plus a guard strike — dead from x1=30. Grounded,
                 // cB = al-150 (k.java:1947-1948) holds camY at ~790 and
                 // both stay blind.
-                p.al in 900..960 && p.ak in 12380..12960 && (p.aZ || p.S == 5) ->
-                    if (foe != null) Pad.M_RIGHT + Pad.M_CONTEXT else Pad.M_RIGHT
+                p.al in 900..960 && p.ak in 12380..12960 && (p.aZ || p.S == 5) -> when {
+                    imminent -> Pad.M_LEFT
+                    heavy != null -> when {
+                        heavy.S in intArrayOf(171, 156, 157, 158, 167) ->
+                            if (heavy.ak - p.ak > 48) Pad.M_RIGHT else Pad.M_RIGHT + Pad.M_CONTEXT
+                        heavy.ak - p.ak > 125 -> Pad.M_RIGHT
+                        heavy.ak - p.ak < 110 -> Pad.M_LEFT
+                        else -> 0
+                    }
+                    foe != null && Math.abs(foe.ak - p.ak) <= 48 -> Pad.M_RIGHT + Pad.M_CONTEXT
+                    winding -> 0
+                    else -> Pad.M_RIGHT
+                }
                 // attack-through: CONTEXT held ONLY while a gap foe is in
                 // range — the S67/68/69 combo staggers it at point-blank so
                 // its tumble→pin chain never starts and the launch-pad
@@ -28725,6 +28762,37 @@ private fun chaseMask297(p: Entity, w: Level0World): Int {
     return mask
 }
 
+/**
+ * Slice 410: the boss's two ranged attacks hurt a bot that stands and trades blows, and — since
+ * `i.a(IIILi;)V`'s head upgrades a hit to the knock-down only for a player who is OFF the ground
+ * (`g.b(aS.S)`, the air/hang set) — a grounded bot that is hit mid-combo no longer gets thrown
+ * clear of the follow-up; it flinches in place. A human plays this fight by walking out of the
+ * telegraphed spots, so the bot does the same (input only): (1) the S33 aura pulse that opens the
+ * barrage harms only a player on the boss's right (`ax61HarmArm`, `p.ak >= aU.ak`) inside
+ * ±60 px, so step away from the boss while it plays; (2) every barrage knife (ax61 S8) is aimed at
+ * where the player stood when it was thrown and lands in the S10 shell there — leave the landing
+ * spot, and the shell, while it is still falling or burning.
+ * Returns the override pad mask, or null when nothing threatens.
+ */
+private fun bossDodge297(p: Entity, w: Level0World, boss: Entity): Int? {
+    var danger = false
+    var fx = 0
+    for (n in w.npcs) if (n.ax == 61) {
+        when (n.S) {
+            8 -> {                                              // knife in flight → lands at Z[8], Z[9]
+                val dx = n.Z[8] - p.ak
+                if (kotlin.math.abs(dx) < 90 && kotlin.math.abs(n.Z[9] - p.al) < 90) { danger = true; fx += dx }
+            }
+            10 -> {                                             // landed shell burning
+                val dx = n.ak - p.ak
+                if (kotlin.math.abs(dx) < 90 && kotlin.math.abs(n.al - p.al) < 90) { danger = true; fx += dx }
+            }
+        }
+    }
+    if (boss.S == 33 && p.ak >= boss.ak && p.ak - boss.ak < 110) { danger = true; fx = boss.ak - p.ak }
+    return if (danger && p.aZ) (if (fx >= 0) Pad.M_LEFT else Pad.M_RIGHT) else null
+}
+
 class Slice297Test {
 
     /** m7 leg A — ax37 scroll-holder survives a level reload (zombie
@@ -28850,6 +28918,7 @@ class Slice297Test {
                     mask = if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
                     if (kotlin.math.abs(boss.ak - p.ak) < 70) mask += Pad.M_CONTEXT
                 }
+                bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
@@ -28905,6 +28974,7 @@ class Slice298Test {
                     mask = if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
                     if (kotlin.math.abs(boss.ak - p.ak) < 70) mask += Pad.M_CONTEXT
                 }
+                bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
@@ -29017,6 +29087,7 @@ private fun driveDuelWin300(w: Level0World, p: Entity) {
                     mask = if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
                     if (kotlin.math.abs(boss.ak - p.ak) < 70) mask += Pad.M_CONTEXT
                 }
+                bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
@@ -29896,7 +29967,7 @@ class Slice307Test {
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
         val trace = ArrayDeque<String>(80)
         var lastS = p.S
-        var jumpCd = 0; var pressCd = 0
+        var jumpCd = 0; var pressCd = 0; var catchCd = 0
         var cp339 = false; var pitDeep = false; var shimmyWest = false
         var westEnd = false; var deaths = 0
         for (t in 0..6000) {
@@ -29909,18 +29980,22 @@ class Slice307Test {
                 p.S in listOf(33, 34, 101, 102, 146, 147) -> mask = Pad.M_LEFT or Pad.M_UP
                 else -> mask = Pad.M_LEFT                                 // descent goes west throughout
             }
-            // claim-QTE: any prompt → CONTEXT
-            if (w.kC != null && pressCd <= 0) { mask = Pad.M_CONTEXT; pressCd = 10 }
             // slice 395: the counterweight catch is the grab prompt — `i.at`
             // armed (`aY()` @1555: idle/falling, facing it, in view) and the
             // player in a mountable state; a human taps it the moment the
             // indicator shows. The old bot only tapped while the uid240 claim
             // held, so the catch depended on how its combo taps happened to
             // line up with the walk (a few ticks of duel/walk drift lost it).
-            else if (Entity.at?.ax == 72 && p.mountableState() && pressCd <= 0) {
-                mask = Pad.M_CONTEXT; pressCd = 10
+            // Slice 410: the catch has its OWN cooldown — the claim-QTE taps below
+            // (every 10 ticks while the uid240 claim holds) used to share one, so a
+            // hit-free duel that ended a few ticks earlier or later left the claim's
+            // cooldown running exactly when the prompt showed and the bot fell past.
+            if (Entity.at?.ax == 72 && p.mountableState() && catchCd <= 0) {
+                mask = Pad.M_CONTEXT; catchCd = 10
             }
-            pressCd--
+            // claim-QTE: any prompt → CONTEXT
+            else if (w.kC != null && pressCd <= 0) { mask = Pad.M_CONTEXT; pressCd = 10 }
+            pressCd--; catchCd--
             w.pad.e(mask)
             w.tick(emptyList())
             if (p.S != lastS) {

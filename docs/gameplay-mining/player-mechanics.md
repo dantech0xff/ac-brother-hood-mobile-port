@@ -48,9 +48,12 @@ Nhãn `inferred` trừ khi có chuỗi/consumer trực tiếp:
 | 297 | launcher hold (aV S=17 bắt player) | i-av doc |
 | 309 | zipline ride (`bs`/`bB` set `aC=5`, `ag=±2560`) | `bB()` case 28 |
 
-States thương binh trong enemy check `g.b(S)` (`g.java:355`: `S==1||S==4`)
-và `g.b(k.aS.S)` tại `i.java:5485,3432` — các state player "đang tấn công/
-hungry" được enemy test.
+Hai overload `g.b` KHÔNG phải một thứ (`proven`, `g.javap.txt`): `g.b(int)` là
+bảng tĩnh các state **ở trên không / treo / leo** — `{18,19,20,22,23,24,25,35,36,
+43,150,157,165,233,242,243,263..266}` (lookupswitch `b(I)Z`) — còn `g.b()` không
+tham số mới là test "đang tấn công" (`{67,68,69,81,112..115,183,184,216,217,286,
+287}`). Đầu `i.a(IIILi;)V` (op 4 → 18) dùng `g.b(aS.S)` — bảng trên không —
+chứ không dùng test tấn công (slice 410).
 
 ## Physics (8.8 fixed, từ `i.java:3887-3916`)
 
@@ -88,16 +91,26 @@ Hằng số quan sát (`proven` = literal trong source):
 - Player damage: `g.aB -= (i7 * this.K) / 6` (`i.java:4472/4531`) — `K` là
   hệ số theo attack/difficulty (`inferred`).
 - `g.s` = **god mode** flag (cheat 0): `!g.s` guard ở `i.java:3192,3432`.
-- `g.a()` = blocking check; `g.b(S)` = player-in-attack-state test.
+- `g.a()` / `g.a(i)` = cổng "cú đánh có trúng không" (`proven`, g.java:139): `i.bh != 0`
+  (khóa hit toàn cục 8 tick) → false; `h()` (`g.s` hoặc `g.t != 0`) → false; player đã
+  chết → true (không trừ); còn sống → `d(…)` trừ máu rồi true. `g.b(S)` = bảng state
+  trên không/treo/leo (xem trên), `g.b()` = bảng state tấn công.
 
 ## Interaction verb `i.a(int op, int a, int b, i src)` (`i.java:3431`)
 
 | op | Hành vi |
 |---:|---|
-| 4 | melee hit on player: nếu `g.b(S)` (đang block?) → đổi thành 18; `k.A(18)` sfx; `ax==61` target → `c(iVar)` (assassination path); `g.a()` guard |
+| 4 | melee hit on player (`proven`, `i.javap.txt:18292` @0-37 + @934-1064): đầu hàm `op==4 && g.b(aS.S) && g.t==0 && !g.s` → đổi thành 18 và `ag=0` — tức player đang **trên không / treo / leo** bị hạ gục; player đứng đất (kể cả giữa combo) đi nhánh op 4: `k.E.P\|=128`, `S∈{284,285,50}` thoát, `ax==61 && g.a(r4)` → `c(r4)`, `S!=9 && g.a() && ax∉{17,50,61}` → `c(r4)` (S9 flinch), `k.A(18)` |
+| 18 | `g.a()` (trừ máu + cổng) rồi `i(43)`; 20 / 28: `g.b=null; i(43)` |
+| 34 | phản hồi đỡ đòn: vel=0, spark `a(8,5,14,av,ak,midY+30,300)`, `k.A(11)` (slice 410) |
+| 38 / 40 | marker-engage: `S==3` thoát → cổng `g.a()` (trừ máu) → (38: `S∈{6,7}` thoát) → `g.b=r4`, `aB=3`, `o()?i(3)`, quay mặt + đẩy ±512 |
 | 6 | attach/mount tới `i3` x (hoặc `iVar` pos); spawn effect `a(8,59,...)` khi `bK`; `k.o(3)` + `k.A(20)` event/sfx; `ax==47` thêm `k.e(0,aw)` |
 | 8,24 | snap về `iVar.W` top-left (mount/ride) |
-| 9,25 | snap + launch `aj=1536` + spawn helper `a(43,32)` |
+| 9,25 | chỉ khi `S==arg`: trượt `ag/ah=Δ<<8`, snap, `aj=1536`, `a(43,32)` |
+
+Mã nguồn gốc chỉ thực sự gửi op `{4, 6, 11, 18, 20, 21, 24, 32, 34, 38, 40}` (liệt kê mọi
+`invokevirtual a:(IIILi;)V` trong i/g.javap, slice 410); 8, 9, 19, 25, 28, 29, 30 có arm
+nhưng không có caller, 39/41 (cặp marker `k.Y`) chết và chưa port.
 
 ## Flying machine — `g.n()` (player ax==25)
 
