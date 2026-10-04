@@ -3139,8 +3139,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
      * (g.java:2226).
      */
     fun eSettle(world: LevelCellSource) {
+        // The original loop has no counter — it ends when `e()` reads the
+        // OOB-20 row below the map (`cy >= k.bq`), i.e. after at most
+        // `(rows*20 - al)/10 + 2` passes; the guard only stops a runaway.
         var guard = 0
-        while (guard++ < 400) {
+        while (guard++ < 5000) {
             ah = 1; b = true
             collideSides(world, true)
             ah = 0
@@ -4942,8 +4945,7 @@ interface LevelCellSource {
 
     // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870) -----------------
 
-    // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
-    var aq: Int
+    // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq below) ----------
     val kAp: IntArray
     val sfxLog: List<Int>
     fun sfx(id: Int)

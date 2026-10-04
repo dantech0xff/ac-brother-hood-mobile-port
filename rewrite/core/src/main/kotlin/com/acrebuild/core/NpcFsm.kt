@@ -128,6 +128,7 @@ class NpcFsm(val world: LevelCellSource) {
         // hardened/weakened records double HP (proven :2256-2258)
         if (e.Z[0] == 1 || e.ax == 73) e.aB = e.aB shl 1
         e.Z[13] = rf(16)
+        if (e.ax == 73) e.Z[8] = 0                              // L2953→L2981
         // script-claim bind (proven :2263-2267): h/k(k.s(Z[13])) +
         // d=true + cd[7] — bindScript allocates cd + sets cd[7] itself.
         if (e.Z[13] != -1) {
@@ -138,9 +139,14 @@ class NpcFsm(val world: LevelCellSource) {
         if (rf(5) == 33) e.P = e.P or 16                       // :2269
         e.setAnim(rf(5))                                        // i(sArr[5])
         e.refreshBoxes()                                        // t()
-        // ctor tail for ax11 (proven :2895-2898): a(true); E()
-        e.collideSides(w, true)
-        e.settleToGround(w)
+        // ctor tail (i.javap L7200-L7233, proven): ax11 → `a(1); E()`;
+        // ax73 → `E()` alone. `E()` is the real settle-sink loop
+        // (`ah=1; b=1; a(1); ah=0; aR∈{≥12,5,3} → done else al+=10`) —
+        // slice 389: the port ran `settleToGround` (no a(true) per pass, no
+        // snap to the cell top, `b` never set) and ax73 also got the extra
+        // a(true), so 154/176 soldiers spawned 1-10 px off the original.
+        if (e.ax == 11) e.collideSides(w, true)
+        e.eSettle(w)
     }
 
     /**
@@ -2248,25 +2254,23 @@ class NpcFsm(val world: LevelCellSource) {
 
     // ============================================================ ax4 = aj()
     // Destructible volume / attack hitbox (dispatch i.java:6682, proven).
-    // Init arm L161 (i.java:3132): az=r8[11]; aD=r8[4]; aE=r8[5]; aF=r8[7];
-    // n=r8[8]; m=r8[9]; p=r8[10]. r8[5]==5 → k.aq+=m (L165) + i=2 (L166);
-    // r8[5]==7 → az=1, Z[4], P|=512 (L169); r8[5]==33 → aA=0, p<<=8.
-    // Level 0: S ∈ {5×2, 6×1, 7×3, 9×14, 21×1} — 9/21 hit the default
-    // no-op; only the aw-paired {5,7} claims and one 6 do anything.
+    // Init arm L3607 (i.javap ctor @1250-1290, proven): az=r8[11]; aD=r8[4];
+    // aE=r8[5]; aF=r8[7]; n=r8[8]; m=r8[9]; p=r8[10]; r8[5]∈{5,7} →
+    // `k.aq += m` (the wisp-total HUD denominator — same static the ax74
+    // wisps bump); `i = 2` for EVERY record; r8[5]==33 → aA=0, p<<=8.
+    // (Slice 389: the port read the ax22 arm's `az=1 / P|=512` — the next
+    // block in the listing — into the r8[5]==7 branch, skipped `i=2` and the
+    // `k.aq += m` there, and fed the ax5/7 wisp total to a dead counter.)
+    // Level 0: S ∈ {5×2, 6×1, 7×3, 9×14, 21×1}.
 
     fun initDestructible(e: Entity, f: List<Int>) {
         fun rf(i: Int) = if (i < f.size) f[i] else 0
         e.az = rf(11); e.aD = rf(4); e.aE = rf(5); e.aF = rf(7)
         e.nl = rf(8); e.m = rf(9); e.pv = rf(10)
         // arm reads raw r8[5] — S isn't assigned until the L392 tail.
-        if (rf(5) == 5) world.aq += e.m        // L165 (k.aq stat counter)
-        if (rf(5) != 7) {                      // L164 → L166
-            e.i = 2
-            if (rf(5) == 33) { e.aA = 0; e.pv = e.pv shl 8 }
-        } else {                               // L169: Z=int[4] alloc —
-            e.az = 1                           // port's Z pre-exists; the
-            e.P = e.P or 512                   // r8[5]!=0 fill is skipped.
-        }
+        if (rf(5) == 5 || rf(5) == 7) world.kAq += e.m   // L3676 (k.aq)
+        e.i = 2                                          // L3687
+        if (rf(5) == 33) { e.aA = 0; e.pv = e.pv shl 8 }
         e.setAnim(rf(5))                       // L392 tail: i(r8[5])
     }
 
@@ -3736,7 +3740,7 @@ class NpcFsm(val world: LevelCellSource) {
     /**
      * ax14 record init — L88 arm (i.java:2868, proven): `az=200`, `aD=f7`,
      * `aE=f8` (arming threshold), `o=f11` (linked entity `aw`, -1=none),
-     * `j=f12` (watch state), `P|=512`, `o!=-1 → P|=128` (hidden until
+     * `j=f12` (watch state), `P|=512`, `o!=-1 || P&32 → P|=128` (hidden until
      * armed), `f4==1 → aA=1` (persistent marker). Then the generic L419
      * fill (i.java:3699): `W = [ak+f7, al+f8, +f9, +f10]` — record
      * pickups get a live box; `a()`-spawned ones keep W empty → their
@@ -3748,7 +3752,9 @@ class NpcFsm(val world: LevelCellSource) {
         e.aD = rf(7); e.aE = rf(8)
         e.oId = rf(11); e.j = rf(12)
         e.P = e.P or 512
-        if (e.oId != -1) e.P = e.P or 128
+        // L1739 (ctor @1700-1750): `o != -1 || (P & 32) != 0 → P |= 128` —
+        // a held (P&32) record is hidden even without a linked uid.
+        if (e.oId != -1 || (e.P and 32) != 0) e.P = e.P or 128
         if (rf(4) == 1) e.aA = 1
         e.setAnim(rf(5))
         e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
@@ -5674,24 +5680,22 @@ fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
  *  binding itself stays `bi[9]=47`). */
 private val K_BN = intArrayOf(47, 72)
 
-/** `i.<init>` ax9 arm (i.java:2663 `case 9` → L50 :2781, proven) + shared
- *  L392/L427 tail (`i(r8[5])` + `t()`):
- *  `aB=10; az=99; r8[5]==0 → k.aV=this; r8[5]==34 → P|=512 (Z skipped,
- *  hidden variant); else Z={0,r8[7],bn[r8[8]]}, aG=0`. */
+/** `i.<init>` ax9 arm (i.javap ctor L1185, proven) + shared L392/L427 tail
+ *  (`i(r8[5])` + `t()`):
+ *  `aB=10; az=99; r8[5]∈{0,34} → k.aV=this`, then — for EVERY record —
+ *  `Z={0, r8[7], k.bn[r8[8]]}; aG=0`. (Slice 389: the port invented a
+ *  `r8[5]==34 → P|=512, skip Z` branch and bound `k.aV` for anim 0 only;
+ *  the bytecode is `if (r8[5]==0) goto L1211; if (r8[5]!=34) goto L1215;
+ *  L1211: k.aV = this`, with no `P|=512` anywhere in the arm.) */
 fun NpcFsm.initAx9(e: Entity, f: List<Int>, w: LevelCellSource) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.aB = 10                                                  // L50
+    e.aB = 10                                                  // L1185
     e.az = 99
-    if (rf(5) == 0) w.kAV = e                                  // L54
-    if (rf(5) == 34) {                                         // L53→L56
-        e.P = e.P or 512
-        e.az = 99
-    } else {                                                   // L55
-        e.Z[0] = 0
-        e.Z[1] = rf(7)                                         // link uid
-        e.Z[2] = K_BN.getOrElse(rf(8)) { 0 }
-        e.aG = 0
-    }
+    if (rf(5) == 0 || rf(5) == 34) w.kAV = e                   // L1211
+    e.Z[0] = 0                                                 // L1215
+    e.Z[1] = rf(7)                                             // link uid
+    e.Z[2] = K_BN.getOrElse(rf(8)) { 0 }
+    e.aG = 0
     e.setAnim(rf(5))                                           // L392
     e.refreshBoxes()                                           // L427 t()
 }
@@ -6133,11 +6137,12 @@ fun NpcFsm.tickAx7(e: Entity, w: Level0World, p: Entity) {
 // ax19 `aO()` (i.java:10261-10299) — meter-restore pickup + fx burst.
 // ---------------------------------------------------------------------------
 
-/** Shared generic record init (L111 map + `i(r8[5])` + `t()`). */
+/** ax6 init arm L1420 (i.javap ctor, proven): `az = 100` and nothing else
+ *  — the shared tail then runs `i(r8[5]) + t()`. (Slice 389: the port ran
+ *  the generic aE/aF/o/p/aG/ay map here and never set `az`.) */
 fun NpcFsm.initAx6(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
-    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.az = 100
     e.setAnim(rf(5))
     e.refreshBoxes()
 }
@@ -6153,10 +6158,15 @@ fun NpcFsm.tickAx6(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
+/** ax19 init arm L3788 (i.javap ctor, proven): `r8[6]&32 → P |= 160`
+ *  (held + hidden-until-armed), `r8[5]==5 → ag = 2048`, `az = 200`; then
+ *  the shared `i(r8[5]) + t()` tail. (Slice 389: the port ran the generic
+ *  map instead — no `az=200` draw depth, no `P|=160`.) */
 fun NpcFsm.initAx19(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
-    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    if ((rf(6) and 32) != 0) e.P = e.P or 160
+    if (rf(5) == 5) e.ag = 2048
+    e.az = 200
     e.setAnim(rf(5))
     e.refreshBoxes()
 }
@@ -6196,18 +6206,22 @@ fun NpcFsm.tickAx19(e: Entity, w: LevelCellSource, p: Entity) {
 // ax42 `bz()` (i.java:17428-17523) — fuse/timer zone + `k.F` claim slot.
 // ---------------------------------------------------------------------------
 
-/** Init arm L382 (i.java:3589) + L419 W-fill (i.java:3698): `P|=16|512`,
+/** Init arm L6715 (i.javap ctor, proven) + the L7233 W-fill: `P|=16|512`,
  *  `Z[3] = {kind r8[4], uid r8[11], secs r8[12]}` and the zone rect
- *  `W = [ak+r8[7], al+r8[8], +r8[9], +r8[10]]`. `bi[42]=-1` (no clip) and
- *  no `i()` call reaches this arm in the ctor — `S` stays -1, so `bz()`'s
- *  `S==0` gate keeps the fuse dormant until a claim-script `i(0)` arms it
- *  (faithful; same shape as ax6's degenerate-W dormancy). */
+ *  `W = [ak+r8[7], al+r8[8], +r8[9], +r8[10]]`. `bi[42]=-1` (no clip), but
+ *  the shared tail still runs `i(r8[5])`: with `aa == null` the
+ *  anim-range test is skipped (`i()` @L21 `aa == null → L88`), so `S`
+ *  becomes `r8[5]` (0 in every shipped record) and `bz()`'s `S==0` gate is
+ *  OPEN from spawn — the countdown phases run (slice 389: the port left
+ *  `S = -1` on the strength of "no i() reaches this arm", which kept every
+ *  mission timer dormant). */
 fun NpcFsm.initAx42(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.P = e.P or 16 or 512
-    e.S = -1                               // ctor S=-1; no i() reaches ax42
+    e.S = -1                               // ctor head `S = -1`
     e.Z.fill(0)                            // Z = new int[3] (val array)
     e.Z[0] = rf(4); e.Z[1] = rf(11); e.Z[2] = rf(12)
+    e.setAnim(rf(5))                       // tail i(r8[5]) — clipless, no range check
     e.W[0] = e.ak + rf(7); e.W[1] = e.al + rf(8)
     e.W[2] = e.W[0] + rf(9); e.W[3] = e.W[1] + rf(10)
 }
@@ -6297,6 +6311,7 @@ fun NpcFsm.tickAx42(e: Entity, w: LevelCellSource, p: Entity) {
 fun NpcFsm.initAx13(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.az = 99
+    e.bN = 1                                  // ctor head `bN = 1` (rope segments)
     e.aG = when (rf(4)) { 1 -> 1; 2 -> 2; 3 -> 4; else -> 0 }
     e.Z[0] = e.aG
     e.Z[7] = 1
@@ -6322,7 +6337,12 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
         integrated = true
         if (e.aA == 1) {                                            // L9
             if (e.bM === p && e.aG == 1 && r0 * e.bO < 0) {
-                p.av = e.bP < 0                                     // L17/L18
+                // @96-109 (i.javap aW(), `aload_0; aload_0; getfield bP;
+                // ifge …; putfield av`): the ROPE's own facing latches the
+                // swing side — the player keeps his facing, which `g.j()`
+                // then reads for the throw direction (slice 389: the port
+                // wrote `p.av`, flipping the rider by the swing side).
+                e.av = e.bP < 0                                     // L17/L18
                 p.releaseRope(w)                                    // aS.j()
             }
         }
@@ -6544,9 +6564,17 @@ fun NpcFsm.initAx54(e: Entity, f: List<Int>, w: Level0World) {
     e.Z[16] = rf(3)                                   // spawn y
     e.Z[0] = rf(4)                                    // mode (0/1/2/3)
     for (i in 1..14) e.Z[i] = rf(i + 6)               // Z[1..14] = r8[7..20]
-    if (e.Z[9] == 0) e.Z[10] = 1                      // L218
-    else if (e.Z[9] == 1 && e.Z[8] == 0) e.Z[8] = 3   // L218→L222
-    else if (e.Z[8] == 1 && e.Z[9] == 1) e.Z[9] = 0   // L226
+    // L4874-L4957 (i.javap ctor, proven): Z[9]==0 → Z[10]=1; Z[9]==1 →
+    // `Z[8]==0 → Z[8]=3`, then ALWAYS Z[10]=1, Z[11]=1, Z[12]=0; and the
+    // `Z[8]==1 && Z[9]==1 → Z[9]=0` test is its own `if` (not an else).
+    // Slice 389: the port chained all three as `else if` and never forced
+    // Z[11]/Z[12], so aD/aF kept the record's raw r8[17]/r8[18].
+    if (e.Z[9] == 0) e.Z[10] = 1
+    else if (e.Z[9] == 1) {
+        if (e.Z[8] == 0) e.Z[8] = 3
+        e.Z[10] = 1; e.Z[11] = 1; e.Z[12] = 0
+    }
+    if (e.Z[8] == 1 && e.Z[9] == 1) e.Z[9] = 0
     e.aC = e.Z[6]; e.aD = e.Z[11]; e.aF = e.Z[12]
     e.nl = e.Z[14]
     e.setAnim(rf(5))                                   // L392 tail: i(r8[5])
@@ -6560,7 +6588,11 @@ fun NpcFsm.initAx54(e: Entity, f: List<Int>, w: Level0World) {
     child.aw = e.aw
     child.setPositionPx(cf[2], cf[3])
     child.P = cf[6]; child.av = (cf[6] and 1) != 0
-    for (i in child.Z.indices) if (7 + i < cf.size) child.Z[i] = cf[7 + i]
+    // ax68's own arm (L4041): `az = 99`, no Z (the child's Z stays null —
+    // slice 389: the port filled Z from the record and left az at 0), then
+    // the shared tail `i(0)` (ax68 special case) + `t()`.
+    child.az = 99
+    child.setAnim(0)
     child.refreshBoxes()
     child.av = false
     child.af = e
@@ -6851,6 +6883,7 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
  *  The ax24 tick FSM (`ba()`, i.java:13742) is a separate slice. */
 fun NpcFsm.initAx24(e: Entity, f: List<Int>, w: Level0World) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.az = 200                                         // L1468: every record
     if (rf(5) == 0) {
         e.P = e.P or 640
         if (w.projectilePool == null)
@@ -7539,43 +7572,47 @@ private fun ax60Zones(e: Entity, w: Level0World) {
     }
 }
 
-/** ax60 init arm (i.java:3394, L259 block, proven). */
+/** ax60 init arm (i.javap ctor L5511, proven). Slice 389: `Z[4]=2` (the
+ *  auto-bounce) is only armed inside the `r8[5]∈{9,16}` branch, the
+ *  `Z[4]==2` result joins `r8[5]∈{6,11,13}` in the `az=0 / P|=16` hide
+ *  test, and the horizontal bound probe is `r8[5]∈{14,15}` only — S16 is
+ *  the downward vertical probe. */
 fun NpcFsm.initAx60(e: Entity, f: List<Int>, w: Level0World) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
+    val s5 = rf(5)
     e.az = 1
     e.Z.fill(0)
     e.Z[0] = rf(7)                                         // link uid
     e.Z[1] = rf(4)                                         // speed
     e.Z[2] = rf(8)                                         // delay
     e.Z[4] = 0
-    if (rf(5) == 9 || rf(5) == 16 || rf(5) == 10 || rf(5) == 17)
-        e.P = e.P or 4096                                  // L262-L267
-    e.Z[3] = if (rf(5) == 9 || rf(5) == 16) e.al else e.ak // L269-L272
-    if (rf(9) == 1) e.Z[4] = 2                             // auto-bounce
+    if (s5 == 9 || s5 == 16 || s5 == 10 || s5 == 17)
+        e.P = e.P or 4096                                  // L5592
+    if (s5 == 9 || s5 == 16) {                             // L5620
+        e.Z[3] = e.al
+        if (rf(9) == 1) e.Z[4] = 2                         // auto-bounce
+    } else e.Z[3] = e.ak                                   // L5648
     e.Z[5] = e.Z[3]
-    if (rf(5) == 14 || rf(5) == 15 || rf(5) == 16) {
-        // L281: horizontal bound probe — scan from ak toward solid while
-        // Z[1] < 0; S15 scans left, 14/16 scan right; S15 adds one cell.
-        if (e.Z[1] < 0) {
-            var r92 = e.ak / 20
-            val r05 = (e.al / 20) - 1
-            while (w.collisionCell(r92, r05) < 12)
-                r92 += if (rf(5) == 15) -1 else 1
-            e.Z[5] = r92 * 20
-            if (rf(5) == 15) e.Z[5] += 20
-        }
-    } else if (rf(5) == 9) {
-        // L297: vertical bound probe — scan UP to the first solid row.
-        var r03 = e.ak / 20
-        var r10 = e.al / 20
-        while (w.collisionCell(r03, r10) < 12) r10 -= 1
-        e.Z[5] = r10 * 20 + 20
+    if ((s5 == 15 || s5 == 14) && e.Z[1] < 0) {
+        // L5686: horizontal bound probe — S15 scans left, S14 right.
+        var r2 = e.ak / 20
+        val r3 = (e.al / 20) - 1
+        while (w.collisionCell(r2, r3) < 12) r2 += if (s5 == 15) -1 else 1
+        e.Z[5] = r2 * 20
+        if (s5 == 15) e.Z[5] += 20
+    } else if (s5 == 9 || s5 == 16) {
+        // L5781: vertical bound probe — S9 scans UP, S16 DOWN.
+        val r2 = e.ak / 20
+        var r3 = e.al / 20
+        while (w.collisionCell(r2, r3) < 12) r3 += if (s5 == 9) -1 else 1
+        e.Z[5] = r3 * 20
+        if (s5 == 9) e.Z[5] += 20
     }
-    if (rf(5) == 6 || rf(5) == 11 || rf(5) == 13) {        // L308/L310→L315
+    if (s5 == 6 || s5 == 11 || s5 == 13 || e.Z[4] == 2) {  // L5878→L5912
         e.az = 0; e.P = e.P or 16
     }
-    if (rf(5) in 11..15) e.aC = e.Z[2]                     // L317
-    e.setAnim(rf(5))                                       // L392 tail
+    if (s5 in 11..15) e.aC = e.Z[2]                        // L5928
+    e.setAnim(s5)                                          // L392 tail
     e.refreshBoxes()                                       // t()
 }
 // ==================================================================// ax43 = bw() — ride/swing carrier (dispatch i.java:5081; bw():17086-17187,
@@ -8242,8 +8279,7 @@ private val IH73 = intArrayOf(20, 20, 20)
  *  which is what legitimately arms the S152 Z[14] check at i.java:7423
  *  inside aJ. initSoldier carries every byte. */
 fun NpcFsm.initAx73(e: Entity, f: List<Int>) {
-    initSoldier(e, f, world)
-    e.Z[8] = 0                                             // :2259
+    initSoldier(e, f, world)               // Z[8]=0 + the E()-only tail inside
 }
 
 /** `i.d()` (i.java:1466, proven) — awareness tier for ax73. 0 = unaware,
@@ -9833,7 +9869,7 @@ fun NpcFsm.initAx16(e: Entity, f: List<Int>) {
  *  the L1bea finish. */
 fun NpcFsm.initAx21(e: Entity, f: List<Int>, w: Level0World) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    if (rf(5) > 1) { e.setAnim(rf(5)); return }      // gate → plain finish
+    if (rf(5) > 1) { e.setAnim(rf(5)); e.refreshBoxes(); return }   // gate → plain finish (t())
     e.aA = 0; e.j = 0
     e.az = rf(8); e.aB = rf(7)
     e.Z[0] = rf(9); e.Z[1] = rf(10); e.Z[2] = rf(11); e.Z[3] = rf(12)
@@ -9845,7 +9881,12 @@ fun NpcFsm.initAx21(e: Entity, f: List<Int>, w: Level0World) {
         setAnim(0)                                   // Ld7c → L1bea → i(0)
         refreshBoxes()
     }
-    e.setAnim(0)                                     // mutated r8[5]=0 → i(0)
+    // ctor @… `rec[5] = 1` right after the child's `new i(rec)` (i.javap
+    // ctor, the listing between L3212 and L3452): the parent's shared tail
+    // is `i(rec[5]) = i(1)` — S=1, not the child's S=0 (slice 389: the
+    // port ran i(0) here, so the director sat in S0 and the slice-387
+    // `b()` ax21 S1 arm was never reached from a real spawn).
+    e.setAnim(1)
     e.refreshBoxes()
 }
 
@@ -9963,6 +10004,7 @@ fun NpcFsm.initAx66(e: Entity, f: List<Int>, w: Level0World) {
  *  `t()` returns them untouched for ax37. */
 fun NpcFsm.initAx37(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
+    e.S = -1                    // ctor head `S = -1`; ax37/70 skip `i(r8[5])`
     e.Z[0] = rf(15); e.Z[1] = rf(16); e.Z[2] = rf(17); e.Z[3] = rf(18)
     e.P = e.P or 512
     if ((e.P and 32) == 0) e.P = e.P or 16

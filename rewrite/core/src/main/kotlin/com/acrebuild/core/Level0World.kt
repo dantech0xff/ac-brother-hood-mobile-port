@@ -356,8 +356,7 @@ class Level0World(
     }
     override fun clearClaim() { claimPrio = 6; claimed = null }
 
-    // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
-    override var aq = 0              // k.aq — global tally (ax4 S5 += m)
+    // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq: the one wisp total) --
     override val sfxLog = mutableListOf<Int>()  // k.A(int) request log
     /** `k.A(i) = z(i)` (k.java:5703, proven): log the request (test
      *  seam — pre-gate), then run the real `z()` (gates `kBE`/`kBF`, sets
