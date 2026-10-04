@@ -1101,8 +1101,8 @@ class Level0WorldTest {
         w.player.refreshBoxes()
         w.playerFsm.eHeadReturns(w.player)        // k.l() → k.M (slice 369)
         w.npcFsm.tickDestructible(d, w.player)
-        assertSame(d, w.claimed)
-        assertEquals(5, w.claimPrio)
+        assertSame(d, w.kL)
+        assertEquals(5, w.claimCo)
         // k.c popup: ax14 singleton S54, az=302, tagged by aw
         assertNotNull(w.kN)
         assertEquals(14, w.kN!!.ax); assertEquals(54, w.kN!!.S)
@@ -1112,7 +1112,7 @@ class Level0WorldTest {
         w.player.refreshBoxes()
         w.playerFsm.eHeadReturns(w.player)        // k.l()
         w.npcFsm.tickDestructible(d, w.player)
-        assertNull(w.claimed); assertEquals(6, w.claimPrio)
+        assertNull(w.kL); assertEquals(6, w.claimCo)
         assertNull(w.kN)
     }
 
@@ -6794,10 +6794,10 @@ class Slice58Test {
         w.player.setPositionPx(9000, 9000); w.player.refreshBoxes()
         val e = lever(w, 2, 300, 150)
         e.aw = 77
-        w.claimed = e                                    // k.L == this
+        w.kL = e                                         // k.L == this
         e.ae = Entity(14, w.clips[9])
         w.npcFsm.tickAx58(e, w, w.player)
-        assertNull(w.claimed, "k.L.aw==aw -> k.m()")
+        assertNull(w.kL, "k.L.aw==aw -> k.m()")
         assertNull(e.ae, "G() releases ae")
     }
 
@@ -6808,9 +6808,9 @@ class Slice58Test {
         val e = lever(w, 2, 300, 150)
         e.aw = 77
         val other = Entity(58, w.clips[20]); other.aw = 88
-        w.claimed = other
+        w.kL = other
         w.npcFsm.tickAx58(e, w, w.player)
-        assertTrue(w.claimed === other, "k.L!=this -> no release")
+        assertTrue(w.kL === other, "k.L!=this -> no release")
     }
 
     @Test fun `S3 anim end goes S4 and runs the Z0 bind tail`() {
@@ -7465,7 +7465,7 @@ class Slice73Test {
         // k.M is written by k.l() at the player's g.e() head (slice 369)
         w.playerFsm.eHeadReturns(w.player)
         w.npcFsm.tickAx73(e, w, w.player)
-        assertTrue(w.claimed === e || w.kL === e, "k.a(this,0,W) claimed")
+        assertTrue(w.kL === e, "k.a(this,0,W) claimed")
     }
 
     @Test fun `head — dead guard releases its claim`() {
@@ -7475,11 +7475,11 @@ class Slice73Test {
         w.player.refreshBoxes()
         w.playerFsm.eHeadReturns(w.player)        // k.l() → k.M (slice 369)
         w.npcFsm.tickAx73(e, w, w.player)
-        assertTrue(w.claimed === e || w.kL === e, "claimed in reach first")
+        assertTrue(w.kL === e, "claimed in reach first")
         e.aB = 0
         e.setAnim(0)
         w.npcFsm.tickAx73(e, w, w.player)
-        assertTrue(w.claimed !== e && w.kL !== e, "k.m() released")
+        assertTrue(w.kL !== e, "k.m() released")
         assertEquals(164, e.S, "aB<=0 && S!=164 → i(164)")
     }
 
@@ -13454,8 +13454,6 @@ class Slice128Test {
         /** Slice 388: the double's "last paint" is exactly its `npcs`, so the
          *  `k.bd` neighbour scans (az, bd, bc, …) see what a test staged. */
         override val drawn: Iterable<Entity> get() = npcs
-        override var claimPrio = 0
-        override var claimed: Entity? = null
         override val kAp = IntArray(6)
         override fun kCount(slot: Int) { kAp[slot]++ }
         override fun countKill(uid: Int) { if (uid > 0) kAp[0]++ }
@@ -13493,8 +13491,6 @@ class Slice128Test {
         override fun isSolid(v: Int): Boolean = v >= 12
         override fun isOneWay(v: Int): Boolean = v == 3
         override fun removeEntity(e: Entity) {}
-        override fun claim(e: Entity, prio: Int, w: IntArray) {}
-        override fun clearClaim() {}
         override fun sfx(id: Int) {}
         override fun spawnWisp(src: Entity) {}
         override fun spawnPickup(anim: Int, x: Int, y: Int): Entity = Entity(14, null)

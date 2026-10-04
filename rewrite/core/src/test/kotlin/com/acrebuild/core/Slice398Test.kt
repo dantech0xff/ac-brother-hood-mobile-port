@@ -97,7 +97,7 @@ class Slice398Test {
             p.setAnim(s)
             d.W.copyInto(w.kM)                                   // k.M ∩ W
             w.npcFsm.tickDestructible(d, p)
-            assertSame(d, w.claimed, "S$s ∉ g.b(I): the bubble claims (k.a prio 5)")
+            assertSame(d, w.kL, "S$s ∉ g.b(I): the bubble claims (k.a prio 5)")
         }
         for (s in intArrayOf(43, 22, 157)) {
             val (w, d) = crateWorld(5)
@@ -105,7 +105,7 @@ class Slice398Test {
             p.setAnim(s)
             d.W.copyInto(w.kM)
             w.npcFsm.tickDestructible(d, p)
-            assertNull(w.claimed, "S$s ∈ g.b(I): the bubble arm is not entered")
+            assertNull(w.kL, "S$s ∈ g.b(I): the bubble arm is not entered")
             assertEquals(5, d.S, "no body overlap → no crack either")
         }
     }
@@ -117,7 +117,7 @@ class Slice398Test {
             p.setAnim(s)
             d.W.copyInto(w.kM)                                   // k.M ∩ W, body clear
             w.npcFsm.tickDestructible(d, p)
-            assertSame(d, w.claimed, "crate S$crate, player S$s ∉ g.b(I): k.a(this,5,W) @119-125")
+            assertSame(d, w.kL, "crate S$crate, player S$s ∉ g.b(I): k.a(this,5,W) @119-125")
             assertEquals(crate, d.S)
         }
     }
@@ -155,12 +155,12 @@ class Slice398Test {
         // the debug overlay, neither of which the port consumes).
         val (w, d) = crateWorld(5)
         d.setAnim(6); d.m = 3
-        w.claim(d, 5, d.W)
-        assertSame(d, w.claimed)
+        w.registerClaim(d, 5, d.W)
+        assertSame(d, w.kL)
         driveToFinish(d)
         w.npcFsm.tickDestructible(d, w.player)
-        assertNull(w.claimed, "k.L.aw == aw → k.m() @335-345")
-        assertEquals(6, w.claimPrio, "k.co back to 6 (unclaimed)")
+        assertNull(w.kL, "k.L.aw == aw → k.m() @335-345")
+        assertEquals(6, w.claimCo, "k.co back to 6 (unclaimed)")
     }
 
     @Test fun `every shipped crate drops exactly the wisps its record counted`() {

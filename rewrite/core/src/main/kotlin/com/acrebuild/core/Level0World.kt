@@ -304,32 +304,20 @@ class Level0World(
         if (e.asSlot >= 0 && e.asSlot < slotFlags.size) slotFlags[e.asSlot] = -99
         if (player.gd === e) player.gd = null
         if (lockTarget === e) lockTarget = null
-        if (claimed === e) clearClaim()
+        // Port-side safety net, NOT in `k.c(i)` (k.javap.txt:22384-22462 never
+        // touches k.L): the original's claimants all `k.m()` themselves before
+        // their own `k.c(this)`, so a removed owner never leaves a stale claim
+        // behind there; releasing it here only guards the port's other
+        // removal sites. `inferred`.
+        if (kL === e) claimReset()
     }
 
-    // -- k.a(i,prio,rect) context-claim system (k.java:816, proven) -------
-    // Strictly-lower priority wins (co starts at 6 = unclaimed); an equal
-    // bid only steals when prio==1&&co==1. Claim persists until released
-    // via k.m() (clearClaim) — there is no per-frame reset. cp = claimed
-    // rect padded ±10 (k.java:850). ax51's Y-swap unexercised (unspawned).
-    override var claimPrio = 6       // k.co — written only via claim()/
-                                     // clearClaim() (interface exposes set)
-    override var claimed: Entity? = null  // k.L
-    val claimPad = IntArray(4)       // k.cp
     // Hoisted above `init`: `spawnEntities` reads it via kSIndex during
     // ax5 record init — property order matters (backing field is null
     // until the initializer runs).
     override var kEh = scripts?.eH ?: IntArray(0)  // k.eH — script uids
     override val kBy = scripts?.by ?: emptyArray() // k.by — op blocks
     override val kBz = scripts?.bz ?: emptyArray() // k.bz — group offsets
-    override fun claim(e: Entity, prio: Int, w: IntArray) {
-        if (prio < 0 || prio >= 6) return
-        if (prio >= claimPrio && !(prio == 1 && claimPrio == 1)) return
-        claimPrio = prio; claimed = e
-        claimPad[0] = w[0] - 10; claimPad[1] = w[1] - 10
-        claimPad[2] = w[2] + 10; claimPad[3] = w[3] + 10
-    }
-    override fun clearClaim() { claimPrio = 6; claimed = null }
 
     // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq: the one wisp total) --
     override val sfxLog = mutableListOf<Int>()  // k.A(int) request log
@@ -692,7 +680,7 @@ class Level0World(
         pendingInsert.clear()
         kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
-        clearClaim()
+        claimReset()                             // i.D() tail: k.m() (i.javap D() @…)
         // i.D() (i.java:1795-1865): g.* link sweep on entity-system reset —
         // vehicle/contact/carry links must not survive into the respawned set
         player.ga = null; player.ac = null; player.standingOn = null
@@ -4649,23 +4637,38 @@ class Level0World(
     var gT = 0                                     // g.t transition int
     override fun gH(): Boolean = gs || gT != 0     // g.h() latch
 
-    /** `k.m()` (k.java:863, proven): reset the interact-claim channel. */
+    /** `k.m()` (k.java:863, proven — k.javap.txt:5112-5125): `co = 6; L =
+     *  null; cp = null; cp = new int[4]`. */
     override fun claimReset() {
         claimCo = 6; kL = null; claimRect = IntArray(4)
     }
 
-    /** `k.a(i,int,int[])` (k.java:816, proven): interact-claim registrar —
-     *  same-entity refresh, else `prio<co || prio==1` steals the claim
-     *  (`co=prio; L=e`); ax51 binds its Y rect not the passed rect. */
+    /** `k.a(int[])` (private static, k.javap.txt:5059-5110, proven): while a
+     *  claim is held, `cp` = the rect padded ±10 — a SNAPSHOT (the owner
+     *  re-bids every tick it stays in reach), not a live view of its `W`. */
+    private fun padClaim(r: IntArray) {
+        if (kL == null) return
+        val cp = claimRect ?: IntArray(4).also { claimRect = it }
+        cp[0] = r[0] - 10; cp[1] = r[1] - 10
+        cp[2] = r[2] + 10; cp[3] = r[3] + 10
+    }
+
+    /** `k.a(i,int,int[])` (k.java:816, proven — k.javap.txt:4990-5062): the
+     *  interact-claim registrar. The current owner (matched by `aw`, @6-16)
+     *  only refreshes `cp`; otherwise a valid bid (`0 <= prio < 6`) takes the
+     *  claim iff `prio < co || (prio == 1 && co == 1)` @54-70 — a prio-1 bid
+     *  does NOT steal from a prio-0 holder. ax51 binds its `Y` rect instead
+     *  of the passed one @19-34 / @82-94. */
     override fun registerClaim(e: Entity, prio: Int, rect: IntArray) {
-        if (kL != null && kL === e) {
-            claimRect = if (e.ax == 51) e.Y else rect
+        val l = kL
+        if (l != null && l.aw == e.aw) {
+            padClaim(if (l.ax == 51) e.Y else rect)
             return
         }
         if (prio < 0 || prio >= 6) return
-        if (prio < claimCo || prio == 1) {
+        if (prio < claimCo || (prio == 1 && claimCo == 1)) {
             claimCo = prio; kL = e
-            claimRect = if (e.ax == 51) e.Y else rect
+            padClaim(if (e.ax == 51) e.Y else rect)
         }
     }
 

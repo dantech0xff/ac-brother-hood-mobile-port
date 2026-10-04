@@ -9,7 +9,7 @@ parent: "../261003-0700-parity-gap-closure-android-hardening/plan.md"
 sources:
   - reconstructed-project/bytecode/i.javap.txt (aj() @0-1065 — i.javap.txt:24516; m(int) @0-124 — :71017; a(IIII) child spawn — :19173; S() — :32381; bN() S0/S1 af.aG arms; p(); a())
   - reconstructed-project/bytecode/g.javap.txt (g.b(I)Z static, pinned in slice 397)
-  - reconstructed-project/bytecode/k.javap.txt (k.c(i) — :22384; k.a(i,I,[I) — :4990; k.m(); k.j(II) — :4612 touch hit-test)
+  - reconstructed-project/bytecode/k.javap.txt (k.c(i) — :22384; k.a(i,I,[I) — :4990; k.m(); k.j(II) — :4465 touch hit-test)
 ---
 
 # Slice 398

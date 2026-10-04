@@ -597,10 +597,10 @@ class Slice369Test {
         w.player.av = false; w.player.setAnim(0); w.player.refreshBoxes()
         w.kM.fill(0)                                     // k.M not written yet
         w.npcFsm.tickDestructible(d, w.player)
-        assertNull(w.claimed, "k.M (zeros) misses the crate")
+        assertNull(w.kL, "k.M (zeros) misses the crate")
         w.playerFsm.eHeadReturns(w.player)               // k.l()
         w.npcFsm.tickDestructible(d, w.player)
-        assertSame(d, w.claimed)
+        assertSame(d, w.kL)
     }
 
     /** 157-163: `g.r` (the aP S7 grab-QTE) returns after `k.l()`. */

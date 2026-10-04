@@ -4964,12 +4964,6 @@ interface LevelCellSource {
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
 
-    // -- k.a(i,prio,rect) context claim (k.java:816): strictly-lower --
-    var claimPrio: Int                    // k.co (6 = unclaimed)
-    var claimed: Entity?                  // k.L
-    fun claim(e: Entity, prio: Int, w: IntArray)
-    fun clearClaim()                      // k.m()
-
     // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870) -----------------
 
     // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq below) ----------
@@ -5579,7 +5573,10 @@ interface LevelCellSource {
     /** `g.j` (g.java:15) — context latch, set on S145/S147 exits,
      *  cleared at g.java:6393 / k.java:6638. */
     var gj: Boolean get() = false; set(_) {}
-    /** `k.L` — the entity currently registered as the interact claim. */
+    /** `k.L` — the entity currently registered as the context/interact
+     *  claim (the ONE channel: ax4 crates, ax11/73 soldiers, ax47 sentinels,
+     *  `br()` grabs and the touch hit-test `k.j(II)` all share it — slice
+     *  399 retired the second, ax4-only copy). */
     var kL: Entity? get() = null; set(_) {}
     /** `k.au` — difficulty/medal-condition field (indexes `bu[]` HP table). */
     var kAu: Int get() = 0; set(_) {}
@@ -5590,7 +5587,7 @@ interface LevelCellSource {
     /** `k.m()` (k.java:863): reset the interact-claim channel. */
     fun claimReset() {}
     /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
-     *  same-entity refresh else `prio<co || prio==1` steals it. */
+     *  same-entity refresh else `prio<co || (prio==1 && co==1)` takes it. */
     fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
     // -- ax73 aJ() statics (i.java:77/100/132/9825, k.aA, g.z) -----------
     /** `i.bf` (i.java:100) — engage-claim latch for the aN-lock sweep. */

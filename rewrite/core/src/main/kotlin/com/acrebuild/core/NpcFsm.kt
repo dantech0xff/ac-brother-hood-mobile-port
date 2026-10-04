@@ -282,6 +282,22 @@ class NpcFsm(val world: LevelCellSource) {
      *  re-entry at `I()` head. */
     private val AH_STATES = intArrayOf(0, 20, 21, 106, 107, 117, 139, 168, 169, 176)
 
+    /** `I()` `case 11` @1644-1697 (proven, raw bytecode i.javap.txt:20029-
+     *  20050): right after the family head a soldier bids the PRIO-0 context
+     *  claim — `k.a(this, 0, W)` — while it is not in an `aH()` state and
+     *  the player's reach box `k.M` overlaps its `W`; otherwise it releases
+     *  a claim it holds (`k.L.aw == aw → k.m()`). The claim is what the touch
+     *  hit-test `k.j(II)` resolves a tap on the soldier to (action 4). (Slice
+     *  399: the port had no ax11 bid — "unported" in slice 369 — so a tap on
+     *  an adjacent soldier fell through to the wheel cell around the player.) */
+    private fun soldierClaimBid(e: Entity) {
+        if (e.S !in AH_STATES && Entity.overlapStrict(e.W, world.kM)) {
+            world.registerClaim(e, 0, e.W)
+        } else if (world.kL?.aw == e.aw) {
+            world.claimReset()
+        }
+    }
+
     fun tick(e: Entity, player: Entity) {
         // `I()` covers only the shared soldier family {11,17,23,47,50,73}
         // (i.java dispatch :15493, proven); every other ax reaches the
@@ -295,6 +311,7 @@ class NpcFsm(val world: LevelCellSource) {
         // fallback covers direct arm calls.
         if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
         familyHead(e, player)
+        if (e.ax == 11) soldierClaimBid(e)
         // `case 23: goto L849` (simple/i.java:5180, proven): ax23 shares
         // the family head but no arm — straight to the L849/L897 tail.
         // (Only the ax10 S30 wave grid spawns ax23, flavour Z[6]==2; no
@@ -2323,12 +2340,12 @@ class NpcFsm(val world: LevelCellSource) {
                         !Entity.overlapStrict(e.W, ctxZone)) {
                         // L14: zone exit releases our claim (k.m()) and
                         // clears the marker popup (k.k(aw)).
-                        if (world.claimed === e) {
-                            world.clearClaim(); world.clearPrompt(e.aw)
+                        if (world.kL?.aw == e.aw) {          // @149-175
+                            world.claimReset(); world.clearPrompt(e.aw)
                         }
                     } else {
                         // in k.M: bid prio 5 (k.a) + marker popup (k.c).
-                        world.claim(e, 5, e.W)
+                        world.registerClaim(e, 5, e.W)
                         world.showPrompt(e.ak, e.al - 85, e.aw)
                     }
                     e.pushContact(world)                  // L18: a()
@@ -2357,7 +2374,7 @@ class NpcFsm(val world: LevelCellSource) {
                         e.m--
                     }
                 }
-                if (world.claimed === e) world.clearClaim()
+                if (world.kL?.aw == e.aw) world.claimReset()          // @326-345
                 world.removeEntity(e)
             }
             29 -> {
@@ -7296,7 +7313,7 @@ fun NpcFsm.tickAx58(e: Entity, w: Level0World, p: Entity) {
             if (Entity.overlapStrict(e.W, p.X) && p.S != 22) {
                 e.setAnim(3); w.sfx(21)
             }
-            if (w.claimed != null && w.claimed!!.aw == e.aw) w.clearClaim()  // k.m()
+            if (w.kL != null && w.kL!!.aw == e.aw) w.claimReset()  // k.m()
             e.releaseAe()                               // G()
         }
         3 -> {                                          // L39 — fired
