@@ -1467,16 +1467,20 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `bt()` (i.java:16669, proven): moving-contact sweep — when `ah != 0`
-     * (falling block), every `bb[]` entity of ax ∈ {17,11,23,50} that is
-     * `P()`-sweepable and overlaps `W` gets `as()`-ed. (`bb`/`bc` =
-     * registration pool = `w.npcs`.)
+     * `bt()` (i.java:15745; bytecode bt() @0-148, proven): moving-contact
+     * sweep — when `ah != 0` (a falling block), every `bb[]` entity of ax ∈
+     * {17,11,23,50} that is ALIVE (`!P()`: `P()` is `aB <= 0`, with `G()`
+     * on the dead — @95-98 `P(); ifne next`) and overlaps `W` gets `as()`
+     * — it is killed. The port skipped the alive ones (inverted), so a
+     * falling block / ax78 rock only ever "killed" corpses. (`bb`/`bc` =
+     * the registration pool = `w.npcs`; `P()` runs for every ax match, as
+     * here.)
      */
     fun sweepHostiles(world: Level0World) {
         if (ah == 0) return
         for (n in world.npcs) {
             if (n.ax != 17 && n.ax != 11 && n.ax != 23 && n.ax != 50) continue
-            if (!n.deadRelease()) continue                       // P() + G()
+            if (n.deadRelease()) continue                        // !P() (+ G())
             if (!overlapStrict(W, n.W)) continue
             n.sweepReact()
         }

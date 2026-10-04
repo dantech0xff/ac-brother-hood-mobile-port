@@ -5581,10 +5581,11 @@ class Slice49Test {
         e.ah = 512                                  // bt() requires ah!=0
         val n = Entity(11, null); n.setPositionPx(200, 175)
         box(n, 180, 160, 200, 180)
-        n.aB = 0
+        n.aB = 100; n.S = 3                         // ALIVE: bt() sweeps `!P()` (slice 387)
         w.npcs.add(n)
         w.npcFsm.tickAx15(e, w, w.player)
         assertTrue(e.P and 16 != 0, "L5 → P|=16")
+        assertEquals(0, n.aB, "bt() → as() zeroes the alive soldier's aB")
         assertEquals(0, n.S, "bt() → as() → ax11 i(0)")
     }
 }

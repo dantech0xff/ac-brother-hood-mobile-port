@@ -5805,13 +5805,19 @@ fun NpcFsm.initAx15(e: Entity, f: List<Int>, w: Level0World) {
     e.refreshBoxes()
 }
 
-/** `bu()` verbatim (i.java:16693-16924, proven). S6/S8 → the L7 body;
- *  S9 → `P|=16`; S10 → `P|=16` + `bt()`; S7 → `L198`; else → `L204`
- *  (`b = false` tail on every arm except S7's remove-return). */
+/** `bu()` verbatim (i.java:15763; bytecode bu() @0-1712, proven). S6/S8 →
+ *  the L7 body; S9 → `P|=16`; S10 → `P|=16` + `bt()` and then the SAME
+ *  body — the tableswitch sends 10 to @54, which has no `goto` after
+ *  `bt()` and runs straight into @69 (the body reads `r1 == 10` for its
+ *  `z2`/`e(r1)` arms); S7 → `L198`; else → `L204` (`b = false` tail on
+ *  every arm except S7's remove-return). */
 fun NpcFsm.tickAx15(e: Entity, w: Level0World, p: Entity) {
     when (e.S) {
         9 -> { e.P = e.P or 16; e.b = false }                          // L4
-        10 -> { e.P = e.P or 16; e.sweepHostiles(w); e.b = false }     // L5
+        10 -> {                                                        // @54-69
+            e.P = e.P or 16; e.sweepHostiles(w)
+            ax15Body(e, w, p); e.b = false
+        }
         7 -> {                                                       // L198
             if (e.animFinished()) {
                 if (e.Z[3] == 1) { w.removeEntity(e); return }       // L203 early
@@ -5882,8 +5888,9 @@ private fun ax15Body(e: Entity, w: Level0World, p: Entity) {
     if (!e.supportedByGround(w) && e.s == null && !r9) {
         e.ag = 0; e.ah = 4096
     }
-    // L137 — grounded → settle flags
-    if (e.supportedByGround(w)) { e.bd = true; e.ai = 0; e.ah = 0 }
+    // L137 — grounded (or a linked S10 block, `z2`) → settle flags
+    // (bu() @1125-1148: `if (aM() || z2) { bd = true; ai = 0; ah = 0 }`)
+    if (e.supportedByGround(w) || r9) { e.bd = true; e.ai = 0; e.ah = 0 }
     // L141 — neighbor sweep over `k.bd` (the last paint's list, slice 385)
     for (n in w.drawn) {
         // L156 ax44 door overlapping an S6 block → i(7) collapse anim; the

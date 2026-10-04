@@ -309,6 +309,13 @@ class Level0World(
         // (`pendingRemove` membership — the list itself drains after).
         if (kAh === e) kN()
         if (kF === e) kF = null
+        // `for (i < bc) if (bb[i] == iVar) { bg[as] = -99; bb[i].p(); … }`
+        // (bytecode k.c(i) @26-91, proven): a pool member is `p()`'d AT
+        // ONCE — boxes, `ab`/`ad`/`ae`/`af`/`c` and the `cr` pool dropped —
+        // so the rest of the frame (stale `bd[]` entries, links still held
+        // by others) sees an inert entity; a second `k.c` on the same one
+        // finds no slot and does nothing (slice 387).
+        if (e !in pendingRemove && (e in npcs || e in pendingInsert)) e.deactivate()
         pendingRemove += e
         // k.c(iVar) (k.java:4576): `bg[as]=-99` — the record's save-image
         // slot tombstones immediately; the next aY() propagates it to bf.
@@ -2354,9 +2361,14 @@ class Level0World(
             val e = drawList[i] ?: break
             e.ad?.let { if (it.ax != 76 && it.ax != 29) it.drawStyleF(this) }
             if (e.ax == 21 && e.S == 1) {                // L243-L251
+                // b(Z) @1910-1966 (proven): `ad != null` → `C == null || u
+                // != 9` clears the freeze bit (`ad.P &= -65`), then
+                // `ad.s()` runs unconditionally (its own `P&64` gate
+                // decides). The port advanced only for `C == null || u ==
+                // 9` — a claim over a non-u9 dialog never moved it.
                 val ad = e.ad
-                if (ad != null && (kC == null || dlgU == 9)) {
-                    if (kC == null) ad.P = ad.P and 64.inv()
+                if (ad != null) {
+                    if (kC == null || dlgU != 9) ad.P = ad.P and 64.inv()
                     ad.advanceAnim()
                 }
             }
