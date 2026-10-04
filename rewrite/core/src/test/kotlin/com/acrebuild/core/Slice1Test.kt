@@ -260,6 +260,13 @@ fun Level0World.paint(vararg es: Entity) {
     for (e in es) drawList[drawCount++] = e
 }
 
+/** Slice 388: `az()` scans `k.bd` — paint the hand-staged neighbours (every
+ *  `npcs` entry, in list order) as the last pass's draw list, then scan. */
+fun Level0World.scanInteract(p: Entity) {
+    paint(*npcs.toTypedArray())
+    playerFsm.interactScan(p)
+}
+
 fun settleIntro(w: Level0World) {
     // the spawn-intro claim script binds `k.C` in phases (~70 ticks each)
     // even with auto-dismiss dialogs; the `I()` L108 gate suspends
@@ -1446,7 +1453,7 @@ class Level0WorldTest {
         p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
         p.setAnim(295)                        // interactEligible state
         val e = soldierAt(w, 350, 150)
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(e, p.g)
         assertSame(e, p.ci)                   // L275 — NPC-kind → ci too
     }
@@ -1458,7 +1465,7 @@ class Level0WorldTest {
         p.setPositionPx(300, 150); p.av = false; p.refreshBoxes()
         p.setAnim(295)
         soldierAt(w, 250, 150)                // left of a right-facing player
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(p.g); assertNull(p.ci)
     }
 
@@ -1471,7 +1478,7 @@ class Level0WorldTest {
         val e = soldierAt(w, 350, 150)
         e.aB = 0                              // dead → P() true
         val ae = w.spawnPickup(71, 0, 0); e.ae = ae
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(p.g)
         assertNull(e.ae)                      // G() ran inside P()
     }
@@ -1485,7 +1492,7 @@ class Level0WorldTest {
         p.g = soldierAt(w, 350, 150)
         Entity.at = p.g
         p.aA = p.aA or 8                      // hidden in a spot
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(p.g); assertNull(Entity.at)
         Entity.at = null
     }
@@ -1498,7 +1505,7 @@ class Level0WorldTest {
         val e = soldierAt(w, 350, 150)
         p.g = e
         e.setPositionPx(300 + 460, 150); e.refreshBoxes()
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(p.g)
     }
 
@@ -1509,12 +1516,12 @@ class Level0WorldTest {
         p.setPositionPx(300, 150); p.refreshBoxes()
         val e = soldierAt(w, 350, 150).apply { aB = 0 }
         Entity.at = e
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(Entity.at)
         val e2 = soldierAt(w, 350, 150).apply { aB = 0 }
         Entity.at = e2
         p.setAnim(298)                        // struggle QTE → preserved
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(e2, Entity.at)
         Entity.at = null
     }
@@ -1537,7 +1544,7 @@ class Level0WorldTest {
         e.Y[0] = e.W[0]; e.Y[1] = e.W[1]; e.Y[2] = e.W[2]; e.Y[3] = e.W[3]
         w.npcs.add(0, e)
         p.S = 0                               // mountable state (g.k whitelist)
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(e, Entity.at)
         Entity.at = null
     }
@@ -1676,7 +1683,7 @@ class Level0WorldTest {
         m.Y[0] = m.W[0]; m.Y[1] = m.W[1]; m.Y[2] = m.W[2]; m.Y[3] = m.W[3]
         w.npcs.add(0, m)
         p.S = 0
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(m, Entity.at, "az() ax72 arm consumed the J&4 request")
         Entity.at = null
     }
@@ -2164,6 +2171,7 @@ class Level0WorldTest {
         p.setAnim(303); p.K = 0
         val t = soldierAt(w, 330, 150)
         p.g = t
+        w.paint(t)                                   // az() scans the last paint
         while (!p.animFinished()) p.advanceAnim()
         val pad = Pad(); pad.queuePress(Pad.M_CONTEXT); pad.commit(0)
         w.playerFsm.tick(p, pad)
@@ -2296,6 +2304,7 @@ class Level0WorldTest {
         p.gJ = 8
         val s = soldierAt(w, 240, 120); s.aB = 400
         p.g = s
+        w.paint(s)                                   // az() scans the last paint
         p.setAnim(295)
         // z=false (no groundedTail ran) → contextDispatch can't double-fire
         val (cx, cy) = w.cellPoint(4)
@@ -13357,6 +13366,9 @@ class Slice128Test {
         override val cellPx = 20
         override var lockTarget: Entity? = null
         override val npcs = mutableListOf<Entity>()
+        /** Slice 388: the double's "last paint" is exactly its `npcs`, so the
+         *  `k.bd` neighbour scans (az, bd, bc, …) see what a test staged. */
+        override val drawn: Iterable<Entity> get() = npcs
         override var claimPrio = 0
         override var claimed: Entity? = null
         override var aq = 0
@@ -19908,6 +19920,10 @@ class Slice196Test {
         // |Δal| >= 60.
         gg.aB = 1; gg.al = p.al
         p.g = gg
+        // S291 is one of the az() rebind states (@66-101: `g = null`, then
+        // the scan binds the last candidate in `k.bd` order within 440px,
+        // facing or not) — the target has to be on the draw list.
+        w.npcs.add(gg)
         val pad = Pad(); pad.bB = 65568
         fsm.tick(p, pad)
         assertEquals(270, p.S, "r9&&v(65568)&&g.g → i(270)")
@@ -23552,6 +23568,7 @@ class Slice245Test {
         settleIntro(w)
         val p = w.player
         var doorPulse = 0
+        var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23607,7 +23624,8 @@ class Slice245Test {
                 doorPulse = (doorPulse + 1) and 1
                 held = when {
                     !p.aZ -> 0
-                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ci != null -> Pad.M_LEFT   // slice 388: `ci` only — `g` stays
+                                                 // bound while the soldier is alert
                     p.ag == 0 && doorPulse == 0 -> Pad.M_UP
                     else -> 0
                 }
@@ -23617,9 +23635,17 @@ class Slice245Test {
             // while bound until the lock clears. The Z2 road-blocker
             // (record-spawned, aB=300) is unkillable — never attack it:
             // its counter only fires while playerAttacking().
+            // Slice 388: az() keeps `g` bound to an alert soldier for as long
+            // as it lives inside the 440px / 60px-dy band — only the LOS-
+            // clear candidates reset it (@1234), so the far pack below the
+            // column no longer unbinds uid571 every tick. Facing away does
+            // not unbind it either. Two opening strikes, then stop: the
+            // soldier chases the jump off the column's west edge and falls
+            // (S25, |dy| >= 60 drops `g`); the kick well brings him back up
+            // to the door with `g == null`.
             val g2 = p.g
             if (g2 != null && p.aZ && !(g2.ax == 11 && g2.Z[0] == 2 &&
-                g2.aB > 80))
+                g2.aB > 80) && !(g2.aw == 571 && strikes571++ >= 2))
                 held = held or Pad.M_CONTEXT
             // Moat approach: hold RIGHT only — NO UP (arming aF makes
             // the wall-grab fire on face contact, pre-empting the
@@ -23679,6 +23705,7 @@ class Slice245Test {
         settleIntro(w)
         val p = w.player
         var doorPulse = 0
+        var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23753,7 +23780,8 @@ class Slice245Test {
                 doorPulse = (doorPulse + 1) and 1
                 held = when {
                     !p.aZ -> 0
-                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ci != null -> Pad.M_LEFT   // slice 388: `ci` only — `g` stays
+                                                 // bound while the soldier is alert
                     p.ag == 0 && doorPulse == 0 -> Pad.M_UP
                     else -> 0
                 }
@@ -23787,9 +23815,17 @@ class Slice245Test {
             // EXCEPT the Z2 road-blocker at x10497: record-spawned
             // aB=300 > BW_MOCK — unkillable by design; attacking only
             // feeds its counter arm. Walk past it instead.
+            // Slice 388: az() keeps `g` bound to an alert soldier for as long
+            // as it lives inside the 440px / 60px-dy band — only the LOS-
+            // clear candidates reset it (@1234), so the far pack below the
+            // column no longer unbinds uid571 every tick. Facing away does
+            // not unbind it either. Two opening strikes, then stop: the
+            // soldier chases the jump off the column's west edge and falls
+            // (S25, |dy| >= 60 drops `g`); the kick well brings him back up
+            // to the door with `g == null`.
             val g2 = p.g
             if (g2 != null && p.aZ && !(g2.ax == 11 && g2.Z[0] == 2 &&
-                g2.aB > 80))
+                g2.aB > 80) && !(g2.aw == 571 && strikes571++ >= 2))
                 held = held or Pad.M_CONTEXT
             // Moat approach: strip UP so aF can't arm wallGrabSnap on
             // face contact — the ax22 eject arc then clears the lip
@@ -23836,6 +23872,7 @@ class Slice245Test {
         settleIntro(w)
         val p = w.player
         var doorPulse = 0
+        var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23884,7 +23921,7 @@ class Slice245Test {
                         doorPulse = (doorPulse + 1) and 1
                         held = when {
                             !p.aZ -> 0
-                            p.g != null || p.ci != null -> Pad.M_LEFT
+                            p.ci != null -> Pad.M_LEFT   // slice 388: `ci` only
                             p.ag == 0 && doorPulse == 0 -> Pad.M_UP
                             else -> 0
                         }
@@ -23898,9 +23935,13 @@ class Slice245Test {
                     // Z2 road-blocker at x10497 is unkillable by design
                     // (aB=300 > BW_MOCK) — attacking feeds its counter;
                     // walk past it.
+                    // Slice 388: two opening strikes on uid571 only — see the
+                    // cp7 fuse leg (az() keeps it bound; it falls off the west
+                    // edge chasing the jump).
                     val g2 = p.g
                     if (g2 != null && p.aZ && !(g2.ax == 11 &&
-                        g2.Z[0] == 2 && g2.aB > 80))
+                        g2.Z[0] == 2 && g2.aB > 80) &&
+                        !(g2.aw == 571 && strikes571++ >= 2))
                         held = held or Pad.M_CONTEXT
                     // Moat: strip UP so aF can't arm wallGrabSnap on
                     // face contact — the zone eject clears the lip.
@@ -25310,7 +25351,8 @@ class Slice245Test {
             // resulting S277 mount is a faithful soft-lock: the carry arm
             // needs Z[0]==0 (i.java:36405) so a weakened Z[0]==2 victim
             // can never release. Walk past instead — the weakened victim
-            // stays passive and unbinds once out of LOS/level.
+            // stays passive; `g` drops once |Δal| >= 60 or it is 440px away
+            // (slice 388: LOS only gates NEW binds, it never unbinds).
             val mountFrozen = p.g != null && p.g!!.ax == 11 &&
                 p.g!!.Z[0] == 2 && p.g!!.Z[19] == 1
             // slice-278: never CONTEXT while the foe is in S144
@@ -25457,7 +25499,8 @@ class Slice245Test {
         // Z[0]==0, i.java:36405; P() needs aB≤0; the rest unreachable once
         // floor-pinned). The bot now suppresses CONTEXT while a weakened
         // mountable is bound (mountFrozen) and walks past — the weakened
-        // guard stays passive and unbinds out of LOS/level.
+        // guard stays passive; `g` drops at |Δal| >= 60 / 440px (slice 388:
+        // LOS only gates new binds).
         // Proven frontier (slice 275): the x8118 crusher corridor's only
         // route is the wire chain — ax40 zipline (S164, ac-bound) →
         // rail2 ax10-S34 (auto-dive Z[1]==1) → lands the x8800 corridor →
@@ -25474,10 +25517,12 @@ class Slice245Test {
         // paired S16 door-teleport — ax10@(10587,330) links oId 134 →
         // ax10@(10789,402) Z0 600→601 (L17d9-L1808 proven). The arm
         // needs the player grounded inside the door's W-box with a
-        // fresh v(16388) edge AND `g == null`; the posted ax11 pair
-        // binds on contact but drops as it falls behind, so a straight
-        // east run reaches the W unbound → doorPulse fires → bh() fades
-        // out (S284) and bi() re-anchors at the far door → ak≈10789.
+        // fresh v(16388) edge AND `g == null`; the posted ax11 binds on
+        // contact and (slice 388) STAYS bound while it is alert inside the
+        // 440px / 60px band — the tower legs bait uid571 off the column's
+        // west edge (S25 fall → |Δal| >= 60 drops `g`), then reach the W
+        // unbound → doorPulse fires → bh() fades out (S284) and bi()
+        // re-anchors at the far door → ak≈10789.
         // Past it: y500 terrace east → the x10940-11319 chasm
         // (ax13 rope @11312,441 / deep pit with patrols) → far shelf
         // x11320+ → goal ax5@11448,503. WON with deaths=0, maxAk=11576
@@ -25523,7 +25568,8 @@ class Slice245Test {
 //    |Δal|≥60, carry `aA|=8` needing victim Z[0]==0 i.java:36405,
 //    aI() W-overlap, S303/295 anim-end, i.at) is unreachable.
 //  The capstone bot's policy stands: never CONTEXT while a weakened
-//  mountable is bound — the weakened victim stays passive and unbinds.
+//  mountable is bound — the weakened victim stays passive; `g` drops at
+//  |Δal| >= 60 / 440px (slice 388: LOS only gates new binds).
 class Slice277Test {
 
     private fun soldierAt(w: Level0World, x: Int, y: Int): Entity {
@@ -25542,7 +25588,7 @@ class Slice277Test {
         p.gJ = 0                                          // no offer arm
         val s = soldierAt(w, 320, 150)
         s.Z[0] = 2; s.Z[19] = 1                           // weakened + mountable
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(s, p.g, "aA=1 + |Δal|=0 + LOS → L56a binds (proven)")
     }
 
@@ -25554,13 +25600,13 @@ class Slice277Test {
         p.gJ = 0                                          // offer dead
         val far = soldierAt(w, 320, 190)                  // |Δal| = 40
         far.Z[0] = 2; far.Z[19] = 1
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertNull(p.g, "aA=1 but |Δal|=40 → L56a skips (gate restored)")
         p.g = null
         w.npcs.remove(far)
         val near = soldierAt(w, 320, 165)                 // |Δal| = 15
         near.Z[0] = 2; near.Z[19] = 1
-        w.playerFsm.interactScan(p)
+        w.scanInteract(p)
         assertSame(near, p.g, "|Δal|=15 ≤ 20 → binds")
     }
 
@@ -25595,7 +25641,7 @@ class Slice277Test {
             assertEquals(5120, p.ag, "ag = -(cF>>8)·cos(128) = +20px/tick")
             assertEquals(0, p.ah, "ah = 20·cos(64-128) = 20·cos(-64) = 0")
             assertEquals(128, p.cy, "cy never recomputed — frozen at bind")
-            w.playerFsm.interactScan(p)                   // release-gate sweep
+            w.scanInteract(p)                   // release-gate sweep
             assertSame(s, p.g, "no release arm reachable — g stays bound")
         }
         assertEquals(277, p.S, "S277 has no input arm — mount never dismounts")
@@ -28212,8 +28258,19 @@ class Slice291Test {
             if (w.jC == 15) { won = true; break }
             if (p.ak - 200 > w.kO) w.kO = p.ak - 200
             if (p.al - 120 > w.kP) w.kP = p.al - 120
+            // Slice 388: the two patrol guards on the lower mass wake as he
+            // drops in (aA = 1) and az() keeps `g` bound to them (LOS-gated
+            // rebinding only — the old unbind flicker is gone), which blocks
+            // the door arm's `g == null` and, with `ci` in front, turns a
+            // held UP into the S6 pick-up pose. Fight them off like leg F.
+            val foe = w.npcs.filter { it.ax == 11 && it.aB > 0 && it.S != 139 &&
+                kotlin.math.abs(it.ak - p.ak) < 130 && kotlin.math.abs(it.al - p.al) < 80 }
+                .minByOrNull { kotlin.math.abs(it.ak - p.ak) }
             val pad = when {
                 w.jC == 10 || w.jC == 15 || w.jC == 21 -> 327712
+                foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 && p.aZ -> {
+                    if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
+                }
                 (p.ac != null && p.ac!!.ax == 10) ||
                 (p.aZ && p.ak in 10590..10700 && p.al in 990..1040) -> Pad.M_UP
                 p.ak in 10910..10960 && p.al > 1100 -> Pad.M_CONTEXT

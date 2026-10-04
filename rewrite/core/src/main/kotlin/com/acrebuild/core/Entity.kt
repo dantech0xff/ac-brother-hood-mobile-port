@@ -3205,24 +3205,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
         e(world, cx, cy)
 
     /**
-     * `g.i(i)` (g.java:5465, proven): interact-eligibility of `cand`
-     * under this player's current state — `J&4 && cand.ax==11 &&
-     * cand.Z[19]==1` → facing + |dx|<=200 window; `S∈{268,291}` or
-     * `aS.S==267` → true; `S==303 && r()` → true; `S∈{295,357,358}` →
-     * true; `S∈[299,307]` → true; else false.
+     * `g.i(i)` (g.javap.txt i(i) 0-188, proven; slice 388): interact-
+     * eligibility of `cand` under this player's current state.
+     *  - 0-85: `J&4 && cand.ax==11 && cand.Z[19]==1` with the candidate IN
+     *    FRONT (`av ? dx < 0 : dx > 0`, `dx = cand.ak - ak`) and within
+     *    200px → true. Every other outcome of that block falls THROUGH to the
+     *    state list — it never returns false itself (the port did, and read
+     *    the `!av` side backwards);
+     *  - 86-186: `S ∈ {268, 291}`, `k.aS.S == 267` (the player's own S),
+     *    `S == 303 && r()`, `S ∈ {295, 357, 358}`, `S ∈ [299, 307]` → true
+     *    (S303 sits in the range, so it is true whatever `r()` says).
      */
     fun interactEligible(cand: Entity): Boolean {
         if (gJ and 4 != 0 && cand.ax == 11 && cand.Z[19] == 1) {
-            if (av && cand.ak - ak >= 0) return false
-            if (!av && cand.ak - ak > 0) return false
-            if (Math.abs(cand.ak - ak) > 200) return false
-            return true
+            val dx = cand.ak - ak
+            if (((av && dx < 0) || (!av && dx > 0)) && Math.abs(dx) <= 200) return true
         }
-        if (S == 268 || S == 291) return true
-        if (S == 303) return animFinished()
-        if (S == 295 || S == 357 || S == 358) return true
-        if (S in 299..307) return true
-        return false
+        return S == 268 || S == 291 || S == 267 || (S == 303 && animFinished()) ||
+            S == 295 || S == 357 || S == 358 || S in 299..307
     }
 
     /** `g.b(int)` (g.java:374, proven): free/interact-eligible anim set —

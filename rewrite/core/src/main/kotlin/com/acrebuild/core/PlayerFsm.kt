@@ -2531,77 +2531,85 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     var tickCount = 0L
 
     /**
-     * `az()` (g.java:5510-5757, proven) — per-tick interact maintenance +
-     * `k.bd[]` scan that produces the three links:
+     * `az()` (g.javap.txt az() 0-1819, proven; slice 388) — per-tick
+     * interact maintenance + the `k.bd[]` scan that produces the three
+     * links:
      *   `g`   = interact target (NPC/prop in front, <440 octagonal px),
      *   `ci`  = carry target (NPC-kind candidate at the same spot),
      *   `i.at`= mount/assassination link (ax72 arm; also written at
      *           i.java:6007 by the ax11 grab).
-     * Hidden (`aA&8`) → drop `g`/`at`, bail. Hostage-carry states
-     * (S270/271) hold the links; S268 drops `g` for a fresh rebind.
+     * Hidden (`aA&8`) or S250 → drop `g`/`at`, bail. Hostage-carry states
+     * (S270/271) hold a BOUND `g`; S267/268/291 drop `g` for a fresh
+     * rebind. The scan walks `k.bd` — the last paint's draw list.
      */
     fun interactScan(p: Entity) {
-        // -- L5-L8: hidden → clear and bail --------------------------------
-        if (p.aA and 8 != 0) { p.g = null; Entity.at = null; return }
-        // -- L12-L19: carry anims preserve links; S268 rebinds g -----------
-        if (p.S == 270 || p.S == 271) return
-        if (p.S == 268) p.g = null
-        // -- L26-L35: drop stale/dead g (ax4 exempt from the aB check) -----
+        // -- @0-38: hidden or S250 → clear and bail ---------------------------
+        if (p.aA and 8 != 0 || p.S == 250) { p.g = null; Entity.at = null; return }
+        // -- @39-65: carry anims keep a bound `g` (an unbound one scans on) ----
+        if (p.g != null && (p.S == 270 || p.S == 271)) return
+        // -- @66-101: S268, S267 (`k.aS.S` — the player's own) and S291
+        //    rebind from scratch ---------------------------------------------
+        if (p.S == 268 || p.S == 267 || p.S == 291) p.g = null
+        // -- @102-182: drop a stale/dead `g` — the whole block skips an ax4
+        //    (no aB check, no distance, no |Δal|) ------------------------------
         p.g?.let { g ->
-            if (g.ax != 4 && g.aB <= 0) p.g = null
-            else if (p.h(p.ak - g.ak, p.al - g.al) > 440 ||
-                     Math.abs(p.al - g.al) >= 60) p.g = null
+            if (g.ax != 4 && (g.aB <= 0 ||
+                    p.h(p.ak - g.ak, p.al - g.al) > 440 ||
+                    Math.abs(p.al - g.al) >= 60)) p.g = null
         }
-        // -- L37-L48: `ci` cleared unconditionally each az() call
-        //    (fallback g.java:12917-12942, proven — both `av` branches
-        //    fall through to `ci = null`; the keep-branch is dead bytecode
-        //    noise). Rebinding happens in the L144+ k.bd[] scan, whose
-        //    own facing + dist<440 gates filter candidates. -------------
+        // -- @183-243: `ci` cleared unconditionally each call (the keep-branch
+        //    needs `av` both true and false — dead bytecode). Rebinding
+        //    happens in the scan, whose facing + dist<440 gates filter it. ----
         p.ci = null
-        // -- L50-L63: ax11 Z[19]==1 targets must stay in front ------------
-        p.g?.let { g -> if (g.ax == 11 && g.Z[19] == 1 && !p.inFrontOf(g)) p.g = null }
-        // -- L65-L83: `i.at` — drop when dead, far, behind, or off-level --
-        Entity.at?.let { a ->
-            val drop = when {
-                a.ax != 11 || !a.deadRelease() -> {
-                    // g.java:5570-5578 (proven) — drop only when the
-                    // target falls BEHIND: `ak - i.at.ak < 0 && av`
-                    // (player west, facing west) or `> 0 && !av`
-                    // (east, facing east); `W[3] < W[1]` when above.
-                    p.h(p.ak - a.ak, p.al - a.al) > 440 ||
-                    (p.ak - a.ak < 0 && p.av) || (p.ak - a.ak > 0 && !p.av) ||
-                    p.W[3] < a.W[1]
-                }
-                else -> true                       // dead ax11 → L83
+        // -- @244-319: an ax11 `Z[19]==1` target must stay in front — dx == 0
+        //    keeps it (`!av && dx < 0` or `av && dx > 0` drops) ----------------
+        p.g?.let { g ->
+            if (g.ax == 11 && g.Z[19] == 1) {
+                val dx = g.ak - p.ak
+                if ((!p.av && dx < 0) || (p.av && dx > 0)) p.g = null
             }
+        }
+        // -- @320-469: `i.at` — drop when dead, far, behind, or off-level; the
+        //    struggle/mount states S277/293/298 keep it ------------------------
+        Entity.at?.let { a ->
+            val drop = (a.ax == 11 && a.deadRelease()) ||     // P() first (releases `ae`)
+                p.h(p.ak - a.ak, p.al - a.al) > 440 ||
+                (p.ak - a.ak < 0 && p.av) || (p.ak - a.ak > 0 && !p.av) ||
+                p.W[3] < a.W[1]
             if (drop && p.S != 277 && p.S != 293 && p.S != 298) Entity.at = null
         }
-        // -- L90-L131: kind gates — dead NPCs, ax4 pose, ax58, anim-end ----
+        // -- @470-559: dead NPCs (P() releases their `ae`) -----------------------
         p.g?.let { g ->
-            when (g.ax) {
-                11, 17, 73, 9 -> if (g.deadRelease()) p.g = null
-            }
-            if (p.g != null && (p.S == 295 || p.S == 303) && p.animFinished()) {
-                val g2 = p.g!!
-                if (g2.ax != 4 || g2.S != 30 || !p.inFrontOf(g2)) p.g = null
-            }
-            p.g?.let { g2 -> if (g2.ax == 4 && g2.S != 30) p.g = null }
-            p.g?.let { g2 -> if (g2.ax == 58) p.g = null }
+            if ((g.ax == 11 || g.ax == 17 || g.ax == 73 || g.ax == 9) &&
+                g.deadRelease()) p.g = null
         }
-        // -- L136-L142: all bound + no pending mount bit → done -----------
-        if (p.g != null && Entity.at != null && p.gJ and 4 == 0 && p.ci != null) return
-        // -- L144-L350: scan k.bd[] ----------------------------------------
-        var best = 440                            // r6 — narrowed by L228
-        for (e in world.npcs) {
+        // -- @560-627: at the end of the S295/S303 anim only a faced ax4 S30 stays
+        p.g?.let { g ->
+            if ((p.S == 303 || p.S == 295) && p.animFinished() &&
+                !(g.ax == 4 && g.S == 30 && p.inFrontOf(g))) p.g = null
+        }
+        // -- @628-679: ax4 off S30 and ax58 never stay bound ---------------------
+        p.g?.let { g -> if (g.ax == 4 && g.S != 30) p.g = null }
+        p.g?.let { g -> if (g.ax == 58) p.g = null }
+        // -- @680-705: all bound + no pending mount bit → done (dead in the
+        //    original: `ci` was just cleared) -----------------------------------
+        if (p.g != null && (Entity.at != null || p.gJ and 4 == 0) && p.ci != null) return
+        // -- @706-1819: scan k.bd[] -----------------------------------------------
+        var best = 440                            // r1 — narrowed at @1246
+        for (e in world.drawn) {
             if (e.P and 32 != 0) continue         // held
-            if ((e.ax == 11 || e.ax == 17 || e.ax == 73 || e.ax == 23 || e.ax == 9)
-                && e.deadRelease()) continue
+            // @762-904: dead NPCs (P() runs — it releases `ae`) and ax4 off S30
+            if (e.ax == 11 && e.deadRelease()) continue
+            if (e.ax == 17 && e.deadRelease()) continue
+            if (e.ax == 73 && e.deadRelease()) continue
+            if (e.ax == 23 && e.deadRelease()) continue
+            if (e.ax == 9 && e.deadRelease()) continue
             if (e.ax == 4 && e.S != 30) continue
             val npcKind = e.ax == 11 || e.ax == 17 || e.ax == 23 ||
                           e.ax == 73 || e.ax == 29 || e.ax == 9
             val pathA = npcKind || (e.ax == 4 && e.S == 30) || e.ax == 58
             if (!pathA) {
-                // -- L279: ax72 mount arm only ------------------------------
+                // -- @1555: ax72 mount arm only --------------------------------
                 if (e.ax != 72) continue
                 // g.az() @1591: `bd[i].v()` — the one v() port
                 if (p.gJ and 4 == 0 || !p.mountableState() || !e.inPlayV(world) ||
@@ -2618,38 +2626,44 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     if (p.W[1] < e.W[3]) continue
                 }
                 if (p.W[3] < e.W[1]) continue
-                if (p.losBlocked(e, world)) continue
+                if (p.losBlocked(e, world)) continue          // @1786 `e(bd[i])`
                 if (Entity.at != null) continue
                 Entity.at = e
                 return
             }
-            // -- L200 path: dead-check, I==8 gate for ax4/58, facing, dist --
+            // -- @1023 path: dead-check, I==8 gate for ax4/58, facing, dist ------
             if (e.aB <= 0 && e.ax != 4 && e.ax != 58) continue
             if (p.gI != 8 && (e.ax == 4 || e.ax == 58)) continue
-            // L212-L220: facing gate — av=false needs dx>0; av=true dx<0;
-            // S∈{268,291} bypass (L220).
-            val inFront = if (p.av) e.ak - p.ak < 0 else e.ak - p.ak > 0
+            // @1092-1155: facing gate — av=false needs dx>0; av=true dx<0;
+            // S∈{268,291} bypass.
+            val dxe = e.ak - p.ak
+            val inFront = (p.av && dxe < 0) || (!p.av && dxe > 0)
             if (!inFront && p.S != 268 && p.S != 291) continue
             val d = p.h(p.ak - e.ak, p.al - e.al)
-            if (d >= best) continue                                 // L224
-            best = d                                                // r6 = r03
-            p.g = null                                              // L228 boundary
-            if (p.S == 268) { p.g = e; continue }                   // L231
+            if (d >= best) continue                                 // @1188
+            // @1191-1231: the rebind states take the nearest facing-or-not
+            // candidate outright — before `best` narrows and with no LOS test
+            if (p.S == 268 || p.S == 267 || p.S == 291) { p.g = e; continue }
+            // @1234: `i.e(bd[i])` — a solid cell on the line between the
+            // two centres hides the candidate (the ax72 arm has the same test)
+            if (p.losBlocked(e, world)) continue
+            best = d                                                // @1246-1278
+            p.g = null                                              // @1283 boundary
             if (npcKind) {
-                // L547 (g.java:13487, proven): the aA gate covers only
+                // @1299-1383 (proven): the aA gate covers only
                 // {11,17,23,73} — an idle/attack-engaged victim without
-                // the i() offer skips; ax9/29 fall to L56a directly.
+                // the i() offer skips; ax9/29 fall to @1386 directly.
                 if ((e.ax == 11 || e.ax == 17 || e.ax == 23 || e.ax == 73) &&
                     !p.interactEligible(e) && (e.aA == 0 || e.aA == 2)) continue
-                // L56a (g.java:13500, proven): the offer bypasses |Δal|;
-                // otherwise the victim must sit within ±20px vertically.
+                // @1386 (proven): the offer bypasses |Δal|; otherwise the
+                // victim must sit within ±20px vertically.
                 if (!p.interactEligible(e) && Math.abs(p.al - e.al) > 20) continue
-                if (p.g == null) p.g = e                            // L260
-                if (p.ci == null) p.ci = e                          // L275
+                if (p.g == null) p.g = e                            // @1419
+                if (p.ci == null) p.ci = e                          // @1433-1522
             } else {
-                // L256-L260: i(e) or |dy|<=20 → g-bind
+                // @1386-1430: i(e) or |dy|<=20 → g-bind
                 if (!p.interactEligible(e) && Math.abs(p.al - e.al) > 20) continue
-                if (p.g == null) p.g = e                            // L260
+                if (p.g == null) p.g = e
             }
         }
     }
