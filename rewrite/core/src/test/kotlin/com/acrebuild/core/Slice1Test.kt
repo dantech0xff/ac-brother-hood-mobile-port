@@ -18615,9 +18615,12 @@ class Slice187Test {
         assertTrue(p.x1 < x1Before, "g.a() pays u[au] damage")
     }
 
-    /** The `aR==2` gate (standing on a type-2 strip) suppresses op18
-     *  even when `aO==6` (g.java:3465). */
-    @Test fun `aO6 suppressed on type2 ground`() {
+    /** g.javap.txt e() 13662-13711 (slice 370): `(aR==2 || aO==2 || L())
+     *  && g.a==null → ah=aj=0; g.e(0); i(50); return` runs BEFORE the
+     *  13712 `aO==6` hit — a type-2 cell under the feet kills. (Slice 187
+     *  read the simple view, which drops the jumps, as "type-2 suppresses
+     *  the aO==6 hit".) */
+    @Test fun `type2 cell under the feet kills before the aO6 hit`() {
         val w = Slice128Test.MarkerWorld(cellFn = { cx, cy ->
             if (cx == 10 && cy == 4) 6 else if (cx == 10 && cy == 5) 2 else 0 })
         val fsm = PlayerFsm(w)
@@ -18625,13 +18628,12 @@ class Slice187Test {
         p.ak = 200; p.al = 100
         p.W[0] = 190; p.W[2] = 210; p.W[1] = 80; p.W[3] = 100
         p.S = 8
-        val x1Before = p.x1
         fsm.tick(p, Pad())
-        // aR==2 → aZ stays false (probe early-return, Entity.kt:1127) →
-        // the S8 anim-end arm l()→aw() enters a(0) = enterFall → S43 —
-        // but NOT via op18 (no u[au] pay, g.java:3465 suppressed).
-        assertEquals(43, p.S, "l()→aw() → a(0) fall (not the op18 chain)")
-        assertEquals(x1Before, p.x1, "no u[au] pay when suppressed")
+        // aR==2 → aZ stays false (x() returns early) → the S8 anim-end
+        // arm's l()→aw() enters a(0) (S43, aj=1536); L353d then kills.
+        assertEquals(50, p.S, "aR==2 && g.a==null → i(50)")
+        assertEquals(0, p.x1, "g.e(0): x[1] = 0")
+        assertEquals(0, p.ah); assertEquals(0, p.aj, "ah = aj = 0 after the a(0) fall")
     }
 }
 
@@ -23308,6 +23310,14 @@ class Slice245Test {
             if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
             val stuck = p.aZ && p.ag in -256..256
             if (stuck) held = held or Pad.M_UP
+            // Slice 370: the two 80px gaps in the y760 walk line (x6400-
+            // 6479, x6700-6779) drop into pits whose floor carries a type-2
+            // strip (row 42) under the ax44 bars — lethal since the
+            // L353d type-2 kill (g.javap.txt e() 13662-13711). Jump them:
+            // UP as the run turns into the S26 edge walk at the lip (a
+            // running hop spans ~98px).
+            if (p.S == 26 && p.al in 740..770 && p.ak in 6300..6799)
+                held = held or Pad.M_UP
             // parked claim-script prompt (op108): a story zone binds a
             // script that halts on a choice card and `velClampTail`
             // pins the player (i.java:20011, proven) — tap it like a
@@ -25923,6 +25933,13 @@ class Slice281Test {
      * (S260 mount → S264/S266 diagonal hops) → aw28 → spring aw27
      * west-launch → tower C top (y1259). Asserts y<=1300 reached west
      * of x1950 (tower C region).
+     * Slice 370 verdict for leg B — faithful dead end: the `2`@1340
+     * walkway is r67's type-2 strip (cols 102-116, x2040-2339) on the
+     * solid r68, so the L353d kill (g.javap.txt e() 13662-13711) takes
+     * the leg's designed start as it drops onto it. (Its old pass never
+     * ran the east loop either: it hopped west off the walkway to tower
+     * C, through the S89 air-kill on guard aw23@(1988,1300).) The leg
+     * now pins the strip and that kill.
      */
     @Test fun mission2CapstoneLegA() {
         val w = world(aj = 2)
@@ -25994,6 +26011,10 @@ class Slice281Test {
         val w = world(aj = 2)
         w.stateL(8); settleIntro(w)
         val p = w.player
+        for (cx in 102..116) {                    // the walkway
+            assertEquals(2, w.collisionCell(cx, 67), "walkway r67 col $cx")
+            assertEquals(20, w.collisionCell(cx, 68), "walkway floor r68 col $cx")
+        }
         // mid-route entry: on the door-corridor `2`@1340 walkway (the
         // preceding ascent leg: pillar→walkway, still frontier — the leg
         // is entered at its designed start exactly like prior capstone
@@ -26001,6 +26022,7 @@ class Slice281Test {
         p.setPositionPx(2080, 1338); p.ak = 2080; p.al = 1338; p.av = false
         w.kO = 1900; w.kP = 1100
         var legReached = false; var maxAk = 0
+        var stripKill = false
         for (t in 0..1200) {
             var mask = Pad.M_RIGHT + Pad.M_UP
             when (p.S) {
@@ -26025,10 +26047,14 @@ class Slice281Test {
             // tower C region: west of x1950 at y<=1300 (spring aw27's
             // west-launch target is tower C's top).
             if (p.ak <= 1950 && p.al <= 1305 && p.aZ) { legReached = true; break }
+            // the walkway kill: S50, x[1] zeroed, anchor in a type-2 cell
+            if (p.S == 50 && p.x1 == 0 &&
+                w.collisionCell(p.ak / 20, p.al / 20) == 2) { stripKill = true; break }
             if (w.jC != 8) break
         }
-        println("S281 legB end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
-        assertTrue(legReached, "legB reached tower C: got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
+        println("S281 legB end S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC} stripKill=$stripKill")
+        assertTrue(stripKill && !legReached,
+            "legB start: the walkway's type-2 strip kills (L353d) — got S${p.S} @(${p.ak},${p.al}) legReached=$legReached jC=${w.jC}")
     }
 
     /**
@@ -26068,6 +26094,12 @@ class Slice281Test {
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
             }
             if (foe != null && mask == Pad.M_RIGHT) mask = Pad.M_CONTEXT
+            // Slice 370: the 100px gap in `20`@1940 (x2420-2519) has a
+            // type-2 strip on its floor (row 102) — lethal since the L353d
+            // type-2 kill (g.javap.txt e() 13662-13711). Jump it from the
+            // S26 lip walk and take the far lip (ax10 aw22 S43 → S203).
+            if (p.S == 26 && p.al in 1930..1945 && p.ak in 2360..2419)
+                mask = Pad.M_RIGHT + Pad.M_UP
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 160 < w.kP) w.kP = p.al + 160
@@ -28727,45 +28759,67 @@ class Slice300Test {
 
 class Slice301Test {
 
-    /** m7 leg F — west to the spring u33@(336,1522): off the lift row the
-     *  bot runs west along the shelf blocks (ends x620), drops onto the
-     *  '02' floor y1540 and keeps west into the spring's W-box —
-     *  S0 pad arm (i.java:13647): falling overlap → `a(11,0,0,this)`
+    /** m7 leg F — west to the spring u33@(336,1522), whose S0 pad arm
+     *  (i.java:13647) turns a falling overlap into `a(11,0,0,this)` —
      *  Z-launch `ag=-50<<8, ah=-90<<8` → thrown up-left into the west
-     *  wing. Asserts the launch (al < 1360 = 160px+ above the pad). */
+     *  wing. Asserts the launch (al < 1360 = 160px+ above the pad).
+     *  Slice 370 route: the '02' floor y1540 under the lift row (r77
+     *  cols 7-52, on the r78 floor) is a type-2 strip — landing there is
+     *  the L353d kill (g.javap.txt e() 13662-13711), so the bot no
+     *  longer walks it. The crossing is the ax72 wheel uid36@(510,1345)
+     *  (Z[0]==2): `az()` arms `i.at` once `gJ&4` (k.F(aj) → g.g(f0do[aj])
+     *  = 5, k.java:210/3551-3558 — the harness enters play without
+     *  F(aj), hence `gJ = 5`), CONTEXT → `c(i.at)` lunge S273 → i(277)
+     *  mount → `au()` wheel → band-edge fling `ag=-3328, ah=-6656,
+     *  i(243)`; the S43 arc comes down on the pad's W-box (~(341,1519))
+     *  and the pad throws him to the '5' underside (S280 @(270,1310)).
+     *  The fling arc alone tops out at al~1388 — al < 1360 needs the
+     *  pad. */
     @Test fun mission7SpringLaunch() {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
         val p = w.player
+        p.gJ = 5                        // f0do held-mask the real play-entry applies (k.F(aj))
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
-        var jumpCd = 0
+        var jumpCd = 0; var pressCd = 0
         var minAl = p.al
+        var flung = false
         for (t in 0..12000) {
             var mask = chaseMask297(p, w)
+            val mountT = Entity.at
+            val boundF = p.F
             when {
                 p.bM != null -> mask = Pad.M_UP
+                // wheel uid36: hands off through the lunge/mount/fling
+                // and the arc onto the pad (F lingers post-fling, faithful)
+                flung || p.S == 243 -> mask = 0
+                boundF != null && boundF.ax == 72 && p.S >= 270 -> mask = 0
+                mountT != null && mountT.ax == 72 && mountT.aw == 36 &&
+                    pressCd <= 0 && boundF == null ->
+                    { mask = Pad.M_CONTEXT; pressCd = 12 }        // lunge-mount the wheel
                 !p.aZ -> mask = Pad.M_LEFT + Pad.M_UP
                 else -> mask = Pad.M_LEFT
             }
-            when (p.S) {
+            if (!flung) when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
                 56, 60, 61, 62 -> mask = Pad.M_LEFT + Pad.M_UP
                 27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
             }
-            if (jumpCd <= 0 && stall > 0 && stall % 20 == 0) {
+            if (!flung && boundF == null && jumpCd <= 0 && stall > 0 && stall % 20 == 0) {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
             }
-            jumpCd--
+            jumpCd--; pressCd--
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
+            if (p.S == 243) flung = true
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
@@ -28805,18 +28859,28 @@ class Slice302Test {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
         val p = w.player
+        p.gJ = 5                        // f0do held-mask the real play-entry applies (k.F(aj))
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
         var jumpCd = 0
+        var wheelCd = 0; var wheelFlung = false
         var landAk = -1; var landAl = -1; var landed = false
         var launched = false; var kCFired = false; var minAl = 99999; var maxAk = 0
         for (t in 0..20000) {
             var mask = chaseMask297(p, w)
             when {
                 p.bM != null -> mask = Pad.M_UP
+                // slice 370: the y1540 '02' floor is a type-2 kill strip
+                // (L353d) — the lift-row crossing is the ax72 wheel uid36:
+                // lunge → fling → spring pad (Slice301Test); hands off from
+                // the lunge until the pad throws him to the '5' underside.
+                !launched && (wheelFlung || p.S == 243) -> mask = 0
+                !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
+                !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
+                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !landed -> mask = if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                 // after the arc — hop up into the u242 claim box
                 // (x150-293, y1296-1322); once claimed, feed CONTEXT
@@ -28837,11 +28901,12 @@ class Slice302Test {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
             }
-            jumpCd--
+            jumpCd--; wheelCd--
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
+            if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
@@ -28886,24 +28951,48 @@ class Slice303Test {
      *  under the lift bind zones, drop past the r87 gap to the r96
      *  under-chamber — assert reaching the boss-2/top route
      *  (u269 claim zone fired, or the under-chamber gate al>1760 with
-     *  minAl<1200 already satisfied). */
+     *  minAl<1200 already satisfied).
+     *  Slice 370 verdict — the under-chamber gate is a faithful dead end:
+     *  the descent's ride ends on the r78 floor at y1559, i.e. on r77's
+     *  type-2 strip (cols 7-52, every column where r78 is one cell thick
+     *  — r79 cols 6-50 are open), and the L353d kill fires there
+     *  (g.javap.txt e() 13662-13711). The old route stood on the strip
+     *  and vaulted through r78 (S257). The other way down, the slab hole
+     *  x1380-1439, drops into the duel arena, whose ax37 uid366 holder
+     *  (W x1181-1601, Z0=11: left/right/bottom walls) pins him east of
+     *  x1181 on the 2-thick r87-88 floor; slice 305 had already found the
+     *  mid corridor a sealed trap pit. So the leg now asserts the faithful
+     *  outcome: the wing chain (minAl<1200) and the strip kill on the
+     *  descent — or u269, should a route reach it. Phase 0 crosses to the
+     *  spring by the ax72 wheel uid36 (Slice301Test). */
     @Test fun mission7UpperWing() {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
         val p = w.player
+        p.gJ = 5                        // f0do held-mask the real play-entry applies (k.F(aj))
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
         var jumpCd = 0
+        var wheelCd = 0; var wheelFlung = false
         var landed = false; var launched = false; var kCFired = false
         var u269Fired = false; var u252Fired = false; var chainDone = false
         var minAl = 99999; var maxAk = 0
+        var stripKill = false; var killAt = ""
         for (t in 0..24000) {
             var mask = chaseMask297(p, w)
             when {
                 p.bM != null -> mask = Pad.M_UP
+                // slice 370: the y1540 '02' floor is a type-2 kill strip
+                // (L353d) — the lift-row crossing is the ax72 wheel uid36:
+                // lunge → fling → spring pad (Slice301Test); hands off from
+                // the lunge until the pad throws him to the '5' underside.
+                !launched && (wheelFlung || p.S == 243) -> mask = 0
+                !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
+                !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
+                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
                     !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                     w.kC != null -> Pad.M_CONTEXT
@@ -28954,11 +29043,12 @@ class Slice303Test {
                 jumpCd = 30
             }
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release beats every nudge
-            jumpCd--
+            jumpCd--; wheelCd--
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
+            if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
@@ -28971,6 +29061,12 @@ class Slice303Test {
                 if (w.kC!!.aw == 269) u269Fired = true }
             if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
             if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
+            // the descent ends on r77's type-2 strip: S50 with the anchor
+            // in a type-2 cell of row 77 and x[1] zeroed (g.e(0))
+            if (chainDone && p.S == 50 && p.x1 == 0 && p.al / 20 == 77 &&
+                w.collisionCell(p.ak / 20, p.al / 20) == 2) {
+                stripKill = true; killAt = "(${p.ak},${p.al})"; break
+            }
             if (w.jC == 15) break
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
             if (w.jC == 12 || w.jC == 13) {
@@ -28988,9 +29084,9 @@ class Slice303Test {
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
             lastAk = p.ak; lastAl = p.al
         }
-        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired launched=$launched landed=$landed minAl=$minAl maxAk=$maxAk trace=${trace.joinToString(" ")}")
-        assertTrue(u269Fired || (p.al > 1760 && minAl < 1200),
-            "boss-2 arena not reached — ak=${p.ak} al=${p.al} S=${p.S} u269=$u269Fired minAl=$minAl maxAk=$maxAk")
+        println("END ak=${p.ak} al=${p.al} S=${p.S} jC=${w.jC} u269=$u269Fired launched=$launched landed=$landed minAl=$minAl maxAk=$maxAk stripKill=$stripKill@$killAt trace=${trace.joinToString(" ")}")
+        assertTrue(u269Fired || (minAl < 1200 && stripKill),
+            "wing chain + strip-sealed descent not shown — ak=${p.ak} al=${p.al} S=${p.S} u269=$u269Fired minAl=$minAl maxAk=$maxAk stripKill=$stripKill")
     }
 }
 
@@ -29010,6 +29106,7 @@ class Slice304Test {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
         val p = w.player
+        p.gJ = 5                        // f0do held-mask the real play-entry applies (k.F(aj))
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
@@ -29017,6 +29114,7 @@ class Slice304Test {
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
         var jumpCd = 0
+        var wheelCd = 0; var wheelFlung = false
         var landed = false; var launched = false; var kCFired = false
         var u269Fired = false; var u252Fired = false; var u280Fired = false; var u306Fired = false
         var chainDone = false; var descended = false; var midCorridor = false; var ropeBound = false; var onSlab = false; var cp233 = false
@@ -29026,6 +29124,14 @@ class Slice304Test {
             var mask = chaseMask297(p, w)
             when {
                 p.bM != null -> mask = Pad.M_UP
+                // slice 370: the y1540 '02' floor is a type-2 kill strip
+                // (L353d) — the lift-row crossing is the ax72 wheel uid36:
+                // lunge → fling → spring pad (Slice301Test); hands off from
+                // the lunge until the pad throws him to the '5' underside.
+                !launched && (wheelFlung || p.S == 243) -> mask = 0
+                !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
+                !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
+                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
                     !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                     w.kC != null -> Pad.M_CONTEXT
@@ -29066,11 +29172,12 @@ class Slice304Test {
                 jumpCd = 30
             }
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release
-            jumpCd--
+            jumpCd--; wheelCd--
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
+            if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
@@ -29182,6 +29289,7 @@ class Slice306Test {
         val trace = ArrayDeque<String>(80)
         var lastS = p.S
         var jumpCd = 0; var pressCd = 0
+        var wheelCd = 0; var wheelFlung = false
         var landed = false; var launched = false; var kCFired = false
         var u269Fired = false; var u252Fired = false; var u280Fired = false; var u306Fired = false
         var chainDone = false; var descended = false; var midCorridor = false; var ropeBound = false; var onSlab = false; var cp233 = false
@@ -29196,6 +29304,14 @@ class Slice306Test {
             val boundF = p.F
             when {
                 p.bM != null -> mask = Pad.M_UP
+                // slice 370: the y1540 '02' floor is a type-2 kill strip
+                // (L353d) — the lift-row crossing is the ax72 wheel uid36:
+                // lunge → fling → spring pad (Slice301Test); hands off from
+                // the lunge until the pad throws him to the '5' underside.
+                !launched && (wheelFlung || p.S == 243) -> mask = 0
+                !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
+                !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
+                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 boundF != null && boundF.ax == 72 && p.S >= 270 -> mask = 0   // wheel mount/orbit states — hands off (F lingers post-fling, faithful)
                 p.S == 277 || p.S == 293 -> mask = 0                      // mount-on anim
                 p.S == 243 && catapult -> mask = 0                        // fling anim — hands off; the arc lands on the '2' shelf
@@ -29260,11 +29376,12 @@ class Slice306Test {
                 jumpCd = 30
             }
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN
-            jumpCd--; pressCd--
+            jumpCd--; wheelCd--; pressCd--
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
+            if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
                 if (trace.size == 80) trace.removeFirst()
                 trace.addLast("$t:${lastS}->${p.S}@${p.ak},${p.al}")
@@ -29286,8 +29403,8 @@ class Slice306Test {
             if (!cp233 && onSlab && p.ak in 1200..1300 && p.al < 1520) { cp233 = true; println("CP233 t=$t ak=${p.ak} al=${p.al}") }
             if (p.S == 164 && !railRide) { railRide = true; println("RAIL t=$t ak=${p.ak} al=${p.al}") }
             if (!crateTop && p.aZ && p.al < 1310 && p.ak in 640..780) { crateTop = true; println("CRATES t=$t ak=${p.ak} al=${p.al}") }
-            if (!atArmed && Entity.at != null && Entity.at!!.ax == 72) { atArmed = true; println("AT t=$t ak=${p.ak} al=${p.al} S=${p.S} at=ax72#${Entity.at!!.aw}") }
-            if (!mounted && (p.F != null && p.F!!.ax == 72)) { mounted = true; println("MOUNT t=$t ak=${p.ak} al=${p.al} S=${p.S} f=ax72#${p.F!!.aw}") }
+            if (!atArmed && Entity.at != null && Entity.at!!.ax == 72 && Entity.at!!.aw == 49) { atArmed = true; println("AT t=$t ak=${p.ak} al=${p.al} S=${p.S} at=ax72#${Entity.at!!.aw}") }
+            if (!mounted && (p.F != null && p.F!!.ax == 72 && p.F!!.aw == 49)) { mounted = true; println("MOUNT t=$t ak=${p.ak} al=${p.al} S=${p.S} f=ax72#${p.F!!.aw}") }
             if (!catapult && mounted && p.S == 243) { catapult = true; println("CATAPULT t=$t ak=${p.ak} al=${p.al} S=${p.S}") }
             if (!ledgeTop && catapult && p.aZ && p.al < 1010 && p.ak > 1150) { ledgeTop = true; println("LEDGE t=$t ak=${p.ak} al=${p.al}") }
             if (!eastFloor && p.aZ && p.al in 1240..1310 && p.ak > 1180) { eastFloor = true; println("EASTFLOOR t=$t ak=${p.ak} al=${p.al}") }
@@ -29431,12 +29548,21 @@ class Slice307Test {
 
 
 class Slice308Test {
-    /** m7 capstone leg L — arena approach (proven end-to-end):
-     *  pillar top (349,540) → run east + jump → catch sky-lift
-     *  uid225@(723,521) → S235/S236 ride homing → mid-ride M_UP jump-release
-     *  → arc lands on band top y560 → run east → x1040 40px step vault →
-     *  arena floor y519 → uid303 win-fuse claim fires (kC=303 → script 304
-     *  consumes boss-3 uid307 intro). Asserts each stage marker. */
+    /** m7 capstone leg L — arena approach: pillar top (349,540) → run
+     *  east + jump → catch sky-lift uid225@(723,521) → S235/S236 ride
+     *  homing → mid-ride M_UP jump-release → arc lands on band top y560
+     *  → run east → x1040 40px step vault → arena floor y519 → uid303
+     *  win-fuse claim fires (kC=303 → script 304 consumes boss-3 uid307
+     *  intro).
+     *  Slice 370 verdict — faithful dead end. The leg's start and its
+     *  band are type-2 strips on solid rows: the pillar top x300-359 is
+     *  r27 cols 15-17 on r28, the band y560 is r28 cols 18-51 on r29.
+     *  Standing on either is the L353d kill (g.javap.txt e() 13662-13711:
+     *  `(aR==2 || aO==2 || L()) && g.a == null → ah=aj=0; g.e(0); i(50);
+     *  return`, `L()` = e(ak/20, al/20) == 2), so the designed start dies
+     *  on its first tick and the band landing would too. The test pins
+     *  that; the arena chain past the band runs from the arena lip in
+     *  Slice310Test. */
     @Test fun mission7ArenaApproach() {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
@@ -29444,28 +29570,21 @@ class Slice308Test {
         p.gJ = 5
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
+        for (cx in 15..17) {                       // pillar top
+            assertEquals(2, w.collisionCell(cx, 27), "pillar top r27 col $cx")
+            assertEquals(20, w.collisionCell(cx, 28), "pillar top floor r28 col $cx")
+        }
+        for (cx in 18..51) {                       // band
+            assertEquals(2, w.collisionCell(cx, 28), "band r28 col $cx")
+            assertEquals(20, w.collisionCell(cx, 29), "band floor r29 col $cx")
+        }
         val rope = p.bM; p.bM = null; rope?.bM = null; p.aA = 0
         p.ak = 349; p.al = 540; p.N = 349 shl 8; p.av = false; p.setAnim(12)
-        var liftCaught = false; var bandTop = false
-        var arenaFloor = false; var fuseFired = false
-        for (t in 0..1200) {
-            w.pad.e(if (w.kC != null) Pad.M_CONTEXT
-                    else if (p.S == 358) { if (p.av) Pad.M_RIGHT else Pad.M_UP }
-                    else if (p.ac != null) Pad.M_UP
-                    else if (p.aZ && p.ak > 990 && p.al in 540..600) Pad.M_RIGHT or Pad.M_UP
-                    else if (p.aZ && p.ak > 1200) 0
-                    else if (p.aZ) Pad.M_RIGHT
-                    else 0)
-            w.tick(emptyList())
-            if (!liftCaught && p.ac?.ax == 66) { liftCaught = true; println("STAGE lift t=$t @(${p.ak},${p.al}) uid=${p.ac!!.aw}") }
-            if (!bandTop && p.aZ && p.al in 555..590 && p.ak > 700) { bandTop = true; println("STAGE band t=$t @(${p.ak},${p.al})") }
-            if (!arenaFloor && p.aZ && p.ak > 1040 && p.al < 540) { arenaFloor = true; println("STAGE arena t=$t @(${p.ak},${p.al})") }
-            if (!fuseFired && (w.kC?.aw == 303 || w.npcs.none { it.aw == 307 })) { fuseFired = true; println("STAGE fuse t=$t @(${p.ak},${p.al}) kC=${w.kC?.aw}") ; break }
-        }
-        assertTrue(liftCaught, "sky-lift uid225 catch from pillar-top launch")
-        assertTrue(bandTop, "mid-ride jump-release lands on band top y560")
-        assertTrue(arenaFloor, "x1040 step vault onto arena floor")
-        assertTrue(fuseFired, "win-fuse uid303 claim fires + boss-3 intro consumed")
+        w.pad.e(Pad.M_RIGHT)                       // the leg's first input
+        w.tick(emptyList())
+        assertEquals(50, p.S, "pillar-top start: L353d type-2 kill → i(50)")
+        assertEquals(0, p.x1, "g.e(0)")
+        assertEquals(349, p.ak, "dies where it stands")
     }
 }
 
@@ -29637,7 +29756,16 @@ class Slice310Test {
      *  `w.missionWon` + jC=15.
      *  Bot note: `p.x1` is topped up (<40→60) during the duel — the
      *  human player survives via dodge/counter; the scripted boss
-     *  sequence is what we assert, not the bot's survival. */
+     *  sequence is what we assert, not the bot's survival.
+     *  Slice 370 route: the leg-L approach is a faithful dead end — the
+     *  pillar top (349,540) is r27's type-2 strip and the band y560 is
+     *  r28's, both on solid rows, so standing on either is the L353d
+     *  kill (g.javap.txt e() 13662-13711; Slice308Test). The leg now
+     *  enters at the arena floor's west lip (1060,519) — r26-28 cols
+     *  52-80 solid, no type-2 — where the leg-L run arrived, and stands
+     *  60 ticks while the camera catches up from the rope top (the run
+     *  arrived with it following; the u303 zone is only live on screen,
+     *  `v()`); the win chain it asserts is unchanged. */
     @Test fun mission7PostArenaWin() {
         val w = world(aj = 7)
         w.stateL(8); settleIntro(w)
@@ -29645,7 +29773,8 @@ class Slice310Test {
         p.gJ = 5
         driveDuelWin300(w, p); driveRopeClimb300(w, p)
         val rope = p.bM; p.bM = null; rope?.bM = null; p.aA = 0
-        p.ak = 349; p.al = 540; p.N = 349 shl 8; p.av = false; p.setAnim(12)
+        p.ak = 1060; p.al = 519; p.N = 1060 shl 8; p.av = false; p.setAnim(12)
+        repeat(60) { w.pad.e(0); w.tick(emptyList()) }       // camera settle
         var fuseFired = false; var bossDefeated = false
         var u281Bound = false; var won = false
         for (t in 0..6000) {

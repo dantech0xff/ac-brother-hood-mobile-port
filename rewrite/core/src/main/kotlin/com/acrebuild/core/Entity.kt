@@ -264,7 +264,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cK = 0                    // c() — X[1] snapshot
     var cH = 0                    // c() — X[0] snapshot (target x anchor)
     var cI = 0                    // c() — X[1] snapshot
-    var cM = 0                    // c() — ax72 Z[0]==1 clears it (L58)
+    var cM = 0                    // c() — ax72 Z[0]∈{1,2} clears it (c(i) 435-457)
     var cL = 0                    // mount-on counter (as() clears; au() oscillates)
     var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
     var K = 0                     // g.K — interact-gauge anim frame (aB())
@@ -578,10 +578,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
         // L40
         cF = 5120; cx = (8 * Trig.M) / 360; cG = av
         if (t.ax == 72) {
-            if (t.Z[0] == 1) cM = 0          // L58
-            else {                           // L49-L52 param overrides
-                if (t.Z[1] > 0) cF = t.Z[1]
-                if (t.Z[2] > 0) cx = (t.Z[2] * Trig.M) / 360
+            // g.javap.txt c(i) 346-460 (slice 370, proven): the param
+            // overrides are the Z[0]∈{0,3,4} arm (355-432); Z[0]∈{1,2}
+            // — both wheel configs — reset the orbit phase `cM = 0`
+            // (435-457); any other Z[0] does neither. The port had
+            // `Z[0]==1 → cM=0, else overrides`, so a second Z0==2 wheel
+            // kept the first one's cM and skipped its spin-in.
+            when (t.Z[0]) {
+                0, 3, 4 -> {
+                    if (t.Z[1] > 0) cF = t.Z[1]
+                    if (t.Z[2] > 0) cx = (t.Z[2] * Trig.M) / 360
+                }
+                1, 2 -> cM = 0
             }
         } else if (t.ax == 11 || t.ax == 17) {          // L60-L66
             if (S == 298) { cF = 7680; cx = 0 } else { cF = 5120; cx = 0 }
