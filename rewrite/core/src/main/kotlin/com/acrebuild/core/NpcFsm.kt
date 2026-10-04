@@ -2710,8 +2710,10 @@ class NpcFsm(val world: LevelCellSource) {
                     p.ga = e
                     if (p.ah > 0) p.ah = 0                          // L26
                     if (p.aj > 0) p.aj = 0                          // L29
-                    if (p.S == 43) { p.al = e.al; p.setAnim(0) }    // L32
-                    else if (p.S == 34 && p.ga === e) p.ga = null   // L34
+                    // @315-337 (raw bytes): S43 AND S34 both land on the platform
+                    // — `aS.al = al; aS.i(0)`. (Slice 406: the port dropped the S34
+                    // landing and released the link instead.)
+                    if (p.S == 43 || p.S == 34) { p.al = e.al; p.setAnim(0) }
                 }
                 e.Z[1]--                                            // L36
                 if (e.Z[1] < 0 && e.animFinished())
@@ -2755,6 +2757,7 @@ class NpcFsm(val world: LevelCellSource) {
                     (p.gB() || p.S == 236 || p.S == 239)) {             // g.b(k.aS.S)
                     if (r8 != null && r8.ax == 66 && r8.S == 16) {
                         p.flingAirborne(p.ah, w); p.ga = null       // L143
+                        return@run                                  // @1052 `goto 2026`
                     }
                     if (p.al > e.W[3]) {                            // L150
                         p.setAnim(209); p.ag = 0; p.ah = 0; p.ak = e.ak
@@ -2830,9 +2833,13 @@ class NpcFsm(val world: LevelCellSource) {
             17, 23 -> { /* → L288 tail only */ }
             // -- L239: arm the aC=Z[0] countdown --------------------
             18 -> if (e.animFinished()) { e.setAnim(14); e.aC = e.Z[0] }
-            // -- L248: timed return / attack-grab (S19 timed, 20-22
+            // -- S20 (@1725): the countdown's hand-off — anim done → S19, aC = Z[1].
+            //    (Slice 406: the port ran S20 through the 19-22 grab arm below and
+            //    sent it to S18, so S19 — the timed return — was never reached.)
+            20 -> if (e.animFinished()) { e.setAnim(19); e.aC = e.Z[1] }
+            // -- L248: timed return / attack-grab (S19 timed, 21/22
             //    anim-done → i(18) + release) ------------------------
-            19, 20, 21, 22 -> {
+            19, 21, 22 -> {
                 if (p.ga !== e) {                                   // L254
                     if (p.gB() &&                                     // g.b(k.aS.S)
                         Entity.overlapStrict(p.W, e.W)) {
@@ -2916,7 +2923,11 @@ class NpcFsm(val world: LevelCellSource) {
             (p.S == 236 || p.S == 239)) {
             p.setAnim(if (p.S == 236) 237 else 240)                // L103
             p.ah = 0; p.ag = 0; p.ga = e
-            if (p.av) {                                           // L113
+            // @684-753 (raw bytes): `getfield av; ifne 726` — a RIGHT-facing player
+            // (av == false) whose left edge sticks out past the crate's is shoved
+            // +20 toward it; a LEFT-facing one whose right edge sticks out, -20.
+            // (Slice 406: the port had the two arms swapped.)
+            if (!p.av) {
                 if (p.W[0] < e.W[0]) p.ak += 20
             } else if (p.W[2] > e.W[2]) p.ak -= 20
         }

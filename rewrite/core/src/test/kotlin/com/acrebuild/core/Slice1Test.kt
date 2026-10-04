@@ -3257,9 +3257,13 @@ class Level0WorldTest {
         w.npcFsm.tickPlatform(e, w, p)
         assertSame(e, p.ga); assertEquals(0, p.ah); assertEquals(0, p.aj)
         assertEquals(4, e.Z[1], "Z[1]-- per tick")
-        ridePlayer(w, e, 34); p.ga = e
+        // Slice 406: S34 lands exactly like S43 (@315-337: `aS.al = al; aS.i(0)`) —
+        // the link stays; the port released it.
+        ridePlayer(w, e, 34); p.ga = e; p.al = e.al - 30
         w.npcFsm.tickPlatform(e, w, p)
-        assertNull(p.ga, "S34 -> L34 release")
+        assertSame(e, p.ga, "S34 keeps g.a = this (@266)")
+        assertEquals(0, p.S, "S34 -> aS.i(0)")
+        assertEquals(e.al, p.al, "aS.al = al")
     }
 
     @Test fun `ax66 S7 timer expiry advances to S8`() {
@@ -3379,11 +3383,28 @@ class Level0WorldTest {
         assertEquals(21, e.S, "aC<=0 -> i(21)")
     }
 
-    @Test fun `ax66 S20 anim-end reverts to S18 and flings player`() {
+    @Test fun `ax66 S20 anim-end hands over to the S19 timer (aC = Z1), no release`() {
+        // Slice 406: @1725 `if (r()) { i(19); aC = Z[1] }` — S20 has its own arm and
+        // never touches the player; the old test sent it through the S21 exit (S18 +
+        // fling), so the timed return S19 was unreachable.
         val w = world(); w.npcs.clear()
         val p = w.player
         val e = platformAt(w, p.ak, p.al, 20)
+        e.Z[1] = 7
         e.T = e.clip!!.frameCount(20) - 1
+        ridePlayer(w, e, 0); p.ga = e
+        w.npcFsm.tickPlatform(e, w, p)
+        assertEquals(19, e.S, "-> i(19)")
+        assertEquals(7, e.aC, "aC = Z[1]")
+        assertSame(e, p.ga); assertEquals(0, p.S)
+    }
+
+    @Test fun `ax66 S21 anim-end reverts to S18 and flings player`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        val e = platformAt(w, p.ak, p.al, 21)
+        e.T = e.clip!!.frameCount(21) - 1
+        e.U = e.clip!!.frameDuration(21, e.T) - 1
         ridePlayer(w, e, 0); p.ga = e
         w.npcFsm.tickPlatform(e, w, p)
         assertEquals(18, e.S, "-> i(18)")
