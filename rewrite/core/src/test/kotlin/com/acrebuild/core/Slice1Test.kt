@@ -187,6 +187,17 @@ fun world(charmap: ByteArray? = null, aj: Int = 0):
             52 to Clip.load(asset("clips/clip52/clip.acpk")),   // ax29 boss (bi[29]=52)
             30 to Clip.load(asset("clips/clip30/clip.acpk")),   // ax41 knockable (bi[41]=30)
             71 to Clip.load(asset("clips/clip71/clip.acpk")),   // ax61 multi-tool (bi[61]=71)
+            // slice 390 — per-record clip tables (k.bk ax67 decor, k.bm[1]
+            // ax7, k.bn[1] ax9): the pack-3 entries the shipped levels reach
+            24 to Clip.load(asset("clips/clip24/clip.acpk")),
+            34 to Clip.load(asset("clips/clip34/clip.acpk")),
+            37 to Clip.load(asset("clips/clip37/clip.acpk")),
+            41 to Clip.load(asset("clips/clip41/clip.acpk")),
+            65 to Clip.load(asset("clips/clip65/clip.acpk")),
+            66 to Clip.load(asset("clips/clip66/clip.acpk")),
+            67 to Clip.load(asset("clips/clip67/clip.acpk")),
+            69 to Clip.load(asset("clips/clip69/clip.acpk")),
+            72 to Clip.load(asset("clips/clip72/clip.acpk")),
         )
         if (aj == 0) {
             clips[-10] = Clip.load(asset("level0/tileset-10/clip.acpk"))
@@ -21074,41 +21085,32 @@ class Slice214Test {
 }
 
 class Slice215Test {
-    /** slice 215 — the ax7 mouth-throw release chain. ERRATUM (G12): the
-     *  "verbatim wedge" verdict below was traced under the port's old
-     *  player-first frame order; with `k.I()`'s order (entities, then
-     *  `aS.I()`) the release reads the swing one step on and the throw
-     *  clears the corner — no soft-lock. The chain as first traced:
-     *  - record P=0 -> `e.av=false` -> release `aS.ag = 2048` east
-     *    (i.java:15695-15710);
-     *  - the S1 capture arm re-snaps `p.ak/al` to the mouth's CURRENT
-     *    frame-W centre every tick — the decoded clip swings the mouth W
-     *    east to ~x1495 (T9) then back west, ending at W [1466,458,1470,467]
-     *    on the last frame (T11);
-     *  - `r()` (i.java:462) fires at T==frameCount-1 && U==dur-1 — release
-     *    at T11 centre (1468,462);
-     *  - `a(43,32)` + mask-32 stale-`u` centre compensation (i.java:2336
-     *    L121: `al += u - Wc`) lands the anchor at (1468,501) — the S313
-     *    last-frame player W is a degenerate 0x0 point (verbatim clip data);
-     *  - one fall tick: +8px east then the wall-face resolve pushes -8
-     *    back -> lands (1468,499) fully embedded (aO=aR=aP=20, bd=false);
-     *  - `L17cc` (g.java): deep embed -> `i(79)` + goto L353d — the `l()`
-     *    input arms only run on shallow embed (aO or aR <= 12), so the
-     *    original ALSO wedges input-immune here. The mouth-plant is a
-     *    trap at this corner — an original-game softlock, kept verbatim.
-     *  Same outcome reproduced for uid=30 at (4801,674). */
+    /** slice 215 — the ax7 mouth-throw release chain. ERRATUM (slice 390):
+     *  the earlier "verbatim wedge / original softlock" verdict (and the
+     *  G12 erratum after it) was traced on the WRONG sprite. `i(short[])`
+     *  binds `aa = k.r(k.bm[r8[8]])` for ax7 with `k.bm = {60, 66}`; the
+     *  level-0 mouths aw=12 (1397,506) and aw=30 (4801,674) carry
+     *  `r8[8] == 1` → clip 66, which the port did not yet decode, so they
+     *  spawned on clip 60 — whose frame-0 rect sits 80 px west of the
+     *  anchor. With clip 66 the capture box is centred on the mouth
+     *  (`[1392,472,1408,488]`) and the chain is the designed wall crossing:
+     *  - S0 `W∩playerW && !aS.f()` → `i(1)` + `aS.i(313)` swallow, the
+     *    player pinned to the mouth's frame-W centre (1400,480);
+     *  - record P=0 → `e.av=false` → at `r()` the release is `aS.ag = 2048`
+     *    east, `ah = 1536` (i.java:15695-15710), 8 ticks later at ~(1529,500);
+     *  - the throw carries him over the x1400 wall; he lands at ~(1569,579). */
     @Test fun `ax7 mouth throw clears the wall corner`() {
         val w = world()
         settleIntro(w)
         val e = w.npcs.first { it.ax == 7 && it.aw == 12 }
         keepLive(e)
-        assertEquals(intArrayOf(1318, 456, 1334, 472).toList(), e.W.toList())
+        assertSame(w.clips[66], e.clip, "r8[8]==1 → k.bm[1] = clip 66")
+        assertEquals(intArrayOf(1392, 472, 1408, 488).toList(), e.W.toList())
         assertFalse(e.av)                       // record P=0 -> throws east
         val p = w.player
         p.setPositionPx(e.W[0] + 4, e.W[1] + 4)
         p.refreshBoxes()
         var captured = false
-        var sawMouthEast = false
         var released = false
         var releasePos: Pair<Int, Int>? = null
         for (t in 0 until 120) {
@@ -21117,7 +21119,6 @@ class Slice215Test {
                 captured = true
                 assertEquals(64, p.P and 64)    // P|=64 slot-hold
             }
-            if (p.S == 313 && e.W[2] > 1480) sawMouthEast = true
             if (!released && p.S == 43) {
                 released = true
                 releasePos = p.ak to p.al
@@ -21125,19 +21126,13 @@ class Slice215Test {
             }
         }
         assertTrue(captured, "mouth swallows the overlapping player")
-        assertTrue(sawMouthEast, "swing carries the mouth past x1480")
         assertTrue(released, "r() releases at the last S1 frame")
         val (rx, ry) = releasePos!!
-        // G12 (k.I() ticks the mouth before aS.I()): the release reads the
-        // swing one step on — ~(1488,501), past the wall's top-east corner
-        // — and the throw lands the player on the floor beyond it. The
-        // slice-215 "verbatim wedge" (deep embed → forced S79) only
-        // happened under the port's old player-first order.
-        assertTrue(rx in 1480..1500, "release x past the wall corner: $rx")
-        assertTrue(ry in 495..505, "release y below wall top: $ry")
+        assertTrue(rx in 1500..1560, "release x east of the wall: $rx")
+        assertTrue(ry in 480..520, "release y: $ry")
         assertTrue(p.S != 79 && !(p.aO == 20 && p.aR == 20 && p.aP == 20),
             "no deep embed: S=${p.S} aO=${p.aO} aR=${p.aR} aP=${p.aP}")
-        assertTrue(p.ak > 1500, "thrown clear of the corner: ${p.ak}")
+        assertTrue(p.ak > 1500, "thrown clear of the wall: ${p.ak}")
     }
 }
 
@@ -29948,7 +29943,10 @@ class Slice311Test {
             w.screenL(9)                                // stateL → jC=9 + jG=0
             repeat(170) { w.tick(emptyList()) }         // jG climbs past 164
             assertEquals(spawn.first, p.ak, "m$aj briefing entry lands pack spawn x")
-            assertEquals(spawn.second, p.al, "m$aj briefing entry lands pack spawn y")
+            // ctor tail E() (slice 389): the fresh player settles on the
+            // ground line — m3 +0, m5 -3, m6 -1 against the record's y.
+            val settle = mapOf(3 to 0, 5 to 3, 6 to 1)
+            assertEquals(spawn.second - settle.getValue(aj), p.al, "m$aj briefing entry lands pack spawn y (settled)")
         }
     }
 }

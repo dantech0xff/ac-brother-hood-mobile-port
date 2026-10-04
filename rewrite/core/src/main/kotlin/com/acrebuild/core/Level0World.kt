@@ -66,72 +66,47 @@ class Level0World(
         const val VIEW_W = 400
         const val VIEW_H = 240
 
-        // Entity type -> clip index (k.bi[]; only decoded clips carried).
-        // ax67 is special: the record binds `aa = k.r(bk[kind])` per-kind
-        // (i.java:2633) — resolved in spawnEntities via NpcFsm.decorClip.
-        val ENTITY_CLIP = mapOf(
-            11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
-            44 to 32,
-            4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
-            5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
-            2 to 1,       // ax2 checkpoint (bi[2]=1 — same invisible clip;
-                          // its 40x128 rect gives aY() the real W box)
-            10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
-                          // modules, proven) — zones still draw nothing
-            29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
-            61 to 71,     // ax61 multi-tool (bi[61]=71, proven)
-            41 to 30,     // ax41 knockable prop (bi[41]=30, proven)
-            8 to 5,       // ax8 knife/param projectiles (bi[8]=5, proven);
-                          // bi[12]=8 has no pack-3 entry-008 → ax12 stays
-                          // clipless (J(8)=null in the original too)
-            14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
-            16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
-            71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
-            27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
-            40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
-            9 to 47,      // ax9 push/contact entity (bi[9]=47, proven)
-            15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
-            46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
-            7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
-            72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
-            78 to 63,     // ax78 counterweight (bi[78]=63, proven)
-            79 to 0,      // ax79 palette prop (bi[79]=0, proven)
-            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
-            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
-            // ax74 maps at the end of the table (bi[74]=54).
-            80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
-                          // entry-057: J(57)=null → invisible/vestigial, proven)
-            54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
-            30 to 36,     // ax30 runner variant (bi[30]=36, proven)
-            24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
-            56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
-            58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
-            60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
-            43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
-            69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
-            64 to 22,     // ax64 harrier — bi[64]=22; pack-3 has no
-                          // entry-022 → clipless (J(22)=null in the original)
-            13 to 61,     // ax13 rope/vine (bi[13]=61, proven)
-            35 to 62,     // ax35 scripted multi-tool (bi[35]=62, proven — the
-                          // level-0 record spawns S=6 at ak=5816 and self-culls
-                          // on its first tick via the L186 off-camera march arm
-                          // `ak > kO+420 -> k.c` — same as the original; only
-                          // the spawn entry was missing, bQ()/initAx35 ported)
-            32 to 36,     // ax32 (bi[32]=36 — same clip as ax30, proven)
-            68 to 26,     // ax68 (bi[68]=26 — generic small-item clip, proven)
-            22 to 14,     // ax22 capture zone (bi[22]=14, proven)
-            21 to 13,     // ax21 mission director (bi[21]=13, proven)
-            48 to 13,     // ax48 (bi[48]=13 — same clip, proven)
-            25 to 16,     // ax25 (bi[25]=16, proven)
-            26 to 15,     // ax26 (bi[26]=15, proven)
-            51 to 28,     // ax51 pushable crate (bi[51]=28, proven)
-            31 to 44,     // ax31 (bi[31]=44, proven)
-            66 to 23,     // ax66 moving platform (bi[66]=23, proven)
-            74 to 54,     // ax74 wisp (bi[74]=54, proven)
-            76 to 56,     // ax76 hazard volume — bi[76]=56 but pack-3 slot 56
-                          // is a zero-size entry (metadata, proven) → null
-                          // clip, invisible trigger
-        )
+        // Entity clip tables, verbatim from `k.<clinit>` (k.javap.txt
+        // static{} — evaluated, not retyped: `bi` 81 entries, -1 = none).
+        // `i(short[])` binds `aa = k.r(table[rec])` (i.javap ctor @270-470):
+        // ax67 → bk[r8[7]], ax46 → bl[r8[10]], ax7 → bm[r8[8]],
+        // ax56 → bj[r8[7]], ax9 → bn[r8[8]], everything else → bi[ax]
+        // when != -1. `k.r(n)` is null for an entry the pack lacks
+        // (pack-3 has no 2/8/17/22/33/43/49/53/55-57/68/70) — those spawn
+        // clipless in the original too. (Slice 390: the port bound ONE
+        // clip per type, so the per-record alternates — ax46 clip0, ax7
+        // clip66, ax9 clip72 — and the ax67 decor clips 24/34/37/41/65/67/69
+        // spawned wrong or invisible; `71 → 26` was a phantom, bi[71] = -1.)
+        private val K_BI = intArrayOf(
+            0, -1, 1, 2, 3, 1, 4, 60, 5, 47, 6, 7, 8, 61, 9, 25, 10, 7, -1, 11,
+            -1, 13, 14, 7, 40, 16, 15, 48, -1, 52, 36, 44, 36, -1, 42, 62, -1,
+            -1, -1, -1, 45, 30, -1, 31, 32, 33, 29, 7, 13, -1, 7, 28, -1, -1,
+            19, -1, 19, -1, 20, -1, 21, 71, -1, -1, 22, -1, 23, -1, 26, 38, 43,
+            -1, 51, 7, 54, 55, 56, -1, 63, 0, 57)
+        private val K_BJ = intArrayOf(19, 68)
+        private val K_BL = intArrayOf(29, 0)
+        private val K_BM = intArrayOf(60, 66)
+        private val K_BN = intArrayOf(47, 72)
+
+        /** `k.bi[]` entries that name a clip, keyed by actor type. */
+        val ENTITY_CLIP: Map<Int, Int> =
+            K_BI.withIndex().filter { it.value >= 0 }.associate { it.index to it.value }
+
+        /** The clip index `i(short[])` binds for record `f` of actor `ax`
+         *  (the PRE-retype type — ax11→47 / ax17→50 share `bi`'s clip 7),
+         *  or null when the type has none (`k.bi[ax] == -1`) / the table
+         *  index is out of range (the original would throw). */
+        fun entityClipIndex(ax: Int, f: IntArray): Int? {
+            fun tab(t: IntArray, i: Int) = if (i >= 0 && i < t.size) t[i] else null
+            return when (ax) {
+                67 -> NpcFsm.decorClip(f.getOrElse(7) { -1 }).takeIf { it >= 0 }
+                46 -> tab(K_BL, f.getOrElse(10) { -1 })
+                7 -> tab(K_BM, f.getOrElse(8) { -1 })
+                56 -> tab(K_BJ, f.getOrElse(7) { -1 })
+                9 -> tab(K_BN, f.getOrElse(8) { -1 })
+                else -> K_BI.getOrNull(ax)?.takeIf { it >= 0 }
+            }
+        }
     }
 
     override val cellPx: Int get() = level.cellPx
@@ -693,6 +668,12 @@ class Level0World(
                 player.Z[0] = 0; player.Z[1] = 0
             }
         }
+        // ctor tail `if (ax == 0) { E(); return }` (i.javap L7188, proven —
+        // slice 389 oracle: aj0 940→939, aj2 1840→1839, aj5 582→579, aj6
+        // 740→739, aj7 1740→1739): the fresh grounded player settles on the
+        // ground line. The checkpoint-restore arm overwrites ak/al after the
+        // ctor, so it keeps the snapshot untouched; ax25 (flyer) has no E().
+        if (s == null && (rec == null || rec[0] != 25)) player.eSettle(this)
         player.gt = 0; player.bh = 0
         // ax10-published player statics (i.java:2492-2512 level-init clears)
         player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
@@ -847,8 +828,7 @@ class Level0World(
             // ticks invisibly until a claim-script i(0) arms it). Entity
             // handles clip=null defensively. Other clipless/unmapped
             // types join as their clips + init arms get verified.
-            val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
-                          else ENTITY_CLIP[type]
+            val clipIdx = entityClipIndex(f[0], f)
             // Every record spawns (proven, i.java:7600 dispatch): a null
             // clip means clipless (bi[ax]=-1 or missing pack-3 entry —
             // invisible but still ticking via i.I()). Entity handles

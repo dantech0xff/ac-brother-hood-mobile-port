@@ -247,6 +247,19 @@ class Slice389Test {
         assertEquals(186, checked)
     }
 
+    @Test fun `the grounded player spawns on the E loop ground line and the flyer is untouched`() {
+        // ctor tail `if (ax == 0) { E(); return }`; ax25 has no E().
+        // (aj → record y, settled y): the interpreter's `al` after the ctor.
+        val expected = mapOf(0 to (940 to 939), 2 to (1840 to 1839), 3 to (699 to 699),
+            5 to (582 to 579), 6 to (740 to 739), 7 to (1740 to 1739),
+            1 to (11963 to 11963), 4 to (12403 to 12403))
+        for ((aj, w) in missions.value.withIndex()) {
+            val (rec, settled) = expected.getValue(aj)
+            assertEquals(rec, w.level.playerSpawn()!!.second, "aj$aj record y")
+            assertEquals(settled, w.player.al, "aj$aj spawn y")
+        }
+    }
+
     @Test fun `the soldier ctor tail leaves b set and ah cleared like E()`() {
         val w = missions.value[0]
         val s = w.npcs.first { it.ax == 11 }

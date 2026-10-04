@@ -74,3 +74,12 @@ player on the floor beyond the corner at ~(1528,579) in S0 — the same
 with or without the port's pre-`e()` `a(true)` superset. There is no
 deep embed and no soft-lock. `Slice215Test` now pins that outcome
 ("ax7 mouth throw clears the wall corner").
+
+## ERRATUM (slice 390)
+
+The "wedge" was traced on the wrong sprite. `i(short[])` binds ax7's clip as
+`k.bm[r8[8]]` with `bm = {60, 66}`; the level-0 mouths aw=12 and aw=30 carry
+`r8[8] == 1` → clip 66, which the port had not converted, so they ran on
+clip 60 (frame-0 rect 80 px west of the anchor). On clip 66 the mouth throws
+the player clean over the x1400 wall — no softlock. See
+`../261004-1200-slice390-clip-tables/plan.md`.

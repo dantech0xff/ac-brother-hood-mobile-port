@@ -10595,14 +10595,15 @@ fun materializeWaypoints(e: Entity, w: LevelCellSource) {
     }
 }
 
-/** `i(short[])` case-8 → L94b (i.java:8204→:8220, proven): the shared
- *  record-field map arm — `aE=f[4]`, `aF=f[11]`, `o=f[12]`, `p=f[13]`,
- *  `aG=f[14]`, `ay=f[15]` — then the L1bea tail `i(r8[5])` + L1d58
- *  `t()` (ax8 skips every special-case). */
+/** `i(short[])` case-8 → L1261 (i.javap ctor, proven): `P |= 512; az = 99`
+ *  — nothing else — then the shared `i(r8[5]) + t()` tail. (Slice 389: the
+ *  port ran the ax10 generic aE/aF/o/p/aG/ay map here, a different label's
+ *  block; no shipped record is ax8 — the knife projectile is spawned
+ *  through `a(8, 5, S, 201)`.) */
 fun NpcFsm.initAx8(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
-    e.aE = rf(4); e.aF = rf(11); e.oId = rf(12)
-    e.pv = rf(13); e.aG = rf(14); e.ay = rf(15)
+    e.P = e.P or 512
+    e.az = 99
     e.setAnim(rf(5))
     e.refreshBoxes()
 }

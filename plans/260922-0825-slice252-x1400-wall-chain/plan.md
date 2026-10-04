@@ -45,3 +45,9 @@ zones, hit the ax7 wedge box at y456, and crossed x1480.
   stall were the bot lacking this route, not a dead end.
 - Same mechanic class as the east-corridor ax22 chain proven in
   slice 247.
+
+## ERRATUM (slice 390)
+
+The ax7 "wedge catch box `[1318,456..1334,472]`" belongs to clip 60; the
+mouth at (1397,506) uses clip 66 (`k.bm[1]`), whose capture box is
+`[1392,472,1408,488]` (see `../261004-1200-slice390-clip-tables/plan.md`).

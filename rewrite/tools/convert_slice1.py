@@ -131,6 +131,20 @@ CLIPS = {
     "clip28": ("pack-3", "entry-028-marker-003"),  # ax51 pushable crate (bi[51]=28)
     "clip44": ("pack-3", "entry-044-marker-003"),  # ax31 (bi[31]=44)
 
+    # Slice 390 — the pack-3 entries the entity clip tables reach for the
+    # shipped levels (k.bk[] ax67 decor kinds 0/4/6/7/10/11/13, k.bm[1] ax7,
+    # k.bn[1] ax9; i.java:2633/2650/2655): without them those records spawned
+    # clipless (invisible, no hitbox) although the original binds real art.
+    "clip24": ("pack-3", "entry-024-marker-003"),  # ax67 kind 0 (bk[0]=24)
+    "clip34": ("pack-3", "entry-034-marker-003"),  # ax67 kind 4 (bk[4]=34)
+    "clip37": ("pack-3", "entry-037-marker-003"),  # ax67 kind 6 (bk[6]=37)
+    "clip41": ("pack-3", "entry-041-marker-003"),  # ax67 kind 7 (bk[7]=41)
+    "clip65": ("pack-3", "entry-065-marker-003"),  # ax67 kind 10 (bk[10]=65)
+    "clip67": ("pack-3", "entry-067-marker-003"),  # ax67 kind 11 (bk[11]=67)
+    "clip69": ("pack-3", "entry-069-marker-003"),  # ax67 kind 13 (bk[13]=69)
+    "clip66": ("pack-3", "entry-066-marker-003"),  # ax7 r8[8]==1 (bm[1]=66)
+    "clip72": ("pack-3", "entry-072-marker-003"),  # ax9 r8[8]==1 (bn[1]=72)
+
     # pack-2 UI bank — A[] clips load under j.a("/2") (k.java:4058-4075).
     # A[2]/A[3] already live as clip93/clip95.
     "clip96": ("pack-2", "entry-000-marker-003"),  # A[0] title-screen bg (k.java:1148)
