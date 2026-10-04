@@ -7879,7 +7879,7 @@ private fun hGate(e: Entity, p: Entity): Boolean {
  *  tick's `j()` damage exactly like the source. */
 private fun iEngage(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     if (p.X[0] == p.X[2] || !Entity.overlapStrict(e.W, p.X) ||
-        p.S !in ATTACK_ANIMS) return false
+        !w.playerAttacking()) return false                   // g.b()
     if (p.S != 8) {
         p.setAnim(8)
         w.kE?.let { it.P = it.P or 128 }
@@ -7912,9 +7912,9 @@ private fun jIntake(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     if (e.ax == 11 && e.Z[0] == 2) {
         if (w.lockTarget !== e && (w.lockTarget == null ||
             w.lockTarget!!.S != 18)) w.lockTarget = e
-        if (p.S !in ATTACK_ANIMS) return false
+        if (!w.playerAttacking()) return false                  // g.b()
     } else {
-        if (p.S !in ATTACK_ANIMS) return false
+        if (!w.playerAttacking()) return false                  // g.b()
         if (kotlin.math.abs(e.ak - p.ak) > 160 ||
             kotlin.math.abs(e.al - p.al) > 20) return false
         if (!w.iBf && (w.lockTarget == null || w.lockTarget === e) &&
@@ -8071,22 +8071,18 @@ fun NpcFsm.tickAx17(e: Entity, w: Level0World, p: Entity) {
             if (e.aZ) e.setAnim(129)
         }
     }
-    // L87 tail (proven): j() → return; S==69 → return; S!=129 → a();
-    // the I() dispatcher then falls through to au() (:7738) = corpseDrop.
-    // j() P() arm (:7699): aB<=0 → G()+true — corpses skip the rest.
-    if (e.aB <= 0) { corpseDrop(e); return }
-    // j() intake, ax17 arm (:1803, proven): player attackbox ∩ W + g.b()
-    // anim → Q() face + aB -= J=100 for {183,184,216,217}, H=50 otherwise.
-    // No S85 react, no weaken/lock arms (ax11/73-only) — always false.
-    if (p.X[0] != p.X[2] && p.S in ATTACK_ANIMS &&
-        Entity.overlapStrict(e.W, p.X)) {
-        e.av = p.ak < e.ak                                   // Q() face
-        e.aB -= if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217)
-            JD[0] else H0
-    }
-    if (e.S == 69) { corpseDrop(e); return }
-    // a() (i.java:914) — the solid-body player push, already ported.
-    if (e.S != 129) e.pushContact(w)
+    // L764 tail (raw @764-795, proven): `if (j() != 0) return; if (S == 69 ||
+    // S == 129) skip a(); else a();` and the I() dispatcher then runs au()
+    // (:7738) = corpseDrop. `j()` is the SAME shared player→NPC intake as the
+    // soldiers' (`jIntake`): `P()` dead gate, `g.b()` + the ±160/±20 band + the
+    // `bf`/`aN` first-swing latch, the box overlap, `Q()`, `aB -= J|H`, then
+    // `C()` — for ax17 `S==68 → false; else i(68) + k.A(13)` (alive) or `i(69)`
+    // (dead) — whose result `j()` returns. (Slice 403: the port's inline copy
+    // dropped the band, the latch and `C()`, so a struck civilian never
+    // staggered or sounded; it only lost hp.)
+    if (jIntake(e, p, w)) { corpseDrop(e); return }
+    if (e.S == 69 || e.S == 129) { corpseDrop(e); return }
+    e.pushContact(w)                                         // a() (i.java:914)
     corpseDrop(e)                                            // au() L849
 }
 
@@ -8372,7 +8368,6 @@ fun NpcFsm.initAx69(e: Entity, f: List<Int>, w: Level0World) {
 
 private val BU73 = intArrayOf(300, 400, 500)
 private val BW73 = intArrayOf(80, 80, 80)
-private val IH73 = intArrayOf(20, 20, 20)
 
 /** ax73 heavy-guard record init — the shared ax11/ax73 ctor case
  *  (i.java:2230-2273, proven): cases 11/73 share ONE init —
@@ -8456,106 +8451,12 @@ private fun sightCheck73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
     return true
 }
 
-/** `i.h()` ax73 arm (i.java:1735 L29-L32, proven): counter window opens
- *  only against player anim 69. */
-private fun counterWindow73(e: Entity, p: Entity): Boolean {
-    if (p.S == 216 || p.S == 217) return false
-    return p.S == 69                                      // L29-L32
-}
-
-/** `i.i()` ax73 arm (i.java:1767 L17, proven): player attackbox non-
- *  degenerate + overlapping my W + mid-attack → player i(8) + E.P|=128 +
- *  my counter stance i(167) with aC=16. Returns false always (L27). */
-private fun counterStrike73(e: Entity, w: LevelCellSource, p: Entity) {
-    if (p.X[0] == p.X[2]) return                          // degenerate X
-    if (!Entity.overlapStrict(e.W, p.X)) return
-    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return    // g.b()
-    if (p.S != 8) { p.setAnim(8); w.kE?.let { it.P = it.P or 128 } }
-    if (e.S != 17) { e.aC = 16; e.setAnim(167) }          // L17-L27
-}
-
-/** `i.j()` ax73 path (i.java:1803 L24-L135, proven): dist-gated engage
- *  lock (bf/aN), then finisher/heavy/sword damage and C() react. */
-private fun damageIntake73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return false   // L24 g.b()
-    val r02 = Math.abs(e.ak - p.ak) <= 160 && Math.abs(e.al - p.al) <= 20
-    if (!r02) return false
-    // L38-L48: bf/aN engage lock — armed once when player winds up S67.
-    if (!w.iBf) {
-        val aN = w.lockTarget
-        if (aN == null || aN === e) {
-            if (p.S == 67) { if (aN == null) w.lockTarget = e; w.iBf = true }
-        }
-    }
-    if (p.X[0] == p.X[2]) return false                    // L50-L52
-    if (!Entity.overlapStrict(e.W, p.X)) return false     // L52-L144
-    e.av = p.ak < e.ak                                    // Q()
-    when {
-        p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217 ->
-            e.aB -= JD.getOrElse(e.au) { JD[0] }          // L61 finisher
-        p.S == 286 || p.S == 287 ->
-            e.aB -= IH73.getOrElse(e.au) { IH73[0] }      // L99 heavy anims
-        else -> e.aB -= BW73.getOrElse(e.au) { BW73[0] }  // L98 sword
-    }
-    // L122 → ax!=11 → L135 → C()
-    return reactOrEnrage73(e, w, p)
-}
-
-/** `i.C()` ax73 arms (i.java:1951 L13/L29/L61, proven): dead → i(164);
- *  wounded-normal (Z0==0 && aB<=bu) → ENRAGE Z0=3 + i(155) + aq=±60 +
- *  player i(8) + E.P|=128; else hit-react i(156) + sfx 13 (sword/heavy
- *  anims also knockback via g()). */
-private fun reactOrEnrage73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (e.aB <= 0) {                                      // L64 death
-        e.setAnim(164); e.ah = 0; e.ag = 0; e.aj = 0; e.ai = 0
-        return true
-    }
-    if (e.Z[0] == 0 && e.aB <= BU73.getOrElse(e.au) { BU73[0] }) {
-        e.Z[0] = 3                                        // L13-L22 enrage
-        e.av = p.ak < e.ak                                // Q()
-        e.setAnim(155)
-        e.aq = e.ak + if (e.av) -60 else 60               // retreat marker
-        p.setAnim(8); w.kE?.let { it.P = it.P or 128 }
-        return true
-    }
-    // @194-213: `Z[0] == 2 → i(6)` (no shipped ax73 carries variant 2, kept
-    // for the record), else the L29-L42 hit-react below.
-    if (e.Z[0] == 2) { e.setAnim(6); return true }
-    // L29-L42: hit-react — g() knockback on sword/heavy anims only.
-    if (p.S == 67 || p.S == 68 || p.S == 69 || p.S == 286 || p.S == 287)
-        hitKnockback73(e, w, p)
-    e.setAnim(156); w.sfx(13)
-    return true
-}
-
-/** `i.g()` no-arg (i.java:1678, proven): hit knockback — zero velocity;
- *  no-op on crate edge; snap to the player's attackbox edge unless a
- *  wall sits behind (e()>=12 in the facing-back cell) — then fling off. */
-private fun hitKnockback73(e: Entity, w: LevelCellSource, p: Entity) {
-    e.ag = 0; e.ai = 0
-    if (crateEdge73(e, w)) return                         // aF()
-    val behind = if (e.av) 1 else -1                      // trailing side
-    if (e.e(w, e.ak / 20 + behind, e.al / 20 - 1) >= 12) return
-    if (!p.av) {
-        if (e.ak >= p.ak) {                               // L16-L20
-            val keep = e.ak
-            e.ak = p.X[2] + (e.ak - e.W[0])
-            if (e.e(w, e.ak / 20, e.al / 20) == 20 ||
-                e.e(w, e.ak / 20, e.al / 20) == 0) {
-                e.ak = keep; e.ag = 2560; e.ai = -1280
-            }
-        }
-    } else {
-        if (e.ak <= p.ak) {                               // L27-L31
-            val keep = e.ak
-            e.ak = p.X[0] - (e.W[2] - e.ak)
-            if (e.e(w, e.ak / 20, e.al / 20) == 20 ||
-                e.e(w, e.ak / 20, e.al / 20) == 0) {
-                e.ak = keep; e.ag = -2560; e.ai = 1280
-            }
-        }
-    }
-}
+// Slice 403: the ax73 tail's `h()` / `i()` / `j()` / `C()` / `g()` are the SAME
+// shared helpers as the soldiers' (`hGate`, `iEngage`, `jIntake`, `Entity.hitReact`,
+// `Entity.resolvePush`) — i.java:1271/1278/1305/1955/1678 are not per-type copies.
+// The port kept a private ax73 copy of each, and the copy of `j()`/`C()` indexed the
+// damage/weaken tables with the entity's own `au` (the screen-distance score that
+// `u()` rewrites, default 10) instead of the difficulty `k.au`.
 
 /** `i.aB()` ax73 arm (i.java:8852 L17-L40, proven): strike when the
  *  attackbox overlaps the player's W — S165 grab arm consumes Z[8],
@@ -9008,8 +8909,8 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
         }
     }
     // -- L234 tail ------------------------------------------------------
-    if (e.Z[0] != 3 && counterWindow73(e, p)) counterStrike73(e, w, p)
-    if (r11 && e.Z[0] != 3 && damageIntake73(e, w, p)) return
+    if (e.Z[0] != 3 && hGate(e, p)) iEngage(e, p, w)       // h() → i() @2042-2063
+    if (r11 && e.Z[0] != 3 && jIntake(e, p, w)) return     // j() @2064-2085
     if (r10) strikePlayer73(e, w, p)
     if (e.aA == 0) {
         e.P = e.P and -17
@@ -9060,7 +8961,6 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
 //      calls l().
 //  M()/h() i.java:7198/7207 — facing-adjacent cell >=5 (floor-ahead probe).
 // =====================================================================
-private val HDM47 = intArrayOf(50, 50, 50)        // i.H counter line (:22315)
 private val DROP_KILL = intArrayOf(24, 22, 43, 150, 35, 157)
 private val KILL_EXIT = intArrayOf(268, 267, 271, 270, 291)
 private val KILL_SKIP = intArrayOf(203, 204, 310, 311)
@@ -9077,7 +8977,7 @@ private val KILL_HOLD = intArrayOf(203, 89, 271, 297)
 fun NpcFsm.initAx47(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.az = rf(17)
-    e.aB = BU73.getOrElse(e.au) { BU73[0] }
+    e.aB = BU73.getOrElse(world.kAu) { BU73[0] }              // bu[k.au]
     e.Z.fill(0)
     e.Z[0] = rf(4)
     e.setAnim(rf(5))
@@ -9090,7 +8990,7 @@ fun NpcFsm.initAx47(e: Entity, f: List<Int>) {
 fun NpcFsm.initAx50(e: Entity, f: List<Int>) {
     fun rf(i: Int) = if (i < f.size) f[i] else 0
     e.az = rf(13)
-    e.aB = BU73.getOrElse(e.au) { BU73[0] }
+    e.aB = BU73.getOrElse(world.kAu) { BU73[0] }              // bu[k.au]
     e.Z.fill(0)
     e.Z[0] = rf(4)
     e.setAnim(rf(5))
@@ -9323,37 +9223,15 @@ private fun contextK(e: Entity, w: LevelCellSource, p: Entity): Boolean {
     }
 }
 
-/** `i.j()` for ax47/50 (i.java:1803-1955, proven): `P()` head (aB<=0 →
- *  releaseAe + false); `g.b()` gate; L24-L38 proximity (|dx|<=160 &&
- *  |dy|<=20) + the `aN/bf` engage latch on p.S==67; L50 X-overlap → Q()
- *  (face player) then damage — `aS.S∈{183,184,216,217}` → J=100 else
- *  L102-L120 → `aB -= H[au]` (50; S67 re-runs Q()). `C()` arm:
- *  survived → `true` with no react; dead → ax50 `i(129)`, ax47 none. */
-private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Boolean {
-    if (e.aB <= 0) { e.releaseAe(); return false }        // P()
-    if (!(p.gI in 1..2 && p.S in ATTACK_ANIMS)) return false   // g.b()
-    val r02 = Math.abs(e.ak - p.ak) <= 160 && Math.abs(e.al - p.al) <= 20
-    if (!r02) return false
-    if (!w.iBf) {                                         // L38-L48 latch
-        val aN = w.lockTarget
-        if (aN == null || aN === e) {
-            if (p.S == 67) { if (aN == null) w.lockTarget = e; w.iBf = true }
-        }
-    }
-    if (p.X[0] == p.X[2]) return false
-    if (!Entity.overlapStrict(e.W, p.X)) return false
-    e.av = p.ak < e.ak                                    // Q()
-    if (p.S == 183 || p.S == 184 || p.S == 216 || p.S == 217)
-        e.aB -= JD.getOrElse(e.au) { JD[0] }              // L61 finisher
-    else {
-        if (p.S == 67) e.av = p.ak < e.ak                 // L102 re-Q()
-        e.aB -= HDM47.getOrElse(e.au) { HDM47[0] }        // L120 counter line
-    }
-    // L135 → C(): ax47/50 arms (i.java:2024-2052).
-    if (e.aB > 0) return true                             // L25→L51: survive
-    if (e.ax == 50) e.setAnim(129)                        // L70 death anim
-    return true                                           // ax47 → L86
-}
+/** `i.j()` for ax47/50: the shared player→NPC intake (`aK()` @521 / `aL()` @478
+ *  both `invokespecial j:()Z` and pop the result) — `jIntake`'s generic arms:
+ *  `P()` head, `g.b()`, the ±160/±20 band + `aN/bf` latch, `Q()`, `aB -= J|H`
+ *  (S67 re-runs `Q()`), then `C()`: a survivor returns true with no react, a dead
+ *  ax50 plays `i(129)`, a dead ax47 nothing. (Slice 403: the port's inline copy
+ *  indexed `J`/`H` with the entity's own `au` — the screen-distance score — and
+ *  not `k.au`; the tables are flat, so only the init HP below mattered.) */
+private fun damageIntakeSentinel(e: Entity, w: LevelCellSource, p: Entity): Boolean =
+    jIntake(e, p, w)
 
 /** `i.aK()` (i.java:9910-10007, proven): the ax50 pouncer FSM — dispatch
  *  `case 50 → aK()` (i.javap.txt:20025) — transcribed arm for arm.

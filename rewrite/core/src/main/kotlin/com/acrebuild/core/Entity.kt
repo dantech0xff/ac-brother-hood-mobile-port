@@ -447,7 +447,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         if (ax == 11 && Z[0] == 1 && aB <= WEAPON_DMG[w.weaponSlot]) {
             Z[0] = 2; setAnim(144)
-            p.spawnMarker(w, 45, ak, al - 85)   // aS.a(45, ak, al-85)
+            // C() @54-74: `aS.a(45, aS.ak, aS.al - 85)` — receiver AND coordinates
+            // are the PLAYER's (getstatic aS ×3); the port used the soldier's.
+            p.spawnMarker(w, 45, p.ak, p.al - 85)
             return true
         }
         if (ax == 73 && Z[0] == 0 && aB <= WEAPON_DMG[w.weaponSlot]) {
