@@ -4156,7 +4156,7 @@ class Level0World(
             p.ag = 0; p.ah = 0
             if (!p.aZ && (p.gB() || p.S == 79)) {
                 if (p.S != 79) p.setAnim(0)
-                p.settleToGround(this)
+                p.eSettle(this)                            // k.aS.E()
             }
         }
         if (kC == null || e.ax == 67) return

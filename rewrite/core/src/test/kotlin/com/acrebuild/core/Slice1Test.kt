@@ -1686,12 +1686,12 @@ class Level0WorldTest {
         Entity.at = null
     }
 
-    @Test fun `settleToGround sinks until standable cell`() {
+    @Test fun `eSettle sinks until standable cell`() {
         val w = world()
         val p = w.player
         // place in open air: sink until below-feet cell is solid
         p.setPositionPx(300, 100); p.refreshBoxes()
-        p.settleToGround(w)
+        p.eSettle(w)
         val below = w.collisionCell(p.ak / 20, (p.W[3] + 1) / 20)
         assertTrue(below >= 12 || below == 5 || below == 3,
             "settled on standable cell, got $below")
@@ -2799,7 +2799,7 @@ class Level0WorldTest {
         w.boundMaxX = 100000
         val p = w.player
         val b = bossAt(w, p.ak, p.al)
-        b.settleToGround(w)                  // pre-settle so a(true) is a no-op
+        b.eSettle(w)                         // pre-settle so a(true) is a no-op
         p.setPositionPx(b.ak, b.al); p.refreshBoxes()
         b.setAnim(4)
         w.iBy = 1
@@ -6564,7 +6564,7 @@ class Slice56Test {
         val w = world()
         val e = ax24(w, 19, 100, 100)
         w.npcFsm.tickAx24(e, w, w.player)
-        assertTrue(e.projB)
+        assertTrue(e.runnerG, "`G` latches (ba() @1380-1396)")
         val child = w.pendingInsert.single { it.ax == 24 }
         assertEquals(40, child.S)
         assertEquals(e.ak, child.ak - child.ao)
@@ -6582,6 +6582,11 @@ class Slice56Test {
         assertEquals(100, w.iBF); assertEquals(999, w.iBE); assertEquals(-1, w.iBG)
         assertEquals(21, w.player.S)
         assertEquals(90, w.kAF, "kAF = min(aB, 100-kAE)")
+        assertEquals(21, e.S, "@1522 i(21): the shrine is spent after one use")
+        // S21 is inert (@1534) — a second overlapping tick heals nothing
+        w.kAF = 7
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertEquals(7, w.kAF, "the spent shrine does not refill again")
     }
 
     @Test fun `S31 pinned child follows owner offset (L53)`() {
@@ -6609,16 +6614,29 @@ class Slice56Test {
         e.T = e.clip!!.frameCount(36) - 1
         e.U = (e.clip!!.frameDuration(36, e.T) - 1).coerceAtLeast(0)
         w.npcFsm.tickAx24(e, w, w.player)
-        assertTrue(e.projB)
+        assertTrue(e.b, "@1606 `b = 1`")
         assertTrue(w.pendingRemove.contains(e))
     }
 
-    @Test fun `S45 lobbed sibling transitions to S15 under the arc (L117)`() {
+    @Test fun `S45 arrival - bZ past ap goes to S15 (@1065-1092)`() {
         val w = world()
-        val e = ax24(w, 45, 100, 100); e.ap = 99999  // bZ<=ap fires
-        e.j = -1                                     // j<=0 && !k → i(15)
+        val e = ax24(w, 45, 100, 100); e.ap = -99999; e.bZ = 0   // bZ > ap
+        e.j = 99
         w.npcFsm.tickAx24(e, w, w.player)
-        assertEquals(15, e.S)
+        assertEquals(15, e.S, "bZ > ap → i(15)")
+    }
+
+    @Test fun `S45 still short of ap keeps flying - the k flag only releases once j runs out`() {
+        val w = world()
+        val e = ax24(w, 45, 100, 100); e.ap = 99999; e.bZ = 0    // bZ <= ap
+        e.j = 5; e.k = true
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertEquals(45, e.S, "bZ <= ap, k, j > 0 → hit test only")
+        assertTrue(e.k)
+        e.j = 0                                       // j-- → -1 <= 0
+        w.npcFsm.tickAx24(e, w, w.player)
+        assertEquals(15, e.S, "k && j <= 0 → k = false; i(15)")
+        assertFalse(e.k)
     }
 
     @Test fun `countKill uid gate (k dot e)`() {

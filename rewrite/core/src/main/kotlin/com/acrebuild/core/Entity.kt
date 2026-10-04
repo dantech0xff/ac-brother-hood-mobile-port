@@ -241,8 +241,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var wpBt: Waypoint? = null     // i.bt — current chain waypoint (c.a)
     var wpF: Waypoint? = null      // i.F — bound companion waypoint (c.a(Z[5]))
     var runnerG = false            // i.G — ax56 pattern-done flag (ay())
-    var projB = false              // i.b — explode-on-contact flag (ba())
-    var projK = false              // i.k — lobbed-arc phase flag (ba())
     var cHWaypoints: Array<IntArray>? = null  // i.cH — homing waypoint
                                               // table on the owner (af)
     var cIDone = false             // i.cI — attack-script done (bool)
@@ -3111,32 +3109,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `g.E()` tail — the consume call after `i(91)`/`A(15)` in ax16's
-     *  hurt arms is `k.aS.E()` = `i.E()` = `settleToGround` (i.java:3760),
-     *  already ported below. Kept as a named alias for call-site clarity.
-     */
-
-    /** `i.E()` (i.java:3760, proven shape): settle loop — sink `al` in
-     *  10px steps until the below-feet cell is standable
-     *  (`aR >= 12 || aR == 5 || aR == 3`). Guarded against missing floor. */
-    fun settleToGround(world: LevelCellSource) {
-        refreshBoxes()
-        var below = e(world, ak / 20, (W[3] + 1) / 20)
-        var guard = 0
-        while (below < 12 && below != 5 && below != 3 && guard++ < 400) {
-            al += 10
-            refreshBoxes()
-            below = e(world, ak / 20, (W[3] + 1) / 20)
-        }
-        aR = below
-    }
-
-    /**
      * `i.E()` (i.java:2929, proven): settle-sink — each pass pins
      * `ah=1`, sets `b`, rescans sides (`a(true)`), unpins `ah`; if
      * `aR∈{3,5,12}` the entity has found footing and returns, else it
-     * sinks `al+=10` and loops. Used by the S54 dismount settle
-     * (g.java:2226).
+     * sinks `al+=10` and loops. The original calls it from 19 sites:
+     * `g.e()` ×6, `g.d(int)` (death release), `i.s()` (jc21 wrap tail),
+     * the constructor tail (ax0 / ax11 / ax73), `aU()` ×2 (zip-line
+     * exits), `aV()` ×3, `bb()` ×2 (S30/38 pickups), `bC()` (S244 kill
+     * landing). Every other spawn / follower / box-refresh site ends in
+     * `t()` only (`i.a(IIII)`, `i.p(II)`, `i.g(I)`, `i.b(Z)`, the `bG()`
+     * knives) — slice 391 retired the sinking `settleToGround` stub.
      */
     fun eSettle(world: LevelCellSource) {
         // The original loop has no counter — it ends when `e()` reads the
@@ -3654,7 +3636,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (x1 <= 0) {
             x1 = 0
             if (w.missionBh() == 3) return
-            if (!aZ && standingOn == null) settleToGround(w)
+            if (!aZ && standingOn == null) eSettle(w)      // k.aS.E()
             bl = 0
             releaseAe(); consumeH()                 // G() + H()
             standingOn = null
@@ -3838,7 +3820,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (d.av) d.P = d.P or 1 else d.P = d.P and -2
         d.ak = ak; d.al = al
         d.ag = ag; d.ah = ah; d.ai = ai; d.aj = aj
-        d.settleToGround(world)
+        d.refreshBoxes()                                  // ad.t()
     }
 
     /** `i.u()` (i.java:575-594, proven): `au` = coarse camera-distance
@@ -3945,15 +3927,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         r0.setAnim(anim)
         r0.az = az
         r0.ak = ak; r0.al = al; r0.av = av
-        r0.settleToGround(world)
+        r0.refreshBoxes()                        // aK.t() — no E(): the child stays where it spawned
         return r0
     }
 
     /** `i.d(i,x,y)` (i.java:16745, proven): spawn the ax24/clip40 `S=i`
      *  score floatie at pixel (x,y) — `a(24,40,i,201)` child, then
      *  `av=false`, `N/O` = 8.8 pos, `ak/al` = pos, vel 0, `t()`, `k.b`
-     *  insert. (spawnChildFx's settleToGround runs before the pos
-     *  re-anchor, so it's a no-op vs the raw a() — flagged.) */
+     *  insert. (`a()` ends `t()` at the parent's position; the re-anchor
+     *  below ends with its own `t()`.) */
     fun spawnFloatie(world: LevelCellSource, i: Int, x: Int, y: Int) {
         val aK = spawnChildFx(world, 24, 40, i, 201)
         aK.av = false
@@ -4182,7 +4164,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         aK.ak = ak + r8; aK.al = al + r9
         aK.ao = r8; aK.ap = r9
         aK.ag = 0; aK.ah = 0
-        aK.settleToGround(world)
+        aK.refreshBoxes()                        // aK.t()
         aK.P = aK.P or 16
         aK.af = this
         world.queueInsert(aK)
@@ -4216,7 +4198,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 cIDone = true
             }
         }
-        aK.settleToGround(world)
+        aK.refreshBoxes()                        // aK.t()
         aK.P = aK.P or 16
         aK.af = this
         aK.bR = false
@@ -4289,27 +4271,37 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 world.playerRect()[2]) shr 1
                             var r9 = 240 - aK.bZ
                             if (r9 < 60) r9 = 60
-                            // proven: `j.a(0, j.c(0)>>8)` — `j.c(0)` =
-                            // Int.MAX_VALUE (j.java:798-804: `b(0)` null-arm
-                            // returns MAX) → range (0, MAX>>8)
+                            // bG @285-334 (proven): `r3 = (j.c(30 * j.m / 360)
+                            // * r2) >> 8` with `j.m = 256` (j.javap static{}
+                            // @62-65) → `j.c(21)`, tan(29.5°) in 8.8 — then
+                            // ONE `j.a(0, r3)` draw feeds `|draw| * (-512 - k.Y)
+                            // / |r2|`. (The port read `j.m` as 0 → `j.c(0)` =
+                            // Int.MAX_VALUE, a range of 8.4M: the knife's
+                            // launch speed overflowed into noise.)
+                            val rng = (Trig.tan(30 * Trig.M / 360) * r9) shr 8
                             val r02 = (kotlin.math.abs(
-                                world.jRand(0, Int.MAX_VALUE shr 8)) *
+                                world.jRand(0, rng)) *
                                 ((-512) - world.kY)) / kotlin.math.abs(r9)
                             aK.ap = aK.bZ + world.jRand(60, r9)
                             aK.ag = if ((world.jNextInt() and 1) == 0) r02
                                     else -r02
-                            aK.settleToGround(world)
+                            aK.refreshBoxes()                       // aK.t()
                             aK.P = aK.P or 16
                             aK.af = this
                             aK.bR = false
                             world.queueInsert(aK)
                             aK.j = (aK.ap shl 8) / (aK.ah - world.kY)
                             if (j == 3) {
-                                val r03 = aK.ag shr 2
+                                // @460-530 (proven): `ag >>= 2`, `k = true`,
+                                // the aG1/aG2 mirror flips `ag` (@511), and
+                                // `ah = k.Y + 128` closes the block on EVERY
+                                // path (@520 is the join of all three jumps).
+                                val r5 = aK.ag shr 2
                                 aK.k = true
-                                aK.ag = r03
-                                if (aG == 1 && r03 > 0) aK.ag = -r03
-                                if (aG == 2 && r03 < 0) aK.ah = world.kY + 128
+                                aK.ag = r5
+                                if ((aG == 1 && r5 > 0) || (aG == 2 && r5 < 0))
+                                    aK.ag = -r5
+                                aK.ah = world.kY + 128
                             }
                             j++
                             if (j >= 4) { j = 0; nl = 0; cIDone = true }
@@ -4414,7 +4406,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                         aK.bZ
                                     aK.ag = (r06 shl 8) / 20
                                     aK.ah = ((r07 shl 8) / 20) + world.kY
-                                    aK.settleToGround(world)
+                                    aK.refreshBoxes()                       // aK.t()
                                     aK.P = aK.P or 16
                                     aK.af = this
                                     aK.bR = false
@@ -4459,7 +4451,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                             }
                         }
                         cIDone = true
-                        aK.settleToGround(world)
+                        aK.refreshBoxes()                       // aK.t()
                         aK.P = aK.P or 16
                         aK.af = this
                         aK.bR = false
