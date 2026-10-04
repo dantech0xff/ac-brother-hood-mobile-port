@@ -2875,10 +2875,11 @@ class Level0WorldTest {
         e.S = 8
         w.npcFsm.tickAx61(e, w, w.player)
         assertEquals(1, e.Z[6])
-        assertEquals(0, e.ak, "t=0 -> Bezier start point Z[0]")
+        assertEquals(w.kO, e.ak, "t=0 -> Bezier start point Z[0] (+ the camera)")
         w.npcFsm.tickAx61(e, w, w.player)
-        val t = 4096; val ti = 65536 - t
-        assertEquals((0 * ti * ti + 2 * 400 * ti * t + 1600 * t * t) shr 16, e.ak)
+        // aR() @104: t = (Z[6] * j.i) / Z[7] = 16 in the 256-param domain (slice 409)
+        val t = 16; val om = 256 - t
+        assertEquals((0 * om * om + 2 * 400 * om * t + (1600 - w.kO) * t * t) / 65536 + w.kO, e.ak)
         repeat(14) { w.npcFsm.tickAx61(e, w, w.player) }
         assertEquals(1600, e.ak, "lands at Z[8]")
         assertEquals(800, e.al, "lands at Z[9]")
@@ -5398,8 +5399,11 @@ class Slice48Test {
         val e = ax9At(w, 200, 200, 0, link = 777)
         w.npcFsm.tickAx9(e, w, w.player)
         assertSame(crate, e.s, "k.q(Z[1]) ax51 overlap → s link")
-        // ride arms: az = s.az + 1, al on top of the crate's W
-        assertEquals(crate.az + 1, e.az)
+        // the link tick sets al (and ak += s.ag>>8); the ride re-pin with az = s.az + 1
+        // is the ELSE of the link scan (bM() @139-199) — it starts the tick after
+        assertEquals(crate.W[1] - (e.Y[3] - e.Y[1]) + 5, e.al)
+        w.npcFsm.tickAx9(e, w, w.player)
+        assertEquals(crate.az + 1, e.az, "next tick: s != null → az = s.az + 1")
         assertEquals(crate.W[1] - (e.Y[3] - e.Y[1]) + 5, e.al)
     }
 
@@ -8355,7 +8359,7 @@ class Slice65Test {
 // (P|512, az=f[7], k.aq++ on anim-0), S0 collect (overlap-or-dist≤20, ap[5] +
 // streak + sfx + S2), S1 polar spiral (aF param, aq/ar anchor, orbit ticks →
 // S2), S2 attach anim → k.c, S5 fall→bezier setup (+dead RNG draw), S3/S6
-// quadratic-bezier view-space flight → S4, S4 → k.c. Helpers jBezier +
+// quadratic-bezier view-space flight → S4, S4 → k.c. Helpers Trig.bezier +
 // kCount/kCollectStreak/kAq/kAz on Level0World.
 
 class Slice66Test {
@@ -8512,10 +8516,10 @@ class Slice66Test {
         e.Z[2] = 300; e.Z[3] = 100                   // end
         e.Z[4] = 200; e.Z[5] = 50                    // control
         e.Z[6] = 0; e.Z[7] = 4                       // 4-tick flight
-        w.npcFsm.tickAx74(e, w, w.player)            // t=0 → 2·ctrl + cam
-        // j.java:511 verbatim weight order: t=0 yields 2·Z[4], NOT Z[0].
-        assertEquals(2 * e.Z[4] + w.kO, e.ak)
-        assertEquals(2 * e.Z[5] + w.kP, e.al)
+        w.npcFsm.tickAx74(e, w, w.player)            // t=0 → the start point + cam
+        // j.a/j.b raw bytes (slice 409): a·(i-t)² + 2b·(i-t)t + c·t² — t=0 is Z[0], Z[1].
+        assertEquals(e.Z[0] + w.kO, e.ak)
+        assertEquals(e.Z[1] + w.kP, e.al)
         assertEquals(1, e.Z[6])
         repeat(3) { w.npcFsm.tickAx74(e, w, w.player) }
         assertEquals(4, e.S)                         // Z6 ≥ Z7 → i(4)
@@ -12209,8 +12213,10 @@ class Slice106Test {
 
 
 // --------------------------------------------------------------- slice 107
-// ax9 S4 hint-banner + S5 context pad (aV() L15b9/L15e8, i.java:12121-12171).
-// op22 scripts arm anims {0..8} onto ax9 uids — S4/S5 are live script states.
+// ax9 S4/S5. Slice 107 ported `aV()`'s hint-banner (L15b9) and context-pad (L15e8) arms
+// into ax9; the bytes disagree (slice 409): `bM()`'s tableswitch sends S4 and S5 to the bare
+// return @653, `k.aB` is written only by `aV()` (ax10, i.javap @5589/@5604), and `bM()` is
+// called only at the I() dispatch of case 9. The four tests below pin the bytes now.
 class Slice107Test {
 
     private fun ax9At(w: Level0World, x: Int, y: Int, s: Int, aF: Int = 0): Entity {
@@ -12230,65 +12236,29 @@ class Slice107Test {
         e.W[2] = p.W[2] + 10; e.W[3] = p.W[3] + 10
     }
 
-    @Test fun `S4 overlap shows the aF level string and holds aC=-1`() {
+    @Test fun `S4 overlap changes nothing - bM() sends S4 to the bare return (@653)`() {
         val w = world(); w.npcs.clear()
         val e = ax9At(w, 0, 0, 4, aF = 3)
         boxAroundPlayer(w, e)
+        w.kAB = null; w.kAC = 0
         w.npcFsm.tickAx9(e, w, w.player)
-        assertEquals(w.levelString(1 + w.kAj, 3), w.kAB, "k.aB = d(1+aj, aF)")
-        assertEquals(-1, w.kAC, "aC = -1 — banner holds while touching")
+        assertNull(w.kAB, "k.aB is aV()'s (ax10), not bM()'s")
+        assertEquals(0, w.kAC)
+        assertEquals(4, e.S)
     }
 
-    @Test fun `S4 leave clears the banner only when aC is out`() {
-        val w = world(); w.npcs.clear()
-        val e = ax9At(w, 0, 0, 4, aF = 3)
-        boxAroundPlayer(w, e)
-        w.npcFsm.tickAx9(e, w, w.player)
-        // walk off: empty k.aC → the banner clears (L15dd aC<=0 arm)
-        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
-        w.npcFsm.tickAx9(e, w, w.player)
-        assertNull(w.kAB, "aC<=0 + no overlap → aB = null")
-        // re-show, then leave while the countdown is still live
-        boxAroundPlayer(w, e)
-        w.npcFsm.tickAx9(e, w, w.player)
-        e.W[0] = -5000; e.W[1] = -5000; e.W[2] = -4000; e.W[3] = -4000
-        w.kAC = 5                                     // countdown live
-        w.npcFsm.tickAx9(e, w, w.player)
-        assertNotNull(w.kAB, "aC>0 → L1ec7 = return, banner kept")
-    }
-
-    @Test fun `S5 overlap plus up press rises the player to S22`() {
-        val w = world(); w.npcs.clear()
-        val e = ax9At(w, 0, 0, 5)
-        boxAroundPlayer(w, e)
-        w.pad.commit(16388)                            // u(16388) held
-        w.npcFsm.tickAx9(e, w, w.player)
-        assertEquals(22, w.player.S, "u(16388) → aS.i(22)")
-    }
-
-    @Test fun `S5 directional tap matches facing — av uses u2 else u8`() {
-        val w = world(); w.npcs.clear()
-        val e = ax9At(w, 0, 0, 5)
-        boxAroundPlayer(w, e)
-        w.player.av = true
-        w.pad.commit(2)                                // av → u(2)
-        w.npcFsm.tickAx9(e, w, w.player)
-        assertEquals(22, w.player.S)
-
-        val w2 = world(); w2.npcs.clear()
-        val e2 = ax9At(w2, 0, 0, 5)
-        boxAroundPlayer(w2, e2)
-        w2.player.av = false
-        w2.pad.commit(8)                               // !av → u(8)
-        w2.npcFsm.tickAx9(e2, w2, w2.player)
-        assertEquals(22, w2.player.S)
-
-        val w3 = world(); w3.npcs.clear()
-        val e3 = ax9At(w3, 0, 0, 5)
-        boxAroundPlayer(w3, e3)
-        w3.pad.commit(0)                               // no press → no rise
-        w3.npcFsm.tickAx9(e3, w3, w3.player)
-        assertNotEquals(22, w3.player.S)
+    @Test fun `S5 overlap plus every press changes nothing - bM() sends S5 to the bare return`() {
+        for (mask in intArrayOf(16388, 2, 8)) {
+            val w = world(); w.npcs.clear()
+            val e = ax9At(w, 0, 0, 5)
+            boxAroundPlayer(w, e)
+            w.player.av = mask == 2
+            val s0 = w.player.S
+            w.pad.commit(mask)
+            w.npcFsm.tickAx9(e, w, w.player)
+            assertEquals(s0, w.player.S, "mask $mask: no aS.i(22)")
+            assertEquals(5, e.S)
+        }
     }
 }
 

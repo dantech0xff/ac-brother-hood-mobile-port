@@ -56,6 +56,26 @@ object Trig {
         247, 248, 248, 249, 249, 250, 250, 251, 251, 252, 252, 253, 253, 254, 254, 255
     )
 
+    /**
+     * `j.a(x0,y0,xc,yc,x1,y1,t)` over `j.b(IIIIII)I` (j.javap `a(IIIIIII)V` @0-60 and
+     * `b(IIIIII)I` @0-20, raw bytes, proven): the quadratic Bézier in the 256-parameter
+     * domain (`t ∈ [0, j.i = 256]`) — `(p0·(i−t)² + 2·pc·(i−t)·t + p1·t²) / 65536` with
+     * Java's truncating `idiv`, once for x and once for y. Slice 409: the port weighted the
+     * START by `(i−t)·t` and the CONTROL by `(i−t)²` (a mislabelled `b(a,b,c,w1,w2,w3)`:
+     * the bytes are `a·w2 + 2·b·w1 + c·w3`), so at t = 0 a flying wisp sat on twice its
+     * control point instead of its start; ax61 S8 carried its own 65536-domain copy whose
+     * `ti²` overflowed `Int` for the first third of the flight.
+     */
+    fun bezier(x0: Int, y0: Int, xc: Int, yc: Int, x1: Int, y1: Int, t: Int): IntArray {
+        val tt = t * t
+        val om = I - t
+        val omt = om * t
+        val om2 = om * om
+        return intArrayOf(
+            (x0 * om2 + 2 * xc * omt + x1 * tt) / 65536,
+            (y0 * om2 + 2 * yc * omt + y1 * tt) / 65536)
+    }
+
     /** `j.b(int)` (j.java:334-349) — wraps |a| to [0,255] and mirrors
      *  the quarter table: cos θ in 8.8. Call sites write `j.b(θ)` as
      *  `cos(θ)` and `j.b(j.n − θ)` (= sin θ) as `cos(N − θ)`. */

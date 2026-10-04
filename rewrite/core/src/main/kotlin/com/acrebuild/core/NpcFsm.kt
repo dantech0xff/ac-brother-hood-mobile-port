@@ -3633,7 +3633,11 @@ class NpcFsm(val world: LevelCellSource) {
     private fun gondolaTail(e: Entity, w: LevelCellSource, p: Entity) {
         // L64/L70 — r7 = ak is past the far endpoint in the travel
         // direction (Z2<Z3 → left→right; Z2>Z3 → right→left).
-        val r7 = if (e.Z[2] <= e.Z[3]) e.ak > e.Z[3] else e.ak < e.Z[3]
+        // @663-728: `(Z2 > Z3 && ak < Z3) || (Z2 < Z3 && ak > Z3)` — equal endpoints (an
+        // unresolved anchor pair) are never "past the far end" (slice 409: the port read
+        // Z2 == Z3 as left→right, so a gondola with 0/0 anchors fell at once).
+        val r7 = (e.Z[2] > e.Z[3] && e.ak < e.Z[3]) ||
+                 (e.Z[2] < e.Z[3] && e.ak > e.Z[3])
         // L75 → L81: past the far end, or script-forced (cK == -2 while
         // a claim is bound) → kick the departure fall and eject a rider
         // still hanging in anim 164.
@@ -5583,15 +5587,14 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
         // i = 65536) from Z[0..1] through ctrl Z[4..5] to screen-space
         // dest Z[8]-k.O / Z[9]-k.P over Z[7] ticks → land + i(10).
         8 -> {
-            val t = (e.Z[6] * 65536) / e.Z[7]
-            val ti = 65536 - t
-            val tc = ti * t
-            val ti2 = ti * ti
-            val t2 = t * t
-            e.ak = ((e.Z[0] * ti2 + 2 * e.Z[4] * tc +
-                    (e.Z[8] - w.kO) * t2) shr 16) + w.kO
-            e.al = ((e.Z[1] * ti2 + 2 * e.Z[5] * tc +
-                    (e.Z[9] - w.kP) * t2) shr 16) + w.kP
+            // `j.a(Z[0], Z[1], Z[4], Z[5], Z[8]-k.O, Z[9]-k.P, (Z[6]*j.i)/Z[7])` @104: the
+            // 256-domain curve (slice 409: the port's own copy ran a 65536 domain whose
+            // `ti²` overflowed `Int`, throwing the first third of the flight off screen).
+            val t = if (e.Z[7] != 0) (e.Z[6] * 256) / e.Z[7] else 0
+            val xy = Trig.bezier(e.Z[0], e.Z[1], e.Z[4], e.Z[5],
+                                 e.Z[8] - w.kO, e.Z[9] - w.kP, t)
+            e.ak = xy[0] + w.kO
+            e.al = xy[1] + w.kP
             e.Z[6]++
             if (e.Z[6] >= e.Z[7]) {                              // L155 fall
                 e.ak = e.Z[8]
@@ -5784,6 +5787,10 @@ fun NpcFsm.initAx9(e: Entity, f: List<Int>, w: LevelCellSource) {
  *  ride-linked blocks (ax51 crate / ax43 overlay) + the S-arm switch. */
 fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
     // ---- preamble: link + ride (skipped for S>=35) -------------------------
+    // @0-200: `if (Z != null && Z[1] > 0 && s == null) { link scan }
+    //          else if (s != null && s.ax == 51) { az = s.az + 1; al = … }` — the ride
+    // re-pin is the ELSE of the link scan (slice 409: the port ran it in the same tick
+    // the link was made, setting `az` one tick early).
     if (e.S < 35) {
         if (e.Z[1] > 0 && e.s == null) {
             val r0 = w.findByAw(e.Z[1])
@@ -5796,10 +5803,11 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
                     e.ak += r0.ag shr 8
                 }
             }
-        }
-        e.s?.takeIf { it.ax == 51 }?.let { s ->                 // L21
-            e.az = s.az + 1
-            e.al = s.W[1] - (e.Y[3] - e.Y[1]) + 5
+        } else {
+            e.s?.takeIf { it.ax == 51 }?.let { s ->             // L21
+                e.az = s.az + 1
+                e.al = s.W[1] - (e.Y[3] - e.Y[1]) + 5
+            }
         }
     }
     when (e.S) {
@@ -5822,21 +5830,9 @@ fun NpcFsm.tickAx9(e: Entity, w: LevelCellSource, p: Entity) {
             e.aB = 0
             if (e.animFinished()) { e.P = e.P or 32; e.P = e.P and -17 }
         }
-        // -- L15b9/L15dd (i.java:12121-12142, proven): S4 hint-banner
-        //    zone — while player box overlaps, `k.aB` = level string aF
-        //    + `k.aC = -1` (hold); leaving clears only once aC is out
-        //    (`aC>0` → L1ec7 = bare return, keeps the banner ticking).
-        4 -> if (Entity.overlapStrict(p.W, e.W)) {
-            w.kAB = w.levelString(1 + w.kAj, e.aF)
-            w.kAC = -1
-        } else if (w.kAC <= 0) w.kAB = null
-        // -- L15e8-L1625 (i.java:12144-12171, proven): S5 context pad —
-        //    overlap + (up 16388 held/edge) OR facing-tap (av→u(2),
-        //    else u(8)) → `aS.i(22)` player rise.
-        5 -> if (Entity.overlapStrict(p.W, e.W) &&
-            (w.padDown(16388) || w.padHeld(16388) ||
-             (p.av && w.padDown(2)) || (!p.av && w.padDown(8))))
-            p.setAnim(22)
+        // S4/S5: `bM()`'s tableswitch sends them to the bare return @653 (slice 409:
+        // the port carried a hint-banner zone (S4) and a context pad (S5) here that are
+        // `aV()`'s ax10 arms, not ax9's; no shipped ax9 record uses S4/S5).
         18 -> e.adChildOverlay(w, 7)                           // L42 l(7)
         // -- L45-L51: driven slide — k.ae vel + aG kick, /aI when slow-mo --
         19 -> {
@@ -7746,7 +7742,9 @@ fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
     r6.refreshBoxes()                                   // t()
     val p = w.player
     if (p.ga != null) { r6.releaseAe(); return }        // L34
-    if (w.playerAttacking()) { r6.releaseAe(); return } // L12→L34
+    // @L185: `g.g() != 0` is the DEATH check (`x[1] <= 0`, g.javap g() 0-11), not the
+    // attack test (`g.b()`) the port had here (slice 409).
+    if (w.playerDead()) { r6.releaseAe(); return }
     if (!Entity.overlapStrict(p.Y, r6.Y)) {             // →L27
         r6.releaseAe(); return
     }
@@ -7771,7 +7769,9 @@ fun NpcFsm.grappleOffer(r6: Entity, w: Level0World) {
 
 fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
     // anim advance: I() preamble (i.java:15232)
-    if (e.claimActive()) { e.runClaimScript(w); return }        // ab()→aa()
+    // @0-11: `if (ab()) aa();` and then the S switch — NO return (slice 409: the port
+    // returned after the claim step, so a scripted hook never ran its own arm).
+    if (e.claimActive()) e.runClaimScript(w)                    // ab()→aa()
     when (e.S) {
         7 -> {                                                  // L7 cut/re-offer
             e.ag = 0; e.ah = 0
@@ -7829,13 +7829,16 @@ fun NpcFsm.tickAx43(e: Entity, w: Level0World, p: Entity) {
                 }
             }
             if (w.kAe !== e) w.kAe = e                    // L62/L65
-            if (p.S < 304) p.setAnim(295)                 // L72
-            if (p.S < 308) {                              // L73 pin (≥308 → L75→L78)
-                p.av = e.av
-                p.ag = 0; p.ah = 0
-                p.ak = (e.X[0] + e.X[2]) shr 1
-                p.al = (e.X[1] + e.X[3]) shr 1
-            }
+            // @367-423: `if (S != 295 && S != 307 && !(S in 304..306)) aS.i(295)` — then the
+            // pin @424-492 for EVERY S. (Slice 409: the port set the hang pose only below 304
+            // and pinned only below 308, so a rider knocked into S>=308 neither returned to
+            // the pose nor followed the hook.)
+            val ps = p.S
+            if (ps != 295 && ps != 307 && ps !in 304..306) p.setAnim(295)
+            p.av = e.av
+            p.ag = 0; p.ah = 0
+            p.ak = (e.X[0] + e.X[2]) shr 1
+            p.al = (e.X[1] + e.X[3]) shr 1
             if (e.animFinished()) e.setAnim(1)            // L78
             return
         }
@@ -9741,22 +9744,7 @@ private fun ax64S7(e: Entity, w: LevelCellSource, p: Entity) {
 // feeds `ap[4|5]` + the `k.s()` streak meter; S1 polar spiral-in orbit; S2
 // attach anim pinned above the player → despawn; S5 fall→bezier; S3/S6
 // quadratic-bezier view-space flight; S4 end. `j.a(6-arg)` param curve at
-// j.java:515 — `b(a,b,c, t(1-t), (1-t)², t²)>>16` blend (verbatim weight
-// order).
-
-/** `j.a(x0,y0,x1,y1,x2,y2,t)` (j.java:515, proven) — quadratic bezier in
- *  the 256-param domain; returns [x,y]. `b(6-arg)` = `a·t(1-t) +
- *  2b·(1-t)² + c·t²` scaled >>16 (verbatim — the weight order is NOT the
- *  textbook Bernstein row). */
-private fun jBezier(x0: Int, y0: Int, x1: Int, y1: Int,
-                    x2: Int, y2: Int, t: Int): IntArray {
-    val tt = t * t
-    val om = 256 - t
-    val om2 = om * om
-    val omt = om * t
-    fun blend(a: Int, b: Int, c: Int) = (a * omt + 2 * b * om2 + c * tt) shr 16
-    return intArrayOf(blend(x0, x1, x2), blend(y0, y1, y2))
-}
+// j.java:515 — `Trig.bezier` (slice 409: textbook weights, `idiv` 65536).
 
 /** Record init (L116 at i.java:3029, proven): `P|=512`, `az = r8[7]`,
  *  `k.aq++` when `r8[5]==0`, then the shared L392 tail `i(r8[5]) + t()`. */
@@ -9807,8 +9795,8 @@ fun NpcFsm.tickAx74(e: Entity, w: LevelCellSource, p: Entity) {
         }
         3, 6 -> {                                  // L51: bezier flight
             val t = if (e.Z[7] != 0) (e.Z[6] * 256) / e.Z[7] else 0
-            val xy = jBezier(e.Z[0], e.Z[1], e.Z[4], e.Z[5],
-                             e.Z[2], e.Z[3], t)
+            val xy = Trig.bezier(e.Z[0], e.Z[1], e.Z[4], e.Z[5],
+                                 e.Z[2], e.Z[3], t)
             e.ak = xy[0] + w.kO
             e.al = xy[1] + w.kP
             e.Z[6]++
