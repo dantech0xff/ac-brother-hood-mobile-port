@@ -4006,9 +4006,13 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.ah == 0 && e.ag != 0) e.spawnMarker(world, 4, e.ak, e.al - 60)
                 var r9 = false
                 if (Entity.overlapStrict(player.W, e.X)) {
-                    if (!world.playerAttacking()) {
+                    // @470-719: `g.b() && !bR` → the bounce; EVERY other combination
+                    // (not attacking, or attacking with the knife already bounced once)
+                    // falls to L707: `aS.a(4,0,0,r1); r2 = 1`. (Slice 407: the port
+                    // did nothing for an attacking player and a re-bounced knife.)
+                    if (!(world.playerAttacking() && !e.bR)) {
                         player.applyHit(4, 0, e, world); r9 = true
-                    } else if (!e.bR) {
+                    } else {
                         if (e.ag > 0) {
                             e.ak = player.X[0] - (e.X[2] - e.X[0])
                             e.al = player.X[1] - (e.X[3] - e.X[1])
@@ -5967,7 +5971,11 @@ private fun ax15Body(e: Entity, w: Level0World, p: Entity) {
             else {
                 // L46 — locomotion-state capture/pushout
                 if (p.gC()) {
-                    if (Entity.overlapStrict(p.W, e.W)) {
+                    // @338-376 (raw bytes): `if (a(aS.W, W)) goto 376; if (aS.ac != r1)
+                    // goto 1095` — the pushout + hang runs for an overlap OR a player
+                    // already claimed by this block. (Slice 407: the port sent the
+                    // claimed-but-not-overlapping case into the capture arm instead.)
+                    if (Entity.overlapStrict(p.W, e.W) || p.ac === e) {
                         // L51-L57: horizontal pushout + hang attempt
                         p.ag = 0; p.ah = 0
                         if (p.ak - e.ak < 0) {
@@ -5978,8 +5986,6 @@ private fun ax15Body(e: Entity, w: Level0World, p: Entity) {
                                     (p.ak - p.W[0])
                         }
                         e.hangOnEdge(w, r1)                        // L57
-                    } else if (p.ac === e) {
-                        ax15Capture(e, w, p)                       // L50→L59
                     }
                 }
             }
@@ -6044,16 +6050,18 @@ private fun ax15Capture(e: Entity, w: Level0World, p: Entity) {
     if (p.gB() || p.S == 34) {
         // L73 — inside the span → claim
         if (p.ak <= e.W[0] || p.ak >= e.W[2]) {
-            // L94/L99 — outside span: side pushout + a(2560) fling
+            // @762-938 (raw bytes) — outside span: the side pushout (when the
+            // player's velocity runs into the block) and then `aS.a(2560)` at 929,
+            // the join of BOTH `if`s — the fling is unconditional. (Slice 407: the
+            // port flung only inside the two pushout arms.)
             if (p.ak <= e.ak && p.ag > 0) {
                 p.ak = e.ak - (p.W[2] - p.W[0]) / 2 - (e.W[2] - e.W[0]) / 2
                 p.ai = 0; p.ag = 0
-                p.flingAirborne(2560, w)
             } else if (p.ak > e.ak && p.ag < 0) {
                 p.ak = e.ak + (p.W[2] - p.W[0]) / 2 + (e.W[2] - e.W[0]) / 2
                 p.ai = 0; p.ag = 0
-                p.flingAirborne(2560, w)
             }
+            p.flingAirborne(2560, w)
             return
         }
         p.ga = e                                                   // g.a = this

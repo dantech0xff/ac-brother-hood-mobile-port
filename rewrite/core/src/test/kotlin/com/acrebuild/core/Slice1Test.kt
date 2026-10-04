@@ -4939,7 +4939,9 @@ class Slice45Test {
     @Test fun `g k rope input pumps and climbs`() {
         val w = world(); w.npcs.clear()
         val p = w.player
-        val e = ax13At(w, 100, 100, ag = 1, z1 = 10)
+        // aG0: g.k() returns at once on `bM.aG == 1` (@14-25, slice 407) — the
+        // climb/descend arms below belong to the other variants.
+        val e = ax13At(w, 100, 100, ag = 0, z1 = 10)
         e.aA = 1; e.bM = p; p.bM = e
         e.bN = 5
         e.bO = 0; e.bP = 0            // dead pendulum — bound at rest

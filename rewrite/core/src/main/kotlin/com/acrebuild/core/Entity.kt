@@ -1969,16 +1969,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `g.k()` (g.java:4821, proven): mounted-rope input handler — runs
-     * from the bound ax13's `aW()` tick (`bM == k.aS`), not the player
-     * loop. aG==4 → climb `i(82)`/`bN--` (`bN-2<0 → j()` dismount);
-     * else held-D-pad pumps the pendulum (±512 clamp ±1280, `/80` feed)
-     * with anim picks {84,85}; `u(16388)` zeroes the swing → `i(82)`→
-     * `r()→i(326)` hang; `u(65568) → i(86)` let-go cue; `u(2)/u(8)` →
-     * `av` + `j()`.
+     * `g.k()` (g.javap @14261-14640, proven; raw bytes): mounted-rope input
+     * handler — runs from the bound ax13's `aW()` tick (`bM == k.aS`), not
+     * the player loop. `bM == null || bM.aG == 1` → return (@0-25). aG==4 →
+     * climb `i(82)`/`bN--` (`bN-2<0 → j()` dismount); else held-D-pad pumps
+     * the pendulum — each arm is `clamp-to-±1280` **or** `±512` (never both,
+     * @183-212/@284-313), then the `/80` feed — with anim picks {84,85};
+     * `u(16388)` zeroes the swing (`bO != 0 || bP != 0`) → `i(82)`→`r()→i(326)`
+     * hang; `u(33024)` zeroes only when `bO != 0` (@485-499 tests bO twice);
+     * `u(65568) → i(86)` let-go cue; `u(2)/u(8)` → `av` + `j()`.
      */
     fun ropeInput(w: LevelCellSource) {
         val r0 = bM ?: return
+        if (r0.aG == 1) return                                        // @14-25: bM.aG == 1 → return
         if (r0.aG == 4) {
             if (r0.bN - 2 < 0) { releaseRope(w); return }
             r0.bN--; setAnim(82); return
@@ -1990,16 +1993,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (w.padDown(8)) { av = false; releaseRope(w); return }      // u(8)
         if (w.padDown(8256)) {                                        // L38 pump
             if (r0.bP <= 0 && r0.bO >= 0) {
-                if (r0.bP > -1280) r0.bP = -1280
-                r0.bP += 512
+                if (r0.bP > -1280) r0.bP = -1280                      // @183-200 → goto 215
+                else r0.bP += 512                                     // @203-212: bP <= -1280
                 r0.bO += (20480 + r0.bP) / 80
             }
             setAnim(if (av) 85 else 84); return
         }
         if (w.padDown(4112)) {                                        // L57 pump
             if (r0.bP >= 0 && r0.bO <= 0) {
-                if (r0.bP < 1280) r0.bP = 1280
-                r0.bP -= 512
+                if (r0.bP < 1280) r0.bP = 1280                        // @284-301 → goto 316
+                else r0.bP -= 512                                     // @304-313: bP >= 1280
                 r0.bO -= (20480 - r0.bP) / 80
             }
             setAnim(if (av) 84 else 85); return
@@ -2015,7 +2018,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             setAnim(326); return
         }
         if (w.padDown(33024)) {                                       // L103 descend
-            if (r0.bO != 0 || r0.bP != 0) { r0.bP = 0; r0.bO = 0; return }
+            if (r0.bO != 0) { r0.bP = 0; r0.bO = 0; return }          // @485-509 tests bO twice, never bP
             if (r0.bN + 2 > r0.Z[1] - 2) {
                 setAnim(43); ag = 0; ah = 2560                        // L113
                 if (r0.aG == 2) consumeH()                                 // k.aS.H()
