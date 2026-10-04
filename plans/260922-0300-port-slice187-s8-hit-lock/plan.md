@@ -9,6 +9,7 @@ sources:
   - reconstructed-project/src/simple/i.java:4446-4580  (i.a() op dispatcher, op18)
   - reconstructed-project/src/simple/g.java:135-155    (g.a() damage pay)
   - reconstructed-project/src/simple/i.java:285-292    (i() clears P&64)
+status: done
 ---
 
 ## What

@@ -21,7 +21,7 @@ import com.badlogic.gdx.audio.Sound
  * `setLoopCount(1)` — a new play preempts whatever was sounding, and
  * `e.b()` stops it. `stopAll()` is that channel's close().
  */
-class AudioBridge {
+class AudioBridge(private val tag: String = SpikeGame.TAG) {
 
     private val sounds = HashMap<Int, Sound>()
     private val music = HashMap<Int, Music>()
@@ -40,17 +40,17 @@ class AudioBridge {
         for (n in wavSlots) {
             val f = Gdx.files.internal("audio/sfx-$n.wav")
             if (f.exists()) sounds[n] = Gdx.audio.newSound(f)
-            else Gdx.app.log(SpikeGame.TAG, "audio: missing audio/sfx-$n.wav")
+            else Gdx.app.log(tag, "audio: missing audio/sfx-$n.wav")
         }
         for (n in midiSlots) {
             val f = Gdx.files.internal("audio/music-$n.ogg")
             if (f.exists()) music[n] = Gdx.audio.newMusic(f)
-            else Gdx.app.log(SpikeGame.TAG, "audio: missing audio/music-$n.ogg")
+            else Gdx.app.log(tag, "audio: missing audio/music-$n.ogg")
         }
     }
 
     /** `b()` — close the single channel: stop music + every SFX instance. */
-    private fun stopAll() {
+    fun stopAll() {
         currentMusic?.stop()
         currentMusic = null
         sounds.values.forEach { it.stop() }
@@ -71,11 +71,11 @@ class AudioBridge {
                             m.play()
                             currentMusic = m
                         } else {
-                            Gdx.app.log(SpikeGame.TAG,
+                            Gdx.app.log(tag,
                                 "audio: slot=${c.slot} empty/unloaded")
                         }
                     }
-                    Gdx.app.log(SpikeGame.TAG, "audio: play slot=${c.slot}")
+                    Gdx.app.log(tag, "audio: play slot=${c.slot}")
                 }
                 is Command.StopAudio -> stopAll()
                 is Command.RequestSave -> Unit // handled by save adapter

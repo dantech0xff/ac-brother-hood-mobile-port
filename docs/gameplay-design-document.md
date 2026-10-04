@@ -109,14 +109,17 @@ crawl 24 → exit 11. IGP promo: 25/27. Cheat seq → l(15)/l(13).
 
 ## 6. Rewrite contract implications
 
-- Fixed 62ms tick, 8.8 fixed point, `N` drift-correct — đã khớp spike core.
-- Player needs ~150 state FSM → ưu tiên mô hình hóa nhóm state family thay
-  vì port nguyên switch; giữ behavior-proven states trước (locomotion,
-  attack 233, hurt 50, push 235-240, ride 252/309).
+- Fixed 62ms tick, 8.8 fixed point, `N` drift-correct — đã khớp core của bản
+  port `rewrite/` (nhịp tick: `docs/decisions/tick-cadence-self-clocked.md`).
+- Player needs ~150 state FSM → kế hoạch ban đầu là mô hình hóa theo state
+  family; bản port thực tế đi theo switch `g.e()` nguyên văn từng arm, có bản
+  đồ exit từ bytecode (`plans/261003-1900-slice365-ge-exits/plan.md`).
 - Entity catalog → port order theo phổ dụng: 67 (props) > 44 (doors) > 4
   (hitboxes) > 10 (triggers) > 2 (checkpoint) > 41/66/51 > NPC FSM family.
 - Level 1/4 flying mode là subsystem riêng (ax 25 player + 30/54/55/56/65).
-- `unknown` còn lại: `au` difficulty→`bu/bw/u` indexing contract chi tiết,
-  helper tail (`V/M/P/t/v/ai/u/O/aa/bI`), `bG()` follower internals,
-  `aJ()`/`aL()` tail arms. Boss/chase (`aP`/`aR`/`bD`) đã mined —
-  `chase-boss-directors.md`.
+- Đã chứng minh từ khi viết GDD: `k.au` là độ khó và là index của các bảng
+  `bu`/`bv`/`dh` (port: `Level0World.kAu`, `BU73[...]`); `aJ()` (ax73, i.java
+  :9331-9905) và `aL()` (ax47, slice 64 + 346) đã port đủ arm. `unknown` còn
+  lại: helper tail (`V/M/P/t/v/ai/u/O/aa/bI`) chưa có tài liệu tổng hợp riêng
+  (từng helper được trích trong code port), `bG()` follower internals.
+  Boss/chase (`aP`/`aR`/`bD`) đã mined — `chase-boss-directors.md`.

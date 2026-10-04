@@ -8,7 +8,9 @@ package com.acrebuild.core
  */
 class InputQueue {
 
-    enum class Type { DOWN, MOVE, UP, CANCEL }
+    /** Pointer events carry view coords; [BACK] (the Android back key)
+     *  carries none — the world maps it onto the right soft-key pill. */
+    enum class Type { DOWN, MOVE, UP, CANCEL, BACK }
 
     data class Event(val sequence: Long, val type: Type, val x: Int, val y: Int)
 

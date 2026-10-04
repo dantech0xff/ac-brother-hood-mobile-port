@@ -14,7 +14,8 @@ resource và script đã kiểm chứng. JAR không được thực thi dưới 
 | Khôi phục tài nguyên | Giải mã pack, string table, sprite/font, audio, PNG IGP và catalog. |
 | Giữ provenance | Mỗi artifact cần hash, nguồn gốc và mức tin cậy rõ ràng. |
 | Khóa contract tĩnh | Kiểm tra một slice behavior bằng Python host-side, không thực thi target. |
-| Thiết kế bản mới | Mô tả hướng Android/iOS hiện đại bằng tài liệu, không triển khai runtime mới ở đây. |
+| Thiết kế bản mới | Mô tả hướng Android/iOS hiện đại (`docs/modern-mobile-technical-design.md`). |
+| Remake game | Port game thật bằng Kotlin + LibGDX trong `rewrite/` theo semantic đã mine (8 mission chơi được trên Android; xem `rewrite/README.md`). |
 
 ## Phạm vi
 
@@ -26,22 +27,27 @@ resource và script đã kiểm chứng. JAR không được thực thi dưới 
 - Ghi rõ phần nào là chứng minh, suy luận, hoặc chưa biết.
 - Kiểm tra alias registry, decoded corpus oracle và source-contract fixtures ở
   host side.
+- Bản port `rewrite/` (Kotlin + LibGDX): build, test, chạy trên emulator/thiết
+  bị — chỉ code port, không bao giờ là JAR gốc.
 
 ### Ngoài phạm vi
 
-- Chạy game hoặc kiểm tra hành vi bằng emulator.
+- Chạy JAR gốc hoặc kiểm tra hành vi của nó bằng emulator/simulator/thiết bị.
 - Sửa nội dung gốc của JAR.
 - Giả định tên symbol hoặc schema khi chưa có bằng chứng.
-- Khẳng định bản dựng hiện đại là buildable nếu chưa có pipeline tương ứng.
+- Phát hành lên store: bản port chỉ phân phối nội bộ (nội dung là IP gốc).
 - Gọi source-contract harness là bằng chứng runtime/MIDlet hoặc full-game parity.
 
 ## Yêu cầu phi chức năng
 
-- Static-only: không có bước động trong quy trình chuẩn.
+- Static-only với JAR gốc: không có bước động nào chạm tới nó; bản port
+  `rewrite/` thì được build và chạy.
 - Reproducible: script phải có đầu vào rõ, output ổn định, và có thể lặp lại.
 - Traceable: artifact cần hash, đường dẫn nguồn và chú thích provenance.
 - Honest confidence: mọi rename hoặc schema map phải gắn mức tin cậy.
-- No fake buildability: tài liệu không được mô tả artifact hiện tại như một game hoàn chỉnh có thể chạy ngay.
+- No fake buildability: chỉ mô tả là chạy được những gì có gate chứng minh
+  (bản port có CI: verifier, `unittest`, `:core:test :gdx:test
+  :android:assembleDebug`); phần chưa có bằng chứng thiết bị ghi là pending.
 
 ## Deliverables chính
 
@@ -54,7 +60,9 @@ resource và script đã kiểm chứng. JAR không được thực thi dưới 
 | `docs/resource-formats.md` | Đặc tả format tài nguyên đã khôi phục. |
 | `docs/save-format.md` | Byte map và hành vi RMS `/ASBR` đã khôi phục. |
 | `docs/reverse-engineering-technical-analysis.md` | Quy trình phân tích tĩnh và tái lập kết quả. |
-| `docs/modern-mobile-technical-design.md` | Thiết kế viết lại cho Android/iOS; không phải implementation. |
+| `docs/modern-mobile-technical-design.md` | Thiết kế viết lại cho Android/iOS; bản hiện thực là `rewrite/`. |
+| `rewrite/` | Bản port Kotlin + LibGDX (core thuần Kotlin, adapter LibGDX, launcher Android/desktop). |
+| `docs/decisions/` | ADR: framework mobile, nhịp tick, chính sách save. |
 | `docs/project-roadmap.md` | Lộ trình theo phase hiện có. |
 | `docs/semantic-registry-and-parity-harness.md` | Authority, command và extension rules cho contract slice. |
 | `tests/` | `unittest` cùng manifest 30 fixture Slice 1/2 historical và manifest 15 fixture riêng cho Slice 3. |

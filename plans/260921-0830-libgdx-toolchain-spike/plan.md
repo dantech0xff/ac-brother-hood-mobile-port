@@ -5,7 +5,7 @@ description: >-
   proving shared-core build/launch, pixel-perfect 400x240 render, touch and
   suspend/resume, converted audio playback, sandboxed save I/O, and a
   deterministic state-hash test outside the UI.
-status: in_progress  # iOS gate half pending a macOS session
+status: done  # Android half complete; the iOS half moved to the iOS track (needs a macOS host)
 priority: P1
 branch: ''
 tags:

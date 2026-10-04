@@ -1,3 +1,8 @@
+---
+title: "Port slice 6 — weaken → assassination finisher (183/184) + victim chain"
+status: done
+---
+
 # Port slice 6 — weaken → assassination finisher (183/184) + victim chain
 
 Bối cảnh: slice 5 có combo kiếm nhưng đòn kết liễu (finisher) còn thiếu vì

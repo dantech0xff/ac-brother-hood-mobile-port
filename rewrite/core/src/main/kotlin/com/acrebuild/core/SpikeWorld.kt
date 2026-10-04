@@ -55,6 +55,7 @@ class SpikeWorld(val rng: DeterministicRandom) {
                     touchY = e.y
                 }
                 InputQueue.Type.UP, InputQueue.Type.CANCEL -> touchHeld = false
+                InputQueue.Type.BACK -> {}
             }
         }
 

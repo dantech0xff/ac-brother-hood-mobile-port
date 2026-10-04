@@ -3,6 +3,7 @@ package com.acrebuild.gdx
 import com.acrebuild.core.Clip
 import com.acrebuild.core.Entity
 import com.acrebuild.core.ScriptPrompt
+import com.acrebuild.core.BubbleDraw
 import com.acrebuild.core.FontClip
 import com.acrebuild.core.UiAnimObject
 import com.acrebuild.core.Trig
@@ -291,8 +292,11 @@ class Level0Renderer {
      *  tick the anim by the frame ms, then draw `d.a(g, e, f, a, b, c,
      *  0,0)` — anim e frame f at (a,b), flags c. Palette slot `k` stays
      *  -1 in every op we ported (no producer), so palette 0. */
-    private fun drawPrompt(pr: ScriptPrompt, ms: Int) {
-        pr.anim.tick(ms)
+    /** `a.c()` (a.java:215) — draw only: the world steps the card's
+     *  `b(j.f)` once per pass (`Level0World.claimCardsStep`, the ax10
+     *  S31 lane's `aUDraw`); this used to tick it per rendered frame too
+     *  (slice 381). */
+    private fun drawPrompt(pr: ScriptPrompt) {
         drawFrame(pr.clipIdx, pr.anim.e, pr.anim.currentFrame,
                   pr.anim.a, pr.anim.b, pr.anim.c)
     }
@@ -300,15 +304,8 @@ class Level0Renderer {
     // -- b(x,y,w,z2,z3) menu panel (k.java:5903-6150, proven) --------------
     private var menuFj: UiAnimObject? = null          // k.fJ (a.java inst)
     private var menuFk: UiAnimObject? = null          // k.fK
-    private var nDl: UiAnimObject? = null             // k.dl — N() icon
-    private var pauseFl: UiAnimObject? = null         // k.fL — pause icon
     private var edgeCQ = -1                           // k.cQ — corner width
     private var edgeCR = -1                           // k.cR — tile width
-    private var nTipDj = 0                            // k.dj — tip type pos
-    private var nTipDk = 0                            // k.dk — tip hold
-
-    /** `eW[]` (k.java:299, proven) — per-mission tip index for `N()`. */
-    private val tipEW = intArrayOf(2, 2, 1, 1, 2, 0, 3, 2, 2)
 
     /** `fP[]` (k.java:344, proven) — mission poster-boundary table for
      *  `ag()`'s `A[4]` anim pick (`i+4`). */
@@ -350,23 +347,21 @@ class Level0Renderer {
      *  `j.g>=165` → dm=165 + `dl.a(dl.a()-3)` freeze-frame + `d(0,9)`
      *  blink; else `dm=j.g` + `bW.l(0)` `d(0,24)`; bar `j.a(dm<<?/165
      *  *300)` at (50,205) color 7644855; `j.g>1` → tip typewriter
-     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. */
+     *  `a(bW,d(0,51+eW[aj]))` + `d(1,0)` mission title wrap. The world
+     *  steps `dl` and the typewriter (`loadScreenN`); this only draws
+     *  (slice 381). */
     private fun loadScreen(world: Level0World) {
-        val dl = nDl ?: UiAnimObject(clips[99], 80, -40)
-            .also { it.arm(0, -1); nDl = it }
+        val dl = world.loadDl
         fillAr(0, 0, 400, 240, -16777216)            // setColor(0);j.b
         val dm: Int
         if (world.jG >= 165L) {
             dm = 165
-            dl.tick(62)
-            dl.seek(dl.len() - 3)                  // dl.a(dl.a()-3)
-            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dl?.let { drawFrame(99, it.e, it.currentFrame, it.a, it.b, it.c) }
             if (world.jG % 10L < 5L) {
                 drawText(world.d0(9) ?: "", 200, 220, 17, pack = 91)
             }
         } else {
-            dl.tick(62)
-            drawFrame(99, dl.e, dl.currentFrame, dl.a, dl.b, dl.c)
+            dl?.let { drawFrame(99, it.e, it.currentFrame, it.a, it.b, it.c) }
             dm = world.jG.toInt()
             fontW.l(0)
             drawText(world.d0(24) ?: "", 395, 230, 40, pack = 91)
@@ -375,7 +370,7 @@ class Level0Renderer {
         val w = ((((dm shl 8) / 165) * 300) + 128) shr 8
         fillAr(50, 205, w, 10, 7644855)
         if (world.jG > 1L) {
-            tipTypewriter(world.d0(51 + tipEW[world.kAj]) ?: "")
+            drawText(world.typewriterText, 200, 40, 17, pack = 91)  // a(bW,…)
             // y.a(str,null) → b.d measured width; x = max(20,(400-b.d)>>1)
             val title = world.levelString(1, 0) ?: return
             val x = ((400 - fontY.measure(title)[0]) shr 1).coerceAtLeast(20)
@@ -472,31 +467,6 @@ class Level0Renderer {
         return true
     }
 
-    /** `a(bVar,str)` tip typewriter (k.java:3450-3469, proven): types
-     *  `dj` chars; inserts `\\2`/palette-2 around the newest char;
-     *  after full string `dk=15` frame hold then `dj=0` restart.
-     *  `bVar.f=true` bold — our drawText maps `\\0`.. codes via the
-     *  font's own escape pass. */
-    private fun tipTypewriter(str: String) {
-        if (str.isEmpty()) return
-        if (nTipDk <= 0) {
-            if (nTipDj < str.length) {
-                // verbatim: \2<new char>\0 bracket inside the FULL string
-                // (untyped tail still draws — moving-highlight cursor)
-                val shown = "\\0" + str.substring(0, nTipDj) +
-                            "\\2" + str[nTipDj] + "\\0" +
-                            str.substring(nTipDj + 1)
-                drawText(shown, 200, 40, 17, pack = 91)
-                nTipDj++
-                return
-            }
-            nTipDj = 0
-            nTipDk = 15
-        }
-        nTipDk--
-        drawText("\\0" + str, 200, 40, 17, pack = 91)
-    }
-
     /** jc18 title-screen arm (k.java:1146-1157, proven) —
      *  **unreachable-labeled** (boot-flow only): `A[1].a(cd,1,0,0,0)` +
      *  `A[0].a(cd,0,0,0,0)` + `A[1].a(cd,2,0,0,0)`; `!cS` → `d(0,9)`
@@ -541,12 +511,8 @@ class Level0Renderer {
         }
         clipScissor(0, 85, 400, 120)
         if (world.kCu <= 4) {
-            // :1290-1296 — `y.a(str,null)` measure, tall text slides
-            // eZ up (`eZ = 85-(b.e-120)`), then draws at eZ; the write-
-            // back is verbatim so `fd = eZ` at cu4→5 inherits it.
-            val h = world.footerFont?.linesHeight(
-                world.storyText().count { it == '\n' } + 1) ?: 0
-            if (h > 120) world.kEz = 85 - (h - 120)
+            // :1290-1296 — the tall-text `eZ` slide is world state, set in
+            // the jc20 proc (slice 373); the renderer only draws at it.
             drawText(world.storyText(), 5, world.kEz, 0)
         } else {
             drawText(world.storyText(), 5, world.kFd, 0)
@@ -625,11 +591,11 @@ class Level0Renderer {
 
     /**
      * `i.F()`'s pure-draw calls (i.java:11782+, proven): drains the
-     * per-tick `fx*` collectors — rope/marker lines (`j.a`), dark
-     * columns + fullscreen veil (`j.a` fill), the ax11 speech bubble
-     * (`k.y.a` — dark panel, white border, wrapped body text on the
-     * `y` font), and the shrine-burst sparkle dots (`g.a`). All coords
-     * arrive screen-relative (world → camera already subtracted).
+     * per-tick `fx*` collectors — rope/marker lines and the pickup
+     * sparkle rays (`j.a`), dark columns + fullscreen veil (`j.a` fill),
+     * the ax11 speech bubble (`k.y.a` — dark panel, white border, wrapped
+     * body text on the `y` font). All coords arrive screen-relative
+     * (world → camera already subtracted).
      */
     private fun fxOverlay(w: Level0World) {
         for (r in w.fxRects) fillAr(r[0], r[1], r[2], r[3], r[4])
@@ -651,13 +617,12 @@ class Level0Renderer {
             if (text.isNotEmpty()) drawText(text, x + 4, y + 3, 0, pack = 92)
         }
         for (o in w.fxOutlines) outlineAr(o[0], o[1], o[2], o[3], o[4])
-        // `a.c()` (a.java:215, proven): armed prompt-card slots — the
-        // renderer ticks + blits at the (a,b) the sim wrote.
+        // `a.c()` (a.java:215, proven): armed prompt-card slots, blitted
+        // at the (a,b) the sim wrote and stepped.
         for (slot in w.fxPrompts) {
             val pr = Entity.scriptPrompts.getOrNull(slot) ?: continue
-            if (pr.anim.e >= 0) drawPrompt(pr, 62)
+            if (pr.anim.e >= 0) drawPrompt(pr)
         }
-        for (d in w.fxDots) fillAr(d[0], d[1], 2, 2, -0x33889900)  // sparkle
     }
 
     /** `j.a(g,x0,y0,x1,y1)` (j.java drawLine, proven) — 1px line via a
@@ -698,8 +663,8 @@ class Level0Renderer {
             seg--
             d += 6
             drawFrame(61, 0, 0,
-                      x4 + ((d * Trig.sin(ang)) shr 8),
-                      y4 - ((d * Trig.sin(Trig.N - ang)) shr 8), 0)
+                      x4 + ((d * Trig.cos(ang)) shr 8),
+                      y4 - ((d * Trig.cos(Trig.N - ang)) shr 8), 0)
         }
     }
 
@@ -751,7 +716,7 @@ class Level0Renderer {
         }
     }
 
-    /** `i.ad()` draw (i.java:20649-20700, proven): consumes `w.bubbleDraw`
+    /** `i.ad()` draw (i.java:20649-20700, proven): one owner's bubble
      *  — bh3 `k.f` is a 120-wide white fill + black square outline at
      *  (x,y); non-bh3 `j.b`/`j.a` is a white roundrect fill + black
      *  roundrect outline at (x-20, y, 160, h). The tail wedge arms at the
@@ -759,8 +724,7 @@ class Level0Renderer {
      *  flipped the bubble below the entity); `flip` moves it to the
      *  right edge. Wrapped page text centers at `textX` on font `y`
      *  variant 1 (`k.y.l(1)`), align 17 = HCENTER|TOP. */
-    private fun drawBubble(w: Level0World) {
-        val b = w.bubbleDraw ?: return
+    private fun drawBubble(b: BubbleDraw) {
         if (b.bh3) {
             fillAr(b.x, b.y, 120, b.h, -1)
             outlineAr(b.x, b.y, 120, b.h, -0x1000000)
@@ -966,7 +930,9 @@ class Level0Renderer {
     /** `a(str,str2)` (k.java:2270, proven) — the footer soft-key strip:
      *  left pill at (5,235) skipped on jc21/8, `y` text when str==d(0,16);
      *  right pill at (395-cf,235), `y` text when str2==d(0,18) else the
-     *  A[2] arrow `zD?29:24`. Hit-test lives in world.footerQ. */
+     *  A[2] arrow `zD?29:24`. The hit-test half — and the `ce/cf` widths
+     *  it persists — is world-side (`Level0World.softKeys`); drawing
+     *  never writes world state. */
     private fun footer(world: Level0World, left: String?, right: String?) {
         // `r10 == d(0,79) → goto L23`: an "OK" left draws nothing at
         // all (k.java:2909-2912). jc21/8 reach only the L20 hit-test
@@ -975,7 +941,6 @@ class Level0Renderer {
         // (ce=36, hit-test only, no pill — k.java:2917-2928).
         if (left != null && left == world.d0(16) && world.jC != 21 && world.jC != 8) {
             val ce = world.footerLeftDim(left)
-            world.kCe = ce
             softPill(5, 235, ce,
                      world.pointerMoveIn(-5, 198, ce + 20, 47))
             fontY.l(0)
@@ -983,7 +948,6 @@ class Level0Renderer {
         }
         if (!right.isNullOrEmpty()) {
             val cf = world.footerRightDim(right)
-            world.kCf = cf
             val zD = world.pointerMoveIn(395 - cf - 10, 198, cf + 20, 47)
             softPill(395 - cf, 235, cf, zD)
             if (right == world.d0(18)) {
@@ -1054,12 +1018,12 @@ class Level0Renderer {
                     fj.a = (i + w) - ((w - i5) shr 1); fj.b = i9
                     fj.tick(frameMs)
                 }
-                if (world.kFI > 0) {
+                // band (k.java:6005-6013): the world steps fI/fH once per
+                // frame and hands over the height this frame drew (slice 373).
+                val band = world.menuBandDraw
+                if (band > 0) {
                     fillAr(i, i9, w, i4, 1879048192)
-                    clipScissor(0, i9 + ((i4 - world.kFI) shr 1),
-                                400, world.kFI)
-                    world.kFI += world.kFH; world.kFH += 8
-                    if (world.kFI >= i4) world.kFI = 0
+                    clipScissor(0, i9 + ((i4 - band) shr 1), 400, band)
                 }
                 fj?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
                 clipReset()
@@ -1370,12 +1334,20 @@ class Level0Renderer {
             }
         }
 
+        // `i.bQ` flash / `i.ce` white backdrop (k.java:2848-2859): a
+        // full-screen fill over the tiles, under the entities; the world
+        // picks the colour and steps `bQ` once per pass (slice 378).
+        if (world.backdropFill != 0)
+            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H, world.backdropFill)
+
         // k.b(z2) entity draw pass (k.java:2904-2934, proven): iterate the
         // `bd[]` sorted list; `ad` child draws BEFORE the parent except
         // ax76/ax29 (after + `ad.s()`); `E` held entity + `ab` overlay.
-        world.buildDrawList()
+        // The list is the one the world's last `b()` pass built — the
+        // sim reads that same list next tick (slice 385), so the renderer
+        // must not rebuild it; `W()` leaves null slots (k.java:5121-5126).
         for (i32 in 0 until world.drawCount) {
-            val e = world.drawList[i32]!!
+            val e = world.drawList[i32] ?: continue
             if (e.ad != null && e.ax != 76 && e.ax != 29) drawEntity(world, e.ad!!, camX, camY)
             // `s()` advances live in drawStylePass (once per tick,
             // k.java:3696-3745) — never per rendered frame.
@@ -1391,38 +1363,30 @@ class Level0Renderer {
                 (world.jC == 8 || (world.jC == 21 && world.dlgU == 8))) {
                 drawEntity(world, kE, camX, camY)
             }
-            if ((e.ax != 11 && e.ax != 17) || e.aB > 0) world.drawPassBubble(e)
-            // `i.ad()` draws inline in the entity pass — the descriptor
-            // tickBubble emitted for this entity is consumed now (one
-            // active cQ dialog at a time; clear so a stale one can't
-            // linger past its last draw tick).
-            if (world.bubbleDraw != null) {
-                drawBubble(world); world.bubbleDraw = null
-            }
+            // `i.ad()` draws inline in the entity pass, right after its
+            // owner; the world ticks it once per frame and keeps the
+            // descriptor up for every rendered frame of the tick (slice 373).
+            // Each speaker has its own bubble state, so every one draws.
+            world.bubbles[e]?.let { drawBubble(it) }
             val ab = e.ab
             if (ab != null && (ab.P and 128) == 0 && ab.inPlayV(world))
                 drawEntity(world, ab, camX, camY)
             drawOverlayTail(world, e, camX, camY)
         }
+        // `k.N` — the tap prompt (k.java:3077-3079 `N.F()`), drawn after
+        // the entity loop; it is never a draw-list member (slice 383).
+        world.kN?.let { drawEntity(world, it, camX, camY) }
 
         // `i.F()` FX primitives (i.java:11782+, proven): the per-tick
         // drawFx* collectors — ropes/marker lines, dark columns, the
         // speech bubble, sparkle dots; emitted in screen space already.
         fxOverlay(world)
 
-        // `k.b(true)` input-lock veil (k.java:9080-9101, proven): the
-        // latch frame's `j.a(cd,-1,-1,1,1,true)` is the recovered 6-arg
-        // form = Graphics.setClip(-1,-1,1,1) — clip collapse, voiding
-        // the frame (j.java:890-907); `j.a(0,false)` is the q/t input
-        // bitflag (j.java:1334-1341). The 3/4-arg `j.a` forms are
-        // unrecovered stubs. Our renderer is a single pass after the
-        // sim tick, so consume the `veilVoid` one-shot as a full black
-        // frame (input stays locked via `inputLockT`).
-        if (world.veilVoid) {
-            world.veilVoid = false
-            fillAr(0, 0, Level0World.VIEW_W, Level0World.VIEW_H,
-                   0xFF000000.toInt())
-        }
+        // The `b()` veil latch (k.java:2692-2698) collapses the clip only
+        // for the tile blit of that one frame (`if (am)` restores it at
+        // :2820) — the previous frame's background stays under the new
+        // entities. Each frame here is drawn fresh, so there is nothing to
+        // do (this used to black the whole frame out; slice 376).
 
         // k.b(z2) tail (k.java:3081-3083, proven): `bJ>0 && de` →
         // scissor + full-screen fill `df` (the damage flash; sim side
@@ -1464,13 +1428,11 @@ class Level0Renderer {
 
         // i.bA[] script-prompt cards (k.java:3085-3117, proven): while a
         // claim-script entity (`kC`) is active (`ab()`), its cb/cc state
-        // selects — `cb[1] ∈ {0,1,2}` → the single YES/NO card at
-        // (200,160); else `cc != null` → the choice-list fan
-        // (cc[0]==3 → 200±50, cc[0]==2 → 200±50, else 200; y=160). Each
-        // card ticks `b(j.f)` then `c()` draws anim e frame f at (a,b)
-        // flags c — palette slot k when set. The trailing
-        // `cd[8] && cb[3]>0` arm pulses bW palette 3 while counting down.
-        // `j.f` = the fixed 62ms tick delta for card ticks.
+        // selects — `cb[1] ∈ {0,1,2}` → the single card, else
+        // `cc != null` → the fan. The world positions and steps them once
+        // per pass (`claimCardsStep`); `c()` draws anim e frame f at
+        // (a,b). Then the `cd[8]` banner `d(0,91)` at (200,120), font
+        // palette 3, on the frames the world flags (slice 381).
         val cEnt2 = world.kC
         if (cEnt2 != null && cEnt2.claimActive()) {
             val cb = cEnt2.cb
@@ -1478,27 +1440,16 @@ class Level0Renderer {
             if (cb != null && (cb[1] == 0 || cb[1] == 1 || cb[1] == 2 ||
                 cc != null)) {
                 if (cb[1] == 0 || cb[1] == 1 || cb[1] == 2) {
-                    Entity.scriptPrompts[0]?.let { pr ->
-                        pr.a = 200; pr.b = 160
-                        drawPrompt(pr, 62)
-                    }
+                    Entity.scriptPrompts[0]?.let { drawPrompt(it) }
                 } else if (cc != null) {
                     for (i54 in 0 until cc[0]) {
-                        val pr = Entity.scriptPrompts[i54] ?: continue
-                        pr.a = when {
-                            cc[0] == 3 -> 200 + 50 * (i54 - 1)
-                            cc[0] == 2 -> 200 + 50 * (if (i54 == 1) 1 else -1)
-                            else -> 200
-                        }
-                        pr.b = 160
-                        drawPrompt(pr, 62)
+                        Entity.scriptPrompts.getOrNull(i54)?.let { drawPrompt(it) }
                     }
                 }
             }
-            if (cEnt2.cd[8] && cEnt2.cb != null && cEnt2.cb!![3] > 0) {
-                fontW.l(3); cEnt2.cb!![3]--
-            }
         }
+        if (world.claimBannerDraw)
+            drawText(world.d0(91) ?: "", 200, 120, 3, palette = 3, pack = 91)
 
         if (world.bh3) {
             // bh3 arm (k.java:4187-4245, proven)
@@ -1618,13 +1569,10 @@ class Level0Renderer {
         // `E(262144)` → `v(262144)` → `l(14)` press chain is already
         // wired in `consume`.
         if (world.jC != 12 && world.jC != 13) {
-            val fl = pauseFl ?: UiAnimObject(clips[93], 377, 19)
-                             .also { pauseFl = it }
             val held = world.pointerMoveIn(354, 0, 46, 37)
             edgeStrip(359, 32, 36, held)
-            fl.arm(if (held) 30 else 25, if (held) 1 else -1)
-            fl.tick(62)                                       // fL.b(j.f)
-            drawFrame(93, fl.e, fl.currentFrame, fl.a, fl.b, fl.c)
+            // `fL` is armed and stepped by the world (`pauseIconStep`)
+            world.pauseIcon?.let { drawFrame(93, it.e, it.currentFrame, it.a, it.b, it.c) }
         }
 
         // z[74] touch-controls overlay (k.java:3142-3161, proven):
@@ -1669,10 +1617,7 @@ class Level0Renderer {
             fillAr(0, 0, 400, h, -16777216)
             fillAr(0, 240 - h, 400, h, -16777216)
         }
-        if (world.fadeSolidFrame) {
-            fillAr(0, 0, 400, 240, -16777216)
-            world.fadeSolidFrame = false
-        }
+        if (world.fadeSolidFrame) fillAr(0, 0, 400, 240, -16777216)
         if (world.kAo && world.kFn >= 0) {
             val h1 = 120 - ((world.kFl - world.kFn) * world.kFm)
             val h2 = 120 - ((world.kFl - world.kFn - 1) * world.kFm)
@@ -1760,8 +1705,7 @@ class Level0Renderer {
                         else if (world.bO == 1) bP = 137
                     }
                     dialogPanel(world, 0, bP)                 // i(0,bP) (:414-429)
-                    val bT = if (world.dlgSuppressed()) world.dlgBT  // gate (:946)
-                             else world.dlgTypeTick(page.length)     // (:947-955)
+                    val bT = world.dlgBT     // stepped by the world tick (slice 374)
                     if (world.dlgU == 6 || i3 == -1) {        // (:934-935)
                         dialogText(world, page, 200, bP + 34, 380, 3, bT)
                     } else {
@@ -1797,8 +1741,11 @@ class Level0Renderer {
         if (world.jC == 6) aboutScreen(world)
         if (world.panelVisible) {
             val pr = world.menuPanelRect()
-            menuPanel(world, pr[0], pr[1], pr[2],
-                      world.menuPanelZ2(), world.menuPanelZ3())
+            // ae()'s eC==121 arm skips the panel and rows (:6206-6218).
+            if (world.menuPanelDrawn) {
+                menuPanel(world, pr[0], pr[1], pr[2],
+                          world.menuPanelZ2(), world.menuPanelZ3())
+            }
             if (world.jC == 23 || world.jC == 28) {
                 // ae() `bW.a(cd,d(0,eC),a(bW,str,200),200,80,0,100,3,-1)`
                 // (:6221; eC==121 arm at :6207, y=120, no bW.l(1)) —
@@ -2057,7 +2004,6 @@ class Level0Renderer {
         // palette alpha, chosen per ax before the (P&128)==0 blit.
         var palette = e.palette
         var alpha = e.paletteAlpha          // `aa.g` — F()'s palette alpha
-        val last = e.T >= clip.frameCount(e.S) - 1
         // `i.a(Graphics)` ax13 arm (i.java:3050-3052 → :13391, proven):
         // draws the rope segments (object Z[7] of clip61) BEFORE the
         // standard blit; the ax13 entity skips the art-select `when`
@@ -2065,13 +2011,9 @@ class Level0Renderer {
         if (e.ax == 13) drawRopeSegments(e, pack, camX, camY)
         when {
             e.ax == 45 -> palette = e.Z.getOrElse(0) { 0 }
-            e.ax == 30 || e.ax == 32 -> {
-                palette = 0
-                if (e.cGCount > 0) {
-                    e.cGCount--
-                    if (e.cGCount % 2 != 0) palette = 1
-                }
-            }
+            // the cG hit-flash steps in the sim-side F() once per frame;
+            // its palette is read here, never stepped (slice 374).
+            e.ax == 30 || e.ax == 32 -> palette = e.palette
             e.ax == 11 -> palette =
                 if (e.Z.getOrElse(0) { 0 } == 1 || e.Z.getOrElse(0) { 0 } == 2) 1 else 0
             e.ax == 47 || e.ax == 17 || e.ax == 73 -> palette = 0
@@ -2080,7 +2022,6 @@ class Level0Renderer {
              (e.ax == 67 && e.Z.getOrElse(0) { 0 } == 11)) && !world.bh3 -> {
                 if (world.iCe) palette = 1
                 else if (e.ax == 9) {
-                    if (e.S == 21 || e.S == 22) e.ad = null
                     palette = when (world.kAj) {
                         2 -> 5; 3 -> 6; 5 -> 7; 6 -> 4; else -> 0
                     }
@@ -2091,11 +2032,10 @@ class Level0Renderer {
                         if (!world.kBK) return
                         palette = 5
                     }
-                    if (world.iCe && e.S == 4 && last) { world.removeEntity(e); return }
-                    if (world.iCe && e.S == 2 && last) e.P = e.P or 64
-                    // S5 candle fade (i.java:3095): sim-side F() owns
-                    // `ak/al` snap, `P|=64`, `aC--`, removal — the
-                    // renderer only consumes `paletteAlpha`.
+                    // `ad = null` (S21/22), the S2/S4/S5 `P|=64`, the S5
+                    // screen lock, `aC--` and the `k.c()` removals are the
+                    // sim-side F()'s (`Entity.drawStyleF`, once per frame);
+                    // the renderer only consumes `paletteAlpha` (slice 374).
                 } else if (e.ax == 0 && world.kBL in boArt.indices) {
                     palette = boArt[world.kBL][0]
                     e.remapTable = boArt[world.kBL][1]
@@ -2208,15 +2148,15 @@ class Level0Renderer {
      *  anchor object `Z[7]` at `(N>>8, O>>8)`, then `i4` middle
      *  segments (`Z[1]-1`, or `bN-1` when `aG==4`) stepped 12px along
      *  the pendulum angle `bP>>8` (angle-256), plus the end segment.
-     *  `iB = 3072·j.b(n-θ)>>8` = 12px·cos θ; `iB2 = 3072·j.b(θ)>>8` =
-     *  12px·sin θ. */
+     *  `iB = 3072·j.b(n-θ)>>8` = 12px·sin θ; `iB2 = 3072·j.b(θ)>>8` =
+     *  12px·cos θ. */
     private fun drawRopeSegments(e: Entity, pack: Int, camX: Int, camY: Int) {
         if (e.Z.size <= 7) return
         val ax = (e.N shr 8) - camX
         val ay = (e.O shr 8) - camY
         val th = e.bP shr 8
-        val sx = (3072 * Trig.sin(Trig.N - th)) shr 8   // iB  = 12px·cos θ
-        val sy = (3072 * Trig.sin(th)) shr 8            // iB2 = 12px·sin θ
+        val sx = (3072 * Trig.cos(Trig.N - th)) shr 8   // iB  = 12px·sin θ
+        val sy = (3072 * Trig.cos(th)) shr 8            // iB2 = 12px·cos θ
         val segs = if (e.aG == 4) e.bN - 1 else e.Z[1] - 1
         drawObject(pack, e.Z[7], ax, ay, e.P, palette = e.palette)  // anchor
         var fx = ax shl 8
@@ -2238,7 +2178,7 @@ class Level0Renderer {
         val free = p.af == null || p.af === e
         val near = p.S != 9 &&
             ((p.af === e && p.ak > wa[0] && p.ak < wa[2]) ||
-             Entity.overlapI(p.W, wa))
+             Entity.overlapStrict(p.W, wa))                     // aU() @142 i.a(aS.W, W)
         var i10 = -1; var i3 = wa[1] - camY; var i11 = 0
         if (near) {
             if (p.ak >= wa[0] && p.ak <= wa[2]) i10 = p.ak - camX
@@ -2265,6 +2205,30 @@ class Level0Renderer {
 
     private fun clipPackOf(clip: Clip): Int? =
         clips.entries.firstOrNull { it.value === clip }?.key
+
+    /** The tick-failure boundary's fatal screen (design §8): the world is
+     *  quarantined; the only action is a tap to restart from the durable
+     *  save. Drawn with the libGDX default font — no game asset is trusted
+     *  after a failed tick. */
+    fun renderFatal() {
+        val sw = Gdx.graphics.width; val sh = Gdx.graphics.height
+        var sc = minOf(sw / Level0World.VIEW_W, sh / Level0World.VIEW_H)
+        if (sc < 1) sc = 1
+        val dw = Level0World.VIEW_W * sc; val dh = Level0World.VIEW_H * sc
+        scale = sc; offsetX = (sw - dw) / 2; offsetY = (sh - dh) / 2
+        Gdx.gl.glViewport(0, 0, sw, sh)
+        ScreenUtils.clear(0f, 0f, 0f, 1f)
+        Gdx.gl.glViewport(offsetX, offsetY, dw, dh)
+        batch.projectionMatrix.setToOrtho2D(
+            0f, 0f, Level0World.VIEW_W.toFloat(), Level0World.VIEW_H.toFloat())
+        batch.begin()
+        font.color = com.badlogic.gdx.graphics.Color.WHITE
+        font.draw(batch, "An error stopped the game.", 0f, 140f,
+            Level0World.VIEW_W.toFloat(), com.badlogic.gdx.utils.Align.center, false)
+        font.draw(batch, "Tap to restart from your last save.", 0f, 110f,
+            Level0World.VIEW_W.toFloat(), com.badlogic.gdx.utils.Align.center, false)
+        batch.end()
+    }
 
     fun dispose() {
         batch.dispose()

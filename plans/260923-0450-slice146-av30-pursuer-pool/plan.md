@@ -2,6 +2,7 @@
 slice: 146
 date: 2026-09-23
 confidence: proven
+status: done
 ---
 
 # Slice 146 — ax10 S30 pursuer-pool wave spawner (La72)

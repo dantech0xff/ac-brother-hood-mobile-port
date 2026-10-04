@@ -1,3 +1,8 @@
+---
+title: "Slice 3 — combat loop: alert → chase → windup → strike → player damage"
+status: done
+---
+
 # Slice 3 — combat loop: alert → chase → windup → strike → player damage
 
 Track: `260921-1515-port-slice3-combat` on branch `devin/1789997650-port-slice3`.

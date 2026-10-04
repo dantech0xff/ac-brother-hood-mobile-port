@@ -1,3 +1,8 @@
+---
+title: "Slice 14 — terminal fall velocity (E2E fall-through fix)"
+status: done
+---
+
 # Slice 14 — terminal fall velocity (E2E fall-through fix)
 
 Date: 2026-09-21. Branch: `devin/<ts>-port-slice14`.

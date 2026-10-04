@@ -1,3 +1,8 @@
+---
+title: "Port slice 9 — `g.t` iframes + `i.bh` hit-flash + op4→op18 upgrade"
+status: done
+---
+
 # Port slice 9 — `g.t` iframes + `i.bh` hit-flash + op4→op18 upgrade
 
 ## Mining — proven (simple/g.java, i.java)

@@ -5,7 +5,8 @@
 Tài liệu này tách bạch hai lớp:
 
 1. kiến trúc legacy đã khôi phục từ JAR Java ME;
-2. kiến trúc đích được đề xuất cho bản rewrite mobile hiện đại.
+2. kiến trúc đích cho bản rewrite mobile hiện đại — nay đã hiện thực trong
+   `rewrite/` (mục 2b).
 
 Hai phần này không được nhập nhằng với nhau.
 
@@ -69,7 +70,7 @@ Runtime pack-to-world flow nằm trong dossier chi tiết được liên kết �
 
 ## 2. Kiến trúc đích được đề xuất
 
-Phần này là design recommendation, không phải code hiện có.
+Phần này là design recommendation ban đầu; bản hiện thực thực tế nằm ở mục 2b.
 
 ### Stack đề xuất
 
@@ -97,6 +98,21 @@ Phần này là design recommendation, không phải code hiện có.
 - Deterministic simulation cho mọi platform.
 - Asset đã chuyển đổi phải versioned và có provenance.
 
+## 2b. Kiến trúc đã hiện thực (`rewrite/`)
+
+| Module Gradle | Trách nhiệm | Ứng với đề xuất |
+|---|---|---|
+| `core` | Kotlin thuần: vòng frame `k.a()`/`k.I()` (`Level0World`), player `g.e()` (`PlayerFsm`), NPC `i.I()` + dispatch ax (`NpcFsm`, `Entity`), input words (`Pad`, `InputQueue`), save container (`SaveEnvelope`), đọc asset (`Clip`, `LevelPack`, `MissionPack`, `ScriptTables`, `FontClip`), RNG LCG (`DeterministicRandom`). | `core` + một phần `runtime` (timing, save format) |
+| `gdx` | LibGDX: `Level0Game` (render loop, ≤1 tick/frame, lifecycle), `TickDriver` (cách ly tick lỗi), `Level0Renderer`, `Level0InputBridge`, `AudioBridge`, `SaveBridge`/`SaveStore` (ghi atomic). | `runtime` |
+| `android`, `lwjgl3` | Launcher mỏng → `Level0Game`. | `launcher-android` |
+| `ios` | Scaffold RoboVM, chỉ build trên macOS. | `launcher-ios` (pending) |
+| `tools`, `generated/` | Converter offline từ `reconstructed-project/resources/` sang pack runtime, `provenance.json`; script bootstrap môi trường. | `pipeline` + `content` |
+
+`core` không import LibGDX hay SDK nền tảng; adapter chỉ đọc snapshot sau tick
+và command (`PlaySfx`, `PersistBA`, …). Hai quyết định lệch thiết kế ban đầu:
+nhịp tick tự định ≤1 tick/frame (`docs/decisions/tick-cadence-self-clocked.md`)
+và save thô giống bản gốc trong container v1 (`docs/decisions/save-policy.md`).
+
 ## 3. Ranh giới sự thật
 
 ### Đã chứng minh
@@ -122,4 +138,5 @@ Phần này là design recommendation, không phải code hiện có.
 
 - Không coi decompile là source gốc.
 - Không gộp proposal mobile mới với legacy facts.
-- Không ghi runtime plan như thể nó đã được triển khai.
+- Không ghi runtime plan như thể nó đã được triển khai; chỉ phần có gate (CI)
+  hoặc device run chứng minh mới được mô tả là chạy được.

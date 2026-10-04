@@ -237,8 +237,27 @@ private fun keepLive(e: Entity) { e.P = e.P or 16 }
  *  the (unmoved) camera arrives (k.java L25f eligibility). In real
  *  play the camera delivers the same tick on approach. */
 private fun overlapCheckpoint(w: Level0World, cp: Level0World.Checkpoint) {
-    w.player.setPositionPx(cp.ak, cp.al + 5)
+    // A teleport between frames must leave the boxes a finished frame
+    // would: the entity loop now ticks before the player (G12), so stale
+    // spawn boxes would bind the intro claim on the next tick.
+    w.player.setPositionPx(cp.ak, cp.al + 5); w.player.refreshBoxes()
     w.npcs.firstOrNull { it.ax == 2 && it.aw == cp.aw }?.let(::keepLive)
+}
+
+/** Slice 379: the death screen opens when the death anim ends (S50
+ *  `r()` → `k.l(12)`, g.java:2200-2219), not the frame the meter hits 0 —
+ *  and a running claim keeps the player's head (and so `i(50)`) off. */
+fun tickUntilFailed(w: Level0World, limit: Int = 300) {
+    var t = 0
+    while (!w.failed && t++ < limit) w.tick(emptyList())
+}
+
+/** Slice 385: the sim's neighbour scans walk `k.bd` — the list the last
+ *  `b()` pass drew — not the `bb[]` pool. A unit test that places the
+ *  neighbours by hand "paints" them: the last pass drew exactly these. */
+fun Level0World.paint(vararg es: Entity) {
+    drawCount = 0
+    for (e in es) drawList[drawCount++] = e
 }
 
 fun settleIntro(w: Level0World) {
@@ -556,9 +575,14 @@ class Level0WorldTest {
         // lands — same in the original.
         w.player.setPositionPx(s.ak - 20, s.al + 4)
         // Land a normal hit to trip the weaken: H=50 → aB=70 → hitReact
-        // Z0==1 → Z0=2 + S144 + claims the aN lock.
-        w.player.setAnim(67)
-        w.tick(emptyList())
+        // Z0==1 → Z0=2 + S144 + claims the aN lock. The soldier ticks
+        // before the player (G12) and reads the boxes the player's last
+        // t() left — refresh them as a finished frame would.
+        w.player.setAnim(67); w.player.refreshBoxes()
+        // the swing lands on the frame the attack box is live — one tick
+        // later than under the old player-first order
+        var hitT = 0
+        while (hitT++ < 8 && s.Z[0] != 2) w.tick(emptyList())
         assertTrue(s.Z[0] == 2 && s.S == 144,
             "hit on Z0==1 soldier should weaken: Z0=2+S144 (got Z0=${s.Z[0]}, S=${s.S})")
         assertTrue(w.lockTarget === s,
@@ -567,7 +591,7 @@ class Level0WorldTest {
         // h() (i.java:1271) — S144 ∉{11,12,6} → i() forces the player to
         // S8 and takes S17 (aC=16) itself, preempting j().
         for (i in 0 until 30) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             val (cx, cy) = w.cellPoint(4)
             w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
                           InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
@@ -581,14 +605,14 @@ class Level0WorldTest {
         // player — including the dive — so strike once the arm advances to
         // S11 (Z0==2 → i(11)), where tail[2] arms j() intake instead.
         for (i in 0 until 60) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             w.tick(emptyList())
             if (s.S != 17) break
         }
         assertTrue(s.S != 17, "counter-engage should resolve (sS=${s.S})")
         w.player.setAnim(216)
         for (i in 0 until 60) {
-            w.player.setPositionPx(s.ak - 20, s.al)
+            w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             w.tick(emptyList())
             if (s.aB <= 0) break          // check the launch before friction decays it
         }
@@ -650,8 +674,8 @@ class Level0WorldTest {
             w.player.gt = 0; w.iBh = 0
         }
         assertTrue(w.player.x1 <= 0, "meter should drain to 0 (x1=${w.player.x1})")
-        // KO → k.l(12): fail screen freezes the world until the context tap
-        w.tick(emptyList())
+        // KO → S50 → k.l(12): fail screen freezes the world until the tap
+        tickUntilFailed(w)
         assertTrue(w.failed, "x1<=0 must raise the mission-fail screen")
         assertEquals(1, w.deaths)
         val pos = w.player.ak to w.player.al
@@ -661,7 +685,7 @@ class Level0WorldTest {
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
         assertFalse(w.failed, "YES row tap should dismiss the fail screen")
-        assertEquals(90, w.player.x1, "reload refills the meter")
+        assertEquals(w.kAx, w.player.x1, "reload refills the meter: g.e(ax) (k.java:5225)")
         assertEquals(spawn, w.player.ak to w.player.al, "player back at spawn")
     }
 
@@ -673,7 +697,7 @@ class Level0WorldTest {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -697,7 +721,7 @@ class Level0WorldTest {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -769,7 +793,9 @@ class Level0WorldTest {
         val cp = w.checkpoints.first()
         overlapCheckpoint(w, cp)
         repeat(2) { w.tick(emptyList()) }
-        assertEquals(0, w.kFS, "aY() arms the fS tip-marquee counter")
+        // armed (`fS != -1`); the case-8 tail types it from the same
+        // frame on (k.java:1027-1031, slice 381)
+        assertTrue(w.kFS in 0..1, "aY() arms the fS tip-marquee counter")
         // The fired record's slot tombstones → after reload the rebuilt
         // checkpoint list marks it consumed again (no second fire).
         w.resetLevel(true)
@@ -885,7 +911,7 @@ class Level0WorldTest {
 
     @Test fun `ax37 trigger writes camera bounds on containment i7053`() {
         val w = world()
-        assertEquals(28, w.scrollTriggers.size)
+        assertEquals(28, w.npcs.count { it.ax == 37 })
         // aw=133: zone (913,553)-(1133,853), mask=9 (minX+maxY), mode=0
         w.player.setPositionPx(1050, 750)
         w.kM(2)                     // m(ad) snap — camera onto the player
@@ -932,8 +958,8 @@ class Level0WorldTest {
         w.player.refreshBoxes()
         w.tick(emptyList())
         assertEquals(50, w.player.S)
-        w.tick(emptyList())
-        assertTrue(w.failed, "x1=0 after S50 → k.l(12) mission fail")
+        tickUntilFailed(w)
+        assertTrue(w.failed, "S50 r() → k.l(12) mission fail (g.java:2218)")
     }
 
     @Test fun `ax10 triggers spawn with record W and S-bank i11800`() {
@@ -1035,19 +1061,21 @@ class Level0WorldTest {
         w.player.av = false
         w.player.setAnim(0)
         w.player.refreshBoxes()
+        w.playerFsm.eHeadReturns(w.player)        // k.l() → k.M (slice 369)
         w.npcFsm.tickDestructible(d, w.player)
         assertSame(d, w.claimed)
         assertEquals(5, w.claimPrio)
         // k.c popup: ax14 singleton S54, az=302, tagged by aw
-        assertNotNull(w.marker)
-        assertEquals(14, w.marker!!.ax); assertEquals(54, w.marker!!.S)
-        assertEquals(302, w.marker!!.az)
+        assertNotNull(w.kN)
+        assertEquals(14, w.kN!!.ax); assertEquals(54, w.kN!!.S)
+        assertEquals(302, w.kN!!.az)
         // step out of the bubble → claim (k.m) and marker (k.k) release
         w.player.setPositionPx(d.W[2] + 200, d.W[3])
         w.player.refreshBoxes()
+        w.playerFsm.eHeadReturns(w.player)        // k.l()
         w.npcFsm.tickDestructible(d, w.player)
         assertNull(w.claimed); assertEquals(6, w.claimPrio)
-        assertNull(w.marker)
+        assertNull(w.kN)
     }
 
     @Test fun `ax4 armed by attack then S6 bursts wisps and self-removes`() {
@@ -1166,13 +1194,17 @@ class Level0WorldTest {
         val e = Entity(67, w.clips[27])
         w.npcFsm.initDecor(e, listOf(67, 901, 200, 400, 0, 21, 0, 1, 0))
         e.setPositionPx(100, 920)                 // inside the tracked view
-        // fabricate an ax68-linked child overlapping W (the k.bd[] scan)
-        val child = Entity(68, w.clips[27])
+        // fabricate an ax68-linked child overlapping W (the k.bd[] scan).
+        // The child uses its own clip (bi[68]=26): its S0 frame carries a
+        // real W rect — clip27's S0 is an anchor point, which `i.a`
+        // rejects (slice 364).
+        val child = Entity(68, w.clips[26])
         child.setPositionPx(e.ak, e.al)
         val owner = Entity(11, w.clips[7])
         owner.ad = child
         w.npcs += owner; w.npcs += child
         child.refreshBoxes(); e.refreshBoxes()
+        w.paint(owner, child, e)
         w.npcFsm.tickDecor(e, w.player)
         // faithful double i(S+1): the bounce arm bumps 21→22, then the
         // bd[]-scan arm reads the CURRENT S and bumps 22→23 (i.java:17620
@@ -1182,23 +1214,23 @@ class Level0WorldTest {
         assertEquals(10, owner.S)  // r0.i(10)
     }
 
-    // Synthetic-clip convention for kind-5 arms: the FSM dispatches on
-    // Z[0], not the bound clip, so a prop bound to clip27 (populated rect
-    // pool + bounds quads) while kind=5 exercises the arms with real W/X
-    // geometry. The real kind5→clip35 pairing carries an EMPTY rect pool
-    // — its W/X degenerate to anchor-point rects, and `i.a()` being
-    // inclusive-edge means they fire only when the anchor lands inside
-    // the player's box (proven; tests below use clip27 for readability).
+    // Synthetic-geometry convention for kind-5 arms: the FSM dispatches on
+    // Z[0], not the bound clip. The real kind5→clip35 pairing carries an
+    // EMPTY rect pool for S12/S28 — its W/X are anchor points, and
+    // `i.a(int[],int[])` rejects a point box (structured i.java:540-558,
+    // slice 364), so on real data these arms never fire; no shipped level
+    // places kind-5 decor in S12 or S28 either. The tests below keep the
+    // arm logic covered with a CLIPLESS prop whose W/X/Y are staged by
+    // hand (`refreshBoxes()` leaves a clipless entity's boxes alone).
 
     @Test fun `kind-5 S12 hide spot binds player when unused`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         // record [67,aw,x,y,f4,f5,P,kind,az]: f4=1 → Z[1]=1 (L3530 arm)
         w.npcFsm.initDecor(e, listOf(67, 902, 300, 500, 1, 12, 0, 5, 7))
         assertEquals(12, e.S); assertEquals(1, e.Z[1]); assertEquals(5, e.Z[0])
-        e.setPositionPx(300, 500); e.refreshBoxes()
-        // W degenerates to the anchor point — the inclusive i.a() overlap
-        // still binds whenever the player box contains (300,500).
+        e.setPositionPx(300, 500)
+        intArrayOf(280, 460, 320, 510).copyInto(e.W)      // staged real box
         w.player.setPositionPx(300, 500); w.player.refreshBoxes()
         w.player.gg = null
         w.npcFsm.tickDecor(e, w.player)
@@ -1210,13 +1242,14 @@ class Level0WorldTest {
 
     @Test fun `kind-5 S28 spawner arms a 71 pickup pinned to view edge`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         w.npcFsm.initDecor(e, listOf(67, 903, 500, 500, 0, 28, 0, 5, 0))
         assertEquals(28, e.S)
-        e.setPositionPx(500, 500); e.refreshBoxes()
-        // X degenerates to the anchor point (clip27 obj0 has no rects) —
-        // place the player so its W contains that point; offscreen cam
-        // keeps v()=false so the spawn arm fires.
+        e.setPositionPx(500, 500)
+        intArrayOf(490, 480, 510, 520).copyInto(e.W)      // staged real boxes
+        intArrayOf(490, 480, 510, 520).copyInto(e.X)
+        // place the player so its W overlaps X; the offscreen cam keeps
+        // v()=false so the spawn arm fires.
         w.player.setPositionPx(e.X[0] + 1, (e.X[1] + e.X[3]) / 2)
         w.player.refreshBoxes()
         w.npcFsm.tickDecor(e, w.player)
@@ -1229,20 +1262,26 @@ class Level0WorldTest {
         val edge = if (w.player.ak - ((e.W[0] + e.W[2]) shr 1) >= 0) 20 else 380
         assertEquals(w.camX + edge, ae.ak)
         assertEquals(e.al, ae.al)
-        // next tick drains the insert buffer
+        // `aS.a(71,…)` = `a(III)V` (bytecode @0-82): no `k.b` insert — the
+        // pickup lives only in `aS.ae`, never in `bb[]`/`npcs`, even after
+        // the next tick's drain (slice 371; this asserted the old insert).
+        assertFalse(w.pendingInsert.contains(ae))
         w.tick(emptyList())
-        assertTrue(w.npcs.contains(ae))
+        assertFalse(w.npcs.contains(ae))
     }
 
     @Test fun `kind-5 S28 shove arm pushes player out of W`() {
         val w = world()
-        val e = Entity(67, w.clips[27])
+        val e = Entity(67, null)
         w.npcFsm.initDecor(e, listOf(67, 904, 500, 500, 0, 28, 0, 5, 0))
-        e.setPositionPx(500, 500); e.refreshBoxes()
         // Shove needs v()==true (else the spawn arm eats the tick): put
         // the prop beside the player in view — the camera follows the
         // player on real ticks so one tick centers the view on them.
+        // Staged W/X/Y box centered on the player's x (r02 = 0 → +2560).
         e.setPositionPx(300, 150)
+        intArrayOf(280, 110, 320, 160).copyInto(e.W)
+        intArrayOf(280, 110, 320, 160).copyInto(e.X)
+        intArrayOf(280, 110, 320, 160).copyInto(e.Y)
         w.player.setPositionPx(300, 150)
         w.kM(2)                              // m(ad) snap → shove in view
         w.player.refreshBoxes()
@@ -1344,7 +1383,9 @@ class Level0WorldTest {
     }
 
     @Test fun `ax14 linked waits then counts down aC to removal`() {
-        val w = world()
+        // the countdown arm is aX()'s `k.bh[k.aj]==3` arm (bytecode aX()
+        // @101-109, slice 371) — not `!k.al`: run it on a bh3 mission
+        val w = world(); w.kAj = 1                     // MISSION_BH[1]==3
         // link target with aw=55 — prepend so k.q's firstOrNull finds it
         // before any level-0 entity that may share the aw value
         val target = Entity(11, w.clips[7]).apply { aw = 55 }
@@ -1362,7 +1403,7 @@ class Level0WorldTest {
     }
 
     @Test fun `ax14 linked waits while target P&32 (held) or P&128`() {
-        val w = world()
+        val w = world(); w.kAj = 1                     // aX() @101 bh3 arm
         val target = Entity(11, w.clips[7]).apply { aw = 55; P = 32 }
         w.npcs.add(0, target)
         val e = recordPickup(w, listOf(14, 15, 500, 500, 0, 69, 0, -30, -40, 60, 80, 55, 7))
@@ -1707,7 +1748,10 @@ class Level0WorldTest {
         assertEquals(14, ae!!.ax)
         assertEquals(200 + w.camX, ae.ak, "hand pinned at view center x")
         assertEquals(120 + w.camY, ae.al, "hand pinned at view center y")
-        assertTrue(w.cm == 1)
+        // g.javap.txt e() 14315 is `putstatic #46 g.cm` — the g latch, not
+        // the k.cm touch-pad flag (slice 369)
+        assertTrue(p.gcm, "g.cm = 1")
+        assertEquals(0, w.cm, "k.cm untouched")
         Entity.at = null
     }
 
@@ -1817,8 +1861,8 @@ class Level0WorldTest {
         p.lungeTick(w)
         assertEquals(277, p.S, "ax11 victim -> i(277)")
         assertEquals(0, p.cL)
-        assertEquals(20 * Trig.sin(32), s.ag, "F.ag = (cF>>8)*j.b(cy)")
-        assertEquals(-20 * Trig.sin(Trig.N - 32), s.ah, "F.ah = -(cF>>8)*j.b(n-cy)")
+        assertEquals(20 * Trig.cos(32), s.ag, "F.ag = (cF>>8)*j.b(cy)")
+        assertEquals(-20 * Trig.cos(Trig.N - 32), s.ah, "F.ah = -(cF>>8)*j.b(n-cy)")
         assertEquals(181, s.S, "F.g(this) true -> i(181)")
         p.g = null
     }
@@ -1872,8 +1916,8 @@ class Level0WorldTest {
         p.mountOrbitTick(w, Pad())
         assertEquals(22, p.S, "W-overlap -> i(22) dismount")
         assertNull(p.F)
-        assertEquals(-20 * Trig.sin(64), p.ag, "ag = -(cF>>8)*j.b(cy)")
-        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        assertEquals(-20 * Trig.cos(64), p.ag, "ag = -(cF>>8)*j.b(cy)")
+        assertEquals(20 * Trig.cos(Trig.N - 64), p.ah)
         Entity.at = null
     }
 
@@ -1919,13 +1963,14 @@ class Level0WorldTest {
         w.npcs.add(track)
         m.ac = track
         Entity.at = m; p.g = null
-        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = 64; p.cF = 0
+        // cart straight above the rider: c() gives cy = j.b(-1, cA<0) ≈ o
+        p.cJ = 300; p.cK = 150; p.cB = 50; p.cy = Trig.O; p.cF = 0
         w.cm = 1                                     // k.k() mounted
         p.mountOrbitTick(w, Pad())
-        assertEquals(250, m.ak, "F.ak = cJ - cB*sin(cy)")
-        assertEquals(150, m.al, "F.al = cK + cB*sin(n-cy)")
-        assertEquals(240, track.ak, "track drags aq behind")
-        assertEquals(130, track.al)
+        assertEquals(300, m.ak, "F.ak = cJ - cB·cos(o) = cJ")
+        assertEquals(100, m.al, "F.al = cK + cB·cos(n-o) = cK - cB: cart above")
+        assertEquals(290, track.ak, "track drags aq behind")
+        assertEquals(80, track.al)
         Entity.at = null; w.cm = 0
     }
 
@@ -1960,8 +2005,8 @@ class Level0WorldTest {
         p.cF = 5120; p.cy = 64
         p.mountOrbitTick(w, Pad())
         assertSame(s, p.F)
-        assertEquals(-20 * Trig.sin(64), p.ag, "L200 drag vx")
-        assertEquals(20 * Trig.sin(Trig.N - 64), p.ah)
+        assertEquals(-20 * Trig.cos(64), p.ag, "L200 drag vx")
+        assertEquals(20 * Trig.cos(Trig.N - 64), p.ah)
         p.g = null
     }
 
@@ -2334,7 +2379,10 @@ class Level0WorldTest {
         val (px, py) = damageSpot(w)
         p.setPositionPx(px, py); p.refreshBoxes()
         val e = requestMarkerAt(w, 16, px + 2, py)
-        e.X[0] = px - 5; e.X[1] = py - 5; e.X[2] = px + 10; e.X[3] = py + 10
+        // The arm's own t() rebuilds X from the clip: clip10 S16 frames
+        // T0-T4 carry an anchor-point X (rejected by `i.a`, slice 364);
+        // T5 has the real impact box [x+3,y-8,x+8,y-3].
+        e.T = 5
         e.af = p                                              // bh[0]=4 path
         w.npcFsm.tickRequestMarker(e, p, Pad())
         assertNull(e.af, "L27 clears af")
@@ -2661,7 +2709,9 @@ class Level0WorldTest {
         b.setAnim(28)
         w.iBy = 3; w.iCp = 47; w.iCi = IntArray(5)
         w.npcFsm.tickBoss(b, p, Pad())
-        assertEquals(0, b.S, "cp>=48 -> i(0)")
+        // cp>=48 -> i(0); i.i() maps i(0) on k.aU at by 3 to i(36)
+        // (i.javap.txt i(int) offsets 0-20, slice 361)
+        assertEquals(36, b.S, "cp>=48 -> i(0) -> i(36) for the by3 boss")
         assertEquals(0, w.iCp)
     }
 
@@ -3005,6 +3055,7 @@ class Level0WorldTest {
         val p = w.player
         p.setAnim(0); p.setPositionPx(300, 150); p.refreshBoxes()
         val e = knockableAt(w, 300, 150, 4)
+        w.paint(e, p)                               // the player is drawn too
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(9, p.S, "r0==0 overlap -> bd.i(9)")
     }
@@ -3016,6 +3067,7 @@ class Level0WorldTest {
         }
         w.npcs.add(soldier)
         val e = knockableAt(w, 300, 150, 4)
+        w.paint(e, soldier)
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(0, soldier.S, "s==null -> bd.i(0)")
         soldier.S = 5; soldier.s = Entity(51, null)
@@ -3023,7 +3075,8 @@ class Level0WorldTest {
         assertEquals(5, soldier.S, "s.ax==51 -> skip")
         soldier.s = Entity(4, null)
         w.npcFsm.tickKnockable(e, w, w.player)
-        assertEquals(5, soldier.S, "s.ax!=51 but this.S==4 != 6 -> no i(7)")
+        assertEquals(0, soldier.S,
+            "n() @201-237: s.ax!=51 -> bd.i(0) (the i(7) arm is the dead case 15)")
     }
 
     @Test fun `ax41 S4 attributes k ae to the player near anim end`() {
@@ -3066,6 +3119,7 @@ class Level0WorldTest {
         w.npcs.add(soldier)
         val e = knockableAt(w, 300, 150, 6)
         e.ah = 400                                  // moving via ah
+        w.paint(soldier)
         w.npcFsm.tickKnockable(e, w, w.player)
         assertEquals(4, e.S, "moving + i(bd) -> i(4)")
     }
@@ -3309,6 +3363,7 @@ class Level0WorldTest {
         val stale = platformAt(w, p.ak - 300, p.al, 13)  // behind, out of reach
         p.ac = stale
         val near = platformAt(w, p.ak + 100, p.al, 12)
+        w.paint(e, stale, near, p)
         w.npcFsm.tickPlatform(e, w, p)
         assertSame(near, p.ac, "dead claim released; nearer crate claimed")
         assertTrue(near.P and 256 != 0, "claim sets P|256")
@@ -3964,6 +4019,7 @@ class Level0WorldTest {
         val s = Entity(11, w.clips[7])
         s.setAnim(3); s.setPositionPx(e.ak, e.al); s.refreshBoxes()
         w.npcs.add(s)
+        w.paint(e, s)
         w.npcFsm.tickAx40(e, w, w.player)
         assertEquals(0, s.S, "d(bd) → i(0) death chain")
         assertEquals(1, e.S, "gondola -> reset arm")
@@ -4595,6 +4651,7 @@ class Slice44Test {
             aB = 100; setPositionPx(330, 200); refreshBoxes() }
         w.npcs.add(o)
         e.refreshBoxes()
+        w.paint(o, e)
         w.npcFsm.tickAx35(e, w, p)
         assertEquals(0, o.aB, "as() zeroes aB on overlap")
         assertEquals(0, o.S, "ax11 -> i(0) death anim")
@@ -4632,9 +4689,13 @@ class Slice44Test {
         val w = world(); w.npcs.clear()
         val af = Entity(11, w.clips[7]).apply { aw = 777; aB = 100 }
         w.npcs.add(af)
-        // Z[5]=angle 0 (march up), Z[8]/Z[9] = fire point, Z[12]=3 waves
+        // Z[5]=125° (26 of the 28 ax35 records in m0/m2/m3/m6/m7; the
+        // other two are 60°), θ=88:
+        // the L118 march steps `20·sin θ` up per turn and only ends above
+        // k.P, so θ needs sin θ > 0 — angle 0 never terminates in the
+        // original either (j.b = cos, slice 352). Z[8]/Z[9] = fire point.
         val e = ax35At(w, 300, 100, 2,
-            z = intArrayOf(0,0,20,20,0,0,10,0,0,777))
+            z = intArrayOf(0,0,20,20,0,125,10,0,0,777))
         e.af = af
         e.Z[8] = 300; e.Z[9] = 100; e.aC = 1
         w.kP = 40                      // kP: march endpoint stays in-map
@@ -5504,6 +5565,7 @@ class Slice49Test {
         val m = Entity(66, null); m.setPositionPx(130, 140)
         box(m, 90, 130, 170, 160)
         w.npcs.add(m)
+        w.paint(e, m)
         w.npcFsm.tickAx15(e, w, w.player)
         assertEquals(131, e.al, "L167 mount → al=n.W[1]+1")
         assertNull(e.s,
@@ -6276,7 +6338,7 @@ class Slice55Test {
         e.runnerBz = true
         e.setAnim(5)
         e.T = 2; e.U = e.clip!!.frameDuration(5, 2) - 1   // s() wraps → T=3,U=0
-        w.player.setPositionPx(400, 500)
+        w.player.setPositionPx(400, 500); w.player.refreshBoxes()
         w.tick(emptyList())
         assertNotNull(w.projectilePool)
         assertEquals(1, e.aF, "aF reset to Z[7]=1")
@@ -6378,6 +6440,7 @@ class Slice56Test {
         w.npcs.add(victim)
         e.X[0] = 190; e.X[1] = 190; e.X[2] = 210; e.X[3] = 210   // real X box
         e.ap = 99999                            // skip the al>ap arm
+        w.paint(victim)
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(10, victim.S, "ax54 W∩X → i(10)")
         assertEquals(9, e.S)
@@ -6393,6 +6456,7 @@ class Slice56Test {
         victim.W[0] = 195; victim.W[1] = 195; victim.W[2] = 205; victim.W[3] = 205
         e.X[0] = 190; e.X[1] = 190; e.X[2] = 210; e.X[3] = 210
         w.npcs.add(victim)
+        w.paint(victim)
         w.npcFsm.tickAx24(e, w, w.player)
         assertEquals(-5, victim.aB, "aB -= 20")
         assertEquals(10, victim.S, "aB<=0 → i(10)")
@@ -6525,8 +6589,8 @@ class Slice58Test {
         return e
     }
 
-    // be(): player overlap short-circuits true; else marks every overlapping
-    // ax11/15 npc P|16 and stays true.
+    // be(): player overlap short-circuits true; else marks the first drawn
+    // overlapping ax11/15 P|16 and reports true (slice 385).
     @Test fun `be() occupied by player`() {
         val w = world()
         w.npcs.clear()
@@ -6557,6 +6621,7 @@ class Slice58Test {
         guard.setPositionPx(300, 150); guard.refreshBoxes()
         guard.W[0] = 295; guard.W[1] = 145; guard.W[2] = 305; guard.W[3] = 155
         w.npcs.add(guard)
+        w.paint(e, guard)
         w.npcFsm.tickAx58(e, w, w.player)
         assertTrue(guard.P and 16 != 0, "k.bd[] overlap -> P|=16")
         assertEquals(1, e.S)
@@ -6814,6 +6879,7 @@ class Slice60Test {
         val pair = ax60At(w, 115, 200, 4, 11, 0, -1, 0, 0) // S11 member
         val e = ax60At(w, 100, 200, 4, 13, 0, -1, 0, 0)
         e.ag = 1024
+        w.paint(pair, e)
         w.npcFsm.tickAx60(e, w, w.player)
         assertEquals(1024, pair.ag, "pair gets Z[1]<<8 push")
         assertEquals(-1024, e.ag, "self reverses")
@@ -6829,6 +6895,7 @@ class Slice60Test {
         // zone inside the lift's real W corridor
         zone.W[0] = e.W[0] + 1; zone.W[1] = e.W[1] + 1
         zone.W[2] = e.W[2] - 1; zone.W[3] = e.W[3] - 1
+        w.paint(zone, e)
         w.npcFsm.tickAx60(e, w, w.player)
         assertTrue(e.k, "S10 + Z[4]==3 + zone → latch k")
     }
@@ -6928,6 +6995,7 @@ class Slice69Test {
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false                                 // facing right = away
         victim.refreshBoxes()
+        w.paint(e, victim)
         w.npcFsm.tickAx69(e, w, w.player)
         assertSame(victim, e.af, "victim bound")
         assertNotNull(e.ae, "hand marker spawned")
@@ -6955,6 +7023,7 @@ class Slice69Test {
         w.player.setPositionPx(100, 163)
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false; victim.refreshBoxes()
+        w.paint(e, victim)
         w.npcFsm.tickAx69(e, w, w.player)
         assertSame(victim, e.af)
         victim.setPositionPx(250, 190); victim.refreshBoxes()   // >40px out
@@ -6970,6 +7039,7 @@ class Slice69Test {
         w.player.setPositionPx(100, 163)
         val victim = ax11At(w, 160, 190, 7)
         victim.av = false; victim.refreshBoxes()
+        w.paint(e, victim)
         w.pad.commit(65568)                               // v() edge
         w.npcFsm.tickAx69(e, w, w.player)
         assertEquals(244, w.player.S, "aS.i(244) leap")
@@ -7139,8 +7209,12 @@ class Slice17Test {
 
     @Test fun `S57 quadrant pick — below+X-sep 67, above+X-sep 66`() {
         val w = world()
-        w.kO = 0; w.kP = 0
-        val e = ax17At(w, 150, 120)
+        // slice 350: S57 runs the full l() — LOS e(aS) included — so both
+        // placements stay inside level0's open top-left block (cells
+        // 0..28 x 0..24); y=120 put the "above" player off the map (y<0,
+        // OOB cells read solid). Camera kP=100 keeps W inside k.ac.
+        w.kO = 0; w.kP = 100
+        val e = ax17At(w, 150, 320)
         // player fully right of W (X-separated) and well below/above it —
         // p.W carries large anim-box offsets so the margin must clear them
         placePlayer(w, e.W[2] + 200, e.W[3] + 200)
@@ -7154,8 +7228,8 @@ class Slice17Test {
 
     @Test fun `S57 quadrant pick — below+overlap 63, above+overlap 62`() {
         val w = world()
-        w.kO = 0; w.kP = 0
-        val e = ax17At(w, 150, 120)
+        w.kO = 0; w.kP = 100                         // see the X-sep case
+        val e = ax17At(w, 150, 320)
         placePlayer(w, e.ak, e.W[3] + 200)
         w.npcFsm.tickAx17(e, w, w.player)
         assertEquals(63, e.S, "X-overlap + player below → i(63)")
@@ -7299,6 +7373,8 @@ class Slice73Test {
         w.player.setPositionPx(e.ak + 20, e.al - 10)
         w.player.av = true                        // facing left → reach left
         w.player.refreshBoxes()
+        // k.M is written by k.l() at the player's g.e() head (slice 369)
+        w.playerFsm.eHeadReturns(w.player)
         w.npcFsm.tickAx73(e, w, w.player)
         assertTrue(w.claimed === e || w.kL === e, "k.a(this,0,W) claimed")
     }
@@ -7308,7 +7384,9 @@ class Slice73Test {
         val e = ax73At(w, 100, 200, 0, 152)
         w.player.setPositionPx(e.ak + 20, e.al - 10); w.player.av = true
         w.player.refreshBoxes()
+        w.playerFsm.eHeadReturns(w.player)        // k.l() → k.M (slice 369)
         w.npcFsm.tickAx73(e, w, w.player)
+        assertTrue(w.claimed === e || w.kL === e, "claimed in reach first")
         e.aB = 0
         e.setAnim(0)
         w.npcFsm.tickAx73(e, w, w.player)
@@ -7504,8 +7582,11 @@ class Slice73Test {
 }
 
 // ============================================================================
-// Slice 64 — ax47 aK() + ax50 aL() + shared i.k() stealth-kill driver
-// (i.java:9910/10008/2057). Citations inline per AGENTS.md.
+// Slice 64 — ax50 aK() pouncer + ax47 aL() ledge sentinel + shared i.k()
+// stealth-kill driver (i.java:9910/10008/2057). Dispatch is `case 47 → aL()`,
+// `case 50 → aK()` (i.java:5181-5194; i.javap.txt:20024-20025, proven).
+// Slice 346 restored that pairing — slice 64 drove the aK arms through ax47
+// and the aL arms through ax50. Citations inline per AGENTS.md.
 // ============================================================================
 class Slice64Test {
     private fun ax47At(w: Level0World, x: Int, y: Int, vararg f: Int): Entity {
@@ -7535,6 +7616,16 @@ class Slice64Test {
         e.T = c.frameCount(e.S) - 1
         e.U = c.frameDuration(e.S, e.T) - 1
     }
+    /** Centre the camera on [e] so its W sits inside `k.ac` — aK's `l()`
+     *  takes the ax50 arm L77, `b(W,k.ac)`: W ⊆ camera rect (i.java:665). */
+    private fun camOn(w: Level0World, e: Entity) {
+        w.kO = e.ak - 200; w.kP = e.al - 120
+    }
+    /** Player standing in the pouncer's column, mid-point at its anchor. */
+    private fun playerUnder(w: Level0World, e: Entity) {
+        w.player.setPositionPx(e.ak, e.al + 29)
+        w.player.setAnim(0); w.player.refreshBoxes()
+    }
 
     // -- init arms -----------------------------------------------------------
     @Test fun `ax47 init — az=f17, aB=bu, Z0=f4, S=f5`() {
@@ -7563,17 +7654,17 @@ class Slice64Test {
         assertTrue(w.npcs.none { it.ax == 11 && it.S in intArrayOf(80, 93) })
     }
 
-    // -- aK() arms ------------------------------------------------------------
-    @Test fun `S120 — drop-kill set + overlap + player below → i89 + i119`() {
+    // -- aK() arms (ax50 pouncer) ----------------------------------------------
+    @Test fun `aK S120 — drop-kill set + overlap + player below → i89 + i119`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 120)
-        // player in drop-kill anim + overlapping + fully above sentinel bottom
-        // sentinel W≈[90,166,113,201]; overlap needs p.W[3]>166, grab arm
+        val e = ax50At(w, 100, 200, 0, 120)
+        // player in drop-kill anim + overlapping + fully above pouncer bottom
+        // pouncer W≈[90,166,113,201]; overlap needs p.W[3]>166, grab arm
         // needs p.W[3]<e.W[3] → p.al in (165,200).
         w.player.setPositionPx(100, 180)
         w.player.setAnim(24)
         w.player.refreshBoxes()
-        w.npcFsm.tickAx47(e, w, w.player)
+        w.npcFsm.tickAx50(e, w, w.player)
         assertEquals(89, w.player.S, "aS.i(89) ceiling-grab victim anim")
         assertEquals(119, e.S, "i(119)")
         assertEquals(30, e.aC, "aC=30")
@@ -7581,190 +7672,209 @@ class Slice64Test {
         assertEquals(e.W[1], w.player.al, "aS.al=W[1] snap")
     }
 
-    @Test fun `S120 — degenerate sight rect only fires at the anchor point`() {
+    @Test fun `aK S120 — W inside the camera + clear LOS → 3x3 pounce pick`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 120)
-        // player W mid = al-29 → al=229 puts mid at the anchor y=200.
-        w.player.setPositionPx(100, 229)
-        w.player.setAnim(0)
-        w.player.refreshBoxes()
-        w.npcFsm.tickAx47(e, w, w.player)
-        assertTrue(e.S in 121..128, "r7 → 3x3 pounce pick (overlapping column → 127/128)")
+        val e = ax50At(w, 100, 200, 0, 120)
+        camOn(w, e)
+        playerUnder(w, e)
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(128, e.S, "overlapping column + p.W[3]>=W[1] → i(128)")
     }
 
-    @Test fun `S120 — player out of sight rect stays perched`() {
+    @Test fun `aK S120 — W only partly inside the camera stays blind`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 120)
-        w.player.setPositionPx(500, 600)
-        w.player.setAnim(0); w.player.refreshBoxes()
-        w.npcFsm.tickAx47(e, w, w.player)
+        val e = ax50At(w, 100, 200, 0, 120)
+        w.kO = e.W[0] + 1; w.kP = e.al - 120          // left edge cuts W
+        playerUnder(w, e)
+        assertTrue(Entity.overlapI(e.W, w.camRect), "W still overlaps the view")
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(120, e.S, "b(W,k.ac) is containment, not overlap → r7 false")
+    }
+
+    @Test fun `aK S120 — off-camera perch stays put`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 120)
+        w.kO = 5000; w.kP = 5000
+        playerUnder(w, e)
+        w.npcFsm.tickAx50(e, w, w.player)
         assertEquals(120, e.S, "r7=false → no pounce")
     }
 
-    @Test fun `S121-128 pounce — T1 sfx16`() {
+    @Test fun `aK S120 — bn and player S284 or S285 blind the pouncer`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 121)
-        w.player.setPositionPx(100, 229)          // mid pierces the anchor → r7
-        w.player.setAnim(0); w.player.refreshBoxes()
+        val e = ax50At(w, 100, 200, 0, 120)
+        camOn(w, e); playerUnder(w, e)
+        w.iBn = true
+        w.npcFsm.tickAx50(e, w, w.player)
+        assertEquals(120, e.S, "L77 bn → r0=false")
+        w.iBn = false
+        for (s in intArrayOf(284, 285)) {
+            w.player.setAnim(s); w.player.refreshBoxes()
+            w.npcFsm.tickAx50(e, w, w.player)
+            assertEquals(120, e.S, "L92/L94 player S$s → false")
+        }
+    }
+
+    @Test fun `aK S121-128 pounce — T1 sfx16`() {
+        val w = world()
+        val e = ax50At(w, 100, 200, 0, 121)
+        camOn(w, e); playerUnder(w, e)
         e.T = 1
-        w.npcFsm.tickAx47(e, w, w.player)
+        w.npcFsm.tickAx50(e, w, w.player)
         assertTrue(16 in w.sfxLog, "T==1 → k.A(16)")
     }
 
-    @Test fun `S121-128 pounce — T3 counteredBy + r() reverts to S120`() {
+    @Test fun `aK S121-128 pounce — T3 op4 is hurt-sfx only for ax50, r() reverts to S120`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 121)
-        w.player.setPositionPx(100, 229)
-        w.player.setAnim(0); w.player.refreshBoxes()
+        val e = ax50At(w, 100, 200, 0, 121)
+        camOn(w, e); playerUnder(w, e)
         e.T = 3
-        w.npcFsm.tickAx47(e, w, w.player)
-        // a(4,…) on the player → r9.c(r13): the PLAYER hit-reacts (S9);
-        // the sentinel keeps pouncing (slice-201 inversion fix).
-        assertEquals(9, w.player.S, "op4 → r9.c(r13) → player S9")
+        w.npcFsm.tickAx50(e, w, w.player)
+        // a(4,…) (structured/i.java:3437-3447): the `r9.c(r13)` stagger
+        // needs r13.ax∉{17,50,61} — the pouncer is ax50, so op4 only plays
+        // the k.A(18) hurt sfx (the S9 stagger slice 64 asserted came from
+        // driving aK through ax47, which the original never does).
+        assertEquals(0, w.player.S, "op4 from ax50 → no r9.c(r13) hit-react")
+        assertTrue(18 in w.sfxLog, "k.A(18) fires unconditionally")
         // all pounce anims end at T==3 — the last frame always coincides
-        // with the hit arm (i.java:1005x: hit BEFORE the r() check).
+        // with the hit arm (i.java:9996-9999: hit BEFORE the r() check).
         val w2 = world()
-        val e2 = ax47At(w2, 100, 200, 0, 121)
-        w2.player.setPositionPx(100, 229); w2.player.setAnim(0); w2.player.refreshBoxes()
+        val e2 = ax50At(w2, 100, 200, 0, 121)
+        camOn(w2, e2); playerUnder(w2, e2)
         finish(e2)                                 // T=3 last frame → hit then r()
-        w2.npcFsm.tickAx47(e2, w2, w2.player)
-        assertEquals(9, w2.player.S, "hit landed → player S9")
+        w2.npcFsm.tickAx50(e2, w2, w2.player)
+        assertTrue(18 in w2.sfxLog, "T==3 arm ran before r()")
         assertEquals(120, e2.S, "pounce r() → S120")
-
-        val w3 = world()
-        val e3 = ax47At(w3, 100, 200, 0, 121)
-        w3.player.setPositionPx(100, 229); w3.player.setAnim(0); w3.player.refreshBoxes()
-        w3.player.gt = 10                          // iframes → no stagger
-        finish(e3)
-        w3.npcFsm.tickAx47(e3, w3, w3.player)
-        assertEquals(120, e3.S, "no hit → r() → i(120)")
     }
 
-    @Test fun `S121 pounce — lost sight reverts to S120`() {
+    @Test fun `aK S121 pounce — lost sight reverts to S120`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 121)
-        w.player.setPositionPx(500, 600); w.player.refreshBoxes()
-        w.npcFsm.tickAx47(e, w, w.player)
+        val e = ax50At(w, 100, 200, 0, 121)
+        w.kO = 5000; w.kP = 5000                // W off the view → l() false
+        playerUnder(w, e)
+        w.npcFsm.tickAx50(e, w, w.player)
         assertEquals(120, e.S, "r7==false → i(120)")
     }
 
-    @Test fun `S130 — anim end despawns`() {
+    @Test fun `aK S130 — anim end despawns`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 130)
-        w.npcFsm.tickAx47(e, w, w.player)
+        val e = ax50At(w, 100, 200, 0, 130)
+        w.npcFsm.tickAx50(e, w, w.player)
         assertTrue(w.npcs.contains(e), "not removed mid-anim")
         finish(e)
-        w.npcFsm.tickAx47(e, w, w.player)
+        w.npcFsm.tickAx50(e, w, w.player)
         w.tick(emptyList())                       // drain pendingRemove
         assertFalse(w.npcs.contains(e), "r() → k.c(this)")
     }
 
-    // -- aL() arms ------------------------------------------------------------
-    @Test fun `S94 — P|512 + claim release + despawn on anim end`() {
+    // -- aL() arms (ax47 ledge sentinel) ---------------------------------------
+    @Test fun `aL S94 — P|512 + claim release + despawn on anim end`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 94)
+        val e = ax47At(w, 100, 200, 0, 94)
         w.kL = e                                  // armed claim
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertTrue(e.P and 512 != 0, "P |= 512")
         finish(e)
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertNull(w.kL, "k.m() released the claim")
         w.tick(emptyList())
         assertFalse(w.npcs.contains(e), "k.c(this) despawn")
     }
 
-    @Test fun `S94 — no claim → still despawns`() {
+    @Test fun `aL S94 — no claim → still despawns`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 94)
+        val e = ax47At(w, 100, 200, 0, 94)
         finish(e)
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         w.tick(emptyList())
         assertFalse(w.npcs.contains(e))
     }
 
-    @Test fun `S81 — anim end arms P64, countdown expiry picks i82`() {
+    @Test fun `aL S81 — anim end arms P64, countdown expiry picks i82`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 81, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 0)
+        val e = ax47At(w, 100, 200, 0, 81, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, -1, 0)
         e.aC = 2
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertEquals(1, e.aC, "aC-- runs per tick")
         assertEquals(81, e.S)
         finish(e)
-        w.npcFsm.tickAx50(e, w, w.player)          // aC 1→0 → still L53 tail
+        w.npcFsm.tickAx47(e, w, w.player)          // aC 1→0 → still L53 tail
         assertEquals(0, e.aC)
-        w.npcFsm.tickAx50(e, w, w.player)          // aC 0→-1 → still tail
+        w.npcFsm.tickAx47(e, w, w.player)          // aC 0→-1 → still tail
         assertEquals(-1, e.aC)
         assertEquals(81, e.S, "post-decrement: i82 fires one tick late")
-        w.npcFsm.tickAx50(e, w, w.player)          // old aC -1 → i82 + P&=-65
+        w.npcFsm.tickAx47(e, w, w.player)          // old aC -1 → i82 + P&=-65
         assertEquals(82, e.S)
         assertTrue(e.P and 64 == 0, "P &= -65 on expiry")
     }
 
-    @Test fun `S82 — r() returns to perch S80`() {
+    @Test fun `aL S82 — r() returns to perch S80`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 82)
+        val e = ax47At(w, 100, 200, 0, 82)
         finish(e)
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertEquals(80, e.S)
     }
 
-    @Test fun `S83 — floor ahead picks i84 freeze else ah 1536 fall`() {
+    @Test fun `aL S83 — floor ahead picks i84 freeze else ah 1536 fall`() {
         val w = world()
-        val e = ax50At(w, 40, 40, 0, 83)
+        val e = ax47At(w, 40, 40, 0, 83)
         // level-0 row at cy=2 — check the actual cell the probe reads
         // (column e.ak/20±1). Force no-floor: park e over empty space.
         w.player.setPositionPx(500, 600); w.player.refreshBoxes()
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         // whatever the outcome, the contract is M() drives i(84) vs ah=1536.
         if (e.S == 84) { assertEquals(0, e.ah); assertEquals(0, e.aj) }
         else assertEquals(1536, e.ah, "M()==false → ah=1536")
     }
 
-    @Test fun `S84 — r() → i0 idle`() {
+    @Test fun `aL S84 — r() → i0 idle`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 84)
+        val e = ax47At(w, 100, 200, 0, 84)
         finish(e)
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertEquals(0, e.S)
     }
 
-    @Test fun `S93 — ceiling-grab → p i89 + i80 + aC30 + claim armed`() {
+    @Test fun `aL S93 — ceiling-grab → p i89 + i80 + aC30 + claim armed`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 93)
+        val e = ax47At(w, 100, 200, 0, 93)
         w.player.setPositionPx(100, 180)
         w.player.setAnim(24); w.player.refreshBoxes()
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertEquals(89, w.player.S)
         assertEquals(80, e.S)
         assertEquals(30, e.aC)
         assertTrue(w.kL === e, "k.a(this,0,W) arms the claim")
     }
 
-    @Test fun `S93 — player not in drop-kill set → nothing`() {
+    @Test fun `aL S93 — player not in drop-kill set → nothing`() {
         val w = world()
-        val e = ax50At(w, 100, 200, 0, 93)
+        val e = ax47At(w, 100, 200, 0, 93)
         w.player.setPositionPx(100, 180); w.player.setAnim(0); w.player.refreshBoxes()
-        w.npcFsm.tickAx50(e, w, w.player)
+        w.npcFsm.tickAx47(e, w, w.player)
         assertEquals(93, e.S, "L26 non-set → return")
     }
 
-    // -- l() arms --------------------------------------------------------------
-    @Test fun `seen50 — off-camera sentinel is blind (bn also blinds)`() {
-        val w = world()
-        val e = ax50At(w, w.kO + 9999, w.kP + 200, 0, 80)  // far off-cam
-        // l() isn't public — observable via aL(): no grab while off-cam.
-        // Direct check via S80 default path: k();j() run regardless; l() only
-        // feeds internal state. Assert the iBn gate via k() exit instead:
-        w.iBn = true
-        w.player.setPositionPx(e.ak, e.al); w.player.refreshBoxes()
-        w.npcFsm.tickAx50(e, w, w.player)
-        assertNull(w.kN, "bn → no prompt popup")
+    @Test fun `aL S0 and S93 return before k() and j()`() {
+        // L52 (S0) and L26 (S93) `return` without the L53 `k(); j()` tail —
+        // a sword hit in reach drains nothing (aK would run j() here).
+        for (s in intArrayOf(0, 93)) {
+            val w = world()
+            val e = ax47At(w, 100, 200, 0, s); e.aB = 300
+            w.player.setPositionPx(120, 200)
+            w.player.setAnim(67); w.player.refreshBoxes()
+            w.player.X[0] = 60; w.player.X[1] = 150; w.player.X[2] = 140; w.player.X[3] = 250
+            w.player.gI = 1
+            w.npcFsm.tickAx47(e, w, w.player)
+            assertEquals(300, e.aB, "S$s returns before j()")
+        }
     }
 
     // -- k() shared driver ------------------------------------------------------
     @Test fun `k() — backstab window shows prompt then op6 kill on edge`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)        // S119 routes k();j()
+        val e = ax47At(w, 100, 200, 0, 80)         // S80 perch → L53 k();j()
         w.player.setPositionPx(160, 198)           // 60px right; y-gate |195…-200|<5
         w.player.setAnim(0); w.player.refreshBoxes()
         w.player.av = true                          // player faces left → faces me
@@ -7783,13 +7893,13 @@ class Slice64Test {
         assertTrue(w.kAp[3] > 0 && 20 in w.sfxLog, "k.o(3)+k.A(20)")
         assertTrue(w.kAp[5] > 0, "S() wisp burst ticked")
         // ax47's L172 tail: else → return true — no anim on the sentinel.
-        assertEquals(119, e.S, "sentinel plays no anim on L81 backstab (verbatim)")
+        assertEquals(80, e.S, "sentinel plays no anim on L81 backstab (verbatim)")
         w.pad.commit(0)
     }
 
     @Test fun `k() — near backstab |dx| under 40 picks anim 283`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         w.player.setPositionPx(130, 198)           // 30px → 283
         w.player.setAnim(0); w.player.refreshBoxes()
         w.player.av = true; e.av = true
@@ -7833,7 +7943,7 @@ class Slice64Test {
 
     @Test fun `k() — prompt survives across ticks and repositions`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         w.player.setPositionPx(160, 198); w.player.setAnim(0); w.player.refreshBoxes()
         w.player.av = true; e.av = true
         w.pad.commit(0)
@@ -7851,7 +7961,7 @@ class Slice64Test {
 
     @Test fun `k() — player S in exit set releases prompt and exits false`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         w.player.setPositionPx(160, 198); w.player.setAnim(268); w.player.refreshBoxes()
         w.pad.commit(0)
         w.npcFsm.tickAx47(e, w, w.player)
@@ -7859,10 +7969,10 @@ class Slice64Test {
         w.pad.commit(0)
     }
 
-    // -- j() sentinel intake -----------------------------------------------------
+    // -- j() shared intake -------------------------------------------------------
     @Test fun `j() — sword hit in reach → aB -= H=50`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         e.aB = 300
         w.player.setPositionPx(120, 200)
         w.player.setAnim(67); w.player.refreshBoxes()
@@ -7874,7 +7984,7 @@ class Slice64Test {
 
     @Test fun `j() — finisher anim drains J=100`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         e.aB = 300
         w.player.setPositionPx(120, 200)
         w.player.setAnim(183); w.player.refreshBoxes()
@@ -7887,7 +7997,7 @@ class Slice64Test {
     @Test fun `j() — dead ax50 plays i129, dead ax47 plays nothing`() {
         val w = world()
         val e5 = ax50At(w, 100, 200, 0, 119); e5.aB = 1
-        val e4 = ax47At(w, 300, 200, 0, 119); e4.aB = 1
+        val e4 = ax47At(w, 300, 200, 0, 80); e4.aB = 1
         w.player.setPositionPx(120, 200)
         w.player.setAnim(67); w.player.refreshBoxes()
         w.player.X[0] = 0; w.player.X[1] = 100; w.player.X[2] = 400; w.player.X[3] = 300
@@ -7895,22 +8005,22 @@ class Slice64Test {
         w.npcFsm.tickAx50(e5, w, w.player)
         w.npcFsm.tickAx47(e4, w, w.player)
         assertEquals(129, e5.S, "ax50 death → i(129)")
-        assertEquals(119, e4.S, "ax47 death → no anim change (verbatim C() L86)")
+        assertEquals(80, e4.S, "ax47 death → no anim change (verbatim C() L86)")
     }
 
     @Test fun `j() — survive → consumed, no hit-react anim`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119); e.aB = 300
+        val e = ax47At(w, 100, 200, 0, 80); e.aB = 300
         w.player.setPositionPx(120, 200); w.player.setAnim(67); w.player.refreshBoxes()
         w.player.X[0] = 60; w.player.X[1] = 150; w.player.X[2] = 140; w.player.X[3] = 250
         w.player.gI = 1
         w.npcFsm.tickAx47(e, w, w.player)
-        assertEquals(119, e.S, "C() L51: survive → true with no anim")
+        assertEquals(80, e.S, "C() L51: survive → true with no anim")
     }
 
     @Test fun `j() — dead entity releases its ae marker (P() head)`() {
         val w = world()
-        val e = ax47At(w, 100, 200, 0, 119)
+        val e = ax47At(w, 100, 200, 0, 80)
         e.aB = 0
         e.ae = Entity(14, w.clips[9])
         w.npcFsm.tickAx47(e, w, w.player)
@@ -7957,17 +8067,28 @@ class Slice65Test {
         assertEquals(5, e.Z[8], "Z[8] untouched outside S7")
     }
 
+    // `aS.a(n,x,y)` (`a(III)V` @0-82) never `k.b`-inserts the marker
+    // (slice 371) — it only exists as `aS.ae`, so a same-tick spawn +
+    // release is observed at the `spawnPickup` call, not the insert
+    // buffer.
+    private class SpawnSpy(private val inner: Level0World) : LevelCellSource by inner {
+        val spawned = ArrayList<Entity>()
+        override fun spawnPickup(anim: Int, x: Int, y: Int): Entity =
+            inner.spawnPickup(anim, x, y).also { spawned += it }
+    }
+
     @Test fun `stalk — below-right arms, picks S66, releases same tick`() {
         val w = world()
         val e = ax64At(w, 260, 150, anim = 7)   // stalk head runs only in S7
         w.player.setPositionPx(200, 100)
         w.player.setAnim(0)                     // vulnerable anim set
         w.pad.commit(0)
-        w.npcFsm.tickAx64(e, w, w.player)
+        val spy = SpawnSpy(w)
+        w.npcFsm.tickAx64(e, spy, w.player)
         // L39-43: right+below → anim 66 + bl=512; then the verbatim L76
         // tail releases the just-spawned S66 on ak>p.ak → 1-tick flicker
         // (the marker blink is the visible prompt).
-        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 66 },
+        assertTrue(spy.spawned.any { it.ax == 14 && it.S == 66 },
             "S66 marker spawned")
         assertEquals(512, e.bl, "bl latch mask for anim 66")
         assertNull(w.player.ae, "L76 tail released the just-picked marker")
@@ -7979,8 +8100,9 @@ class Slice65Test {
         w.player.setPositionPx(200, 100)
         w.player.setAnim(0)
         w.pad.commit(0)
-        w.npcFsm.tickAx64(e, w, w.player)
-        assertTrue(w.pendingInsert.any { it.ax == 14 && it.S == 60 },
+        val spy = SpawnSpy(w)
+        w.npcFsm.tickAx64(e, spy, w.player)
+        assertTrue(spy.spawned.any { it.ax == 14 && it.S == 60 },
             "S60 marker spawned")
         assertEquals(128, e.bl)
         assertNull(w.player.ae, "L53-67 released the matched-side marker")
@@ -8209,8 +8331,8 @@ class Slice66Test {
         e.j = 0
         w.npcFsm.tickAx74(e, w, w.player)            // j=15, aF=90*256/360=64
         assertEquals(64, e.aF)
-        assertEquals(400 + ((Trig.sin(64) * 15) shr 8), e.ak)
-        assertEquals(300 + ((Trig.sin(0) * 15) shr 8), e.al)
+        assertEquals(400 + ((Trig.cos(64) * 15) shr 8), e.ak)
+        assertEquals(300 + ((Trig.cos(0) * 15) shr 8), e.al)
         assertTrue((e.P and 16) != 0)                // P |= 16
     }
 
@@ -8658,7 +8780,7 @@ class Slice68Test {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -8897,7 +9019,7 @@ class Slice71WinTest {
         w.pad.queuePress(Pad.M_CONTEXT); w.tick(emptyList())
         w.pad.queuePress(Pad.M_CONTEXT); w.tick(emptyList())
         assertFalse(w.won, "YES on the win dialog should advance")
-        assertEquals(90, w.player.x1, "reload refills the meter")
+        assertEquals(w.kAx, w.player.x1, "reload refills the meter: g.e(ax) (k.java:5225)")
     }
 
     @Test fun `screenL(13) is idempotent`() {
@@ -8933,6 +9055,7 @@ class Slice72ScrollReleaseTest {
         val w = world()
         val p = w.player
         p.ak = 3000   // teleport past the wall as the agent did
+        p.refreshBoxes()   // entities tick first (G12): no stale spawn boxes
         repeat(30) { w.tick(emptyList()) }
         assertTrue(w.camX > 9)
     }
@@ -9618,7 +9741,14 @@ class Slice79Test {
 
     @Test fun `pause rect tap emits M_PAUSE edge and l(14)`() {
         val w = world()
+        // `J()` hit-tests the release point (`c()` reads k.H/k.I) after
+        // `I()`; the E(262144) lands in bB at the next commit, so the
+        // pause opens one frame after the release (slice 368).
         down(w, 370, 10)
+        assertEquals(8, w.jC, "a press alone arms nothing (pointerPressed = wheel only)")
+        up(w, 370, 10)
+        assertEquals(8, w.jC, "release frame: E(262144) armed, v() still clear")
+        w.tick(emptyList())
         assertEquals(14, w.jC, "k.java:1056 — pause icon → k.l(14)")
     }
 
@@ -9826,10 +9956,12 @@ class Slice80Test {
         assertEquals(24, w.jC)
     }
 
-    @Test fun `deaths feed ap1 through the l12 arm`() {
+    @Test fun `the death screen does not feed ap1`() {
+        // `ap[1]` counts `a(true)` retries — `o(1)` (k.java:5175); `l(12)`
+        // has no ap write (k.java:1656-1660). Slice 377 (Slice377Test).
         val w = world()
         w.stateL(12)
-        assertEquals(1, w.kAp[1])
+        assertEquals(0, w.kAp[1])
     }
 
     @Test fun `typewriter emits the next-mission string`() {
@@ -10309,44 +10441,45 @@ class Slice87Test {
     }
 }
 
-/** Slice 88 — `j.t` pad-held latch + `j.i()` fail/win input flush
- *  (j.java:105-345, k.java:1109, proven). */
+/** Slice 88 — `j.t` + `j.i()` fail/win frame skip (j.java:105-345,
+ *  k.java:1109, proven). Slice 376 corrected the reading: the pointer
+ *  handlers never touch `j.t` (k.java:486-516); only the veil latch
+ *  (bit 0) and `K()` (bit 4) set it. */
 class Slice88Test {
 
-    @Test fun `pad press latches jT release clears it`() {
+    @Test fun `pad presses and releases leave jT alone`() {
         val w = world()
         val (x, y) = w.cellPoint(0)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
-        assertTrue(w.kJT != 0, "DOWN in a pad zone latches j.t")
+        assertEquals(0, w.jT, "pointerPressed has no j.t write (k.java:486-494)")
         w.tick(listOf(InputQueue.Event(1, InputQueue.Type.UP, x, y)))
-        assertEquals(0, w.kJT)
+        assertEquals(0, w.jT)
     }
 
-    @Test fun `fail screen flushes a held pad bit for one frame`() {
+    @Test fun `fail screen skips its first frame after K()`() {
         val w = world()
-        val (x, y) = w.cellPoint(0)
-        w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, x, y)))
-        assertTrue(w.kJT != 0)
-        // the fatal press stays latched when the screen flips to 12 —
-        // `j.i()` true → `j.t=0` and the frame's menu is skipped
+        w.jT = 16                                // K() at load (k.java:2674)
         w.stateL(12)
-        w.tick(emptyList())
-        assertEquals(0, w.kJT)
-        assertEquals(12, w.jC)
-        // next frames dispatch normally (NO row → menu)
+        // the skipped frame: `j.i()` true → `j.t=0`, no b(true)/L()/Q()
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
             InputQueue.Event(1, InputQueue.Type.UP, 200, 165)))
+        assertEquals(0, w.jT)
+        assertEquals(12, w.jC, "the tap on the skipped frame is not read")
+        // next frames dispatch normally (NO row → menu)
+        w.tick(listOf(
+            InputQueue.Event(2, InputQueue.Type.DOWN, 200, 165),
+            InputQueue.Event(3, InputQueue.Type.UP, 200, 165)))
         assertEquals(2, w.jC)
     }
 
     @Test fun `a manually latched bit flushes on the next frame`() {
         val w = world()
         w.stateL(12)
-        w.kJT = 1 shl 2                       // simulate a held pad bit
+        w.jT = 1 shl 2                        // any bit: `j.i()` = `t != 0`
         w.tick(emptyList())
         // `j.i()` true → `j.t=0`, frame skipped; next tap dispatches
-        assertEquals(0, w.kJT)
+        assertEquals(0, w.jT)
         assertEquals(12, w.jC)
         w.tick(listOf(
             InputQueue.Event(0, InputQueue.Type.DOWN, 200, 165),
@@ -10525,6 +10658,7 @@ class Slice89Test {
         // (al-20) is what postTail's aO reads, so walk `al` up until the
         // cell one row ABOVE the head is '5' — rising under the lip.
         p.al = cy * 20 + 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
@@ -10533,7 +10667,9 @@ class Slice89Test {
         }
         assertEquals(5, p.e(w, p.ak / 20, p.W[1] / 20 - 1),
             "could not place the head under a '5' lip")
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertEquals(280, p.S, "cw && aO==5 must fire the S280 ceiling grab")
         assertEquals(cy * 20 + 10, p.al, "al snaps onto the '5' lip row +10")
     }
@@ -10566,13 +10702,16 @@ class Slice89Test {
         p.ah = -3000                                 // rising
         p.ak = cx * 20 + 10
         p.al = cy * 20 + 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
             if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
             p.al--
         }
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertEquals(280, p.S, "precondition: the lip grab fires")
         guard = 0
         while (guard++ < 60 && p.S == 280) w.tick(emptyList())
@@ -10621,13 +10760,16 @@ class Slice89Test {
         p.ah = -3000
         p.ak = 2109
         p.al = 40 * 20 + 80                          // dip '5' cy40 + 80 (same offset the '5'-grab tests use)
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 60) {
             p.probeCells(w)
             if (p.e(w, p.ak / 20, p.W[1] / 20 - 1) == 5 && p.aO < 12) break
             p.al--
         }
-        w.tick(emptyList())
+        // the grab is e()'s consumer (cw && aO==5): drive e() on the set-up
+        // state — the real tick integrates first (G12) and shifts the probe
+        w.playerFsm.tick(p, w.pad); p.refreshBoxes()
         assertTrue(p.S == 280 || p.S == 38,
             "precondition: the dip lip grab fires — S${p.S}@${p.ak},${p.al}")
         guard = 0
@@ -10681,6 +10823,7 @@ class Slice89Test {
         // edge stays ≥21px left of the wall — place ak ~1.5 cells out.
         p.ak = (wx - 2) * 20 + 5                     // air left of the wall
         p.al = wy * 20 - 80                          // start above the lip
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 80 && p.S == 43) w.tick(emptyList())
         assertEquals(61, p.S, "the fall must auto-grab the wall lip")
@@ -10729,6 +10872,7 @@ class Slice89Test {
             p.S = 43; p.ah = 2560; p.av = false
             p.ak = (wx - 2) * 20 + 5
             p.al = wy * 20 - 80
+            p.refreshBoxes()                             // a finished frame's t() (G12)
             var g = 0
             while (g++ < 80 && p.S == 43) w.tick(emptyList())
             assertEquals(61, p.S, "the fall must auto-grab the wall lip")
@@ -10777,6 +10921,7 @@ class Slice89Test {
         // kisses the wall face (~1px out), not the 1.5-cell hang gap.
         p.ak = wx * 20 - 12
         p.al = wy * 20 - 80
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         var guard = 0
         while (guard++ < 80 && p.S == 43) w.tick(emptyList())
         assertEquals(60, p.S, "the near lip probe grabs the wall edge")
@@ -10817,9 +10962,10 @@ class Slice89Test {
     fun `down at a thin platform edge vault-drops into S257`() {
         val w = world()
         w.stateL(8)
-        // ledgeDrop257 needs: support cell aQ ∈ {20,5} (shifted probe =
-        // the cell under the feet), aR == 0 below it (thin platform),
-        // and open space two cells out one row below in the facing dir.
+        // the a(257,8) vault-drop (S0: l() → aw()'s DOWN arm) needs:
+        // support cell aQ ∈ {20,5} (shifted probe = the cell under the
+        // feet), aR == 0 below it (thin platform), and open space two
+        // cells out one row below in the facing dir.
         var px = -1; var py = -1
         outer@ for (y in 2 until w.level.rows - 2) {
             for (x in 2 until w.level.cols - 3) {
@@ -10836,6 +10982,7 @@ class Slice89Test {
         p.av = false                            // face right, toward the drop
         p.ak = px * 20 + 10
         p.al = py * 20 - 1                      // feet on the platform top
+        p.refreshBoxes()                             // a finished frame's t() (G12)
         w.pad.queuePress(Pad.M_DOWN)
         w.tick(emptyList())
         assertEquals(257, p.S, "DOWN at the thin edge arms the vault-drop")
@@ -11322,14 +11469,13 @@ class Slice95Test {
             w.player.applyHit(18, 0, null, w)
             w.player.gt = 0; w.iBh = 0
         }
-        var g2 = 0                                     // l(21) dialogs eat ticks
-        while (!w.failed && g2++ < 40) w.tick(emptyList())
+        tickUntilFailed(w)                             // dialogs + the S50 anim
         assertTrue(w.failed)
-        var g3 = 0                                     // j.t held-bits flush
-        while (w.kJT != 0 && g3++ < 10) w.tick(emptyList())
+        var g3 = 0                                     // j.t frame skip
+        while (w.jT != 0 && g3++ < 10) w.tick(emptyList())
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
-        assertFalse(w.kDe, "f() reload clears de (k.java:5131)")
+        assertTrue(w.kDe, "de survives a(z2) — only W() clears it (k.java:5131)")
     }
 
     @Test fun `resolvePadZone mounted arm - circles then pad box`() {
@@ -11564,6 +11710,8 @@ class Slice98Test {
         tickClean(w, 1)
         assertFalse(w.kAn, "bI>255-fk → an=false (k.java:3171)")
         assertTrue(w.fadeSolidFrame, "single solid-black frame armed")
+        tickClean(w, 1)
+        assertFalse(w.fadeSolidFrame, "for one tick (slice 381)")
     }
 
     @Test fun `fadeIn drains bI and recedes stripes`() {
@@ -11600,8 +11748,12 @@ class Slice98Test {
     @Test fun `vignette gated off play state`() {
         val w = world(); w.npcs.clear(); w.stateL(8)
         w.iBh = 8; w.stateL(12)
+        // l(12)'s b(true) (k.java:1657) runs before `j.c = 12` is
+        // committed, so its tail still sees j.c==8 and steps fs once
+        // (:3190-3196, slice 376)
+        assertEquals(70, w.kFs, "the transition's b(true) steps fs")
         tickClean(w, 1)
-        assertEquals(80, w.kFs, "j.c!=8 → fs frozen")
+        assertEquals(70, w.kFs, "j.c!=8 → fs frozen")
     }
 
     @Test fun `letterbox dz opens via av and chases aw`() {
@@ -12422,7 +12574,9 @@ class Slice114Test {
     }
 
     @Test fun `u8 auto-advances pages on the 48-frame countdown`() {
-        val w = armDialog(world(), 8, 0, 2, "p1", "p2", "p3")
+        // the world runs under a u8 dialog (slice 380): settle the m0
+        // intro claim first, or it opens its own dialog over this one
+        val w = armDialog(world().also { settleIntro(it) }, 8, 0, 2, "p1", "p2", "p3")
         repeat(49) { w.tick(emptyList()) }             // x6=48→…→x6=0 → D(v+1)
         assertEquals(1, w.dlgV, "x<=0 → x=48; D(v+1) (:964-968)")
         assertEquals(48, w.kDlgX)
@@ -13204,7 +13358,6 @@ class Slice128Test {
         override val npcs = mutableListOf<Entity>()
         override var claimPrio = 0
         override var claimed: Entity? = null
-        override var marker: Entity? = null
         override var aq = 0
         override val kAp = IntArray(6)
         override fun kCount(slot: Int) { kAp[slot]++ }
@@ -13245,8 +13398,6 @@ class Slice128Test {
         override fun removeEntity(e: Entity) {}
         override fun claim(e: Entity, prio: Int, w: IntArray) {}
         override fun clearClaim() {}
-        override fun setMarker(x: Int, y: Int, tag: Int) {}
-        override fun clearMarker(tag: Int) {}
         override fun sfx(id: Int) {}
         override fun spawnWisp(src: Entity) {}
         override fun spawnPickup(anim: Int, x: Int, y: Int): Entity = Entity(14, null)
@@ -13334,7 +13485,7 @@ class Slice128Test {
             p.applyHit(18, 0, null, w)
             p.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)
         assertTrue(w.failed)
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 200, 130),
                       InputQueue.Event(1, InputQueue.Type.UP, 200, 130)))
@@ -13348,12 +13499,15 @@ class Slice128Test {
 class Slice129Test {
 
     @Test fun `attackStep advances 1792 on flagged combo tick g5363`() {
-        // ay() S67: T==1 + V<=0 → ag=+1792 facing right (av=false)
+        // ay() S67: T==1 + V<=0 → ag=+1792 facing right (av=false).
+        // Real clip mid-anim: with r() true the combo end runs `l()`
+        // (g.javap.txt e() 10598, slice 369), whose aw() zeroes ag.
         val w = Slice128Test.MarkerWorld(cell = 20)
         val fsm = PlayerFsm(w)
-        val p = Entity(0, null)
-        p.S = 67; p.T = 1; p.av = false; p.aZ = true
-        p.W[0] = 0; p.W[2] = 40; p.W[3] = 100
+        val p = Entity(0, Clip.load(asset("clips/clip0/clip.acpk")))
+        p.setAnim(67); p.T = 1; p.U = 0; p.av = false; p.aZ = true
+        p.ak = 80; p.al = 100; p.refreshBoxes()
+        assertFalse(p.animFinished())
         fsm.tick(p, Pad())
         assertEquals(1792, p.ag, "ay() attack step on T==1 (g.java:5383)")
         assertTrue(p in w.clampCalls, "i.f(this) scroll-wall tail called")
@@ -13372,18 +13526,21 @@ class Slice129Test {
     }
 
     @Test fun `attackStep clamps at the lock target edge g5363`() {
-        // aN ahead on the right: W[0]=105 → the +2 approach check trips
+        // aN ahead on the right: the +2 approach check trips when
+        // ak + (ag>>8) + (W2-ak) + 2 = W2 + 9 reaches aN.W[0]. Real clip
+        // mid-anim (r() false) and a live aN — e()'s head drops a dead
+        // one (598-614), and r() would end the combo through l() (slice 369).
         val w = Slice128Test.MarkerWorld(cell = 20)
         val fsm = PlayerFsm(w)
-        val p = Entity(0, null)
-        p.S = 67; p.T = 1; p.av = false; p.aZ = true
-        p.ak = 80; p.W[0] = 60; p.W[2] = 100; p.W[3] = 100
-        val t = Entity(11, null)
-        t.W[0] = 105; t.W[2] = 140; t.ak = 120
+        val p = Entity(0, Clip.load(asset("clips/clip0/clip.acpk")))
+        p.setAnim(67); p.T = 1; p.U = 0; p.av = false; p.aZ = true
+        p.ak = 80; p.al = 100; p.refreshBoxes()
+        val t = Entity(11, null); t.aB = 50
+        t.W[0] = p.W[2] + 9; t.W[2] = t.W[0] + 35; t.ak = 120
         w.lockTarget = t
         fsm.tick(p, Pad())
         assertEquals(0, p.ag,
-            "ak+ag>>8+(W2-ak)+2 = 80+7+20+2 = 109 >= 105 → clamped")
+            "ak+ag>>8+(W2-ak)+2 = W2+9 >= aN.W[0] → clamped")
     }
 
     @Test fun `comboArm falls through when footing lost g2469`() {
@@ -13403,7 +13560,7 @@ class Slice129Test {
         // bound (1577,619)-(1927,799), mask=1 → left wall at x=1577.
         val w = world()
         val p = w.player
-        p.setPositionPx(1700, 700)
+        p.setPositionPx(1700, 700); p.refreshBoxes()
         w.tick(emptyList())                        // zone overlap → claim
         p.ag = -5120                               // -20px/tick toward wall
         p.Y[0] = 1590; p.Y[1] = 660; p.Y[2] = 1610; p.Y[3] = 700
@@ -13882,8 +14039,8 @@ class Slice135Test {
     /** MarkerWorld + tracking for the finisher payoff calls. */
     class FinWorld(cell: Int = 0) : Slice128Test.MarkerWorld(cell) {
         var statE = 0; var stat5 = 0; var streak = 0; var wisps = 0
-        override fun kStatE(gate: Int) { statE++ }
-        override fun kStat(n: Int) { if (n == 5) stat5++ }
+        override fun countKill(uid: Int) { statE++ }
+        override fun kCount(slot: Int) { if (slot == 5) stat5++ }
         override fun kCollectStreak() { streak++ }
         override fun spawnWisp(src: Entity) { wisps++ }
     }
@@ -13899,7 +14056,9 @@ class Slice135Test {
         val w = FinWorld()
         val fsm = PlayerFsm(w)
         val p = playerAt(200, 100)
-        val v = Entity(11, null); v.S = 144; v.al = 105   // weakened soldier
+        // weakened but alive: e()'s head drops a dead i.aN (g.javap.txt
+        // e() 598-614, `aN.P()`), so the drag needs aB > 0 (slice 369)
+        val v = Entity(11, null); v.S = 144; v.al = 105; v.aB = 40
         w.lockTarget = v
         fsm.tick(p, Pad())
         // converted clip7's S183 is single-frame → r() fires the same
@@ -13935,7 +14094,7 @@ class Slice135Test {
         val fsm = PlayerFsm(w)
         val p = playerAt(200, 100, av = true)
         p.S = 184
-        val v = Entity(11, null); v.S = 144; v.al = 105
+        val v = Entity(11, null); v.S = 144; v.al = 105; v.aB = 40   // alive (598-614)
         w.lockTarget = v
         fsm.tick(p, Pad())
         assertEquals(107, v.S, "i.aN.i(107)")
@@ -15020,7 +15179,7 @@ class Slice141Test {
 
 class Slice142Test {
     class S142World(cell: Int = 0) : Slice139Test.ClaimZoneWorld(cell) {
-        override var kAQ: Entity? = null
+        override var volPaintRect: IntArray? = null      // k.aQ (Image)
         override fun findByAw(aw: Int): Entity? =
             if (aw == -1) null
             else if (player.aw == aw) player
@@ -15038,23 +15197,33 @@ class Slice142Test {
         return p
     }
 
+    // S47 nulls `k.aQ` — the ONE `static Image aQ` (k.javap.txt:2850,
+    // aV() @538 `putstatic k.aQ:Image`), i.e. the eagle-view inset the
+    // port keeps as `volPaintRect` (slice 371 — this asserted a write-only
+    // `kAQ: Entity?` duplicate that had no reader).
     @Test fun `S47 clears the claim slot every tick L219`() {
-        val w = S142World(); w.kAQ = w.player
+        val w = S142World(); w.volPaintRect = intArrayOf(1, 2, 3, 4)
         NpcFsm(w).tickTrigger(trig(47), w, w.player, Pad())
-        assertNull(w.kAQ)
+        assertNull(w.volPaintRect)
+    }
+
+    // S48/S49 test the LINKED target's own Y: `i.a(r8.Y, W)` with
+    // r8 = k.q(o) (aV() offsets 358-381 / 444-467, `aload_1`) — slice 364.
+    private fun targetIn(t: Entity) {
+        t.Y[0] = 190; t.Y[1] = 110; t.Y[2] = 210; t.Y[3] = 130
     }
 
     @Test fun `S48 copies pv onto the linked entity aG L166`() {
-        val w = S142World(); overlapped(w)
-        val boss = Entity(29, null); boss.aw = 7
+        val w = S142World()
+        val boss = Entity(29, null); boss.aw = 7; targetIn(boss)
         w.npcs += boss
         NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
         assertEquals(12, boss.aG)
         assertEquals(1, w.removed.size)
     }
 
-    @Test fun `S48 requires player-Y overlap`() {
-        val w = S142World()
+    @Test fun `S48 requires the target's Y overlap, not the player's`() {
+        val w = S142World(); overlapped(w)
         val boss = Entity(29, null); boss.aw = 7
         w.npcs += boss
         NpcFsm(w).tickTrigger(trig(48, pv = 12), w, w.player, Pad())
@@ -15062,8 +15231,8 @@ class Slice142Test {
     }
 
     @Test fun `S49 advances the linked entity to S20 L1bc`() {
-        val w = S142World(); overlapped(w)
-        val t = Entity(21, null); t.aw = 7
+        val w = S142World()
+        val t = Entity(21, null); t.aw = 7; targetIn(t)
         w.npcs += t
         NpcFsm(w).tickTrigger(trig(49), w, w.player, Pad())
         assertEquals(20, t.S)
@@ -15890,15 +16059,19 @@ class Slice151Test {
         assertEquals(-1, Entity.M)
     }
 
-    @Test fun `gcm latch stays when mount request absent`() {
-        // J&4 == 0 → mountEntry returns before the consumer — latch held
+    @Test fun `gcm latch drains when mount request absent`() {
+        // Slice 365 (g.javap.txt e() 13741-13755 → 14204 → 14322, proven):
+        // J&4 == 0 skips only the scan (`goto 14204`); r98 stays 0, so the
+        // L37f2 arm still drains `g.cm` and refreshes the indicator. The
+        // slice-151 reading (return before the consumer, latch held) was
+        // a misread of the jump target.
         val w = S151World(cell = 12)
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
         p.S = 0; p.gJ = 0
         p.gcm = true
         fsm.mountEntry(p, Pad())
-        assertTrue(p.gcm)
+        assertFalse(p.gcm, "J&4==0 → goto 14204 → cm drained at 14322")
     }
 }
 
@@ -16172,6 +16345,7 @@ class Slice160Test {
         pad.W.copyInto(ad.W)
         val r0 = Entity(30, null); r0.ad = ad
         w.npcs += r0
+        w.paint(r0, pad)
         w.npcFsm.tickDecor(pad, w.player)
         assertEquals(20, pad.S)                          // S+1 armed
         assertEquals(2, ad.S)                            // ad.i(2)
@@ -16220,47 +16394,68 @@ class Slice161Test {
 }
 
 class Slice162Test {
+    /** An ax37 record on the entity path (slice 355): zone (4900,4900)-
+     *  (5100,5100), bound (0,0)-(0,0), mask 15, link mode `cond` on
+     *  `uid`, containment mode. */
+    private fun tr(w: Level0World, cond: Int, uid: Int): Entity {
+        val f = listOf(37, 9000 + cond, 5000, 5000, 0, 0, 0,
+            -100, -100, 200, 200, -5000, -5000, 0, 0, 15, cond, uid, 0)
+        val e = Entity(37, null).apply { aw = f[1]; setPositionPx(5000, 5000); P = f[6] }
+        w.npcFsm.initAx37(e, f)
+        w.npcs += e
+        return e
+    }
 
-    private fun tr(cond: Int, uid: Int) = Level0World.ScrollTrigger(
-        intArrayOf(4900, 4900, 5100, 5100), intArrayOf(0, 0, 0, 0),
-        mask = 15, mode = 0, linkCond = cond, linkUid = uid)
+    private fun playerAt(w: Level0World, x: Int, y: Int) {
+        w.player.setPositionPx(x, y); w.player.refreshBoxes()
+    }
 
     @Test fun `ax37 linkCond3 removes trigger when link dead`() {
         val w = world()
-        val base = w.scrollTriggers.size
-        w.scrollTriggers += tr(3, 4242)
+        val t = tr(w, 3, 4242)
         w.npcs += Entity(11, null).apply { aw = 4242; aB = 0 }   // dead link
-        w.fireScrollTriggers()
-        assertEquals(base, w.scrollTriggers.size)              // k.n() + k.c(this)
+        playerAt(w, 5000, 5050)                                  // inside the zone
+        w.scrollTriggerAl(t)
+        assertTrue(t in w.pendingRemove, "k.n() + k.c(this)")
+    }
+
+    @Test fun `ax37 linkCond3 tests the zone before the link`() {
+        // al() returns at the zone miss (i.java:5749-5763) before it
+        // reaches the Z[2] gate: a player outside never triggers removal.
+        val w = world()
+        val t = tr(w, 3, 4243)
+        w.npcs += Entity(11, null).apply { aw = 4243; aB = 0 }
+        playerAt(w, 300, 300)
+        w.scrollTriggerAl(t)
+        assertFalse(t in w.pendingRemove)
     }
 
     @Test fun `ax37 linkCond3 keeps trigger while link alive`() {
         val w = world()
-        val base = w.scrollTriggers.size
-        w.scrollTriggers += tr(3, 4244)
+        val t = tr(w, 3, 4244)
         w.npcs += Entity(11, null).apply { aw = 4244; aB = 1 }
-        w.fireScrollTriggers()
-        assertEquals(base + 1, w.scrollTriggers.size)
+        playerAt(w, 5000, 5050)
+        w.scrollTriggerAl(t)
+        assertFalse(t in w.pendingRemove)
+        assertSame(t, w.kAh, "containment claims k.ah")
     }
 
     @Test fun `ax37 linkCond1 flagged link skips claim`() {
         val w = world()
-        w.player.setPositionPx(5000, 5000)
-        w.player.refreshBoxes()
-        w.scrollTriggers += tr(1, 4245)
+        val t = tr(w, 1, 4245)
         w.npcs += Entity(80, null).apply { aw = 4245; P = P or 32 }
-        w.fireScrollTriggers()
+        playerAt(w, 5000, 5050)
+        w.scrollTriggerAl(t)
         assertNull(w.kAh)                              // gate skipped claim
     }
 
     @Test fun `ax37 linkCond1 unflagged link allows claim`() {
         val w = world()
-        w.player.setPositionPx(5000, 5000)
-        w.player.refreshBoxes()
-        w.scrollTriggers += tr(1, 4246)
+        val t = tr(w, 1, 4246)
         w.npcs += Entity(80, null).apply { aw = 4246 }
-        w.fireScrollTriggers()
-        assertNotNull(w.kAh)
+        playerAt(w, 5000, 5050)
+        w.scrollTriggerAl(t)
+        assertSame(t, w.kAh)
     }
 }
 
@@ -16270,7 +16465,9 @@ class Slice163Test {
         val w = world()
         settleIntro(w)                 // I() L108 gate: tests run post-intro
         val d = w.npcs.first { it.ax == 4 }
-        d.S = 29; d.refreshBoxes()
+        // clip3 S29 carries a real blast box only on T2-T5 (T0/T1/T6/T7
+        // are anchor points, which `i.a` rejects — slice 364): sweep on T3.
+        d.S = 29; d.T = 3; d.refreshBoxes()
         // ax11 melee inside X, aB>0 -> -bu[au]<<1 (kAu=0 -> 600)
         val s = Entity(11, null).apply {
             aB = 100; ak = (d.X[0] + d.X[2]) / 2; al = (d.X[1] + d.X[3]) / 2
@@ -16292,25 +16489,28 @@ class Slice163Test {
             W[0] = s.W[0]; W[1] = s.W[1]; W[2] = s.W[2]; W[3] = s.W[3]
         }
         w.npcs += s; w.npcs += sib; w.npcs += g15; w.npcs += boss
-        // player OUT of X so applyHit doesn't fire; advanceAnim wraps
-        // T5->6 at U0 so the arm reads T==6&&U==0 -> sfx12. advanceAnim is
-        // explicit — the I() preamble owns s() now (i.java:15232).
+        // player OUT of X so applyHit doesn't fire
         w.player.setPositionPx(d.X[2] + 500, d.X[3] + 500)
         w.player.refreshBoxes()
-        d.T = 5; d.U = 999
-        d.advanceAnim()
+        w.paint(d, s, sib, g15, boss)
         w.npcFsm.tickDestructible(d, w.player)
         assertTrue(s.aB <= 100 - 600, "ax11 aB drained by bu[au]<<1, got ${'$'}${'{'}s.aB}")
         assertEquals(29, sib.S)
         assertEquals(7, g15.S); assertEquals(1, g15.Z[3])
         assertEquals(150, boss.aB); assertEquals(20, boss.S)
+        // advanceAnim wraps T5->6 at U0 so the arm reads T==6&&U==0 ->
+        // sfx12. advanceAnim is explicit — the I() preamble owns s() now
+        // (i.java:15232).
+        d.T = 5; d.U = 999
+        d.advanceAnim()
+        w.npcFsm.tickDestructible(d, w.player)
         assertTrue(12 in w.sfxLog)
     }
 
     @Test fun `ax4 S29 player overlap routes op4 hit`() {
         val w = world()
         val d = w.npcs.first { it.ax == 4 }
-        d.S = 29; d.refreshBoxes()
+        d.S = 29; d.T = 3; d.refreshBoxes()          // T3: real blast box
         w.player.setPositionPx((d.X[0] + d.X[2]) / 2, (d.X[1] + d.X[3]) / 2)
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
@@ -16321,9 +16521,11 @@ class Slice163Test {
         val w = world()
         val d = w.npcs.first { it.ax == 4 }
         d.S = 30; d.refreshBoxes()
-        // player.X (attack box) reaching W -> i(29)
+        // player.X (attack box) reaching W -> i(29). The S67 swing has a
+        // real attack box only on T1 (T0/T2-T4 are anchor points, which
+        // `i.a` rejects — slice 364).
         w.player.setPositionPx(d.W[0] + 1, d.W[3] - 1)
-        w.player.setAnim(67)
+        w.player.setAnim(67); w.player.T = 1
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
         assertEquals(29, d.S)
@@ -16452,6 +16654,10 @@ class Slice165Test {
         val c = claimWaiting(); w.kC = c
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 370, 210),
                       InputQueue.Event(1, InputQueue.Type.UP, 370, 210)))
+        // b(false)'s SKIP pill arms E(131072) on the release frame; the
+        // :944 gate reads it at the next one (slice 368).
+        assertEquals(21, w.jC, "release frame: E(131072) armed")
+        w.tick(emptyList())
         assertEquals(8, w.jC, "v(131072) + C.cd[2] → C.Z(); l(8) (:1003-1010)")
         assertTrue(c.cd[1], "C.cd[1]=true on the consume arm")
         assertFalse(c.cd[0], "C.Z() resumes the halted claimer")
@@ -16471,7 +16677,7 @@ class Slice165Test {
         w.kC = claimWaiting()
         w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, 340, 210),
                       InputQueue.Event(1, InputQueue.Type.UP, 340, 210)))
-        assertEquals(21, w.jC, "x=340 sits outside (349..405,198..245)")
+        assertEquals(21, w.jC, "x=340 sits outside the SKIP pill (cf=36 → 349..405,198..245)")
     }
 
     @Test fun `pause icon on jC21 routes to the pause menu`() {
@@ -16718,10 +16924,15 @@ class Slice168Test {
         val (w, p) = armed()
         holdRight(w)
         var sawArmedRun = false; var sawArmedStop = false
+        var prevAk = p.ak
         for (i in 0 until 400) {
             w.tick(listOf())
-            if (p.S == 12 && p.ag != 0 && p.aO == 0 && p.z) sawArmedRun = true
-            if (p.S == 12 && (p.ag == 0 || p.aO != 0) && p.z) sawArmedStop = true
+            // a blocked tick: the run did not advance (the frame now ends
+            // after e() re-arms ag — G12 — so ag==0 is not observable)
+            val blocked = p.ak == prevAk || p.aO != 0
+            if (p.S == 12 && !blocked && p.z) sawArmedRun = true
+            if (p.S == 12 && blocked && p.z) sawArmedStop = true
+            prevAk = p.ak
         }
         assertTrue(sawArmedRun, "active-run ticks arm z via L17c9→l()")
         assertTrue(sawArmedStop, "stopped/blocked ticks re-arm z via L17c9")
@@ -16761,9 +16972,13 @@ class Slice168Test {
         val (w, p) = armed()
         holdRight(w)
         var pinned = false
+        var prevAk = p.ak
         for (i in 0 until 300) {
             w.tick(listOf())
-            if (p.S == 12 && p.ag == 0 && p.ak >= 500) { pinned = true; break }
+            // pinned: running but not advancing (G12: the frame ends after
+            // e() re-arms ag, so read the stalled position, not ag==0)
+            if (p.S == 12 && p.ak == prevAk && p.ak >= 500) { pinned = true; break }
+            prevAk = p.ak
         }
         assertTrue(pinned, "runner should pin at the aw10 crate (~ak504)")
         for (k in 0 until 12) {
@@ -16891,6 +17106,7 @@ class Slice172Test {
         p.ak = 12300; p.al = 500
         p.N = p.ak shl 8; p.O = p.al shl 8
         p.ag = 0; p.ah = 0
+        p.refreshBoxes()                      // entities tick first (G12)
         w.tick(listOf())
         assertEquals(15, w.jC)                // screenL(15) fired
         assertFalse(w.npcs.contains(zone))    // zone consumed itself
@@ -17328,6 +17544,10 @@ class Slice178Test {
         val w = world(aj = 1)
         tickPlay(w, 2)
         w.npcs.clear()                                  // nothing to consume
+        // …and no running claim: the intro claim's u9 dialog is switched
+        // (auto-dismissed) on the frame that opens it (slice 380), so the
+        // claim runs again and would suspend the player (I() L108)
+        w.kC = null
         // slice 180: flightTick's z3 tail holds ah at kY — integrate drifts
         // al by kY>>8 = -7/tick. Seat the latch + pin ah=kY so the drift is
         // exact (O's sub-256 residue would otherwise alternate -3/-4).
@@ -17556,7 +17776,10 @@ class Slice180Test {
         val p = w.player; p.setAnim(0); p.ah = 0
         w.stateL(8)
         w.playerFsm.tick(p, Pad())
-        assertNotEquals(2, p.aA, "aA stays grounded-default (no ax25 init)")
+        // aA==2 is the grounded default since the e() head's `k.aA<=0 →
+        // aA=2` (slice 360); the ax25 init's other marks stay absent.
+        assertNotEquals(202, p.az, "no ax25 init (az=202)")
+        assertTrue(p.clip !== w.clips[16], "grounded clip, not the glider suit")
     }
 }
 
@@ -17716,7 +17939,7 @@ class Slice183Test {
         e.U = (e.clip?.frameDuration(176, e.T) ?: 1) - 1
         w.npcFsm.tick(e, w.player)
         assertEquals(139, e.S, "S176 r() → i(139) corpse")
-        assertEquals(1, w.statTally0, "k.e(0,aw) → statTally0++")
+        assertEquals(1, w.kAp[0], "k.e(0,aw) → ap[0]++ (k.java:3264)")
     }
 
     @Test fun `S177 and S140 unwind back to idle S23`() {
@@ -17851,15 +18074,15 @@ class Slice184Test {
     @Test fun `S12 player roll into the bind claims the lock`() {
         val w = world(); w.npcs.clear()
         val e = guard(w, 300, 150); e.Z[0] = 2
-        e.setAnim(12); e.refreshBoxes()
+        // The tick's own t() rebuilds X from clip7 S12: T0/T6 carry an
+        // anchor-point X (rejected by `i.a`, slice 364), T1-T5 the real
+        // strike box — start on T2 so the I() preamble's s() stays inside.
+        e.setAnim(12); e.T = 2; e.refreshBoxes()
         val p = w.player
         // park the player inside e's X attack box, facing it, rolling
         p.setAnim(6)
         p.setPositionPx(e.ak, e.al); p.refreshBoxes()
         p.av = e.ak < p.ak                            // player faces e
-        // place e's X box so overlapI(player.W, e.X) holds
-        e.X[0] = p.W[0]; e.X[2] = p.W[2]
-        e.X[1] = p.W[1]; e.X[3] = p.W[3]
         w.npcFsm.tick(e, p)
         assertEquals(18, e.S, "counter-bind → i(18) finisher-offer")
         assertSame(e, w.lockTarget, "aN = this")
@@ -17872,16 +18095,27 @@ class Slice184Test {
         val w = world(); w.npcs.clear()
         val e = guard(w, 300, 150); e.Z[0] = 0
         e.aB = BU73_HALF - 10                          // aB <= bu/2 → L495
-        e.setAnim(12); e.refreshBoxes()
+        // The strike box exists on T1-T5 only (slice 364): on T4 the bind
+        // lands and the L495 tail runs without an anim-end r().
+        e.setAnim(12); e.T = 4; e.refreshBoxes()
         val p = w.player
         p.setAnim(6); p.setPositionPx(e.ak, e.al); p.refreshBoxes()
         p.av = e.ak < p.ak
-        e.X[0] = p.W[0]; e.X[2] = p.W[2]
-        e.X[1] = p.W[1]; e.X[3] = p.W[3]
-        finish(e)
         w.npcFsm.tick(e, p)
         assertEquals(18, e.S, "bind still lands i(18)")
         assertTrue(w.lockTarget !== e, "Z0==0 skips aN claim")
+        // On the last frame (T6) the strike box is an anchor point: no
+        // bind, and the anim-end r() routes to i(23) (L495).
+        val w2 = world(); w2.npcs.clear()
+        val e2 = guard(w2, 300, 150); e2.Z[0] = 0
+        e2.aB = BU73_HALF - 10
+        e2.setAnim(12); e2.refreshBoxes()
+        val p2 = w2.player
+        p2.setAnim(6); p2.setPositionPx(e2.ak, e2.al); p2.refreshBoxes()
+        p2.av = e2.ak < p2.ak
+        finish(e2)
+        w2.npcFsm.tick(e2, p2)
+        assertEquals(23, e2.S, "T6 point X: no bind, r() → i(23)")
     }
 
     // -- S11 windup-2 (L475, i.java:5578-5585) ----------------------------
@@ -18493,7 +18727,9 @@ class Slice189Test {
     @Test fun `ride bound tap into facing side keeps bind`() {
         val w = world(); val p = w.player
         val crate = Entity(51, null); crate.S = 8
-        p.clip = null; p.bindAc(crate); p.S = 228
+        // real clip mid-anim: S228's `r()` exit is `a(0)` (12746-12748,
+        // slice 369), which drops `ac` whatever the tap did
+        p.bindAc(crate); p.setAnim(228); p.T = 0; p.U = 0
         p.ak = 400; p.av = true                     // facing left
         crate.ak = 300                              // crate on the facing side
         val pad = Pad(); pad.commit(Pad.M_TAP_L)
@@ -18540,26 +18776,37 @@ class Slice189Test {
         assertEquals((160 shl 8) / 5, p.ag, "r96=5 for the ax51 close-in")
     }
 
-    /** S235 unbound (`ac==null`) → the `ag=+4864, ah=-6656` dive, then the
-     *  `r()` chain lands idle (structured g.java:3368-3388). */
+    /** S235 unbound (`ac==null`) → the `ag=+4864, ah=-6656` dive at T==1
+     *  (structured g.java:3368-3388); both unbound exits are `a(0)` =
+     *  `g.a(int)`, the S43 fall (g.javap.txt e() 5503-5505/5515-5517 —
+     *  `invokevirtual #213`, slice 369; the port had `i(0)`). Real clip
+     *  so the dive tick is mid-anim. */
     @Test fun `push entry unbound dives`() {
         val w = world(); val p = w.player
-        p.clip = null; p.S = 235; p.T = 1; p.av = false
+        p.setAnim(235); p.T = 1; p.U = 0; p.av = false
+        assertFalse(p.animFinished())
         w.playerFsm.tick(p, Pad())
         assertEquals(4864, p.ag, "unbound dive impulse")
         assertEquals(-6656, p.ah)
-        assertEquals(0, p.S, "unbound r() → a(0)")
+        assertEquals(235, p.S, "the dive keeps S235 until r()")
+        p.T = p.clip!!.frameCount(235) - 1
+        p.U = p.clip!!.frameDuration(235, p.T) - 1
+        w.playerFsm.tick(p, Pad())
+        assertEquals(43, p.S, "unbound r() → a(0) = g.a(int) → S43")
     }
 
     /** S236 push-hold: bound crate `S==8` and `al <= ac.al` (bottom at/
-     *  above crate) → `a=null; a(0)` (structured g.java:3391-3397). */
+     *  above crate) → `a=null; a(0)` (structured g.java:3391-3397) —
+     *  `a(0)` is `g.a(int)` (g.javap.txt e() 5774-5776), the S43 fall
+     *  that also drops `ac` (slice 369; the port had `i(0)`). */
     @Test fun `push hold releases above crate`() {
         val w = world(); val p = w.player
         val crate = Entity(51, null); crate.S = 8; crate.al = 500
         p.clip = null; p.bindAc(crate); p.S = 236; p.al = 400
         w.playerFsm.tick(p, Pad())
-        assertEquals(0, p.S, "al <= ac.al → release")
+        assertEquals(43, p.S, "al <= ac.al → release through a(0)")
         assertNull(p.ga)
+        assertNull(p.ac, "g.a(int) clears ac")
     }
 
     /** Gate lost (crate no longer S8) → `aj=512` only. */
@@ -18962,7 +19209,10 @@ class Slice193Test {
         val p = mk(200, 100); p.S = 61; p.aC = 1   // last grace tick
         fsm.tick(p, Pad())
         assertEquals(43, p.S, "aC→0 → H+G+a(0) drop → freefall — L2460")
-        assertEquals(130, p.al, "al += W3-W1 (+20) then a(0) al+=10")
+        // the arm's own `al += W3-W1` (+20), then a(0) = a(43,32) → i(43)
+        // while still S61 adds W3-W1 again (i.java:264-266, slice 361),
+        // then a(0)'s al += 10
+        assertEquals(150, p.al, "al += W3-W1 twice, then a(0) al+=10")
     }
 
     @Test fun `S61 edge loss with no link drops immediately`() {
@@ -19380,19 +19630,26 @@ class Slice196Test {
         assertEquals(50, p.S, "floor land → i(50)")
     }
 
-    @Test fun `S217 on aZ support flings with bd and clears P64`() {
+    @Test fun `S217 on aZ support rescans with a(true) and clears P64`() {
         val w = Slice128Test.MarkerWorld(cell = 5)
         val fsm = PlayerFsm(w)
-        // real player clip so r() is false for the fresh S43 (clipless
-        // entities would fall through to the `r() → i(0)` below).
+        // real player clip so r() is false mid-anim (clipless entities
+        // would fall through to the `r() → i(0)` below).
         val p = Entity(0, Clip.load(asset("clips/clip0/clip.acpk")))
         p.ak = 200; p.al = 100
         p.W[0] = 190; p.W[2] = 210; p.W[1] = 80; p.W[3] = 100
         p.S = 217; p.T = 1; p.P = 64
         fsm.tick(p, Pad())
-        assertTrue(p.bd, "aZ → bd=1")
-        assertEquals(43, p.S, "a(1) fling")
+        // g.javap.txt e() 12329-12334: `bd = 1; a(true)` — #282 is
+        // i.a(Z)V, the side rescan (its x() rewrites bd), not g.a(int):
+        // the dive stays in S217 (slice 369).
+        assertEquals(217, p.S, "a(true) keeps S217 — no S43 fling")
+        assertEquals(100, p.al, "no g.a(int) al += 10")
+        // i.javap.txt x() 29-42: `bd = (ah != 0)` — the `bd = 1` set just
+        // before a(true) is overwritten by its x() (ah == 0 here)
+        assertFalse(p.bd, "a(true)'s x() rewrites bd = ah != 0")
         assertTrue(p.P and 64 == 0, "P&=~64")
+        assertEquals(0, p.ah); assertEquals(0, p.aj)
     }
 
     @Test fun `S258 up edge jumps to S259`() {
@@ -19643,6 +19900,10 @@ class Slice196Test {
         val t = Entity(10, null); t.S = 0
         p.af = t
         val gg = Entity(11, null); gg.ak = p.ak + 10
+        // a live, level target: az() runs in e()'s head (g.javap.txt e()
+        // 617, slice 365) before this arm and drops a g with aB <= 0 or
+        // |Δal| >= 60.
+        gg.aB = 1; gg.al = p.al
         p.g = gg
         val pad = Pad(); pad.bB = 65568
         fsm.tick(p, pad)
@@ -20261,30 +20522,31 @@ class Slice205Test {
         return p
     }
 
-    // -- j.d(int) piecewise table sqrt (j.java:1097, proven; U table
-    //    verified 255/256 against resources/archive/16 offset 154) ------
+    // -- j.d(int) piecewise table sqrt (structured/j.java:418-429,
+    //    proven; U = archive /16 entry 1 verbatim, U[0] = 0 — slice 352
+    //    dropped the old `U[0]=256` misread, see Slice352Test) ---------
 
-    @Test fun `table sqrt small inputs incl the U0 quirk`() {
-        assertEquals(0, Entity.isqrt(-1))
-        assertEquals(16, Entity.isqrt(0), "U[0]=256 quirk → d(0)=16, not 0")
-        assertEquals(1, Entity.isqrt(1))
-        assertEquals(1, Entity.isqrt(3))
-        assertEquals(15, Entity.isqrt(255))
+    @Test fun `table sqrt small inputs`() {
+        assertEquals(0, Trig.sqrt(-1))
+        assertEquals(0, Trig.sqrt(0), "U[0] = 0 → d(0) = 0")
+        assertEquals(1, Trig.sqrt(1))
+        assertEquals(1, Trig.sqrt(3))
+        assertEquals(15, Trig.sqrt(255))
     }
 
     @Test fun `table sqrt mid band boundaries`() {
-        assertEquals(16, Entity.isqrt(256))
-        assertEquals(63, Entity.isqrt(4095))
-        assertEquals(255, Entity.isqrt(65535))
-        assertEquals(256, Entity.isqrt(65536))
-        assertEquals(512, Entity.isqrt(262144))
+        assertEquals(16, Trig.sqrt(256))
+        assertEquals(63, Trig.sqrt(4095))
+        assertEquals(255, Trig.sqrt(65535))
+        assertEquals(256, Trig.sqrt(65536))
+        assertEquals(512, Trig.sqrt(262144))
     }
 
     @Test fun `table sqrt quantizes large inputs`() {
-        assertEquals(1020, Entity.isqrt(1048575),
+        assertEquals(1020, Trig.sqrt(1048575),
             "U[255]<<2 = 1020 — table value, not true floor-sqrt 1023")
-        assertEquals(32768, Entity.isqrt(0x40000000))
-        assertEquals(46080, Entity.isqrt(Int.MAX_VALUE),
+        assertEquals(32768, Trig.sqrt(0x40000000))
+        assertEquals(46080, Trig.sqrt(Int.MAX_VALUE),
             "U[127]<<8 — top of the piecewise window")
     }
 
@@ -20464,6 +20726,7 @@ class Slice210Test {
         // close enough that the arc reaches the x2200 face airborne.
         p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -200; p.aj = 1536
         p.av = false                               // facing east
+        p.refreshBoxes()                           // a finished frame's t() (G12)
         // hold RIGHT — pad zone 2 emits `2<<2 = 8` = M_TAP_R
         val q = InputQueue()
         val (rx, ry) = w.cellPoint(2)
@@ -20523,6 +20786,7 @@ class Slice212Test {
         p.setPositionPx(1790, 700)             // mid-shaft, face x1820 spans y420-800
         p.S = 35; p.ag = 1536; p.ai = 0; p.ah = -300; p.aj = 1536
         p.av = false                            // facing east toward x1820
+        p.refreshBoxes()                        // a finished frame's t() (G12)
         val q = InputQueue()
         val (rx, ry) = w.cellPoint(2)
         q.post(InputQueue.Type.DOWN, rx, ry)   // hold east the whole time
@@ -20595,7 +20859,7 @@ class Slice213Test {
         val p = w.player
         // a free-anim standing state inside the zone's clip rect
         p.setPositionPx(e.ak, e.al)
-        p.S = 0; p.ah = 0; p.ag = 0
+        p.S = 0; p.ah = 0; p.ag = 0; p.refreshBoxes()   // a finished frame's t()
         var captured = false
         repeat(40) {
             w.tick(emptyList())
@@ -20615,6 +20879,7 @@ class Slice213Test {
         keepLive(e)
         val p = w.player
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        p.refreshBoxes()                               // a finished frame's t()
         var t2 = 0
         while (p.S != 65 && t2++ < 40) w.tick(emptyList())
         assertEquals(65, p.S)
@@ -20661,11 +20926,13 @@ class Slice214Test {
         // trigger rect sits off-anchor, so re-pin the player inside it
         // each tick while the world settles.
         var swallowed = false
-        repeat(20) {
+        for (i in 0 until 20) {
             p.setPositionPx((e.W[0] + e.W[2]) / 2, (e.W[1] + e.W[3]) / 2)
-            p.S = 0; p.ah = 0; p.ag = 0
+            p.S = 0; p.ah = 0; p.ag = 0; p.refreshBoxes()   // the plant ticks first (G12)
             w.tick(emptyList())
-            if (e.S == 1) { swallowed = true; return@repeat }
+            // stop re-pinning once swallowed (`return@repeat` only skipped
+            // to the next pass, which re-forced S0 under the capture)
+            if (e.S == 1) { swallowed = true; break }
         }
         assertTrue(swallowed, "overlap -> i(1) swallow; e.S=${e.S}")
         assertTrue(p.P and 64 != 0, "player slot-held P|64 while swallowed")
@@ -20673,9 +20940,9 @@ class Slice214Test {
         // preamble's s() now advances e.T for claimed procs.
         var released = false
         var thrownAg = 0
-        repeat(200) {
+        for (i in 0 until 200) {
             w.tick(emptyList())
-            if (e.S == 0) { released = true; thrownAg = p.ag; return@repeat }
+            if (e.S == 0) { released = true; thrownAg = p.ag; break }
         }
         assertTrue(released, "animFinished -> i(0) release + throw; e.S=${e.S} T=${e.T}")
         assertTrue(released, "S1 arm completed the swallow cycle")
@@ -20691,6 +20958,7 @@ class Slice214Test {
             ?: error("no ax22 record at (1214,636)")
         keepLive(e)
         p.setPositionPx(e.ak, e.al); p.S = 0; p.ah = 0; p.ag = 0
+        p.refreshBoxes()           // no stale spawn boxes for the intro claim (G12)
         w.tick(emptyList())
         // aOp's >=100 sentinel: skip s() this tick, then m() (not claim-
         // suspended) resets y to 0 so the next tick advances again.
@@ -20750,9 +21018,11 @@ class Slice214Test {
 }
 
 class Slice215Test {
-    /** slice 215 — the ax7 mouth-throw landing wedge is verbatim original
-     *  behavior, not a port divergence. The full release chain was traced
-     *  against the source:
+    /** slice 215 — the ax7 mouth-throw release chain. ERRATUM (G12): the
+     *  "verbatim wedge" verdict below was traced under the port's old
+     *  player-first frame order; with `k.I()`'s order (entities, then
+     *  `aS.I()`) the release reads the swing one step on and the throw
+     *  clears the corner — no soft-lock. The chain as first traced:
      *  - record P=0 -> `e.av=false` -> release `aS.ag = 2048` east
      *    (i.java:15695-15710);
      *  - the S1 capture arm re-snaps `p.ak/al` to the mouth's CURRENT
@@ -20771,7 +21041,7 @@ class Slice215Test {
      *    original ALSO wedges input-immune here. The mouth-plant is a
      *    trap at this corner — an original-game softlock, kept verbatim.
      *  Same outcome reproduced for uid=30 at (4801,674). */
-    @Test fun `ax7 mouth throw wedges into the wall verbatim`() {
+    @Test fun `ax7 mouth throw clears the wall corner`() {
         val w = world()
         settleIntro(w)
         val e = w.npcs.first { it.ax == 7 && it.aw == 12 }
@@ -20802,14 +21072,16 @@ class Slice215Test {
         assertTrue(sawMouthEast, "swing carries the mouth past x1480")
         assertTrue(released, "r() releases at the last S1 frame")
         val (rx, ry) = releasePos!!
-        // release point verbatim: mask-32 stale-u compensation lands the
-        // anchor ~(1468,501), deep inside the wall's top-east corner
-        assertTrue(rx in 1460..1480, "release x inside wall corner: $rx")
+        // G12 (k.I() ticks the mouth before aS.I()): the release reads the
+        // swing one step on — ~(1488,501), past the wall's top-east corner
+        // — and the throw lands the player on the floor beyond it. The
+        // slice-215 "verbatim wedge" (deep embed → forced S79) only
+        // happened under the port's old player-first order.
+        assertTrue(rx in 1480..1500, "release x past the wall corner: $rx")
         assertTrue(ry in 495..505, "release y below wall top: $ry")
-        // deep embed -> forced S79, input-immune, collideSides dead
-        assertEquals(79, p.S)
-        assertEquals(20, p.aO); assertEquals(20, p.aR); assertEquals(20, p.aP)
-        assertFalse(p.bd)
+        assertTrue(p.S != 79 && !(p.aO == 20 && p.aR == 20 && p.aP == 20),
+            "no deep embed: S=${p.S} aO=${p.aO} aR=${p.aR} aP=${p.aP}")
+        assertTrue(p.ak > 1500, "thrown clear of the corner: ${p.ak}")
     }
 }
 
@@ -20867,8 +21139,13 @@ class Slice218Test {
         val p = w.player
         // stand beside the crate facing it; pin the camera there too so
         // the au-gate keeps the crate live (slice-216 gate, verbatim).
-        p.setPositionPx(d.ak - 40, d.al)
-        p.av = false
+        // The crate sits against the x1400-1579 solid block (columns
+        // 70-78 are '20' on every row), so its only open side is east:
+        // 40px west put the player inside the block, where g.e()'s
+        // grounded arm ends at `aO>12 && aR>12 → i(79)` without `l()`
+        // (g.javap.txt e() 6092-6116, slice 369) — no context dispatch.
+        p.setPositionPx(d.ak + 40, d.al)
+        p.av = true
         w.kO = p.ak - 200; w.kP = p.al - 120
         // context tap -> 65568 -> ap() I==1 -> i(67) sword swing
         var brokenAt = -1
@@ -21227,7 +21504,7 @@ class Slice237Test {
         overlapCheckpoint(w, cp)
         w.tick(emptyList())
         assertTrue(cp.consumed)
-        assertEquals(0, w.kFS)
+        assertTrue(w.kFS in 0..1, "fS armed; the frame's tail may type one char")
         assertNotNull(w.checkpointSnap)
         w.tick(emptyList())                    // drain pendingRemove
         assertNull(w.npcs.firstOrNull { it === e },
@@ -22050,6 +22327,17 @@ class Slice245Test {
             // Scoped x>1100 so the x930-1040 pit keeps its tap-fall route.
             if (!p.aZ && p.ak > 1100 && p.ak < 1560)
                 held = held or Pad.M_UP
+            // G12 re-route: the zone vaults' S19/S43 flights reach the
+            // x1400 face 11px higher than before (the zone's vault and the
+            // player's integration now share a frame), so a grab on first
+            // contact (y523) kicks the S36 arc over the ax7 slot's box
+            // [1318,456..1334,472]. Keep aF unarmed (no UP/taps — it
+            // persists until a grab) and arm it only once the slide down
+            // the face reaches y530: the grab lands at the old y~534.
+            if (!p.aZ && (p.S == 19 || p.S == 43) && p.ak in 1240..1395 &&
+                p.al in 400..640)
+                held = if (p.ak >= 1370 && p.al >= 530)
+                    Pad.M_RIGHT or Pad.M_UP else Pad.M_RIGHT
             // x900-face climb + roof-edge jump into ax22 zone1: the
             // designed route climbs the x900-1120 building's west face
             // to its y780 roof, then vaults east off the lip into
@@ -22524,6 +22812,15 @@ class Slice245Test {
             if (p.S == 60 || p.S == 61 || p.S == 62 || p.S == 63) grabs++
             // hold east; jump when grounded past the roof's east half
             var held = Pad.M_RIGHT or Pad.M_UP
+            // Slice 369 re-time: S5 no longer swallows a jump press into a
+            // 4-tick S21 wind-up (g.javap.txt e() 4764-4793: `i(21)` falls
+            // into `u(94324) → l()`, and the post-tail takes the edge as
+            // `i(233)`, which S233 turns into S22 at once, 7222-7362), so
+            // a held UP bunny-hops the roof a tick per landing and the
+            // last hop overshoots the east edge. Run the roof (y779) with
+            // RIGHT alone and take off at its east edge (x988+): the rise
+            // meets the ax46 bar → S330 → S165 into ax22 zone1.
+            if (p.aZ && p.al in 770..790 && p.ak in 800..987) held = Pad.M_RIGHT
             if (p.aZ && p.ak >= 1080) jumps++
             w.pad.e(held)
             w.tick(emptyList())
@@ -22585,6 +22882,9 @@ class Slice245Test {
             val stuck = p.aZ && p.ag in -256..256
             if (crateNear && p.aZ && t % 4 < 3) held = held or Pad.M_CONTEXT
             else if (stuck || p.ak in 260..380 || p.ak in 860..1140) held = held or Pad.M_UP
+            // Slice 369 re-time (see the x1400 wall leg): the roof (y779)
+            // is run with RIGHT alone to its east edge, then the take-off.
+            if (p.aZ && p.al in 770..790 && p.ak in 800..987) held = Pad.M_RIGHT
             w.pad.e(held)
             w.tick(emptyList())
             if (p.al < minAl) minAl = p.al
@@ -23166,8 +23466,29 @@ class Slice245Test {
             if (foe != null && t % 4 < 3) held = held or Pad.M_CONTEXT
             val stuck = p.aZ && p.ag in -256..256
             if (stuck) held = held or Pad.M_UP
+            // Floor east of the roof drop (y≈719) runs straight to cp7: a
+            // stuck-UP hop there (after a duel with floor guard uid524)
+            // grabs the y599 lip and climbs onto the ax44 crusher band
+            // (uid210/211 → S50).
+            if (p.aZ && p.al > 700 && p.ak in 9700..10010)
+                held = held and Pad.M_UP.inv()
             // S33 face-climb needs UP held — M_RIGHT alone slides down
             if (p.S == 33 || p.S == 92) held = Pad.M_UP
+            // Timing (slice 369): the hop off the y359 ledge's east end
+            // walks into the ax10 launch zone (S148→S149→S150), which
+            // drops him into the ax22 catch at (9874,514) a fixed 21
+            // ticks later. That S65 box [9872,514,9896,576] overlaps
+            // ax44 door uid211's S3T1 box, and the door reads the
+            // player's box before his vault refreshes it (NpcFsm ax44
+            // S3 arm) — arriving there with uid211 in S3T1 is lethal.
+            // So: hold still through the last combo there and step off
+            // only while uid211 rests in S0 (arrival then falls in its
+            // S1T2). Enemies and doors are untouched; only the moment of
+            // the hop changes (the faster S5/S233 jump cadence of slice
+            // 369 had shifted it onto the lethal phase).
+            if (p.aZ && p.al in 350..370 && p.ak in 9786..9810 &&
+                (p.S in 67..69 || w.npcs.firstOrNull { it.aw == 211 }?.S != 0))
+                held = 0
             if (w.kC != null && w.kC!!.claimActive()) {
                 w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
             }
@@ -23207,6 +23528,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23254,8 +23576,19 @@ class Slice245Test {
             // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
             // it and press UP → teleport east. Drop M_RIGHT so the run
             // actually settles inside the box (aZ) before the edge.
-            if (p.ak in 10530..10620 && p.al in 380..455)
-                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // slice 360: aw()'s UP + carry-target arm (g.java:5257)
+            // enters S6 while the posted guard uid571 stands in front,
+            // and a held UP keeps it there. g/ci bind only in front:
+            // face west (away from the guard) first, then pulse UP.
+            if (p.ak in 10530..10620 && p.al in 380..455) {
+                doorPulse = (doorPulse + 1) and 1
+                held = when {
+                    !p.aZ -> 0
+                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                    else -> 0
+                }
+            }
             // The door arm also needs `g == null` — the column-top
             // soldier uid571 binds the interact target, so slash it
             // while bound until the lock clears. The Z2 road-blocker
@@ -23322,6 +23655,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23388,8 +23722,19 @@ class Slice245Test {
             // ax10-S16 door uid87 (W x10587-10618, y330-434): stand in
             // it and press UP → teleport east. Drop M_RIGHT so the run
             // actually settles inside the box (aZ) before the edge.
-            if (p.ak in 10530..10620 && p.al in 380..455)
-                held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+            // slice 360: aw()'s UP + carry-target arm (g.java:5257)
+            // enters S6 while the posted guard uid571 stands in front,
+            // and a held UP keeps it there. g/ci bind only in front:
+            // face west (away from the guard) first, then pulse UP.
+            if (p.ak in 10530..10620 && p.al in 380..455) {
+                doorPulse = (doorPulse + 1) and 1
+                held = when {
+                    !p.aZ -> 0
+                    p.g != null || p.ci != null -> Pad.M_LEFT
+                    p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                    else -> 0
+                }
+            }
             // Finale-shaft S33 on the fort's west face: the into-wall
             // dir arm is the LIP SCAN (dirKey && ah<0 → ct=true + scan —
             // a no-op on the flat '20' face), not the kick — the kick
@@ -23467,6 +23812,7 @@ class Slice245Test {
         w.stateL(8)
         settleIntro(w)
         val p = w.player
+        var doorPulse = 0
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
         w.kO = 10000; w.kP = 700
@@ -23509,8 +23855,17 @@ class Slice245Test {
                     if (p.aZ && p.ak in 9980..10035) held = held or Pad.M_UP
                     if (p.S == 33 || p.S == 36 || p.S == 92 || p.S == 101)
                         held = (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
-                    if (p.ak in 10530..10620 && p.al in 380..455)
-                        held = if (p.ag == 0 && p.aZ) Pad.M_UP else 0
+                    // slice 360: see the cp7 fuse leg — face away from
+                    // the posted guard, then pulse UP inside the door.
+                    if (p.ak in 10530..10620 && p.al in 380..455) {
+                        doorPulse = (doorPulse + 1) and 1
+                        held = when {
+                            !p.aZ -> 0
+                            p.g != null || p.ci != null -> Pad.M_LEFT
+                            p.ag == 0 && doorPulse == 0 -> Pad.M_UP
+                            else -> 0
+                        }
+                    }
                     if (p.S == 33 && p.ak in 11285..11340)
                         held = if (p.al > 735)
                             (if (p.av) Pad.M_LEFT else Pad.M_RIGHT) or Pad.M_UP
@@ -23668,9 +24023,13 @@ class Slice245Test {
         // starving the leg ~1500px short of the window — fidelity bug).
         // With the gate the au window (camY 8000-8480) is reached inside
         // the fuel budget, `aY()` writes the checkpoint, and the next
-        // respawn lands AT cp1 (respawnAl == 8360). Fuel stalls still
-        // kill a naive-climb bot — deaths stay in the design.
-        assertTrue(snapFired && minAl < 8360 && respawnAl == 8360,
+        // respawn lands AT cp1. Fuel stalls still kill a naive-climb bot
+        // — deaths stay in the design. aY()'s bh3 gate fires on the first
+        // frame the glider is at-or-above the checkpoint (`e.al >= aS.al`)
+        // and stamps the GLIDER's own position (writeIX), so the respawn
+        // lands within one climb step above cp1's y8360 — under k.I()'s
+        // order the climb samples 8362 → 8358 and the stamp is 8358.
+        assertTrue(snapFired && minAl < 8360 && respawnAl in 8344..8360,
             "canyon legs: the fixed conveyor keeps ~7px/t so camY reaches " +
             "cp1's au window (8000-8480) before the k.aE cap — the " +
             "checkpoint fires (snap) and respawns land at cp1 (8360) — " +
@@ -23930,6 +24289,11 @@ class Slice245Test {
             var mask = 0
             if (p.ak < 405) mask = mask or 8256           // M_RIGHT
             if (p.al > 8500) mask = mask or 16388         // M_UP
+            // Slice 385: `bc()` sweeps `k.bd` — only what the last paint
+            // drew — so the probe holds the camera on the S19 column
+            // until it arms (the teleport left the drift camera ~600px
+            // below it; a real pilot reaches it with the camera).
+            if (shrinesArmed == 0) { w.kO = 397 - 200; w.kP = 8437 - 120 }
             w.pad.e(mask)
             w.tick(emptyList())
             for (n in w.npcs) {
@@ -24125,11 +24489,16 @@ class Slice245Test {
             val poles = w.npcs.filter { it.ax == 44 && it.ak in 3850..4270 }
             val covering = poles.filter {
                 exitAk - 10 <= it.W[2] && exitAk + 10 >= it.W[0] }
-            // ~20t to land → pole phase at landing ≈ (ph + 20) % 7 — the
-            // overlap window is only ~3-4t while al ≥ 767. Land during
-            // S0/S1 (early non-lethal) so the next S3 lands after the
-            // hop clears the box. Drop during the covering pole's S1.
-            return covering.all { it.S == 1 }
+            // The S257 drop lands 15t after the press — one phase on.
+            // The poles tick before the player (k.I() order) and bv()
+            // tests both boxes as the previous frame left them (slice
+            // 362); the crush ticks are the S3 pair — pre-tick ph5
+            // tests the S3T0 box (y767+), ph6 the S3T1 box (y755+).
+            // The run-hop (S5, S12, S12, S233) keeps the bot on the
+            // floor through the 4th tick after landing, so only a ph0
+            // landing keeps both crush ticks off grounded frames. Drop
+            // at ph6 (S3T1) → land at ph0.
+            return covering.all { polePh(it) == 6 }
         }
         while (t++ < 140000) {
             when {
@@ -24168,6 +24537,15 @@ class Slice245Test {
                     // plain hang) — v(M_UP) takes the shared tail's
                     // climb-up S62 (PlayerFsm L2460, proven).
                     w.pad.e(Pad.M_UP); w.tick(emptyList()); continue
+                }
+                (p.S == 280 || p.S == 38) && p.ak in 1740..1900 && p.al < 850 -> {
+                    // Slice 369: the S257 drop-through ends in `a(0)` (S43,
+                    // g.javap.txt e() 12853-12855), so the first fall tick
+                    // still has the '5' strip at the head (aO == 5) and the
+                    // post-tail's `cw && aO == 5 → i(280)` hangs him under
+                    // it. Let go — S38's `u(33024)` drop (al = W[3]+10;
+                    // i(43)) — instead of mantling back up into the loop.
+                    w.pad.e(Pad.M_DOWN); w.tick(emptyList()); continue
                 }
                 (p.S == 280 || p.S == 38 || p.S == 54) && p.ak < 3000 -> {
                     // '5'-lip hang → mantle (slice-273): the fixed S38 arm
@@ -24251,6 +24629,32 @@ class Slice245Test {
                         // keeps its proven tap-fall route.
                         if (!p.aZ && p.ak > 1100)
                             held = held or Pad.M_UP
+                        // G12 re-route: the kick off the x1000 pit wall
+                        // must rise into the ax46 bar @1067,650 (S327 →
+                        // S330 catch → S165 launch east). The bar tests
+                        // last frame's W (k.I() runs bb[] before aS.I()),
+                        // and its X box ends at y≈686 — a grab at y≈818
+                        // (the free ping-pong's hop meeting the wall on
+                        // its way down) kicks 1px short. Run west and
+                        // take off ~45px out so the hop meets the wall
+                        // at its apex (grab y≈797). Too close → back off.
+                        if ((p.aZ || p.S == 5) && p.av && p.al > 840 &&
+                            p.ak in 1000..1110) {
+                            held = when {
+                                p.ak > 1060 -> Pad.M_LEFT
+                                p.ak >= 1046 -> Pad.M_LEFT or Pad.M_UP
+                                else -> Pad.M_RIGHT
+                            }
+                        }
+                        // Slice 369 re-route: the S36 kick off the x1400
+                        // wall leaves him facing west; S5 now runs `l()`
+                        // under a held direction (g.javap.txt e() 4775-
+                        // 4793), so the old RIGHT|UP turned him back east
+                        // on every landing. Hop the pit floor west with
+                        // LEFT|UP until the x1000-1110 take-off arm above.
+                        if ((p.aZ || p.S == 5) && p.av && p.al > 840 &&
+                            p.ak in 1111..1390)
+                            held = Pad.M_LEFT or Pad.M_UP
                     } else {
                         // CHANNEL CROSSING (slice-273 — proven end-to-end):
                         // the '5' floor strip x1580-2120 is ONE continuous
@@ -24337,7 +24741,7 @@ class Slice245Test {
                         // '5' top west end (x3860-3899): keep walking
                         // east — the vault-drop can't fire here (the
                         // cell under '5' is the '20' deep wall, so
-                        // ledgeDrop257's aR==0 gate refuses); the drop
+                        // the a(257,8) aR==0 gate refuses); the drop
                         // only opens where the underside is open, i.e.
                         // inside the corridor arm east of x3900.
                         p.aZ && p.al in 540..620 && p.ak >= 3860 ->
@@ -24395,6 +24799,33 @@ class Slice245Test {
                         // 194 hits the "5" band start x3880; below it the
                         // probe lands on the "##" cap ("20" -> crouch trap).
                         // DOWN is one-shot: stand in-zone until dropSafe.
+                        // Under the faithful l() (slice 360) a run step
+                        // is 10px, a released run still steps on its
+                        // release tick and a long run brakes (S11) — so
+                        // the window is reached in single taps from a
+                        // stand: release while running/braking, turn in
+                        // place (aA != 0 turns without a step), step.
+                        p.aZ && p.al in 540..620 && p.ak in 3900..3970 &&
+                            (p.S == 12 || p.S == 11) -> 0
+                        // Slice 369: past the divider (mounted at x4130+)
+                        // the '5' top is walked EAST to the '20' plateau.
+                        // The west-steer below used to reach here too and
+                        // only worked because S5 ignored the held LEFT on
+                        // its jump press; S5 now runs `l()` (g.javap.txt
+                        // e() 4775-4793), which turns him west into the
+                        // divider face.
+                        p.aZ && p.al in 540..620 && p.ak in 4000..4689 -> Pad.M_RIGHT
+                        // ...down the steps to the x4707 ledge (y699) and
+                        // off its end: the hop's rise meets the S313 catch
+                        // @~4730,632 that throws him on to x4880 (the old
+                        // route reached it the same way, via S5's ignored
+                        // LEFT). Falling off the ledge lands the pit floor.
+                        (p.aZ || p.S == 5) && p.al in 621..710 &&
+                            p.ak in 4000..4689 -> Pad.M_RIGHT
+                        (p.aZ || p.S == 5) && p.al in 540..710 &&
+                            p.ak in 4690..4720 -> Pad.M_RIGHT or Pad.M_UP
+                        !p.aZ && p.al < 710 && p.ak in 4000..4720 ->
+                            Pad.M_RIGHT or Pad.M_UP
                         p.aZ && p.al in 540..620 && p.ak > 3935 -> Pad.M_LEFT
                         p.aZ && p.al in 540..620 && p.ak < 3928 -> Pad.M_RIGHT
                         p.aZ && p.al in 540..620 && !p.av -> Pad.M_LEFT
@@ -24512,12 +24943,17 @@ class Slice245Test {
                         // arc apex comes down on its head; a hop too
                         // close or aimed past just lands into its
                         // lunge reach (struck on touchdown at ~9803).
+                        // G12 re-route: never turn back west on the top.
+                        // Every attempt now lands the S157 fling on guard1
+                        // (S89 kill @9723) with guard2 30px ahead; hopping
+                        // back at a guard that has slipped behind only
+                        // feeds it strikes (the 301-death dance). Hop over
+                        // a guard ahead, otherwise run for the shaft.
                         p.aZ && p.al in 330..400 && p.ak in 9600..10080 ->
                             if (foe != null && foe.ax == 11 &&
-                                foe.aB > 200 &&
-                                kotlin.math.abs(foe.ak - p.ak) in 20..110)
-                                (if (foe.ak > p.ak) Pad.M_RIGHT
-                                 else Pad.M_LEFT) or Pad.M_UP
+                                foe.aB > 200 && foe.ak > p.ak &&
+                                foe.ak - p.ak in 20..110)
+                                Pad.M_RIGHT or Pad.M_UP
                             else Pad.M_RIGHT
                         // shaft descent / ledge / under-corridor: drift
                         // and run east toward the pillar face. Ledge-
@@ -24567,6 +25003,16 @@ class Slice245Test {
                         // ascent (S33/36/60/62 run in the trace). Scoped
                         // to the pocket — the respawn corridor at x~8896
                         // also sits at al>560 and must run EAST anyway.
+                        // G12 re-route: the chimney foot (y799 floor under
+                        // the x8941/x8979 faces). Running into the x8979
+                        // face only rides S33 → S34 back down while the
+                        // floor soldier u65 closes in; under k.I()'s order
+                        // a respawn lands grounded, so the air-tick corner
+                        // tap that used to hop it in never fires. Hop from
+                        // the floor: the arc meets the face high → S101 →
+                        // the S36/S101 zigzag climbs to the y559 ledge.
+                        p.aZ && p.al in 780..820 && p.ak in 8915..8975 ->
+                            Pad.M_RIGHT or Pad.M_UP
                         p.aZ && p.al > 560 && p.ak in 6000..9819 ->
                             Pad.M_RIGHT
                         // plateau '02' top: the ax44 pole gauntlet.
@@ -24674,6 +25120,22 @@ class Slice245Test {
                         (!p.aZ && p.ak <= 9080) || p.S in 33..36 ||
                             p.S == 92 || p.S == 101 ->
                             if (p.ag < 0) Pad.M_TAP_L else Pad.M_TAP_R
+                        // G12 re-route: bridge top (y259) — run into the
+                        // parked gondola uid49 with RIGHT alone. The
+                        // gondola binds in the entity pass and ticks
+                        // again as the player's ac link after aS.I()
+                        // (k.java:2589-2591), where a held UP is bx()'s
+                        // hop-off (k.v(16388), i.java:16150 → S157 fling).
+                        p.aZ && p.al in 240..280 && p.ak in 9000..9400 ->
+                            Pad.M_RIGHT
+                        // G12 re-route: chimney-top ledge (y559). The hop
+                        // to the x8979 face top must leave from x>=8912:
+                        // 8px further west the arc meets the face one
+                        // tick lower (grab y548, not y530) and the S36
+                        // kick then tops out under the '5' strip (y390)
+                        // instead of catching it (S280).
+                        (p.aZ || p.S == 5) && p.al in 550..565 &&
+                            p.ak in 8860..8911 -> Pad.M_RIGHT
                         // grounded at the wall face: RIGHT|UP — aF arms
                         // (cv&&u|v(M_UP)) so the face contact grabs;
                         // vaults rise toward the face otherwise.
@@ -25081,7 +25543,7 @@ class Slice277Test {
         assertTrue(w.cm == 1)
     }
 
-    @Test fun `S277 orbit applies the frozen-cy down-drag and never releases`() {
+    @Test fun `S277 orbit applies the frozen-cy drag toward the victim and never releases`() {
         val w = world()
         w.npcs.clear()
         val p = w.player
@@ -25092,8 +25554,10 @@ class Slice277Test {
         p.cF = 5120; p.cy = 128                           // atan2(0,-54) = 128
         repeat(400) {
             p.mountOrbitTick(w, Pad())
-            assertEquals(0, p.ag, "ag = -(cF>>8)·sin(128) = 0")
-            assertEquals(5120, p.ah, "ah = 20·sin(-64) = +20px/tick down-drag")
+            // j.b = cos (slice 352): victim due east → +20px/tick east, no
+            // vertical pull (the old "down-drag" was the sine-table artifact)
+            assertEquals(5120, p.ag, "ag = -(cF>>8)·cos(128) = +20px/tick")
+            assertEquals(0, p.ah, "ah = 20·cos(64-128) = 20·cos(-64) = 0")
             assertEquals(128, p.cy, "cy never recomputed — frozen at bind")
             w.playerFsm.interactScan(p)                   // release-gate sweep
             assertSame(s, p.g, "no release arm reachable — g stays bound")
@@ -25261,7 +25725,7 @@ class Slice277Test {
 // - Below 25 the conveyor halves: `i.aJ = k.X; k.X = aJ>>1`
 //   (g.java:13963-13979); the ax24-S20 shrine fire restores
 //   `k.X = i.aJ` (NpcFsm.kt:7129, i.java:39330-39335 proven).
-// - `projSweepBc` (NpcFsm.kt:6919+) has NO `au` filter — the player's
+// - `Entity.bc()` (the one `i.bc()` port since slice 371) has NO `au` filter — the player's
 //   flap-emitted ax24-S6 drop-lines convert S19→S20 shrines at any
 //   camera distance, and kill ax54/56/30 runners on contact.
 // - Camera: `kP` IS `camY` (view top). Player dies when
@@ -25487,6 +25951,22 @@ class Slice281Test {
                     it.ax == 4 && it.ak in p.ak + 1..p.ak + 55 &&
                     Math.abs(it.al - p.al) < 60
                 }) mask = Pad.M_RIGHT + Pad.M_UP
+            // aw4/aw5 are solid breakable crates (ax4 S5/S7, aj() L18 a()
+            // push-out). Under k.I()'s frame order (G12) the crate's
+            // `aS.ag = 0` runs before the player's integration step, so a
+            // player whose box touches a crate can neither run nor hop
+            // away from it — smash it instead (attack + body overlap).
+            // S5 counts as grounded: an UP held into the landing would
+            // start another S21 hop from inside the crate's box.
+            if ((p.aZ || p.S == 5) && w.npcs.any {
+                    it.ax == 4 && (it.S == 5 || it.S == 7) &&
+                    Entity.overlapI(p.W, it.W)
+                }) mask = Pad.M_CONTEXT
+            // Past the smashed crates the run reaches the block's east
+            // edge (S26 edge walk, x≈1168) instead of bunny-hopping off
+            // it: jump there for the arc onto the ax22 vault at 1249.
+            if (p.S == 26 && p.ak in 1100..1200 && p.al in 1810..1825)
+                mask = Pad.M_RIGHT + Pad.M_UP
         val foe = w.npcs.firstOrNull {
                 it.ax == 11 && it.aB > 0 &&
                 Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
@@ -25529,6 +26009,13 @@ class Slice281Test {
                 164, 52, 280, 209, 211, 260, 259 -> mask = Pad.M_UP
                 263, 265 -> mask = Pad.M_RIGHT + Pad.M_TAP_R   // ride: hop off at ends
             }
+            // Slice 369 (F8): the S5 land arm runs l() after a jump press
+            // whenever u(94324) is held (e() 4764-4793) — a held RIGHT
+            // turns him east and the post-tail jumps that way. Off the
+            // S89 pin at x~1988 the landing on the y1299 ledge must
+            // therefore hop west with LEFT+UP to reach tower C.
+            if (p.S == 5 && p.ak in 1960..2010 && p.al in 1290..1305)
+                mask = Pad.M_LEFT + Pad.M_UP
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -25663,7 +26150,14 @@ class Slice282Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_R
                 228, 358 -> mask = Pad.M_LEFT + Pad.M_UP
-                297 -> mask = Pad.M_CONTEXT + Pad.M_TAP_R   // balance-pin
+                // balance-pin. The post-intro pin over the gap (980,563)
+                // is left with DOWN (the S17 zone's v(33024) drop): under
+                // k.I()'s frame order (G12) the zone's TAP_R leap and the
+                // player's S19 tick share a frame, so the TAP_R edge also
+                // arms the cv → aF grab latch, and the leap clings to the
+                // gap's east wall (S101) and kicks west into the pit.
+                297 -> mask = if (p.ak in 960..1000 && p.al in 540..590)
+                    Pad.M_DOWN else Pad.M_CONTEXT + Pad.M_TAP_R
                 89, 90 -> mask = Pad.M_CONTEXT
                 101, 102, 315, 318, 29, 28, 34, 63, 60, 62, 89, 61, 74,
                 164, 52, 280, 209, 211 -> mask = Pad.M_UP
@@ -25681,6 +26175,22 @@ class Slice282Test {
             // x1400 wall: grounded approach holds UP — the auto-vault
             // (S21 squat -> S36/43) needs the UP edge to fire the kick
             if (p.aZ && p.ak in 1300..1470) mask = Pad.M_RIGHT + Pad.M_UP
+            // Slice 369 (F8): the kick off the x1400 wall drops him on the
+            // y519 ledge facing west; the route hops WEST along it to the
+            // x1120-1180 chimney (S101/S36 kick climb → y339 → east over
+            // the wall top). The S5 land arm runs l() after the jump press
+            // while u(94324) is held (e() 4764-4793), so a held RIGHT
+            // would turn him east — hop with LEFT+UP instead.
+            if (foe == null && p.al in 500..530 && p.ak in 1100..1360 &&
+                (p.aZ || p.S == 5)) mask = Pad.M_LEFT + Pad.M_UP
+            // ...and east of the wall top the y339 run meets the ax4
+            // crates aw641/aw829 (x1517/x1534, S7/S5 — solid, a() push-
+            // out). The bunny hops now land on them and the push-out
+            // drops him west of them: smash them (attack edge) instead.
+            if ((p.aZ || p.S == 5) && w.npcs.any {
+                    it.ax == 4 && (it.S == 5 || it.S == 7) &&
+                    it.ak - p.ak in -10..45 && Math.abs(it.al - p.al) < 30
+                }) mask = Pad.M_CONTEXT
             // x1400 wall hangs: hold RIGHT toward the face — UP fires a
             // kick that throws the player OVER the wall to the east face,
             // where the chain bounces it back west (verified live)
@@ -25988,6 +26498,14 @@ class Slice282Test {
             // hold UP approaching the x11800 wall face so the vault/
             // climb arms on contact (wall run + lip grab).
             if (p.ak >= 11600) mask = Pad.M_RIGHT + Pad.M_UP
+            // Falling (S43) at the x11940 face above the y760 step, a held
+            // UP clings to it (fall-arm wall grab → S101 → S36 kick back
+            // west); without UP the player slides down the face and the
+            // postTail ct consumer's lip grab (S60) mounts the y680 top.
+            // Under G12 the running jump off the step meets the face
+            // while still that high (the old hop reached it lower).
+            if (p.S == 43 && p.ak in 11880..11940 && p.al < 760)
+                mask = Pad.M_RIGHT
             // guards engage on the street — attack when one is in front.
             w.pad.e(mask)
             w.tick(emptyList())
@@ -26131,6 +26649,17 @@ class Slice282Test {
                 if (p.al >= 1250) { toPit = false; east = true }
                 else if (p.aZ && p.al in 1000..1150) mask = Pad.M_LEFT
             }
+            // Slice 369 (F7): the landing on the raised block's top
+            // (13358,779, head and feet cells solid) now ends the grounded
+            // arm in S79 (e() 6092-6116) instead of crouch-walking west, so
+            // the y819 duel with the platform guard drifts west and he can
+            // leave the platform before `descend` latches (guard == null).
+            // The chain below is unchanged; latch `east` on the pit floor
+            // itself so the walk to aw409's pad still starts there.
+            if (!east && p.aZ && p.al >= 1250 && p.ak in 12690..12800) {
+                descend = false; toPit = false; east = true
+                mask = Pad.M_RIGHT
+            }
             // ax27 fuse prop @x12997 — solid-ish; '8' forward jump clears
             // it (M_UP would trigger the S267 carry-init instead).
             if (p.aZ && p.al in 1000..1120 && p.ak in 12950..12985) mask = 8
@@ -26220,6 +26749,14 @@ class Slice288Test {
                         w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush()
                         w.tick(emptyList())
                     }
+                    // The respawn puts the player back at the last
+                    // checkpoint, below legs already flown: resume the
+                    // route at the first leg above it. (Under G12 the
+                    // bot reaches the top claim on x1 5 and dies there;
+                    // left in "claim" mode it never re-bound the aw324
+                    // perch and fell behind the camera on every retry.)
+                    val back = route.indexOfFirst { p.al > it.second - 60 }
+                    if (back in 0 until leg) leg = back
                     continue
                 }
                 w.jC == 21 -> {
@@ -26332,6 +26869,12 @@ class Slice288Test {
                 if (p.al < wallT.W[3] + 40) held = held or Pad.M_DOWN
                 else if (p.al > wallT.W[3] + 90) held = held or Pad.M_UP
             }
+            // Predictive dodge (slice 353): with the volleys aimed and
+            // fanned as the bytecode has them, a live escort shot is
+            // projected 24 ticks ahead; when it would pass within 30px
+            // of the drifting player, take the move that keeps the most
+            // clearance.
+            dodgeMask288(w, p)?.let { held = it }
             val preAF = w.kAF
             prevS = p.S
             w.pad.e(held); w.tick(emptyList())
@@ -26356,6 +26899,38 @@ class Slice288Test {
     }
 }
 
+
+/** Mission-4 bot dodge: each live enemy pool shot (`af` set, in-flight
+ *  anim) is stepped `ak += ag/256, al += ah/256` for 24 ticks against the
+ *  player's W-centre drifting at the scroll speed `kY`; inside 30px the
+ *  bot picks the 8px/tick move (left/right, plus up/down while inside the
+ *  view band) with the largest minimum clearance. */
+private fun dodgeMask288(w: Level0World, p: Entity): Int? {
+    val pool = w.projectilePool ?: return null
+    val shots = pool.filter {
+        it != null && (it.P and 128) == 0 && it.af != null &&
+            (it.S in 0..4 || it.S in 22..28)
+    }
+    if (shots.isEmpty()) return null
+    val drift = w.kY / 256.0
+    val cy0 = (p.W[1] + p.W[3]) / 2.0
+    fun clearance(dx: Double, dy: Double): Double {
+        var best = Double.MAX_VALUE
+        for (s in shots) for (t in 1..24) {
+            val sx = s!!.ak + s.ag * t / 256.0
+            val sy = s.al + s.ah * t / 256.0
+            val d = Math.hypot(sx - (p.ak + dx * t), sy - (cy0 + (drift + dy) * t))
+            if (d < best) best = d
+        }
+        return best
+    }
+    if (clearance(0.0, 0.0) > 30) return null
+    val q = p.al - w.kP
+    val opts = mutableListOf(Pad.M_LEFT to (-8.0 to 0.0), Pad.M_RIGHT to (8.0 to 0.0))
+    if (q > 90) opts += Pad.M_UP to (0.0 to -8.0)
+    if (q < 190) opts += Pad.M_DOWN to (0.0 to 8.0)
+    return opts.maxByOrNull { clearance(it.second.first, it.second.second) }?.first
+}
 
 private fun chaseMask289(p: Entity, w: Level0World): Int {
     var mask = Pad.M_RIGHT
@@ -26489,7 +27064,12 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
         (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
             Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55
     }
-    if (foe != null && p.aZ) mask = Pad.M_CONTEXT + Pad.M_RIGHT
+    // The swing faces east: a foe behind (west) on a lower level — e.g.
+    // the cp321 tower base guard uid30 stuck in its chase under the
+    // y919 step — is not in reach, so the route goes on instead.
+    if (foe != null && p.aZ &&
+        (foe.ak >= p.ak - 20 || Math.abs(foe.al - p.al) < 20))
+        mask = Pad.M_CONTEXT + Pad.M_RIGHT
     return mask
 }
 
@@ -26652,7 +27232,21 @@ class Slice289Test {
         w.kO = 4700; w.kP = 800
         var reached = false; var maxAk = 4880; var prevS = -1
         for (t in 0..3000) {
-            val mask = chaseMask289(p, w)
+            var mask = chaseMask289(p, w)
+            // Slice 369 (F8): the S5 land arm no longer squats in S21 under
+            // a held RIGHT+UP — it runs l() (e() 4764-4793): the held RIGHT
+            // starts a run and the post-tail jumps at once, carrying the
+            // run's first 10px. From the 40px base step (y919) that arc
+            // meets the tower face just below its top (S101) and the kick
+            // throws him back west. Jump from a standstill at the step's
+            // west end instead: walk west, turn east with a RIGHT tap
+            // (l(): `aA != 0 → av = false`, no step), then UP alone.
+            if ((p.aZ || p.S == 5) && p.al in 900..925 && p.ak in 5055..5110)
+                mask = when {
+                    p.ak > 5075 -> Pad.M_LEFT
+                    p.av -> Pad.M_RIGHT
+                    else -> Pad.M_UP
+                }
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -26756,8 +27350,14 @@ class Slice289Test {
                 // the ax10-S36 bound-catch carrier @x6439 lowers the player
                 // down the shaft — keep its bind while inside the descent
                 // column, release it elsewhere.
+                // Phase 2 (G12): the last block-top hop now clips the
+                // zone's top-left corner (W x6439-6479, y379-539); the
+                // ride ends at its bottom edge (al > g.o → i(318), g.java
+                // :1860-1864) in a freeze that only a DOWN press releases
+                // (case 318 `k.v(33024) → a(ah)`, g.java:1829-1835).
+                // Press it: the drop comes down on the y719 floor.
                 p.S == 315 || p.S == 318 ->
-                    if (p.ak in 6300..6600) 0 else Pad.M_DOWN
+                    if (p.S == 315 && p.ak in 6300..6600) 0 else Pad.M_DOWN
                 // x6520-6580 40px step on the y719 floor: hop west over it
                 p.aZ && p.al in 700..790 && p.ak in 6560..6660 ->
                     Pad.M_UP or Pad.M_LEFT
@@ -26872,6 +27472,14 @@ class Slice289Test {
                 // x8560 street edge -> x8760 face: hold the vault till the
                 // edge so the ~200px arc reaches the S6 block's hang zone
                 p.aZ && p.al > 1000 && p.ak < 8540 -> Pad.M_RIGHT
+                // Phase 2 (G12): the ax40 gondola uid181 @x8882 binds the
+                // player in the entity pass, then ticks again as his `ac`
+                // link right after aS.I() (k.java:2589-2591) — an UP
+                // pressed on the boarding frame is its bx() hop-off
+                // (`k.v(16388)`, i.java:16150) and the S157 fling drops
+                // into the pit. Run into it on RIGHT alone from the y979
+                // ledge.
+                p.aZ && p.al in 960..1000 && p.ak in 8840..8900 -> Pad.M_RIGHT
                 p.aZ -> Pad.M_RIGHT + Pad.M_UP
                 else -> Pad.M_RIGHT
             }
@@ -26979,6 +27587,7 @@ class Slice289Test {
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
         w.kO = 12080; w.kP = 780
         var reached = false; var maxAk = 12280; var prevS = -1; var stall = 0; var lastAk = 12280
+        var settle = 0; var wasS90 = false
         for (t in 0..60000) {
             p.gJ = 7
             val foe = w.npcs.firstOrNull {
@@ -26993,7 +27602,15 @@ class Slice289Test {
             // aF intent latch keeps arming the wall-grabs.
             val inMarker = p.ak in 13469..13554 && p.al in 1052..1104 && p.S != 214 && p.S != 215
             val inChimney = p.ak in 13460..13565 && p.al in 740..1140
+            // slice 356: the S90 air kill now ends when the pinned victim's
+            // corpse lands (family head `aS.a(0)`, Q==24), ~5 ticks earlier
+            // than before, so the bot met foe 534 mid-swing and was beaten
+            // back. Standing 16 ticks after the release re-phases the run
+            // (deterministic replay: 15-17 pass, 14 and 18+ do not).
+            if (wasS90 && p.S != 90) settle = 16
+            wasS90 = p.S == 90
             val mask = when {
+                settle > 0 -> { settle--; 0 }
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
                 p.S == 65 -> Pad.M_UP                          // ax22: vault east
                 p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
@@ -27019,15 +27636,40 @@ class Slice289Test {
                 // homes onto it, then the S238 release dives over the gap.
                 p.ga?.aw == 240 && p.ak < 13300 -> Pad.M_RIGHT
                 p.ga != null -> Pad.M_RIGHT + Pad.M_UP
+                // Phase 2 (G12): cross the lip (x12380-12960, y939) on the
+                // ground — S5 landings and foe-free stretches too. A hop
+                // lifts the camera (cB keeps the head box 40px inside the
+                // view, k.java:1954-1955: camY ~778), and the ax50
+                // pouncers uid224/225 (W tops y789/783) then sit wholly
+                // inside k.ac, see the player (l() L77 `b(W, k.ac)`,
+                // simple/i.java:2396-2405) and drain 5 per pounce (T==3
+                // `k.aS.a(4,…)`, i.java:7785). The hop-run took five of
+                // those plus a guard strike — dead from x1=30. Grounded,
+                // cB = al-150 (k.java:1947-1948) holds camY at ~790 and
+                // both stay blind.
+                p.al in 900..960 && p.ak in 12380..12960 && (p.aZ || p.S == 5) ->
+                    if (foe != null) Pad.M_RIGHT + Pad.M_CONTEXT else Pad.M_RIGHT
                 // attack-through: CONTEXT held ONLY while a gap foe is in
                 // range — the S67/68/69 combo staggers it at point-blank so
                 // its tumble→pin chain never starts and the launch-pad
                 // zone's gA autowalk fires cleanly. Held constantly it
                 // would swing-crawl the whole 700px approach (~5px/swing).
+                // Phase 2: with the real aC() cycle (S23 back-off → S11
+                // wind-up → S12) the hardened lip guards uid226/534/228
+                // knock a hop-running bot back west into the pit. On the
+                // ground, fight through without the UP hop — the combo's
+                // i-frames carry the run east to the launch pad.
+                foe != null && p.aZ -> Pad.M_RIGHT + Pad.M_CONTEXT
                 foe != null -> Pad.M_RIGHT + Pad.M_UP + Pad.M_CONTEXT
                 else -> Pad.M_RIGHT + Pad.M_UP
             }
-            w.pad.e(mask)
+            // Slice 369 (F5): the combo arm's end runs l() (e() 10598-
+            // 10602), so with the attack held the post-tail's ap() starts
+            // the next S67 on the same tick — no S0 tick between combos.
+            // Against the lip guards that tighter chain loses the exchange
+            // (worn down at x12600-12680). Let go on the S69 last frame
+            // (T4): the next combo then restarts from S0 a tick later.
+            w.pad.e(if (p.S == 69 && p.T == 4) 0 else mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
@@ -27093,11 +27735,18 @@ class Slice289Test {
             // pole-2 uid289@(15199,610): press ~(15100-15160,665-700) —
             // probe-verified landing (15359-15386,699) on the east rim.
             val pole = Entity.at
+            // Phase 2 (G12): the player's I() integrates BEFORE g.e()
+            // (i.java:3889-3922), so the press is read one step further
+            // down the arc than the position seen here — test the windows
+            // on that next point (N+ag, O+ah), or the pole-1 press lands
+            // in the water.
+            val nx = ((p.ak shl 8) + (p.N and 255) + p.ag) shr 8
+            val ny = ((p.al shl 8) + (p.O and 255) + p.ah) shr 8
             val poleSwing = pole != null && pole.ax == 72 && (
-                (pole.aw == 283 && p.ak - pole.ak in -135..-45 &&
-                    p.al - pole.al in 114..135) ||
-                (pole.aw == 289 && p.ak - pole.ak in -110..-35 &&
-                    p.al - pole.al in 55..95))
+                (pole.aw == 283 && nx - pole.ak in -135..-45 &&
+                    ny - pole.al in 114..135) ||
+                (pole.aw == 289 && nx - pole.ak in -110..-35 &&
+                    ny - pole.al in 55..95))
             val mask = when {
                 poleSwing -> Pad.M_CONTEXT + Pad.M_RIGHT + Pad.M_UP
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
@@ -27259,6 +27908,15 @@ class Slice291Test {
                     kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
             }
             w.pad.e(when {
+                // Slice 369 (F7): the S26 edge-walk off the y699 ledge now
+                // ends in S79 under its low lip (e() 6092-6116) and drops
+                // him on the y739 floor ~6 ticks sooner, so floor guard
+                // uid99 gives up the chase (S2) instead of striking him
+                // loose from heavy guard uid112 (ax73, S152, x6946). With
+                // uid112 in front `f()` holds `cq` off (no jump), so cut
+                // through it with the attack instead.
+                p.aZ && p.al > 700 && threat != null && threat.ax == 73 &&
+                    threat.ak - p.ak in 0..40 -> Pad.M_CONTEXT or Pad.M_RIGHT
                 p.S == 28 || p.S == 318 -> Pad.M_DOWN
                 p.S == 65 -> Pad.M_UP
                 p.S == 228 || p.S == 358 -> Pad.M_UP
@@ -27324,6 +27982,10 @@ class Slice291Test {
                 p.aZ && p.al > 500 && p.ak in 8000..8080 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R   // platform edge → vault east onto ax22@(8158,476)
                 !p.aZ && p.ag > 0 && p.ak in 8040..8200 -> Pad.M_TAP_R or Pad.M_UP                  // mid-flight: keep the arc
                 p.S == 361 -> Pad.M_CONTEXT
+                // Slice 369 (F7): same cut through heavy guard uid112 as
+                // leg B (`f()` holds `cq` off while it stands in front).
+                p.aZ && p.al > 700 && threat != null && threat.ax == 73 &&
+                    threat.ak - p.ak in 0..40 -> Pad.M_CONTEXT or Pad.M_RIGHT
                 p.S == 28 || p.S == 318 -> Pad.M_DOWN
                 p.S == 65 -> Pad.M_UP
                 p.S == 228 || p.S == 358 -> Pad.M_UP
@@ -27389,11 +28051,22 @@ class Slice291Test {
             intArrayOf(8660, 230, 0), intArrayOf(8890, 220, 0),
             intArrayOf(8960, 760, 0), intArrayOf(9120, 760, 0),
             intArrayOf(9164, 500, 0), intArrayOf(9290, 150, 0),
-            intArrayOf(9680, 360, 0),
+            // Slice 369: past uid311 the route goes on east out of the
+            // ax35 volley band (x9600-9800 @y339-400) to the x9900 exit.
+            intArrayOf(9680, 360, 0), intArrayOf(9960, 400, 0),
         )
         var wp = 0; var bindT = 0; var maxAk = 0; var maxAl = 0; var died = false
         for (t in 0..2400) {
             if (p.al - 240 > w.kP) w.kP = p.al - 240
+            // Slice 369 (F8): the special-case arms above carry him over
+            // the gap and the pillar without ever passing within reach of
+            // waypoints 8-11, so after door uid166's S284/S285 transfer
+            // (x9400 → 9650) the bot still steered for (8960,760) — LEFT.
+            // Before, S5's squat (S21, no l()) kept the facing and the
+            // landing hop still went east by luck; now the land arm runs
+            // l() and a held LEFT turns him back into the volley band.
+            // Once past the door, aim for the uid311 point and beyond.
+            if (p.ak >= 9400 && wp < wps.lastIndex - 1) wp = wps.lastIndex - 1
             w.pad.e(when {
                 w.kC != null -> Pad.M_CONTEXT
                 p.S == 361 -> Pad.M_CONTEXT
@@ -27409,6 +28082,14 @@ class Slice291Test {
                         // committed gap-edge hops on the mass tops
                         p.aZ && p.al < 290 && p.ak in 8820..8900 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
                         p.aZ && p.al < 290 && p.ak in 9100..9165 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R
+                        // pillar top x9240-9339@y139 past the rope: walk off
+                        // its east edge (S26 → fall) so the drop lands in
+                        // door uid166's box [9374,9429] and the held UP
+                        // fires it. Under G12 the rope dismount lands on
+                        // the pillar and the hops overshoot the door to
+                        // x9469, where the ax35 volleys kill the bot.
+                        (p.aZ || p.S == 5) && p.al in 130..145 &&
+                            p.ak in 9240..9340 -> Pad.M_RIGHT
                         // inside a gap — drift toward the east face
                         !p.aZ && p.al > 240 && p.ak in 8850..9250 -> Pad.M_RIGHT
                         // bound on an ax66 lift — ride ≥4 ticks then hop toward the next point
@@ -27516,7 +28197,10 @@ class Slice291Test {
         w.kO = 10080; w.kP = 400
         var maxAk = 0; var won = false; var died = false
         for (t in 0..3000) {
-            if (w.jC == 15) { won = true; break }
+            // l(15) re-enters as l(22) the same tick when a medal stamps
+            // (k.java:1666-1700) — this leg's kills reach ap[0] >= 7 since
+            // slice 382 counts every k.e(0,aw) site
+            if (w.jC == 15 || w.jC == 22) { won = true; break }
             if (w.jC == 12 || w.jC == 13) { died = true; break }
             if (p.ak - 200 > w.kO) w.kO = p.ak - 200
             if (p.al - 120 > w.kP) w.kP = p.al - 120
@@ -27529,6 +28213,14 @@ class Slice291Test {
                 p.S == 65 || p.S == 228 || p.S == 358 -> 16396
                 p.S == 101 -> Pad.M_RIGHT or Pad.M_UP
                 p.ga != null && p.ga!!.ax == 66 -> Pad.M_RIGHT
+                // Under G12 launcher uid176's bm() mount (i(260)) and the
+                // player's own S260 arm run in the same frame, so the
+                // input held while flying into it picks the launch: UP
+                // fires the straight-up S259 (which drops back onto the
+                // launcher, forever); RIGHT fires S261 east.
+                !p.aZ && w.npcs.any { it.aw == 176 && it.ax == 66 &&
+                    kotlin.math.abs(it.ak - p.ak) < 60 &&
+                    p.al - it.al in -60..120 } -> Pad.M_RIGHT
                 foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 -> {
                     if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
                 }
@@ -27542,6 +28234,15 @@ class Slice291Test {
                 p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
                 p.al in 880..1020 && p.ak > 10700 -> Pad.M_LEFT
                 p.al in 690..880 && p.ak > 10540 -> Pad.M_LEFT
+                // Slice 369 (F8): the S5 land arm runs l() after the jump
+                // press while u(94324) is held (e() 4764-4793) — a held
+                // RIGHT starts a run and the post-tail hop carries its
+                // first 10px. On the hollow block top (x10560-10699, y419)
+                // that overshoots the top's east end onto the y519 shelf
+                // (guard uid451), whose west end is the block's wall. Hop
+                // the top from a standstill with UP alone (facing east):
+                // (10608) → (10696) → over the shelf to the east wall.
+                (p.aZ || p.S == 5) && p.al in 410..425 && p.ak in 10560..10699 -> Pad.M_UP
                 // the east shaft x10759+ is scroll-wall sealed (bound pins
                 // al at ~528 — falling there hovers forever). At the
                 // far-east ledge lip return LEFT into the gap mouth
@@ -28212,6 +28913,18 @@ class Slice303Test {
                     when {
                         p.ga != null -> mask = 0                            // riding an ax66 sink lift — wait it out
                         p.al > 1760 -> mask = 0                             // under-chamber — done
+                        // G12: he now steps off onto sink lift u24 a tick
+                        // earlier, and the airborne LEFT drift turns him west
+                        // on it — so on the y1559 landing S5's land arm turns a
+                        // held LEFT into a run (S12) that bounces off the lip
+                        // back into S5. Hold DOWN alone through S5 here.
+                        // Slice 369 (F7): the grounded arm's a(257,8) drop
+                        // (e() 6119-6267) is S79-only, and from S0 a held
+                        // LEFT wins in l() (run, S12) — so DOWN stays alone in
+                        // S0 too: l()'s DOWN arm → aw() vaults a(257,8) where
+                        // the cell two over is open (x911), else crouches
+                        // (S78→S79) and DOWN+LEFT then crouch-walks.
+                        (p.S == 5 || p.S == 0) && p.al > 1530 && p.ak in 620..1100 -> mask = Pad.M_DOWN
                         !p.aZ -> mask = Pad.M_LEFT                          // airborne: always drift west — lands '2'/r78, never the x1120-1499 hole
                         p.al > 1530 && p.ak in 620..1100 -> mask = Pad.M_DOWN + Pad.M_LEFT   // lift bind zone — crouch-walk under: 36px box clears the y1500-1520 hover
                         p.al > 1530 -> mask = Pad.M_LEFT                    // '2'/r78/r87 — west to r78's x0 edge → drop to r96 (r87 east is walled: towers at x1020/x1500)
@@ -28299,6 +29012,7 @@ class Slice304Test {
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        var jitter = 0; var prevAk = p.ak; var prevAl = p.al
         val trace = ArrayDeque<String>(60)
         var lastS = p.S
         var jumpCd = 0
@@ -28346,7 +29060,7 @@ class Slice304Test {
             } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
-            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ) {
+            } else if (jumpCd <= 0 && chainDone && (stall >= 30 || jitter >= 30) && p.aZ) {
                 mask = if (midCorridor) (16396 or Pad.M_RIGHT) else if (descended || p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
                 jumpCd = 30
             }
@@ -28391,6 +29105,13 @@ class Slice304Test {
             if (u269Fired || u280Fired || u306Fired || (midCorridor && p.ak > 1280)) break
             if (descended && !midCorridor && p.ak > 1560) break
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            // G12 order: the ax27 door post uid44 (x330, y1299 ledge) pushes
+            // the player out (i.a(k.aS,P,W), ag=0) in the entity pass, BEFORE
+            // his run integrates back in — so a run held into it jitters
+            // 341<->351 every tick instead of parking and `stall` never
+            // builds. Count "back where he was two ticks ago" as stalled too.
+            if (p.ak == prevAk && p.al == prevAl) jitter++ else jitter = 0
+            prevAk = lastAk; prevAl = lastAl
             lastAk = p.ak; lastAl = p.al
             if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
             val rope = w.findByAw(37)
@@ -28427,7 +29148,7 @@ class Slice306Test {
             w.pad.e(if (p.ak < 780) Pad.M_RIGHT else 0)
             w.tick(emptyList())
             if (t % 5 == 0 || Entity.at != null)
-                println("PROBE t=$t p=(${p.ak},${p.al}) S=${p.S} mountable=${p.mountableState()} at=${Entity.at?.ax}#${Entity.at?.aw} hit=${wheel.wasHitRecently(w)} au=${wheel.au} i=${wheel.i} los=${p.losBlocked(wheel, w)}")
+                println("PROBE t=$t p=(${p.ak},${p.al}) S=${p.S} mountable=${p.mountableState()} at=${Entity.at?.ax}#${Entity.at?.aw} hit=${wheel.inPlayV(w)} au=${wheel.au} i=${wheel.i} los=${p.losBlocked(wheel, w)}")
             if (Entity.at != null) break
         }
     }
@@ -28456,6 +29177,7 @@ class Slice306Test {
         driveDuelWin300(w, p)
         driveRopeClimb300(w, p)
         var stall = 0; var lastAk = p.ak; var lastAl = p.al
+        var jitter = 0; var prevAk = p.ak; var prevAl = p.al
         val trace = ArrayDeque<String>(80)
         var lastS = p.S
         var jumpCd = 0; var pressCd = 0
@@ -28532,7 +29254,7 @@ class Slice306Test {
             } else if (jumpCd <= 0 && stall > 0 && stall % 20 == 0 && !chainDone) {
                 mask = 16390 or Pad.M_LEFT
                 jumpCd = 20
-            } else if (jumpCd <= 0 && chainDone && stall >= 30 && p.aZ && !(catapult && p.al in 1450..1530)) {
+            } else if (jumpCd <= 0 && chainDone && (stall >= 30 || jitter >= 30) && p.aZ && !(catapult && p.al in 1450..1530)) {
                 mask = if (midCorridor) (16396 or Pad.M_RIGHT) else if (descended || p.al > 1530) (16390 or Pad.M_LEFT) else (16396 or Pad.M_RIGHT)
                 jumpCd = 30
             }
@@ -28585,6 +29307,11 @@ class Slice306Test {
             if (cp339 || u269Fired || u280Fired || u306Fired || (midCorridor && p.ak > 1280)) break
             if (descended && !midCorridor && p.ak > 1560) break
             if (p.ak == lastAk && p.al == lastAl) stall++ else stall = 0
+            // G12 order: the run into the ax27 door post uid44 jitters
+            // 341<->351 instead of parking — count it as a stall too (see
+            // Slice304Test).
+            if (p.ak == prevAk && p.al == prevAl) jitter++ else jitter = 0
+            prevAk = lastAk; prevAl = lastAl
             lastAk = p.ak; lastAl = p.al
             if (t % 400 == 0) println("POS t=$t ak=${p.ak} al=${p.al} S=${p.S} aZ=${p.aZ} ga=${p.ga?.ax}#${p.ga?.aw} F=${p.F?.ax}#${p.F?.aw} at=${Entity.at?.ax}#${Entity.at?.aw} mask=$mask kC=${w.kC?.aw} kP=${w.kP}")
             val rope = w.findByAw(37)
@@ -28780,7 +29507,13 @@ class Slice309Test {
         p.ak = u252.ak; p.al = u252.al; p.N = u252.ak shl 8; p.setAnim(0); p.aZ = true; p.refreshBoxes()
         var mounted = false; var bound = false; var released = false
         for (t in 0..120) {
-            w.pad.e(0); w.tick(emptyList())
+            // G12 (k.I() order): u248's board test (i.bm() L131, needs
+            // g.b(S)) reads the player's state from the previous frame,
+            // and the straight fall lands (S5) in the same frame its W
+            // first reaches u248's W — so the drop alone never boards.
+            // A jump press on the landing spot puts him in S233 (in
+            // g.b()) while overlapping, and the next entity pass boards.
+            w.pad.e(if (!mounted && p.aZ && p.S == 0) Pad.M_UP else 0); w.tick(emptyList())
             if (p.ga === u248) mounted = true
             if (w.kC === u252) bound = true
             if (bound && w.kC == null) { released = true; break }
@@ -29089,13 +29822,17 @@ class Slice318Test {
         // strikes → it dies. This is the actual fightable path the
         // "unfightable posted guard" repro was missing: the sentry was
         // still parked, not broken.
+        // slice 357: the woken guard runs the real aC() scheduler, so it
+        // `Q()`-faces the player and backs off in S23 — the scripted
+        // player now faces the guard (it struck the guard's back before,
+        // which only worked while S23 never turned it around).
         val w = world(aj = 2)
         val g = w.npcs.first { it.aw == 313 }
         g.P = g.P and -33                                  // wake: P&~32
         var ticks = 0
         while (g.aB > 0 && g.S != 139 && ticks++ < 800) {
             w.player.setPositionPx(g.ak + 20, g.al)
-            w.player.av = g.av
+            w.player.av = true                             // face the guard (west)
             if (w.player.S !in intArrayOf(67, 68, 69, 112, 113, 114, 115))
                 w.player.setAnim(67)
             w.tick(emptyList())

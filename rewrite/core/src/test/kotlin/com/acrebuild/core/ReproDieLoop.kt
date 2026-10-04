@@ -55,13 +55,13 @@ class ReproDieLoop {
             w.player.applyHit(18, 0, foe, w)
             w.player.gt = 0; w.iBh = 0
         }
-        w.tick(emptyList())
+        tickUntilFailed(w)                    // S50 plays out first (slice 379)
         assertTrue(w.failed, "KO must reach the fail screen")
         // YES → f(false) reload → checkpoint restore
         w.tick(tap(w, 200, 130))
         assertEquals(8, w.jC, "reload returns to play")
         assertEquals(snap.ak, w.player.ak, "respawn at the snapshot pos")
-        assertEquals(snap.x1, w.player.x1, "meter restores from bA[20]")
+        assertEquals(w.kAx, w.player.x1, "a(true) refills the meter: g.e(ax) (k.java:5225)")
         assertTrue(w.player.al <= w.camY + 240,
             "camera snapped under the respawn — OOB arm cannot fire")
         // 80 settle ticks: the respawned player lands and stays alive —

@@ -1,3 +1,8 @@
+---
+title: "Slice 2 — real `g.e()` grounded/air arms + ax11 soldier FSM"
+status: done
+---
+
 # Slice 2 — real `g.e()` grounded/air arms + ax11 soldier FSM
 
 Track: `260921-1400-port-slice2-fsm` on branch `devin/1789994018-port-slice2`
