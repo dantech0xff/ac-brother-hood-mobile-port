@@ -1061,40 +1061,8 @@ class NpcFsm(val world: LevelCellSource) {
     }
 
     private fun pushL897(e: Entity, p: Entity) {
-        if (e.ax == 0) return                                    // L909
-        if (e.P and 4096 == 0) return                            // L5
-        val r9 = e.W
-        if (!Entity.overlapStrict(p.W, r9)) return                    // L7
-        if (p.ah > 0 || e.ah < 0) {                              // → L11
-            if (p.W[1] < r9[1] && p.W[3] < r9[3] &&
-                p.ak > r9[0] && p.ak < r9[2]) {
-                if (p.ah > 0) { p.aj = 0; p.ah = 0 }
-                p.al = r9[1] - 5
-                return
-            }
-        }
-        if (p.ah < 0 || e.ah > 0) {                              // → L28
-            if (p.W[3] > r9[3] && p.W[1] > r9[1] &&
-                p.ak > r9[0] && p.ak < r9[2]) {
-                if (p.ah < 0) { p.aj = 0; p.ah = 0 }
-                if (p.aZ && e.ah > 0) return                     // L41
-                p.al = r9[3] + (p.al - p.W[1]) + 5
-                return
-            }
-        }
-        if (p.ag > 0 || e.ag < 0 || e.ax == 27) {                // → L52
-            if (p.W[2] < r9[2]) {                                // left push
-                if (p.ag > 0) { p.ai = 0; p.ag = 0 }
-                p.ak = r9[0] - (p.W[2] - p.ak) - 5
-                return
-            }
-        }
-        if (p.ag < 0 || e.ag > 0 || e.ax == 27) {                // → L65
-            if (p.W[0] > r9[0]) {                                // right push
-                if (p.ag < 0) { p.ai = 0; p.ag = 0 }
-                p.ak = r9[2] + (p.ak - p.W[0]) + 5
-            }
-        }
+        if (e.ax == 0) return                                    // I() @8032 `if (ax != 0)`
+        pushApart(p, e.P, e.W, e)                                // a(k.aS, P, W)
     }
 
     // -- L357 patrol: `case 2/3/92` (structured/i.java:4104-4135; bytecode
@@ -3331,10 +3299,9 @@ class NpcFsm(val world: LevelCellSource) {
             if (r7.W[3] > r9[3] && r7.W[1] > r9[1] &&
                 r7.ak > r9[0] && r7.ak < r9[2]) {
                 if (r7.ah < 0) { r7.aj = 0; r7.ah = 0 }      // L39 head
-                if (!r7.aZ || self.ah <= 0) {                // L39/L41
-                    r7.al = r9[3] + (r7.al - r7.W[1]) + 5    // L43
-                    return
-                }
+                if (r7.aZ && self.ah > 0) return             // @179-191 `return`
+                r7.al = r9[3] + (r7.al - r7.W[1]) + 5        // L43
+                return
             }
         }
         // L46 → L52 left-exit (r7 moving right into r9's left face, or
@@ -3401,27 +3368,32 @@ class NpcFsm(val world: LevelCellSource) {
                     w.clearLatches()
                     fuseTail(e, w); return
                 }
-                // L27 — aA==1 arms the pickup marker at (ak, al-85)
+                // @283-356 (raw bytes): aA==1 arms the pickup marker at (ak, al-85):
+                // `if (ae == null || ae.S != 7) { G(); a(7, ak, al-85) }` and then the
+                // pin `ae.ak = ak; ae.al = al-85` for whatever `ae` is now. (Slice 408:
+                // the port respawned only for a null `ae`, a marker that had left S7
+                // was left where it was.)
                 if (e.aA != 1) { fuseTail(e, w); return }
-                if (e.ae == null) {
-                    e.releaseAe()                            // L32 G()
+                val ae0 = e.ae
+                if (ae0 == null || ae0.S != 7) {
+                    e.releaseAe()                            // G()
                     e.spawnMarker(w, 7, e.ak, e.al - 85)     // a(7,…)
                 }
-                val ae = e.ae
-                if (ae != null && ae.S == 7) {               // L31→L33 pin
-                    ae.ak = e.ak; ae.al = e.al - 85
-                }
+                e.ae?.let { it.ak = e.ak; it.al = e.al - 85 }
             }
             // ---------- S1/S21 — mount-in anim ----------
-            1, 21 -> {                                       // L35
+            // @366-458 (raw bytes): `G(); if (r() || (aS.az == -2 && T == last)) { T = last;
+            // U = 0; if (aS.az == -2) { aS.i(269); aS.az = 100 } }` and then straight to
+            // the shared tail @1119. (Slice 408: the port also ran the S4 fuse-arm after
+            // it, and skipped the `i(269)` hand-over when the arm was entered through the
+            // pinned-last-frame door instead of `r()`.)
+            1, 21 -> {
                 e.releaseAe()                                // G()
-                if (e.animFinished()) {                      // L38→L41
-                    e.T = e.clip!!.frameCount(e.S) - 1; e.U = 0
+                val last = e.clip!!.frameCount(e.S) - 1
+                if (e.animFinished() || (p.az == -2 && e.T == last)) {
+                    e.T = last; e.U = 0
                     if (p.az == -2) { p.setAnim(269); p.az = 100 }
-                } else if (p.az == -2 && e.T == e.clip!!.frameCount(e.S) - 1) {
-                    // L38/L41 pin — falls into L58 below
-                } else { fuseTail(e, w); return }
-                fuseArm(e, w); fuseTail(e, w); return        // → L58 arm
+                }
             }
             // ---------- S2/S22 — hold player on the prop ----------
             2, 22 -> {                                       // L45
@@ -3453,11 +3425,10 @@ class NpcFsm(val world: LevelCellSource) {
             6 -> {                                           // L78
                 if (!e.animFinished()) { fuseTail(e, w); return }
                 e.P = e.P or 64; e.P = e.P and -4097         // L78/L82
-                if (e.Z[1] != 0) {
-                    e.Z[2] += 62                             // j.f
-                    if (e.Z[2] >= e.Z[1]) {
-                        e.setAnim(8); e.Z[2] = 0; w.sfx(23)  // k.A(23)
-                    }
+                if (e.Z[1] == 0) return                      // @801-804 `return`: no tail
+                e.Z[2] += 62                                 // j.f
+                if (e.Z[2] >= e.Z[1]) {
+                    e.setAnim(8); e.Z[2] = 0; w.sfx(23)      // k.A(23)
                 }
             }
             // ---------- S7 — pin last frame ----------
@@ -3526,7 +3497,8 @@ class NpcFsm(val world: LevelCellSource) {
         if (r0.S !in intArrayOf(1, 4, 6, 8, 10, 12)) return  // L68 set
         e.setAnim(6)
         e.P = e.P or 16
-        if (w.kAD == null) w.kAD = e                         // L75
+        w.kAD = e                                            // @745-759: `k.aD = this` (an
+        // earlier owner is replaced — the `null || != this` test only skips a no-op store)
     }
 
     /** `bL()` L121 tail (i.java:19272): push the drawn ax11s within 50px
@@ -6134,7 +6106,10 @@ private fun ax46Spring(e: Entity, w: Level0World, p: Entity) {
     if (p.ah < 0) return                                        // L82 still rising
     if ((((p.W[1] + (p.W[1] + p.W[3])) shr 1) shr 1) >= e.W[1]) return
     p.applyHit(11, 0, e, w)                                     // L83
-    e.setAnim(if (e.S == 11) 12 else 1)                         // L88/L102
+    // @694-739: `if (S == 11) i(12) else if (S == 0) i(1)` — a pad that is already
+    // springing (S1/S12) is not restarted or re-targeted (slice 408: the port set
+    // anim 1 for everything but S11, restarting S1 and turning a sprung S12 pad into S1).
+    if (e.S == 11) e.setAnim(12) else if (e.S == 0) e.setAnim(1)
 }
 
 /** L9 touch arm (proven): X-box (attack rect) overlap → armed records
@@ -6921,10 +6896,11 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
         }
         in 0..4 -> {                                           // L53 walk
             val f = e.wpF
-            if (f == null) runnerFacePlayer(e, p)
-            if (e.S != 4) {
-                if (e.S == 0 && f != null) e.av = f.a < e.ak   // L56/L58
-            } else e.av = false                                // L64
+            // @440-496 (raw bytes): `F == null ? Q() : av = F.a < ak`, then the sideways
+            // anims S0/S4 force `av = false`. (Slice 408: the port forced only S4 and
+            // set `F.a < ak` for S0 alone — S1-S3 never turned to the companion.)
+            if (f == null) runnerFacePlayer(e, p) else e.av = f.a < e.ak
+            if (e.S == 4 || e.S == 0) e.av = false
             if (e.Z[0] != 2) {
                 val r14 = e.aC; e.aC = r14 - 1
                 if (r14 < 0 && e.Z[13] < 0) {                  // L66 timers out
@@ -6938,9 +6914,9 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
         }
         in 5..9 -> {                                           // L80 attack
             val f = e.wpF
-            if (f == null) runnerFacePlayer(e, p)
-            if (e.S == 9 && f != null) e.av = f.a < e.ak       // L83
-            else if (e.S == 5) e.av = false                    // L91
+            // @595-653: same shape — S5/S9 force `av = false` after the F test.
+            if (f == null) runnerFacePlayer(e, p) else e.av = f.a < e.ak
+            if (e.S == 5 || e.S == 9) e.av = false
             if (e.animFinished() && e.U == 0) {                // L93
                 e.P = e.P or 64
                 val r16 = e.aF - 1; e.aF = r16
@@ -6960,19 +6936,23 @@ fun NpcFsm.tickAx54(e: Entity, w: Level0World, p: Entity) {
         else -> {}
     }
     // L123: homing caps — clamp velocity toward the waypoint vector
-    if (e.runnerB && e.wpBt != null) {
-        val bt = e.wpBt!!
-        if ((kotlin.math.abs(bt.a - e.bY) shl 8) <= kotlin.math.abs(e.ag))
-            e.ag = (bt.a - e.bY) shl 8
-        if ((kotlin.math.abs(bt.b - e.bZ) shl 8) <= kotlin.math.abs(e.ah))
-            e.ah = w.kY + ((bt.b - e.bZ) shl 8)
-        if (bt.a == e.bY && bt.b == e.bZ) {                    // L131 arrive
-            e.ah = 0; e.ag = 0; e.runnerB = false
-            e.runnerD = bt.d; e.iE = true
-            e.ad?.setAnim(0)
+    if (e.runnerB) {                                           // @938 `if (B)`
+        val bt = e.wpBt
+        if (bt != null) {
+            if ((kotlin.math.abs(bt.a - e.bY) shl 8) <= kotlin.math.abs(e.ag))
+                e.ag = (bt.a - e.bY) shl 8
+            if ((kotlin.math.abs(bt.b - e.bZ) shl 8) <= kotlin.math.abs(e.ah))
+                e.ah = w.kY + ((bt.b - e.bZ) shl 8)
+            if (bt.a == e.bY && bt.b == e.bZ) {                // L131 arrive
+                e.ah = 0; e.ag = 0; e.runnerB = false
+                e.runnerD = bt.d; e.iE = true
+                e.ad?.setAnim(0)
+            }
         }
+        // @1117-1159: the companion pin lives INSIDE the `if (B)` block (slice 408: the
+        // port pinned it every tick, also while the runner was not travelling).
+        e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }  // L138 pin F
     }
-    e.wpF?.let { it.a = e.ak + it.h; it.b = e.al + it.i }      // L138 pin F
     if (e.iE) {                                                // L141 dwell
         val r19 = e.runnerD - 1; e.runnerD = r19
         if (r19 < 0) { e.bs++; e.iE = false }
@@ -7092,10 +7072,9 @@ fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
         }
         in 0..4 -> {                                        // L26 walk
             val f = e.wpF
-            if (f == null) runnerFacePlayer(e, p)
-            if (e.S == 4) e.av = false                      // L37
-            else if (e.S == 0 && f != null)                 // L36→L29
-                e.av = f.a < e.ak
+            // @220-276 (raw bytes): same shape as ax(): F test, then S0/S4 → av = false
+            if (f == null) runnerFacePlayer(e, p) else e.av = f.a < e.ak
+            if (e.S == 4 || e.S == 0) e.av = false
             if (e.Z[0] == 2) return                         // L160 mode-2 hold
             val r12 = e.aC; e.aC = r12 - 1
             if (r12 >= 0 || e.Z[8] >= 0) {                  // L55/L59 windup
@@ -7110,10 +7089,9 @@ fun NpcFsm.tickAx56(e: Entity, w: Level0World, p: Entity) {
         }
         in 5..9 -> {                                        // L117 attack
             val f = e.wpF
-            if (f == null) runnerFacePlayer(e, p)
-            if (e.S == 5) e.av = false                      // L128
-            else if (e.S == 9 && f != null)                 // L127→L120
-                e.av = f.a < e.ak
+            // @823-881: F test, then S5/S9 → av = false
+            if (f == null) runnerFacePlayer(e, p) else e.av = f.a < e.ak
+            if (e.S == 5 || e.S == 9) e.av = false
             if (e.T == 3 && e.U == 0) {                     // L130 frame-3
                 e.P = e.P or 64
                 val r17 = e.aF - 1; e.aF = r17
