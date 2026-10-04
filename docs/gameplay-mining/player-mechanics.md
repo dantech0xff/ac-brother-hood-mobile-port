@@ -204,8 +204,36 @@ Xem `save-format.md` cho byte map.
 | 310,311,312 | mount-QTE dismount/throw-off (311 success, 312 thrown ±1280) | ax11 S175 loop |
 | 370,371 | boss-grabbed intro/loop (370 r()→371) | `aP` S17 finisher, `aR` S12 overlay |
 | 374 | grab release (r()→376 hoặc `k.l(12)`) | `aR` S12 escape path |
-| 375 | trap-caught drag ±1280 →376 | `aR` S15 damage-trap |
+| 375 | trap-caught drag →376: `ag = 1280; if (!av) ag = -1280` (`proven`, `g.e()` @2164-2182) — trượt **xa** boss mà người chơi đang quay mặt về | `aR` S15 damage-trap |
 | 376 | escape recover | |
 
 Bi-directional refs: enemy `i.aN` = assassination-lock victim; `aN`/`bx`/`at`
 là các global lock; `g.E` = counter-window flag (set ở ax11 S12).
+
+## Audit song song `g.e()` / `g.n()` / `D()` (slice 416, `proven` — byte `g/i/k.javap.txt`)
+
+Tám auditor read-only chạy trên một bản chụp đóng băng của port + javap thô; mọi claim được dựng lại từ
+bytecode trước khi sửa (jadx/structured đảo điều kiện, làm phẳng else-if, giấu descriptor). Các điểm đã chốt:
+
+| Chỗ | Bytecode | Hành vi gốc |
+|---|---|---|
+| S184/S205 finisher | `g.e()` @4372-4543 | nạn nhân bị kéo tới `av ? ak - 35 : ak + 35`; kết thúc khi `r() \|\| aN == null` (`k.p(); i.O(); i(0)`) |
+| S50/S241 | @4580-4583 | frame 1 gọi `g.d(I)V` **static** (`i.bh = 8` khoá-đánh toàn cục + nhả khi chết) |
+| S92/S101 | @6809-6832 | ô đầu đặc (`ah == 0`) → `g.a(0)` (rơi), ngược lại `a(36,36)` |
+| S22 | @7365-7393 | nhả chủ ô ẩn nấp `g.e` (`aA &= -9; az = 100`) trước khi vào họ trên không |
+| họ trên không | @8068-8296 | kẹp trôi `±512` **không** có điều kiện `ag != 0`; hạ cánh `d(false)` cho mọi S, nhánh S215 là ELSE của phép thử hạ cánh (`g.a(0); av = !av`); `i.f(this)` là bước **cuối** |
+| bám tường — 2 chuỗi byte | trên không @7886-7938 `((W0+20)/20)*20+1`; nhánh rơi @8881-8927 `(W0/20)*20+1` | nhánh rơi đặt người chơi gần tường hơn một ô — các cú đá ống khói / khe phụ thuộc vào đây |
+| S90 | @9768 | `k.v()` xoá cả sáu từ phím (`eL bC bB eM eK eN`) |
+| S38 | @11282-11306 | không bám + ô đầu mở → `al = W[3]; i(43)` và **kết thúc** arm (bộ xử lý DOWN/quay mặt @11383+ chỉ thuộc nhánh bám) |
+| cổng `ap()` hậu-tail | @14396-14415 | `z && !i.bn && !g.E` — hai static sống; `i.bn` cũng quyết `g.l()` (`i(bn ? 199 : 32)`) và S79 |
+| `ap()` dao | @200-235 | `I == 2 && S != 79` → `ai = ag = 0; i(286); k.A(29)` |
+| `g.c(i)` | @5-6 | `i.bq = 0` — mức đỉnh thùng mà `g.m()` đọc |
+| điểm gauge | `g.aB()` @117-163; `aq()/ar()` @230-263 | `g.L/g.M` là field **instance** của người chơi (gauge + điểm ném); `i.L/i.M` static là neo chạm (`o(II)V`, `b(II)Z`, `U()`) — hai thứ khác nhau |
+| khoá đổi vũ khí `k.at` | `k.c(Z)` @1159-1167 | HUD tail `at == 1 → 0` dưới `g.o()Z` (đứng đất hoặc trên xe) — một field duy nhất |
+| `i.J()` (overlay đồng hành ax71) | @60-79 | ẩn khi `r() \|\| (j.c == 21 && k.u != 8)`; `k.u` = loại hộp thoại (`k.b(IIII)Z`, `ag()`), **không** phải từ phím giữ |
+| `putfield ac` thô | `g.a(I)V` @31-37, `g.e()` @12688, `g.as()` @248, `g.au()` @1431 | không đụng `P & 256`; chỉ `i.a(Li;)V` (14 call-site trong `i`) mới nhả/đặt cờ |
+| `g.n()` (bh3) | `i.I()` @1253-1256 | method riêng: **không** có đầu `e()` (không `a(Z)V`, `an()`, `J()`, `i(50)`, kẹp `ah`), `i.bh--` nằm sau lệnh `return` của dead-drag; level-out về S4 chỉ khi `k.bB == 0 && k.bC == 0` (từ phím) |
+| `D()` (mỗi spawn / retry / vào màn) | @0-406 | `k.n(-1)` là overload **rung camera** (`cO = 1`), không phải nhả tường; tái vũ trang `i.br[]` (gợi ý hướng dẫn màn 0); `k.aw = 0` (qua `i.O()` và `k.r()`); `k.p()` nhả khoá nhập; `k.F = null`; `i.at = null` |
+| `i.t()` ax21 | @1103-1172 | `W[0] += bY - k.O; W[1] += bZ` — hộp trong không gian camera |
+| `i.B()` | `b(III)V` @33-83, `c(III)V` @33-84, @278 | các lần trượt kênh đọc lại `W[0]/W[2]` sau mỗi `t()` (lượt thứ 2+ trượt cả ô 20px); nhánh góc nhúng L36 trả về **không** gọi `t()` cuối |
+

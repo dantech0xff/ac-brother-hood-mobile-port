@@ -231,4 +231,34 @@ class Slice415Test {
         assertEquals(13, plain.jC)
         assertTrue(plain.drainCommands().any { it == Command.PlaySfx(7) }, "bx < 0 keeps the sting (control)")
     }
+
+    // ---------------------------------------------------------------- i.L / i.M anchor statics, g.L / g.M gauge point
+
+    @Test fun `the interact gauge parks its point on the player's own L M - not on the touch-anchor statics`() {
+        val w = world(); val p = w.player
+        val target = Entity(11, w.clips[7]).apply { setPositionPx(p.ak + 40, p.al); refreshBoxes() }
+        p.g = target
+        p.cN = 1000                                                   // past the frame duration: the step runs
+        Entity.L = 7; Entity.M = 8
+        try {
+            p.interactGauge(w)
+            assertEquals((target.W[0] + target.W[2]) shr 1, p.gQL, "g.aB() @117-137 putfield g.L")
+            assertEquals(((target.W[1] + target.W[3]) shr 1) - 10, p.gQM, "putfield g.M")
+            assertEquals(7, Entity.L, "the statics i.L / i.M are untouched")
+            assertEquals(8, Entity.M)
+        } finally { Entity.L = -1; Entity.M = -1 }
+    }
+
+    @Test fun `every writer of the i_L i_M anchor feeds the one touch hit-test`() {
+        val w = world(); w.cm = 0
+        val x = w.player.ak; val y = w.player.al
+        try {
+            w.iL = x; w.iM = y                                         // NpcFsm markerSpawn74 / markerMove74
+            assertEquals(-1, w.resolvePadZone(x - w.camX, y - w.camY), "@33979-33992 b(II)Z: within 70 px of (L, M)")
+            w.iL = -1; w.iM = -1
+            assertEquals(4, w.resolvePadZone(x - w.camX, y - w.camY), "cleared → the wheel again")
+            w.player.markerPoint(x, y)                                 // Entity.markerPoint = o(x, y)
+            assertEquals(-1, w.resolvePadZone(x - w.camX, y - w.camY))
+        } finally { Entity.L = -1; Entity.M = -1 }
+    }
 }

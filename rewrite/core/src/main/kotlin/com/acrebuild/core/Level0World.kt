@@ -397,9 +397,16 @@ class Level0World(
     override var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
-     *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
-    var anchorLx = -1
-    var anchorLy = -1
+     *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space.
+     *  ONE pair of statics (slice 415: the port kept four disjoint copies — the hand / marker
+     *  writers parked their point where the touch hit-test never looked, so the anchor zone
+     *  was dead): `Entity.L/M`. */
+    var anchorLx: Int
+        get() = Entity.L
+        set(v) { Entity.L = v }
+    var anchorLy: Int
+        get() = Entity.M
+        set(v) { Entity.M = v }
     fun setInteractAnchor(x: Int, y: Int) { anchorLx = x; anchorLy = y }  // i.o()
     fun clearInteractAnchor() { anchorLx = -1; anchorLy = -1 }            // i.U() tail
     override fun clipFor(idx: Int): Clip? = clips[idx]
@@ -472,7 +479,6 @@ class Level0World(
     override var vehicle: Entity? = null        // g.a
     override var cv: Entity? = null             // i.cv — ax10-S51 rail zone
     override var iFlag = true                   // g.i
-    override var eFlag = false                  // g.E
 
     /** `k.q()` (k.java:13152, proven): rebuild `ar[]`/`as` from `player.gJ`
      *  — `as=0; at=0; ar[]=-1`, then bits 0..4 take set bits except
@@ -702,6 +708,7 @@ class Level0World(
         //  prefill; `bW` staying armed re-fires `i.X()` every tick.
         iZ = true; iBy = 1                          // i.z, i.by
         iCm = false; iCl = null                     // i.cm, i.cl
+        kF = null                                   // k.F (D() @17)
         iAH = false; iAI = 1                        // i.aH, i.aI=1
         iBj = false; iBT = false                    // i.bj, i.bT
         cFFlag = false                              // i.cF (gauge-full)
@@ -732,6 +739,11 @@ class Level0World(
         iAK = null                                  // i.aK
         iBh = 0                                     // i.bh
         iBn = false                                 // i.bn
+        Entity.at = null                            // i.at (D() @173, slice 416)
+        hintPending.fill(true)                      // i.br[] re-armed (D() @192-211, slice 416): the
+                                                    //   mission-0 tutorial hints show again on a retry
+                                                    //   / re-entry; reload()'s checkpoint arm then
+                                                    //   restores the snapshot's copy (:5200-5202)
         iQ = false                                  // i.q (gauge-charge)
         kAZ = false                                 // k.aZ
         iCk = null                                  // i.ck
@@ -744,11 +756,14 @@ class Level0World(
         iF = null; iG = null; iH = null             // i.f/g/h sparkle fields
         iBQ = 0                                     // i.bQ
         // i.O() (i.java:7623): slow-mo/conveyor restore on bh3 packs —
+        kAw = 0                                     // i.O() @4-5 `k.aw = 0` (slice 416)
         if (Entity.MISSION_BH[kAj] == 3) {
             if (kW != 0) iAJ = kW
             if (iAJ != 0) kX = iAJ
             iAJ = 0
         }
+        player.unlockInput(this)                    // D() @338 k.p() (slice 416): a retry never keeps a
+                                                    //   stale input lock (the flying g.n() never releases)
         iBB = false                                 // i.bB
         iBF = -1; iBG = -1                          // i.bF/bG = -1
         iBk = false                                 // i.bk
@@ -758,7 +773,10 @@ class Level0World(
         kAv = false                                 // k.av (k.aQ = volPaintRect, nulled above)
         iCg = null; iCh = null                      // i.cg, i.ch
         kDz = 120                                   // k.dz (k.r() tail)
-        kN()                                        // k.n(-1) — wall release
+        kN()                                        // k.V() @49 `n()V` — the scroll-wall release
+        kNSet(-1)                                   // D() @299-300 `k.n(I)V` with -1 = the SHAKE
+                                                    //   overload (`cO = 1; cP = false`; slice 416), not
+                                                    //   the wall release the port called here
         rebuildRecordStructs()
 
         // d(z2) slot map (simple k.java:5941-6080, proven): every record
@@ -1091,7 +1109,6 @@ class Level0World(
         }
     }
     override fun kAyAt(i: Int): Entity? = kAY.getOrNull(i)
-    override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
     /** `k.M` — the player's front box, written at `g.e()` offset 154
@@ -1600,8 +1617,6 @@ class Level0World(
     override var iAK: Entity? = null             // i.aK — flap-puff child
     override var kAI = 0                         // k.aI — flap cooldown
     override var kAG = 0                         // k.aG — aE decay divider
-    override var kBB = 0                         // k.bB — burst-phase int
-    override var kBC = 0                         // k.bC
     /** `k.bD` — ONE static: the input commit's hold-duration counter
      *  (k.java:1599-1604), which `g.l()` reads for hold-to-turn and the
      *  flying bank anims read and bump (g.java:5701-5776). */
@@ -1664,7 +1679,6 @@ class Level0World(
         dlgZ()                                          // z() (:371)
         return true
     }
-    var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
     var alertSlide = 0                         // derived `i3` = 30-aH slide
     var alertFill = 0                          // derived `i4` = min(aE,100)
@@ -4578,8 +4592,12 @@ class Level0World(
         set(v) { player.gh = v }
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
-    override var iL = -1                           // i.L
-    override var iM = -1                           // i.M
+    override var iL: Int                           // i.L — the one static pair (Entity.L/M)
+        get() = Entity.L
+        set(v) { Entity.L = v }
+    override var iM: Int                           // i.M
+        get() = Entity.M
+        set(v) { Entity.M = v }
     /** `aS.l()` (g.java:4968) — grab-release; bM=null first per the
      *  original head, then the shared `PlayerFsm.l` resolver. */
     override fun grabResolve(p: Entity): Boolean {
@@ -5097,8 +5115,11 @@ class Level0World(
         // aO/aP timed line (k.java:4337-4343): expired or absent → null
         if (kAO < 0 || kAP == null) kAP = null
         // weapon-corner latch (k.java:4276-4279): at==1 → 0 inside the
-        // gate, which opens with `!z2` — b(true) never clears it
-        if (!z2 && weaponCornerArmed() && kAt == 1) kAt = 0
+        // gate, which opens with `!z2` — b(true) never clears it. `k.at` is the ONE cycle lock
+        // `g.ao()` / `g.h(I)Z` set (raw bytes @1159-1167, slice 416): the port reset a separate,
+        // never-written `kAt`, so the lock stayed 1 after the first weapon cycle until the next
+        // equip rebuild.
+        if (!z2 && weaponCornerArmed() && actionLock == 1) actionLock = 0
     }
 
     /** The `b(z2)` draw-tail counters (k.java:3166-3239, proven) — the
@@ -5169,16 +5190,13 @@ class Level0World(
      *  door-arrival arm (i.java:14448). */
     override fun fadeIn() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
 
-    /** `i.o()` (i.java:5423): player alive-and-acting —
-     *  S ∉ {2,20..29}. */
-    fun playerAliveO(): Boolean = player.S !in
-        intArrayOf(2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29)
-
     /** The weapon-corner gate (k.java:4274-4276): `!z2 && !bh3 && aS.o()
      *  && (C==null || (aS.P&512)!=0) && ((jc==21&&u==8)||jc==8) &&
      *  z[12]!=null` (z12 is always loaded in the port). */
     fun weaponCornerArmed(): Boolean {
-        if (bh3 || !playerAliveO()) return false
+        // @1092-1098 `invokevirtual g.o:()Z` — the player's grounded-or-vehicle test (g.java:6090),
+        // not the private `i.o()Z` (S ∉ {2, 20..29}) the port tested (slice 416)
+        if (bh3 || !player.groundOrVehicle()) return false
         val c = kC
         if (c != null && (player.P and 512) == 0) return false
         return (jC == 21 && dlgU == 8) || jC == 8

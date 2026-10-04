@@ -422,6 +422,10 @@ class Slice369Test {
 
         val w2 = HeadWorld(cellFn = floorFrom(5))
         w2.kAm = true
+        // the S184 arm's own end-gate is `r() || aN == null` (raw bytes @4496-4509, slice 416): with a
+        // live victim and the anim still running it keeps the lock, without one it releases it
+        val v2 = Entity(11, null); v2.S = 107; v2.aB = 50
+        w2.lockTarget = v2
         val p2 = playerAt(200, 99, synth, 184)
         PlayerFsm(w2).tick(p2, Pad())
         assertTrue(w2.kAm, "S184 keeps the lock")

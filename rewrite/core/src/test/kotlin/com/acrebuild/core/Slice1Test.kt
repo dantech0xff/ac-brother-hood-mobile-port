@@ -11862,11 +11862,13 @@ class Slice96Test {
         w.cm = 0
         // play state: jc8 = in-game → armed
         w.stateL(8)
+        w.player.aZ = true
         assertTrue(w.weaponCornerArmed())
-        // dead player S in {2,20..29} disarms
-        w.player.S = 20
+        // raw bytes @1092-1098 (slice 416): the gate is `g.o()Z` — grounded or aboard a vehicle — so
+        // an airborne player (aZ false, nothing under him) disarms
+        w.player.aZ = false; w.player.standingOn = null
         assertFalse(w.weaponCornerArmed())
-        w.player.S = 0
+        w.player.aZ = true
         // menu jc (not 8 / 21-8) disarms
         w.stateL(0)
         assertFalse(w.weaponCornerArmed())
@@ -11880,11 +11882,12 @@ class Slice96Test {
         assertFalse(w.weaponCornerPressed())
     }
 
-    @Test fun `kAt latch consumed inside armed gate`() {
+    @Test fun `k_at cycle lock consumed inside armed gate`() {
         val w = world(); w.npcs.clear()
-        w.stateL(8); w.kAt = 1
+        w.stateL(8); w.actionLock = 1
+        w.player.aZ = true
         w.tick(emptyList())
-        assertEquals(0, w.kAt, "at==1 → 0 (k.java:4277)")
+        assertEquals(0, w.actionLock, "at==1 → 0 (k.java:4277, raw bytes @1159-1167): the lock `g.ao()` sets")
     }
 
     @Test fun `hudScoreText tiers`() {
@@ -13645,7 +13648,6 @@ class Slice128Test {
         override var actionLock = 0
         override var cEntity: Entity? = null
         override var iFlag = false
-        override var eFlag = false
         override var cv: Entity? = null
         override var cFFlag = false
         override var playerLinkB: Entity? = null
@@ -13858,17 +13860,18 @@ class Slice130Test {
         val p = Entity(0, null)
         p.S = 375; p.T = 0; p.av = false
         fsm.tick(p, Pad())
-        assertEquals(1280, p.ag, "S375 skid +1280 facing right (g.java:4246)")
+        // raw bytes @2164-2182 (slice 416): `ag = 1280; if (!av) ag = -1280`
+        assertEquals(-1280, p.ag, "S375 skid -1280 facing right (the boss is to the right: away from it)")
         assertTrue(p in w.clampCalls, "i.f(this) tail (g.java:4253)")
     }
 
-    @Test fun `S375 left-facing skids -1280`() {
+    @Test fun `S375 left-facing skids +1280`() {
         val w = Slice128Test.MarkerWorld()
         val fsm = PlayerFsm(w)
         val p = Entity(0, null)
         p.S = 375; p.T = 0; p.av = true
         fsm.tick(p, Pad())
-        assertEquals(-1280, p.ag)
+        assertEquals(1280, p.ag, "av = left-facing (toward the boss) → pushed right, away from it")
     }
 
     @Test fun `S375-377 chain skids to halt then falls g4245`() {
@@ -14373,7 +14376,7 @@ class Slice135Test {
         w.lockTarget = v
         fsm.tick(p, Pad())
         assertEquals(107, v.S, "i.aN.i(107)")
-        assertEquals(235, v.ak, "av=true → ak+35")
+        assertEquals(165, v.ak, "av=true → ak-35 (raw bytes @4440-4457; the port had the signs swapped)")
         assertEquals(1, w.statE); assertEquals(3, w.wisps)
     }
 
@@ -16319,6 +16322,7 @@ class Slice151Test {
         assertNull(p.ae, "mounted → releaseAe drops ae")
         assertFalse(p.gcm, "latch drained")
         assertEquals(5, Entity.L, "G() does not touch L/M")
+        Entity.L = -1; Entity.M = -1                           // statics: do not leak into later tests
     }
 
     @Test fun `gcm quiet tick unmounted drops indicator`() {
@@ -17953,11 +17957,12 @@ class Slice180Test {
         p.setAnim(4)                                      // z4 state → bank anim applies
         w.playerFsm.tick(p, pad)
         assertEquals(-768, p.ag, "left bank -768/tick")
-        // clip16's S32/S33 are 1-frame poses — the i(33) arm fires
-        // (Q stamps 33) but the `kBB==0&&kBC==0&&r()&&z4→i(4)` recover
-        // arm resets to the glide state in the same tick (verbatim).
-        assertEquals(33, p.Q, "kBD<15 → light left bank i(33)")
-        assertEquals(4, p.S, "1-frame bank blip → recover arm resets S")
+        // clip16's S32/S33 are 1-frame poses. The `bB == 0 && bC == 0 && r() && z4 → i(4)` recover arm
+        // (g.n() @1654-1684, raw bytes, slice 416: the PAD's edge / held words) stays quiet while a
+        // direction key is held — the bank pose stays up (the port read two never-written stubs
+        // and blipped back to S4 on every wrap).
+        assertEquals(4, p.Q, "kBD<15 → light left bank i(33) from the glide S4")
+        assertEquals(33, p.S, "key held → no recover")
         pad.held = 0                                      // release — held keys re-steer
         // S4's glide case keeps decaying the banked ag (z2 tail).
         w.playerFsm.tick(p, pad)
@@ -17966,7 +17971,7 @@ class Slice180Test {
         pad.held = 8256                                   // u(8256) right
         w.playerFsm.tick(p, pad)
         assertEquals(768, p.ag, "right bank +768/tick")
-        assertEquals(32, p.Q, "kBD<15 → light right bank i(32)")
+        assertEquals(32, p.S, "kBD<15 → light right bank i(32); the held key keeps the pose")
         // climb: u(16388) gated kQ>117 — kQ=230 on bh3. S32 has no exit
         // arm (verbatim g.java:6013-6020: `av=false` + dead ifs only) —
         // restore the glide state first.
@@ -18040,7 +18045,6 @@ class Slice180Test {
         // arm — kAI cooldown elapsed → flap(p, false).
         val p = w.player; p.setAnim(4); w.kAI = 11   // cooldown elapsed
         p.ah = w.kY                                  // z4 glide condition
-        w.kBB = 1                                    // !bB==0&&bC==0 → skip
         val before = w.pendingInsert.size
         w.playerFsm.tick(p, Pad())
         val wisp = w.iAK
@@ -19734,7 +19738,9 @@ class Slice195Test {
         val p = mk(200, 100); p.S = 92
         fsm.tick(p, Pad())
         assertEquals(0, p.ah, "aO==20 → ah=0")
-        assertEquals(36, p.S)
+        // raw bytes @6809-6832 (slice 416): a solid head cell (`ah == 0`) FALLS — `g.a(0)` (S43),
+        // only an open one re-enters the wall state with `a(36,36)`.
+        assertEquals(43, p.S, "ah == 0 → g.a(0) fall")
     }
 
     @Test fun `S122 bind-prep enters masked state 53`() {
@@ -25983,9 +25989,19 @@ class Slice277Test {
      * Proven route (driven by real input events):
      *  1. fall into the chimney → S101 grab wall face
      *  2. kick auto-bounce (r()→av flip → S36 ag=∓2048 ah=-5120), ~70px
-     *     rise per zigzag leg between the 60px faces
-     *  3. west-drift apex under the low strip → cw&&aO==5 → S280 ceiling
-     *     grab (y390)
+     *     rise per zigzag leg between the east wall and the pillar face; the
+     *     third (west-bound) leg finds no west wall above y560 and drops onto
+     *     the LEDGE (cells x8720-8919, top y560)
+     *  3. (slice 416) from the ledge the human hops WEST (TL corner held: a
+     *     jump with ag=-2048 per hop) until the arc meets the floating
+     *     tower's east face (x8740, rows 15-27) → S101 grab at that face →
+     *     the auto-kick throws him EAST and ~70px up under the low strip →
+     *     cw&&aO==5 → S280 ceiling grab (y390). (The slice-278 route kicked
+     *     off the east wall and reached the strip's x-range only because the
+     *     fall-arm wall-grab snap was one cell off: g.javap.txt e() @8881-8927
+     *     snaps `(W0/20)*20+1` / `(W2/20)*20+19`, the air arm @7886-7938 the
+     *     `+20`/`-20` variant — with the faithful snap the east-wall kick
+     *     peaks at x8940, past the strip's end at x8920.)
      *  4. S280→S38 hang → hold cell 5 (M_RIGHT) → S37 shimmy east
      *  5. at the strip's east end (x>8890) tap UP → S38 vault-out arm
      *     `u(M_UP)→probe→a(54,8)` (PlayerFsm.kt:813-870, L1502) — pops
@@ -26023,12 +26039,16 @@ class Slice277Test {
         var grabs = 0; var ceilingGrab = false; var shimmy = false
         var wallLand = false
         var bridgeGrab = false; var vaultOut = false
+        // slice 416: once the zigzag drops him on the ledge (S5 at y559, x<8920) he hops west to the
+        // tower face (TL corner held), until the S101 grab at x<8800 hands over to the kick
+        var ledgeHops = false; var towerGrab = false
         repeat(800) { t ->
+            if (!ledgeHops && !towerGrab && p.S == 5 && p.al == 559 && p.ak < 8920) ledgeHops = true
             // the touch wheel tracks the player's screen pos — re-post the
             // hold every few ticks at the live zone point (no UP needed:
             // pad bits OR together and aF accepts either direction)
-            if (t % 5 == 0 || (p.ag < 0) != heldW || p.S == 38 || p.S == 280) {
-                heldW = if (p.S == 38 || p.S == 280) false else p.ag < 0
+            if (t % 5 == 0 || (p.ag < 0) != heldW || p.S == 38 || p.S == 280 || ledgeHops) {
+                heldW = if (p.S == 38 || p.S == 280) false else if (ledgeHops) true else p.ag < 0
                 postHeld()
             }
             // at the low strip's east end (x>8890), tap UP → S38 vault-out
@@ -26040,6 +26060,7 @@ class Slice277Test {
             }
             val prevS = p.S
             w.tick(q.drainTo(q.headSequence()))
+            if (ledgeHops && p.S == 101 && p.ak < 8800) { ledgeHops = false; towerGrab = true }
             if (p.S == 101) grabs++
             if (p.S == 280) ceilingGrab = true
             if (p.S == 37 || p.S == 38) shimmy = true
@@ -26049,10 +26070,11 @@ class Slice277Test {
             if (p.ak >= 9000 && p.al <= 430 &&
                 (p.S == 0 || p.S == 5 || p.S == 1 || p.S == 11)) wallLand = true
         }
-        println("CHIMNEY grabs=$grabs ceiling=$ceilingGrab shimmy=$shimmy " +
+        println("CHIMNEY grabs=$grabs towerGrab=$towerGrab ceiling=$ceilingGrab shimmy=$shimmy " +
                 "vaultOut=$vaultOut bridgeGrab=$bridgeGrab " +
                 "wallLand=$wallLand minAl=$minAl @${p.ak},${p.al} S${p.S}")
         assertTrue(grabs >= 4, "expected ≥4 face grabs in zigzag, got $grabs")
+        assertTrue(towerGrab, "the ledge hops never met the tower's east face (S101 at x<8800)")
         assertTrue(ceilingGrab, "'5'-strip S280 ceiling grab never fired")
         assertTrue(shimmy, "S37/38 hang/shimmy never entered")
         assertTrue(vaultOut, "S38 UP vault-out a(54,8) never fired at strip end")
@@ -26628,8 +26650,13 @@ class Slice282Test {
             // the wall top). The S5 land arm runs l() after the jump press
             // while u(94324) is held (e() 4764-4793), so a held RIGHT
             // would turn him east — hop with LEFT+UP instead.
-            if (foe == null && p.al in 500..530 && p.ak in 1100..1360 &&
-                (p.aZ || p.S == 5)) mask = Pad.M_LEFT + Pad.M_UP
+            // Slice 416: the faithful fall-arm wall-grab snap (g.javap.txt e() @8881-8927: `(W0/20)*20+1`
+            // — the air arm @7886-7938 snaps a cell further out) puts the kick's arc over the ledge's
+            // east lip, which he now catches (S61 lip hang → UP pull-up S62 → S0 at x1370) instead of
+            // landing on it: the west hop starts from the lip, and S0 (aZ still false for the frame
+            // after the pull-up) counts as standing.
+            if (foe == null && p.al in 500..530 && p.ak in 1100..1380 &&
+                (p.aZ || p.S == 5 || p.S == 0)) mask = Pad.M_LEFT + Pad.M_UP
             // ...and east of the wall top the y339 run meets the ax4
             // crates aw641/aw829 (x1517/x1534, S7/S5 — solid, a() push-
             // out). The bunny hops now land on them and the push-out
@@ -26641,7 +26668,8 @@ class Slice282Test {
             // x1400 wall hangs: hold RIGHT toward the face — UP fires a
             // kick that throws the player OVER the wall to the east face,
             // where the chain bounces it back west (verified live)
-            if (p.ak in 1330..1500 && (p.S == 101 || p.S == 62 || p.S == 60 || p.S == 61))
+            if (p.ak in 1330..1500 && (p.S == 101 || p.S == 62 || p.S == 60 || p.S == 61) &&
+                !(p.S == 61 && p.al <= 530))      // the ledge-lip hang (y519) pulls UP (slice 416)
                 mask = Pad.M_RIGHT
             // post-intro drop: the aF latch catches the gap's east wall at
             // ~(979,548) when any direction is held airborne — the auto-
@@ -27550,6 +27578,11 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
     // floor and relaunch — net +40px/cycle up the 280px tower face.
     if (!p.aZ && p.ak in 1460..2119)
         mask = Pad.M_RIGHT + Pad.M_TAP_R                // airborne column
+    // Slice 416: with the faithful fall-arm wall-grab snap (g.javap.txt e() @8881-8927) the slot kick
+    // off the x1960 face arcs onto the slab's east lip (x1880, y580) and CATCHES it (S61 lip hang):
+    // pull UP onto the slab top (S62 -> S0) instead of letting the 40-tick hang expire into a drop.
+    if (p.S == 61 || p.S == 60 || p.S == 62)
+        mask = Pad.M_UP                                 // lip hang -> pull-up
     // y399 slab-top (post-shaft): RUN east to the x1960 tower face —
     // holding UP here turns every landing into a standstill squat-jump
     // (ag never rebuilds → stationary bounce at ~x1825). The face
@@ -27574,7 +27607,9 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
     // direction re-faces the player and every hop arc goes the wrong
     // way (probeInteriorClimb's westward migration needs av preserved).
     // LAST leg-B arm — must override every band above regardless of aZ.
-    if ((p.S == 5 || p.S == 79 || p.S == 21) &&
+    // (Slice 416: the S0 frame after the slot lip's pull-up S62 stands on the y579 slab top facing
+    // west — it hops on west, keeping av, exactly like the S5 landings.)
+    if ((p.S == 5 || p.S == 79 || p.S == 21 || (p.S == 0 && p.al in 570..590)) &&
         p.al > 470 && p.ak in 1460..1960)
         mask = Pad.M_UP                                 // hop: keep av
     // melee override — LAST so no traversal arm can silence it (the tunnel
@@ -27593,9 +27628,18 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
             Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55 &&
             (it.ak >= p.ak - 20 || Math.abs(it.al - p.al) < 20)
     }.minByOrNull { Math.abs(it.ak - p.ak) }
-    val foeOpen = foe != null && foe.S != 85 && foe.S != 17
-    if (foe != null && foeOpen && p.aZ)
-        mask = Pad.M_CONTEXT + Pad.M_RIGHT
+    // Slice 416: a soldier at the player's BACK on his own level is the one to face first. The
+    // front-only target let the bot keep striking a stunned soldier ahead (S144) while the one
+    // behind hit him in the back (the block-2 duel: S9 from behind, x1 30 -> 10, then a dive off the
+    // edge) — a human turns round (LEFT + the attack edge) and answers the attacker.
+    val behind = w.npcs.filter {
+        (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
+            it.ak < p.ak - 15 && Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 30
+    }.minByOrNull { Math.abs(it.ak - p.ak) }
+    val target = behind ?: foe
+    val foeOpen = target != null && target.S != 85 && target.S != 17
+    if (target != null && foeOpen && p.aZ)
+        mask = (if (target === behind) Pad.M_LEFT else Pad.M_RIGHT) + Pad.M_CONTEXT
     return mask
 }
 
