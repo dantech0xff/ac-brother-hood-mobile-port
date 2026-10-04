@@ -1811,16 +1811,22 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.b()` (i.java:1268-1279, proven): corner-support probe — refresh
-     * boxes (`t()`) then read the four W-corner cells into the scratch
-     * fields `aT` (top-left) / `aU` (top-right) / `aV` (bottom-left) /
-     * `aW` (bottom-right); true iff ANY corner cell `>= 12` (solid). The
-     * S85 hit-react uses it to skip the freeze+kick when fully over a pit.
-     * NOT a LOS/attack probe — misnamed in older notes.
+     * `i.b()` (i.javap `private boolean b()` @0-196, raw bytes, proven): corner-support probe —
+     * refresh boxes (`t()`), then — slice 412 — `k.ah != null` (the active scroll-wall holder,
+     * an ax37 with walls) answers TRUE at once unless the box lies strictly inside the holder's
+     * `W` (`W0 <= ah.W0 || W2 >= ah.W2 || W1 <= ah.W1 || W3 >= ah.W3`, @40-89; the scratch
+     * fields are left alone then), else read the four W-corner cells into the scratch fields
+     * `aT` (top-left) / `aU` (top-right) / `aV` (bottom-left) / `aW` (bottom-right); true iff ANY
+     * corner cell `>= 12` (solid). Callers: the S85 hit-react (`I()` @3390) and the ax60 mover's
+     * carry push-back (`c(Z)` @613). NOT the static attack test `g.b()` — that overload
+     * confusion was the port's `c(Z)` carry (slice 412).
      */
     fun cornerSupported(w: LevelCellSource): Boolean {
         refreshBoxes()
         val left = W[0]; val right = W[2]; val top = W[1]; val bot = W[3]
+        val ah = w.kAh
+        if (ah != null &&
+            (left <= ah.W[0] || right >= ah.W[2] || top <= ah.W[1] || bot >= ah.W[3])) return true
         aT = e(w, left / 20, top / 20)
         aU = e(w, right / 20, top / 20)
         aV = e(w, left / 20, bot / 20)

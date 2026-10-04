@@ -6922,7 +6922,7 @@ class Slice60Test {
         assertEquals(39, e.aC, "aC=Z[2] set by arm, then L149 decrements same tick")
     }
 
-    @Test fun `ride — standing player on moving lift gets S50`() {
+    @Test fun `ride — standing player on a moving lift enters S78 first, S50 the next tick`() {
         val w = world()
         val e = ax60At(w, 100, 200, 5, 10, 0, -1, 40, 0)   // S10 vertical mover
         e.refreshBoxes()
@@ -6932,7 +6932,158 @@ class Slice60Test {
         w.player.aZ = true
         e.ah = 256                                         // moving down
         w.npcFsm.tickAx60(e, w, w.player)
-        assertEquals(50, w.player.S, "moving lift → ride crouch S50")
+        // @361-369 (raw bytes, slice 412): `aS.i(78); goto 529` — the arm ENDS at the S78 entry
+        assertEquals(78, w.player.S, "first tick: crouch entry only")
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(50, w.player.S, "already in S78 + lift moving → ride crouch S50")
+    }
+
+    @Test fun `ride — a lift that moves only sideways also puts a crouched rider into S50`() {
+        val w = world()
+        val e = ax60At(w, 100, 200, 5, 10, 0, -1, 40, 0)
+        e.refreshBoxes()
+        w.player.setPositionPx((e.W[0] + e.W[2]) shr 1, e.W[3])
+        w.player.refreshBoxes()
+        w.player.aZ = true
+        w.player.S = 78                                    // already crouched
+        e.ah = 0; e.ag = 256                               // @372-394: `ah != 0 || ag != 0 → i(50)`
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(50, w.player.S)
+    }
+
+    // ---- c(boolean) — the horizontal mover helper (i.javap `c(Z)Z`, raw bytes, slice 412)
+
+    @Test fun `c(Z) — a non-locomotion player below the platform's bottom edge is knocked down`() {
+        val w = world()
+        val e = ax60At(w, 300, 200, 5, 11, 0, -1, 0, 0)    // S11 horizontal mover, c(false)
+        e.refreshBoxes()
+        val p = w.player
+        // S5 (the landing recovery) is neither in g.b(int)'s air set (no mount attempt) nor in
+        // g.c(int)'s locomotion set (no side clip) — its box still reaches into the platform
+        p.setAnim(5)
+        p.setPositionPx(e.W[0], e.W[3] + 6); p.refreshBoxes()
+        p.aZ = false; p.ga = null
+        assertTrue(Entity.overlapStrict(p.W, e.W), "the player's box reaches into the platform")
+        w.npcFsm.tickAx60(e, w, p)
+        // @514: `!g.c(S)` and `al > W[3]` (S not 209/50) → `aS.a(0)`
+        assertEquals(43, p.S, "head-bonk: a(0) fall")
+        assertNull(p.ga)
+    }
+
+    @Test fun `c(Z) — the S209 cling is carried with the platform even once the boxes separate`() {
+        val w = world()
+        val e = ax60At(w, 300, 200, 5, 11, 0, -1, 0, 0)
+        e.refreshBoxes()
+        val p = w.player
+        p.setPositionPx(e.W[2] + 200, e.W[3])              // far away: no W overlap
+        p.setAnim(209); p.refreshBoxes()
+        p.ga = e
+        e.ag = 5 shl 8
+        val x0 = p.ak
+        w.npcFsm.tickAx60(e, w, p)
+        // @562: `g.a == this && S == 209` keeps the link; @585 carries by `ag >> 8`
+        assertSame(e, p.ga)
+        assertEquals(x0 + 5, p.ak)
+    }
+
+    @Test fun `c(Z) — a carry that ends outside the scroll holder is pushed back (aS_b is the corner probe)`() {
+        val w = world()
+        val e = ax60At(w, 300, 200, 5, 11, 0, -1, 0, 0)
+        e.refreshBoxes()
+        val p = w.player
+        p.setPositionPx(e.W[2] + 200, e.W[3]); p.setAnim(209); p.refreshBoxes()
+        p.ga = e; e.ag = 5 shl 8
+        val x0 = p.ak
+        w.npcFsm.tickAx60(e, w, p)
+        assertEquals(x0 + 5, p.ak, "open air: the plain carry")
+        // @610-636 `if (aS.b()) aS.ak -= (ag << 1) >> 8` — `b()` is i.b() (corner cells and the
+        // scroll holder `k.ah`), NOT the static attack test g.b() the port called
+        val holder = Entity(37, null).apply {
+            W[0] = p.ak - 5; W[1] = 0; W[2] = p.ak + 500; W[3] = 1000
+        }
+        w.kAh = holder
+        try {
+            p.ga = e; p.setAnim(209); p.refreshBoxes()
+            val x1 = p.ak
+            e.ag = 5 shl 8
+            w.npcFsm.tickAx60(e, w, p)
+            assertEquals(x1 - 5, p.ak, "blocked: carry + (-2 x carry)")
+        } finally { w.kAh = null }
+    }
+
+    @Test fun `c(Z) — the carry push-back does not read the static attack test g_b`() {
+        // two identical riders on the same platform, one mid-sword-swing (S67 with a sword): the
+        // port's `playerAttacking()` pushed the swinging one back, the bytes' `i.b()` does not care
+        fun carried(s: Int): Int {
+            val w = world()
+            val e = ax60At(w, 300, 200, 5, 11, 0, -1, 0, 0)
+            e.refreshBoxes()
+            val p = w.player
+            p.gI = 1
+            p.setAnim(s)
+            p.setPositionPx(e.ak, e.W[3]); p.refreshBoxes()
+            p.ga = e; e.ag = 5 shl 8
+            val x0 = p.ak
+            w.npcFsm.tickAx60(e, w, p)
+            return p.ak - x0
+        }
+        assertEquals(carried(5), carried(67), "S67 (attack set) is carried exactly like S5")
+    }
+
+    @Test fun `i_b — an active scroll holder blocks any box that is not strictly inside it`() {
+        val w = world(); w.npcs.clear()
+        val p = w.player
+        p.setPositionPx(300, 100); p.refreshBoxes()
+        val open = p.cornerSupported(w)
+        fun holder(dl: Int, dt: Int, dr: Int, db: Int) = Entity(37, null).apply {
+            W[0] = p.W[0] + dl; W[1] = p.W[1] + dt; W[2] = p.W[2] + dr; W[3] = p.W[3] + db
+        }
+        try {
+            w.kAh = holder(-50, -50, 50, 50)
+            assertEquals(open, p.cornerSupported(w), "strictly inside: falls through to the corner cells")
+            w.kAh = holder(0, -50, 50, 50);  assertTrue(p.cornerSupported(w), "W0 <= ah.W0")
+            w.kAh = holder(-50, -50, 0, 50); assertTrue(p.cornerSupported(w), "W2 >= ah.W2")
+            w.kAh = holder(-50, 0, 50, 50);  assertTrue(p.cornerSupported(w), "W1 <= ah.W1")
+            w.kAh = holder(-50, -50, 50, 0); assertTrue(p.cornerSupported(w), "W3 >= ah.W3")
+        } finally { w.kAh = null }
+    }
+
+    @Test fun `c(Z) — the lever or pair latch is taken on the link tick only`() {
+        val w = world()
+        val lever = Entity(58, w.clips[20]); lever.aw = 88801
+        lever.S = 2
+        w.npcs.add(lever)
+        val e = ax60At(w, 300, 200, 5, 13, 0, 88801, 0, 0)  // S13 mover linked to an ax58
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertSame(lever, e.ac)
+        assertEquals(3, e.Z[4], "link tick: ax58 → lever mode")
+        e.Z[4] = 0                                          // @0: `ac != null` skips the block
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(0, e.Z[4], "no re-latch on later ticks")
+    }
+
+    @Test fun `c(Z) — a stationary mover snaps home and starts after its cooldown (ag == 0 clamp)`() {
+        val w = world()
+        val e = ax60At(w, 300, 200, 5, 13, 0, -1, 0, 0)     // S13, no link, Z[2] = 0
+        e.refreshBoxes()
+        assertEquals(0, e.ag)
+        w.npcFsm.tickAx60(e, w, w.player)
+        // @1033 `ifne 1119` falls into @1040 for ag == 0: `ak = Z[3]`, `ag = ±Z[1] << 8`
+        assertEquals(e.Z[3], e.ak)
+        assertEquals(5 shl 8, Math.abs(e.ag), "the mover started (direction by the probe)")
+    }
+
+    @Test fun `pair handoff — runs when the S11 member is past its bound, not before`() {
+        val w = world()
+        val m = ax60At(w, 160, 200, 5, 11, 0, -1, 0, 0); m.aw = 88802   // the S11 pair member
+        val e = ax60At(w, 100, 200, 5, 13, 0, 88802, 0, 0)               // S13 linked to it
+        m.refreshBoxes(); e.refreshBoxes()
+        m.ak = m.Z[3] + 10                                  // ac.ak > ac.Z[3]
+        w.npcFsm.tickAx60(e, w, w.player)
+        assertEquals(1, e.Z[4], "pair latch on the link tick")
+        // @1105 `if_icmple 1138` runs the block for `ac.ak > ac.Z[3]`
+        assertEquals(m.Z[3] - 50, e.ak, "e snaps 50px behind the member's bound")
+        assertEquals(m.Z[3], m.ak, "member re-seated at e.ak + 50")
     }
 
     @Test fun `auto-bounce Z4=2 — solid probe reverses ah`() {
@@ -7089,20 +7240,33 @@ class Slice69Test {
         assertEquals(0, e.S)
     }
 
-    @Test fun `S0 Z0=1 — feet must hang below zone mid to perch`() {
+    @Test fun `S0 Z0=1 — the zone catches a player whose feet are still above its mid-line`() {
         val w = world()
         val e = ax69At(w, 100, 200, 1, 0, 0, -1)
         w.player.setAnim(19)
-        // W[3] (foot edge) above the midline → rejected (L65)
-        w.player.setPositionPx(100, 130)
-        w.player.refreshBoxes()
-        w.npcFsm.tickAx69(e, w, w.player)
-        assertEquals(0, e.S, "feet above mid: no bind")
+        // @693 `if_icmpge 801` (raw bytes, slice 412): `aS.W[3] >= mid → return`. Feet at / below
+        // the mid-line → no bind (the port had this the other way round)
         w.player.setPositionPx(100, 195)
         w.player.refreshBoxes()
         w.npcFsm.tickAx69(e, w, w.player)
-        assertEquals(1, e.S, "feet below mid: perch anim S1")
+        assertEquals(0, e.S, "feet below mid: no bind")
+        // feet above the mid-line — he is dropping into the zone from above → perch anim S1
+        w.player.setPositionPx(100, 130)
+        w.player.refreshBoxes()
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(1, e.S, "feet above mid: perch anim S1")
         assertSame(e, w.player.af)
+    }
+
+    @Test fun `S1 runs the armed S7 body in the same tick (bytes @802 falls into @815)`() {
+        val w = world()
+        val e = ax69At(w, 100, 200, 1, 0, 0, -1)
+        e.setAnim(1)                                      // perch anim, not finished
+        assertEquals(1, e.S)
+        w.player.setPositionPx(300, 300)
+        w.pad.commit(8256)                                // k.u(12368): RIGHT held
+        w.npcFsm.tickAx69(e, w, w.player)
+        assertEquals(6, e.S, "Z0=1 + held pad → i(6) straight from S1")
     }
 
     @Test fun `preamble — ax11 victim right of zone within 40px binds + marker`() {

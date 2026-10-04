@@ -120,6 +120,13 @@ người chơi **đứng nguyên tại điểm bấm** và bán kính quỹ đ�
 bánh/cột; cung dốc nâng tay (X rect ≈ +21,−47) lên trên chân nên bán kính ngắn hơn. Bản port cũ
 dùng `g.b()` (bảng tấn công) — cùng kiểu nhầm overload với op 4.
 
+**Ba method tên `b`** (slice 412, `proven` — đếm mọi call site trong javap): `g.b(int)` static =
+bảng trên không/treo/leo (17 caller trong `i` + `k.m(int)` + `g.c(i)`), `g.b()` static = bài test
+đang vung kiếm/dao (13 caller trong `i` + `g.ap()`), và `i.b()` (private, instance, `i.javap`
+`b()Z` @0-196) = **probe góc va chạm**: `t()`, nếu `k.ah` (holder scroll-wall) khác null thì trả
+true trừ khi hộp nằm lọt hẳn trong `ah.W`, rồi đọc 4 ô góc W (`aT/aU/aV/aW`), true nếu có ô `>= 12`.
+`i.b()` có 2 caller: S85 hit-react (`I()` @3390) và carry của mover ax60 (`c(Z)` @613).
+
 ## Flying machine — `g.n()` (player ax==25)
 
 - Heat/energy gauge: `k.aE` giảm 1 mỗi `k.aG`=6 tick; hết (`aE<=0` &&
