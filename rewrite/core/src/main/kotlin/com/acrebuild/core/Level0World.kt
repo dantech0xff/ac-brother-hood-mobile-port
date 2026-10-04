@@ -5,9 +5,10 @@ package com.acrebuild.core
  * 62 ms tick through the ported `g.e()`/`i.I()` arm loops.
  *
  * Tick order (matches the original entity tick shape):
- *   input → Pad.commit → player collideSides(probe+resolve) → PlayerFsm
- *   dispatch (arms read the fresh probes) → integrate → s() anim advance →
- *   same for each NPC via NpcFsm.
+ *   input → Pad.commit → player s() anim advance → integrate → `g.e()`
+ *   (PlayerFsm: head `a(an())` rescan, then the arm — whose own
+ *   `a(true)`/`E()` calls are the only wall resolves, slice 372) → same
+ *   for each NPC via NpcFsm.
  *
  * Touch zones are the original's `j(x,y)` wheel (k.java:575-621, proven):
  * a 3×3 radial grid `c()` centered ON THE PLAYER (`ak-25..+25`,
@@ -309,6 +310,19 @@ class Level0World(
         // (`pendingRemove` membership — the list itself drains after).
         if (kAh === e) kN()
         if (kF === e) kF = null
+        // `for (i < bc) if (bb[i] == iVar) { bg[as] = -99; bb[i].p(); … }`
+        // (bytecode k.c(i) @26-91, proven): a pool member is `p()`'d AT
+        // ONCE — boxes, `ab`/`ad`/`ae`/`af`/`c` and the `cr` pool dropped —
+        // so the rest of the frame (stale `bd[]` entries, links still held
+        // by others) sees an inert entity; a second `k.c` on the same one
+        // finds no slot and does nothing (slice 387).
+        if (e !in pendingRemove && (e in npcs || e in pendingInsert)) e.deactivate()
+        // `k.b(i)` inserts at once, so the original's `k.c` finds a same-frame
+        // spawn in `bb[]`, frees its slot and the entity never ticks again.
+        // The port queues spawns in `pendingInsert` and drains it AFTER
+        // `pendingRemove` — a queued entity removed before the drain would
+        // join `npcs` and run on. Dequeue it.
+        pendingInsert.remove(e)
         pendingRemove += e
         // k.c(iVar) (k.java:4576): `bg[as]=-99` — the record's save-image
         // slot tombstones immediately; the next aY() propagates it to bf.
@@ -2354,9 +2368,14 @@ class Level0World(
             val e = drawList[i] ?: break
             e.ad?.let { if (it.ax != 76 && it.ax != 29) it.drawStyleF(this) }
             if (e.ax == 21 && e.S == 1) {                // L243-L251
+                // b(Z) @1910-1966 (proven): `ad != null` → `C == null || u
+                // != 9` clears the freeze bit (`ad.P &= -65`), then
+                // `ad.s()` runs unconditionally (its own `P&64` gate
+                // decides). The port advanced only for `C == null || u ==
+                // 9` — a claim over a non-u9 dialog never moved it.
                 val ad = e.ad
-                if (ad != null && (kC == null || dlgU == 9)) {
-                    if (kC == null) ad.P = ad.P and 64.inv()
+                if (ad != null) {
+                    if (kC == null || dlgU != 9) ad.P = ad.P and 64.inv()
                     ad.advanceAnim()
                 }
             }
@@ -5669,13 +5688,15 @@ class Level0World(
         // `g.e()` offsets 0-163 (slice 369): the `k.C` and `g.r` returns
         // and `k.l()` run on the integrated position, before anything
         // else in `e()` moves the player.
+        // No wall rescan here (slice 372, proven): the original's
+        // `i.I()` goes straight into `g.e()`, whose only side-collides are
+        // the head's `a(an())` (g.javap e() 494) and the nine arm sites
+        // (6328 grounded, 6550 S32, 8259 air, 10143/10187 stagger,
+        // 12334 S217, 12556 S242/243, 13425 S311/312) plus `E()`/`au()`.
+        // The slice-2 superset that used to run `a(true)` here pushed him
+        // out of walls in every state — including those whose arm
+        // deliberately leaves them embedded (S79's crawl, S12 at a face).
         if (!playerFsm.eHeadReturns(p)) {
-            // The wall rescan `a(an())` also runs inside `g.e()`'s head
-            // (g.java:1282, proven); this pre-dispatch `a(true)` is a
-            // slice-2 superset the bot legs were proven against — removing
-            // it stalls proven crossings (gate row, canyon shaft), so it
-            // stays until a proven arm covers those states.
-            p.collideSides(this, true)
             playerFsm.tickBody(p, pad)                          // g.e()
         }
         // L1f35 tail (i.java:18904-18922): every dispatched entity ends

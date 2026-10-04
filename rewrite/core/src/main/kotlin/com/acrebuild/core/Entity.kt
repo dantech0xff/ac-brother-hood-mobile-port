@@ -264,7 +264,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var cK = 0                    // c() — X[1] snapshot
     var cH = 0                    // c() — X[0] snapshot (target x anchor)
     var cI = 0                    // c() — X[1] snapshot
-    var cM = 0                    // c() — ax72 Z[0]==1 clears it (L58)
+    var cM = 0                    // c() — ax72 Z[0]∈{1,2} clears it (c(i) 435-457)
     var cL = 0                    // mount-on counter (as() clears; au() oscillates)
     var cN = 0                    // g.cN — interact-gauge sub-tick (aB())
     var K = 0                     // g.K — interact-gauge anim frame (aB())
@@ -578,10 +578,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
         // L40
         cF = 5120; cx = (8 * Trig.M) / 360; cG = av
         if (t.ax == 72) {
-            if (t.Z[0] == 1) cM = 0          // L58
-            else {                           // L49-L52 param overrides
-                if (t.Z[1] > 0) cF = t.Z[1]
-                if (t.Z[2] > 0) cx = (t.Z[2] * Trig.M) / 360
+            // g.javap.txt c(i) 346-460 (slice 370, proven): the param
+            // overrides are the Z[0]∈{0,3,4} arm (355-432); Z[0]∈{1,2}
+            // — both wheel configs — reset the orbit phase `cM = 0`
+            // (435-457); any other Z[0] does neither. The port had
+            // `Z[0]==1 → cM=0, else overrides`, so a second Z0==2 wheel
+            // kept the first one's cM and skipped its spin-in.
+            when (t.Z[0]) {
+                0, 3, 4 -> {
+                    if (t.Z[1] > 0) cF = t.Z[1]
+                    if (t.Z[2] > 0) cx = (t.Z[2] * Trig.M) / 360
+                }
+                1, 2 -> cM = 0
             }
         } else if (t.ax == 11 || t.ax == 17) {          // L60-L66
             if (S == 298) { cF = 7680; cx = 0 } else { cF = 5120; cx = 0 }
@@ -1137,9 +1145,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
         aV = e(world, cx - 1, r02 / 20)
         aW = e(world, cx + 1, r02 / 20)
         if (aR < 10) {
-            // L9: only aR == 5 continues; others return early.
+            // x() @159-176 (bytecode, proven): only aR == 5 continues, and
+            // straight into `r8 = r02 % 20` — `bd` keeps its `ah != 0`
+            // value. (The simple decompile prints `L9: if (aR != 5) goto
+            // L69; L5: bd = false` — the block order, not a fall-through:
+            // the port used to clear `bd` here, so `a(true)` never took
+            // its ground pre-adjust on a '5' cell.)
             if (aR != 5) return r8
-            bd = false
         }
         r8 = r02 % 20
         if (aO < 12 || aP < 12) {
@@ -1467,16 +1479,20 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `bt()` (i.java:16669, proven): moving-contact sweep — when `ah != 0`
-     * (falling block), every `bb[]` entity of ax ∈ {17,11,23,50} that is
-     * `P()`-sweepable and overlaps `W` gets `as()`-ed. (`bb`/`bc` =
-     * registration pool = `w.npcs`.)
+     * `bt()` (i.java:15745; bytecode bt() @0-148, proven): moving-contact
+     * sweep — when `ah != 0` (a falling block), every `bb[]` entity of ax ∈
+     * {17,11,23,50} that is ALIVE (`!P()`: `P()` is `aB <= 0`, with `G()`
+     * on the dead — @95-98 `P(); ifne next`) and overlaps `W` gets `as()`
+     * — it is killed. The port skipped the alive ones (inverted), so a
+     * falling block / ax78 rock only ever "killed" corpses. (`bb`/`bc` =
+     * the registration pool = `w.npcs`; `P()` runs for every ax match, as
+     * here.)
      */
     fun sweepHostiles(world: Level0World) {
         if (ah == 0) return
         for (n in world.npcs) {
             if (n.ax != 17 && n.ax != 11 && n.ax != 23 && n.ax != 50) continue
-            if (!n.deadRelease()) continue                       // P() + G()
+            if (n.deadRelease()) continue                        // !P() (+ G())
             if (!overlapStrict(W, n.W)) continue
             n.sweepReact()
         }
@@ -3189,24 +3205,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
         e(world, cx, cy)
 
     /**
-     * `g.i(i)` (g.java:5465, proven): interact-eligibility of `cand`
-     * under this player's current state — `J&4 && cand.ax==11 &&
-     * cand.Z[19]==1` → facing + |dx|<=200 window; `S∈{268,291}` or
-     * `aS.S==267` → true; `S==303 && r()` → true; `S∈{295,357,358}` →
-     * true; `S∈[299,307]` → true; else false.
+     * `g.i(i)` (g.javap.txt i(i) 0-188, proven; slice 388): interact-
+     * eligibility of `cand` under this player's current state.
+     *  - 0-85: `J&4 && cand.ax==11 && cand.Z[19]==1` with the candidate IN
+     *    FRONT (`av ? dx < 0 : dx > 0`, `dx = cand.ak - ak`) and within
+     *    200px → true. Every other outcome of that block falls THROUGH to the
+     *    state list — it never returns false itself (the port did, and read
+     *    the `!av` side backwards);
+     *  - 86-186: `S ∈ {268, 291}`, `k.aS.S == 267` (the player's own S),
+     *    `S == 303 && r()`, `S ∈ {295, 357, 358}`, `S ∈ [299, 307]` → true
+     *    (S303 sits in the range, so it is true whatever `r()` says).
      */
     fun interactEligible(cand: Entity): Boolean {
         if (gJ and 4 != 0 && cand.ax == 11 && cand.Z[19] == 1) {
-            if (av && cand.ak - ak >= 0) return false
-            if (!av && cand.ak - ak > 0) return false
-            if (Math.abs(cand.ak - ak) > 200) return false
-            return true
+            val dx = cand.ak - ak
+            if (((av && dx < 0) || (!av && dx > 0)) && Math.abs(dx) <= 200) return true
         }
-        if (S == 268 || S == 291) return true
-        if (S == 303) return animFinished()
-        if (S == 295 || S == 357 || S == 358) return true
-        if (S in 299..307) return true
-        return false
+        return S == 268 || S == 291 || S == 267 || (S == 303 && animFinished()) ||
+            S == 295 || S == 357 || S == 358 || S in 299..307
     }
 
     /** `g.b(int)` (g.java:374, proven): free/interact-eligible anim set —

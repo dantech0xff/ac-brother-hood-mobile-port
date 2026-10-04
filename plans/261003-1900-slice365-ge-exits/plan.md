@@ -287,7 +287,8 @@ No capstone bot test changed.
 
 F2-F11 are resolved in
 [slice 369](../261003-2300-slice369-player-ge-followups/plan.md) (F11 ported;
-not observable after the head's `a(an())`).
+not observable after the head's `a(an())`); F1 in
+[slice 370](../261004-0800-slice370-type2-kill/plan.md).
 
 ## Gates
 

@@ -119,7 +119,7 @@ timing change in the bot.
 
 ## Further divergences found (not fixed here)
 
-- **S32 arm (e() 6512-6630, proven).** The port has only `i.f(this)` and
+- **S32 arm (e() 6512-6630, proven; fixed in slice 372).** The port has only `i.f(this)` and
   `r() → ag = 0; i(Q==79 ? 79 : 0)`. Missing: `!aZ && g.a == null → cq = 0;
   a(0); goto` (6516-6538), `ag != 0 → a(true)` (6541-6550), `y() && ag != 0 →
   ag = 0` (6553-6569), and after `r()`: `S == 0 → x(); aO > 12 → i(79)`

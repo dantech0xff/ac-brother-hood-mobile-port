@@ -27,7 +27,7 @@ decide what still needs a slice.
 | `PlayerFsm.preJumpArm` "rope/platform variants omitted" | e() 7222-7362: `r() \|\| S==233 → i(22)`; `ah = g.a.ax==51 ? -2560 : -5120`; `g.a.ax==43 && g.a.ab() → ag=∓1024` else `∓2048`. The port waits for the anim end on S233 too and always jumps full height/width. | slice 369 (F12) |
 | `Level0World` "g.r(stub)" | g.r is read: e() 157-163 `if (g.r) return` — the boss grab lock (aP S7, i.java:8328/8352). The port writes `gR` and never reads it. | slice 369 (F13c) |
 | (no marker) e() head | 0-19 `k.C != null && (aS.P&512)==0 → return` (any bound claimer, not only `ab()`); 154 `k.l()` writes the static `k.M` reach box that NPCs read a frame later; the port rebuilds it live (`NpcFsm.ctxZone`, `reachRect73`). | slice 369 (F13a/b) |
-| `Level0World.tickPlayerI` pre-dispatch `collideSides(true)` "slice-2 superset" | An extra side-collide before `g.e()` that the original does not run; removing it stalls two bot crossings, so some arm's own collide is missing. Documented, but an approximation. | follow-up slice after 369/370 land (needs the arm audit + bot check) |
+| `Level0World.tickPlayerI` pre-dispatch `collideSides(true)` "slice-2 superset" | An extra side-collide before `g.e()` that the original does not run; removing it stalls two bot crossings, so some arm's own collide is missing. Documented, but an approximation. | **done — slice 372**: removed; the only arm lacking its own collide was S32 (6550), the bot crossings were routes through states the superset had been masking |
 
 ## B. Deliberately not ported — no gameplay effect
 
