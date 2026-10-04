@@ -18260,6 +18260,9 @@ class Slice184Test {
         val w = world(); w.npcs.clear()
         val e = guard(w, 300, 150)
         e.setAnim(24); e.aC = 5; e.refreshBoxes()
+        // the pinned victim is in S89 (the S99 arm's `aS.i(89)` bounce) — the tail's
+        // `a()` push @265 skips `aS.S > 43`; at S0 it would shove him off the pin
+        w.player.setAnim(89)
         w.npcFsm.tick(e, w.player)
         assertEquals(60, w.kAA, "k.aA = 60")
         assertEquals(0, w.player.ah)
@@ -23366,6 +23369,15 @@ class Slice245Test {
                 p.ak < 5470 -> Pad.M_RIGHT                     // run to the rope
                 else -> Pad.M_UP                               // at x5487: jump up
             }
+            // Slice 404: the three trench guards are solid to the player whether or
+            // not they are alerted (the shared tail's `a()` @7644-7657 joins both aA
+            // branches) — the trench run trades blows with whoever blocks it, so
+            // strike the guard in front of the swing.
+            if (p.aZ && p.ak < 5470 && w.npcs.any {
+                    it.ax == 11 && it.aB > 0 && it.S != 139 &&
+                    Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50 &&
+                    it.ak >= p.ak - 20
+                }) held = Pad.M_CONTEXT
             w.pad.e(held)
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
@@ -24712,6 +24724,16 @@ class Slice245Test {
                     w.pad.e(if (zn != null && zn.Z[2] != 0) 16396 else 16390)
                     w.tick(emptyList()); continue
                 }
+                // Slice 404: lip sentinels. Mantling the x2200 lip (S60) puts the climber
+                // inside the unaware sentinel e151 (x2213, `Z5=Z6=0`), and a soldier is
+                // solid to the player — the shove drops him off the lip, over and over.
+                // The designed answer is the ledge assassination: the context button at
+                // the lip grab (S60 → S203 carry, g.h = the victim) and once more to
+                // throw the victim off (S203 → S204).
+                (p.S == 60 || p.S == 203) && w.npcs.any {
+                    it.ax == 11 && it.aB > 0 && (it.j == 0 || p.S == 203) &&
+                    Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) <= 5
+                } -> { w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue }
                 p.S == 203 -> {
                     // slice-279: S203 at the massif lip is a ledge-hang
                     // (ax10-S43 arm i.java:L852-ish sets 203 on a S60/61
@@ -25488,8 +25510,12 @@ class Slice245Test {
             // elite @3811 auto-binds p.g on approach and the door's outer
             // gate requires g==null, so fleeing here is a deadlock: the
             // duel MUST run (kill → g.aB<=0 → p.g clears → teleport).
+            // Slice 404: …and the cp3→cp4 trench (x4700-5900): its three guards are
+            // solid to the player whether or not they are alerted (the shared tail's
+            // `a()` @7644-7657 joins both aA branches), so the trench cannot be run
+            // through — the last guard stands on the rope's foot (x5487). Duel them.
             val fleeElite = foe != null && foe.ax == 11 && foe.aB > 200 &&
-                p.ak < 10520 && p.ak !in 3300..3850
+                p.ak < 10520 && p.ak !in 3300..3850 && p.ak !in 4700..5900
             // slice-279 cont'd: past the channel the finale floor packs
             // 2-4 ax11s at ~x10465 — engaging ANY of them swings into a
             // 1vN: the mid-swing lock eats strikes from the rest and the
@@ -25561,6 +25587,19 @@ class Slice245Test {
                     if (foe.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
                 } else held
             }
+            // Slice 404: the stealth kill. Soldiers are solid to the player whether
+            // or not they are alerted (the shared tail's `a()` @7644-7657 joins both
+            // aA branches) — a posted guard in the corridor can no longer be fled
+            // past, and its S144/S17 recover loops make the open duel a loser. Taken
+            // from behind it is one press: k()'s window (@260-375) is an unaware
+            // soldier (`j == 0`) within 80x/5y that the player faces and that does
+            // not face the player.
+            val stabFoe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 && it.j == 0 && it.aA == 0 &&
+                kotlin.math.abs(it.ak - p.ak) < 80 && kotlin.math.abs(it.al - p.al) <= 5 &&
+                p.faces(it) && !it.faces(p)
+            }
+            if (stabFoe != null && p.aZ) held = Pad.M_CONTEXT
             atkCd--
             w.pad.e(held)
             w.tick(emptyList())
@@ -26178,6 +26217,16 @@ class Slice281Test {
                 // which are directional context hops.
                 mask = Pad.M_CONTEXT
             }
+            // Slice 404: the pillar's west lip (x960) is held by a stationary
+            // sentinel (aw38: faces east, `Z5=Z6=0`) that is solid to the player —
+            // mantling into its body shoves the climber back off the lip into the
+            // spike pit. The designed answer is the ledge assassination: press the
+            // context button during the lip grab (S60 → S203 carry → S204 throw)
+            // while the sentinel is still unaware (`j == 0`).
+            if (p.S == 60 && w.npcs.any {
+                    it.ax == 11 && it.aB > 0 && it.j == 0 &&
+                    Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) <= 5
+                }) mask = Pad.M_CONTEXT
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -26281,7 +26330,11 @@ class Slice281Test {
             // type-2 strip on its floor (row 102) — lethal since the L353d
             // type-2 kill (g.javap.txt e() 13662-13711). Jump it from the
             // S26 lip walk and take the far lip (ax10 aw22 S43 → S203).
-            if (p.S == 26 && p.al in 1930..1945 && p.ak in 2360..2419)
+            // Slice 404: with the two guards on the platform now solid the run no
+            // longer arrives in the S26 lip walk (it fights, then sprints in S12 /
+            // S233) — the jump starts from any grounded run state on the lip stretch.
+            if ((p.S == 26 || p.S == 12 || p.S == 233 || p.S == 0) && p.aZ &&
+                p.al in 1930..1945 && p.ak in 2360..2419)
                 mask = Pad.M_RIGHT + Pad.M_UP
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
@@ -26328,6 +26381,15 @@ class Slice281Test {
                 else -> if (p.ak < 3000) mask = Pad.M_LEFT + Pad.M_UP
                         else mask = Pad.M_RIGHT + Pad.M_UP
             }
+            // Slice 404: an alerted soldier is solid to the player (the shared
+            // tail's `a()` @7644-7657 joins both aA branches) — the three guards
+            // on `20`@1880 can no longer be run through; strike whoever blocks the
+            // way, as legs A/C do.
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null && p.aZ && mask == Pad.M_RIGHT + Pad.M_UP) mask = Pad.M_CONTEXT
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 160 < w.kP) w.kP = p.al + 160
@@ -26676,6 +26738,15 @@ class Slice282Test {
             // fail-branch script 25 → l(12)). Press context on the
             // rooftop approach.
             if (p.al < 700 && p.ak >= 10600) mask = Pad.M_CONTEXT
+            // Slice 404: the rooftop sentinel (aw640 @10020,718) is solid to the
+            // player whether or not it is alerted (the shared tail's `a()` @7644-7657
+            // joins both aA branches) — running into it just trades blows; strike
+            // whoever stands in front.
+            val foe = w.npcs.firstOrNull {
+                it.ax == 11 && it.aB > 0 &&
+                Math.abs(it.ak - p.ak) < 70 && Math.abs(it.al - p.al) < 50
+            }
+            if (foe != null && p.aZ && mask == Pad.M_RIGHT) mask = Pad.M_CONTEXT
             w.pad.e(mask)
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
@@ -27437,15 +27508,12 @@ class Slice289Test {
         w.kO = 1100; w.kP = 560
         var reached = false; var maxAk = 0
         for (t in 0..8000) {
-            var mask = chaseMask289(p, w)
-            // Slice 401: on the block2/3 tops (x >= 2560) two soldiers flank
-            // the run to cp555. A soldier facing the player is immune while it
-            // flinches (S85) and answers a swing in S17 with the player's i(8)
-            // stun, and the player's meter is 30 at this checkpoint — a duel
-            // there is a coin flip. Run past instead: soldiers pace at 2 px/tick
-            // against the player's 10, so the hop-run reaches cp555 first.
-            if (p.ak >= 2560 && mask == Pad.M_CONTEXT + Pad.M_RIGHT)
-                mask = Pad.M_RIGHT + Pad.M_UP
+            // Slice 404: on the block2/3 tops (x >= 2560) two soldiers flank the
+            // run to cp555. Slice 401 ran past them (they paced at 2 px/tick against
+            // the player's 10) — but an alerted soldier is solid to the player (the
+            // shared tail's `a()` @7644-7657 joins both aA branches), so the run is
+            // blocked and the duel is the route: chaseMask289's melee override.
+            val mask = chaseMask289(p, w)
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -27589,6 +27657,12 @@ class Slice289Test {
             p.gJ = 7                                   // equip incl. the ax16-prompt bit
             val mask = when {
                 p.S == 297 -> Pad.M_TAP_R                          // seesaw launch east
+                // Slice 404: the chain's drop lands on the slab guard (uid65, 600 HP,
+                // solid to the player) — the S89 air pin over it is the stab edge:
+                // press the context button (S89 -> S90 -> the guard dies in S20),
+                // exactly as the mission-6 legs do. Running on instead sends the
+                // pin's release into a duel the player (30 HP) cannot win.
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
                 Entity.at != null && p.ga == null -> Pad.M_CONTEXT // bound ax72 -> lunge
                 p.ga == m62 && upTicks < 6 -> Pad.M_UP             // mount-up -> bind
                 Entity.overlapI(p.W, e69.W) -> Pad.M_CONTEXT       // kill-prompt overlap
@@ -27825,6 +27899,15 @@ class Slice289Test {
             p.gJ = 7
             val mask = when {
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
+                // Slice 404: the two 600-HP soldiers on the x11780 block (uid213/932)
+                // are solid to the player (the shared tail's `a()` @7644-7657 joins both
+                // aA branches) — the hop-run can no longer pass through them. They are
+                // unaware (j == 0) when the mantle ends: press the context button inside
+                // the stealth-kill window (k(): <=80x, <=5y, unaware) instead of hopping.
+                p.aZ && w.npcs.any {
+                    it.ax == 11 && it.aB > 0 && it.j == 0 &&
+                    Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) <= 5
+                } -> Pad.M_CONTEXT
                 p.S == 65 -> Pad.M_UP                          // ax22: vault east
                 p.S == 317 -> Pad.M_UP + Pad.M_CONTEXT + Pad.M_DOWN
                 p.S == 164 || p.S == 157 -> Pad.M_RIGHT

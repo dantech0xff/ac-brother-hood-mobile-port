@@ -1023,16 +1023,17 @@ class NpcFsm(val world: LevelCellSource) {
         // (aS.aA&1 + aS.g(this) + j!=0 → aS.a(32)).
         if (e.aA == 0) {
             e.P = e.P and -17
-            if (player.aA <= 2) {
-                if (player.aA and 8 == 0) e.pushContact(world)  // a()
-            } else if (losL(e, player, world)) {
+            if (player.aA > 2 && losL(e, player, world))
                 player.applyHit(32, 0, e, world)        // aS.a(32,0,0,this)
-            }
         } else {
             e.P = e.P or 16
             if ((player.aA and 1) != 0 && player.inFrontOf(e) && e.j != 0)
                 player.applyHit(32, 0, e, world)
         }
+        // @7644-7657: BOTH branches (and the `aS.aA <= 2` shortcut) join here —
+        // `if ((aS.aA & 8) == 0) a()`: the soldier is solid to the player whether
+        // or not it is alerted.
+        if (player.aA and 8 == 0) e.pushContact(world)
     }
 
     /** `a(k.aS, this.P, this.W)` at L897 (i.java:15324-15380, proven):
