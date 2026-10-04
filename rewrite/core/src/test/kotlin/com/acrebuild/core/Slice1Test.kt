@@ -28750,6 +28750,11 @@ private fun driveDuelWin300(w: Level0World, p: Entity) {
                 } else if (w.kC != null && w.kC!!.aw == 280 &&
                     (boss.S == 23 || boss.S == 25 || boss.S == 27)) {
                     mask = Pad.M_LEFT + Pad.M_CONTEXT
+                } else if (boss.S == 15 || boss.S == 16) {
+                    // slice 395: `aQ()` now spawns the pick's aura `e(4/5, …)` —
+                    // the S15/S16 slash covers ±50 px in front of the boss
+                    // (X ≈ [bx-60, bx+47]); step out of it while it plays
+                    mask = if (boss.ak < p.ak) Pad.M_RIGHT else Pad.M_LEFT
                 } else if (kotlin.math.abs(boss.ak - p.ak) < 170 &&
                     kotlin.math.abs(boss.al - p.al) < 60) {
                     mask = if (boss.ak < p.ak) Pad.M_LEFT else Pad.M_RIGHT
@@ -29649,6 +29654,15 @@ class Slice307Test {
             }
             // claim-QTE: any prompt → CONTEXT
             if (w.kC != null && pressCd <= 0) { mask = Pad.M_CONTEXT; pressCd = 10 }
+            // slice 395: the counterweight catch is the grab prompt — `i.at`
+            // armed (`aY()` @1555: idle/falling, facing it, in view) and the
+            // player in a mountable state; a human taps it the moment the
+            // indicator shows. The old bot only tapped while the uid240 claim
+            // held, so the catch depended on how its combo taps happened to
+            // line up with the walk (a few ticks of duel/walk drift lost it).
+            else if (Entity.at?.ax == 72 && p.mountableState() && pressCd <= 0) {
+                mask = Pad.M_CONTEXT; pressCd = 10
+            }
             pressCd--
             w.pad.e(mask)
             w.tick(emptyList())

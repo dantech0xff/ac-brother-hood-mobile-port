@@ -4503,100 +4503,103 @@ private fun NpcFsm.directorChase(e: Entity, flag: Boolean): Boolean {
 
 // =====================================================================// Slice 34 — i.aP() ax29 boss duel FSM (i.java:10328-11076)
 // =====================================================================
-/** `d.a` (d.java:9, proven): the `aQ()` attack-pick table —
- *  `{16,15,7,17,9,8,5,14,10,33}`; by3 remaps value 5→40, 6→39
- *  (i.java:11159-11169). */
+/** `d.a` (d.javap `static{}`, proven): the `aQ()` attack-pick table —
+ *  `{16,15,7,17,9,8,5,14,10,33}`. */
 private val BOSS_PICK_TABLE = intArrayOf(16, 15, 7, 17, 9, 8, 5, 14, 10, 33)
 
-/** `i.aQ()` (i.java:11108-11170, proven): the boss attack picker.
- *  `r9` bands: by0 → table[7]; by3 `ci[2]>=160` idle-window → 3;
- *  `ci[3]>=80 && v() && aB<=500` → finisher arm (by1 first-time → 9 +
- *  `e(17)` + `cm`, else 7); `r0>100` → `ci[1]>=48` idle-window → 2,
- *  else `4|8(by3)`; `60<r0<=100` → `ci[1]>=48&&aS.aZ` → 6 +
- *  `a(true,0)`, `ci[0]>=32` → 1; `r0<=60` → `ci[0]>=32` → 0 else 5.
- *  `r02<0||>=10` → L124 `i(0)`. */
-private fun NpcFsm.bossPick(e: Entity) {
+/** `i.aQ()` (i.javap `aQ()` @0-832, proven — slice 395 re-read it from the
+ *  raw bytecode; the port's picker had four defects, see the plan):
+ *  - by0 → index 7 (`ah=ag=0`); else the first of
+ *  - by3 `ci[2] >= 160 && v()` and the player idle (S∈{0,1,7,12,79,32,6},
+ *    not 9/375) → `ci[2]=0`, index 3 — and it STOPS there (`goto @561`);
+ *  - `ci[3] >= 80 && v() && aB <= 500` → by1 first time (`!cm`): index 9 +
+ *    `e(17,…)` + `cm=true` and `ci[3]` is NOT reset; every other case index 7
+ *    and `ci[3] = 0` (@264-272);
+ *  - the distance bands on `|Δx|`: `>100` → idle-window `ci[1]>=48` → 2
+ *    (`ci[1]=0, cj=false`) else 4 (by3: 8); `60<|Δx|<=100` → EITHER
+ *    `ci[1]>=48 && aS.aZ` → 6 + `a(true,0)` OR (else) `ci[0]>=32` → 1; no
+ *    pick → -1; `<=60` → `ci[0]>=32` → 0 else 5;
+ *  - `idx` outside the table → `ah=ag=0; i(0)`; else `ci[4]=0`, `v = d.a[idx]`,
+ *    by3 remaps `5→40, 8→39, 10→37, 14→35`; `15/16/17` spawn the aura
+ *    `e(4/5/6, ak, al, az+1)`; `i(v)`; sfx 31 for 17/14/35, 33 for 16/15. */
+internal fun NpcFsm.bossPick(e: Entity) {
     val w = world
     val p = w.player
-    val ci = w.iCi
-    val r0 = kotlin.math.abs(p.ak - e.ak)
-    var r9 = -1
-    var r02 = -1
+    val ci = w.iCi ?: IntArray(5).also { w.iCi = it }
+    val r3 = kotlin.math.abs(p.ak - e.ak)
+    val by = w.iBy
     val idleSet = p.S == 0 || p.S == 1 || p.S == 7 || p.S == 12 ||
         p.S == 79 || p.S == 32 || p.S == 6
-    if (w.iBy == 0) {
+    val idx: Int
+    if (by == 0) {
         e.ah = 0; e.ag = 0
-        r02 = 7
+        idx = 7
+    } else if (by == 3 && ci[2] >= 160 && e.inPlayV(w) && idleSet &&
+        p.S != 9 && p.S != 375) {
+        e.ah = 0; e.ag = 0
+        ci[2] = 0
+        idx = 3
+    } else if (ci[3] >= 80 && e.inPlayV(w) && e.aB <= 500) {
+        e.ah = 0; e.ag = 0
+        if (by == 1 && !w.iCm) {
+            idx = 9
+            e.bossAura(w, 17, e.ak, e.al, e.az - 1)
+            w.iCm = true
+        } else {
+            idx = 7
+            ci[3] = 0
+        }
     } else {
-        var done = false
-        // L6 — by3 counter-window (ci[2]>=160, player idle, in-play)
-        if (w.iBy == 3 && (ci?.get(2) ?: 0) >= 160 && e.inPlayV(w) &&
-            idleSet && p.S != 9 && p.S != 375) {
-            e.ah = 0; e.ag = 0
-            ci?.let { it[2] = 0 }
-            r02 = 3
-        }
-        // L31 — finisher/barrage arm (ci[3]>=80 && v() && aB<=500)
-        if ((ci?.get(3) ?: 0) >= 80 && e.inPlayV(w) && e.aB <= 500) {
-            e.ah = 0; e.ag = 0
-            var r92 = 7
-            if (w.iBy == 1 && !w.iCm) {
-                r92 = 9
-                e.bossAura(w, 17, e.ak, e.al, e.az - 1)
-                w.iCm = true
-            }
-            ci?.let { it[3] = 0 }
-            r02 = r92
-            done = true
-        }
-        if (!done) {
-            // L44 — distance bands
-            if (r0 > 100) {
-                if ((ci?.get(1) ?: 0) >= 48 && e.inPlayV(w) &&
-                    idleSet && p.S != 9 && p.S != 375) {
-                    e.ah = 0; e.ag = 0
-                    r9 = 2
-                    ci?.let { it[1] = 0 }
-                    w.iCj = false
-                } else {
-                    r9 = if (w.iBy == 3) 8 else 4
-                }
-            } else if (r0 > 60) {
-                if ((ci?.get(1) ?: 0) >= 48 && p.aZ) {
-                    e.ah = 0; e.ag = 0
-                    r9 = 6
-                    e.startTrail()
-                }
-                if ((ci?.get(0) ?: 0) >= 32) {
-                    e.ah = 0; e.ag = 0
-                    r9 = 1
-                    ci?.let { it[0] = 0 }
-                }
+        var r2 = -1
+        if (r3 > 100) {
+            if (ci[1] >= 48 && idleSet && e.inPlayV(w) &&
+                p.S != 9 && p.S != 375) {
+                e.ah = 0; e.ag = 0
+                r2 = 2
+                ci[1] = 0
+                w.iCj = false
             } else {
-                if ((ci?.get(0) ?: 0) >= 32) {
-                    e.ah = 0; e.ag = 0
-                    r9 = 0
-                    ci?.let { it[0] = 0 }
-                } else {
-                    r9 = 5
-                }
+                r2 = 4
+                if (by == 3) r2 = 8
             }
-            r02 = r9                                          // L89
+        } else if (r3 > 60) {
+            if (ci[1] >= 48 && p.aZ) {
+                e.ah = 0; e.ag = 0
+                r2 = 6
+                e.startTrail()                              // a(true, 0)
+            } else if (ci[0] >= 32) {
+                e.ah = 0; e.ag = 0
+                r2 = 1
+                ci[0] = 0
+            }
+        } else {
+            if (ci[0] >= 32) {
+                e.ah = 0; e.ag = 0
+                r2 = 0
+                ci[0] = 0
+            } else r2 = 5
         }
+        idx = r2
     }
-    // L90 — table lookup; L124 = i(0) for r02<0 or >=len
-    if (r02 < 0 || r02 >= BOSS_PICK_TABLE.size) {
+    if (idx < 0 || idx >= BOSS_PICK_TABLE.size) {              // @817
         e.ah = 0; e.ag = 0
         e.setAnim(0)
         return
     }
-    w.iCi?.let { it[4] = 0 }
-    var r8 = BOSS_PICK_TABLE[r02]
-    if (w.iBy == 3) {
-        if (r8 == 5) r8 = 40
-        if (r8 == 6) r8 = 39
+    ci[4] = 0
+    var r1 = BOSS_PICK_TABLE[idx]
+    when (r1) {                                                // @587 tableswitch 5..17
+        5 -> if (by == 3) r1 = 40
+        8 -> if (by == 3) r1 = 39
+        10 -> if (by == 3) r1 = 37
+        14 -> if (by == 3) r1 = 35
+        15 -> e.bossAura(w, 4, e.ak, e.al, e.az + 1)
+        16 -> e.bossAura(w, 5, e.ak, e.al, e.az + 1)
+        17 -> e.bossAura(w, 6, e.ak, e.al, e.az + 1)
     }
-    e.setAnim(r8)
+    e.setAnim(r1)
+    if (r1 == 17 || r1 == 14 || r1 == 35) w.sfx(31)
+    else if (r1 == 16 || r1 == 15) w.sfx(33)
 }
 
 /** `i.aP()` (i.java:10328-11076, proven): the ax29 boss duel FSM.
@@ -4754,7 +4757,8 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
             } else {
                 e.ah = 0; e.ag = 0
                 if (w.iBy == 3) e.setAnim(38) else e.setAnim(2)
-                e.startTrail()
+                e.startTrail()                           // a(1, 0)
+                return                                   // @1513-1516: the S-switch is skipped
             }
         }
     }
@@ -4775,10 +4779,16 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                 for (r132 in 0 until r122) {
                     var r14 = p.al
                     if (!p.aZ) {
-                        // i.e(cx,cy) cell read — player-specific arms
-                        // unreachable on the boss (inferred collisionCell)
-                        val r016 = w.collisionCell(p.ak / 20, r14 / 20)
-                        if (r016 < 12 && r016 != 5 && r016 != 3) r14 += 10
+                        // @1857-1897: a LOOP — `r3 += 10` until the cell under
+                        // the player's x is standable (`>= 12 || 5 || 3`); the
+                        // port stepped once. `i.e(cx,cy)` — the player-specific
+                        // arms are unreachable on the boss (inferred
+                        // collisionCell); an out-of-map read is 20 → ends.
+                        var r016 = w.collisionCell(p.ak / 20, r14 / 20)
+                        while (r016 < 12 && r016 != 5 && r016 != 3) {
+                            r14 += 10
+                            r016 = w.collisionCell(p.ak / 20, r14 / 20)
+                        }
                     }
                     var r15 = p.ak
                     if (r122 == 3) r15 = p.ak + (r132 - 1) * 100
@@ -4801,9 +4811,10 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
                 else if (w.iCo == 28) e.setAnim(28) else e.setAnim(0)
             }
         }
-        // L300+L302 — S15/16/6: inert + punish-check + r()→i(0)
+        // @2364-2470 — S15/16 zero ah/ag, then (and S6 directly at @2374)
+        // the punish-check + r()→i(0)
         15, 16, 6 -> {
-            e.ah = 0; e.ag = 0
+            if (e.S != 6) { e.ah = 0; e.ag = 0 }
             if (p.X[0] != p.X[2] && Entity.overlapStrict(e.W, p.X) &&
                 w.playerAttacking() && p.S != 8) {
                 p.setAnim(8)
@@ -4890,14 +4901,17 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
             if (kotlin.math.abs(p.ak - e.ak) < 100) {
                 e.ah = 0; e.ag = 0
                 e.setAnim(0)
-            } else if (e.animFinished()) {
+            }
+            // @3009: an independent test, not an else — it reads the anim
+            // `i(0)` just selected
+            if (e.animFinished()) {
                 e.facePlayer(w)
                 bossPick(e)
             }
         }
         // L388 — S4 strike: lunge, W∩aS.W → i(6)+e(2); r()→trail-end+i(0)
         4 -> {
-            e.ag = if (e.av) 2560 else -2560
+            e.ag = if (e.av) -2560 else 2560               // @3150-3168: forward lunge
             if (Entity.overlapStrict(e.W, p.W)) {
                 e.ah = 0; e.ag = 0
                 e.setAnim(6)
