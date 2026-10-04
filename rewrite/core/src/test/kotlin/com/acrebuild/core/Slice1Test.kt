@@ -27314,19 +27314,24 @@ private fun chaseMask289(p: Entity, w: Level0World): Int {
     if ((p.S == 5 || p.S == 79 || p.S == 21) &&
         p.al > 470 && p.ak in 1460..1960)
         mask = Pad.M_UP                                 // hop: keep av
-    // melee override — LAST so no traversal arm can silence it (the
-    // tunnel guard at ~x1500,y767 patrols the corridor floor; the slab-
-    // top ax73 at (1845,398) blocks the leg-B tower run): any living
-    // soldier in sword range while grounded -> face east + attack.
-    val foe = w.npcs.firstOrNull {
+    // melee override — LAST so no traversal arm can silence it (the tunnel
+    // guard at ~x1500,y767 patrols the corridor floor; the slab-top ax73 at
+    // (1845,398) blocks the leg-B tower run): the soldier in front of the
+    // swing (east — a foe behind (west) on a lower level, e.g. the cp321 tower
+    // base guard uid30 stuck in its chase under the y919 step, is not in
+    // reach, so the route goes on instead) while grounded -> face east + attack.
+    // Slice 401: a soldier FACING the player takes no hit while it flinches
+    // (S85) or counters (S17) — the I() head leaves the intake gate down in
+    // those states, and S17 answers a swing with the player's i(8) stun — so
+    // the swing waits for the damageable windows, and the target is the
+    // nearest soldier in front (a soldier behind it never decides the swing).
+    val foe = w.npcs.filter {
         (it.ax == 11 || it.ax == 73) && it.aB > 0 && it.S != 139 &&
-            Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55
-    }
-    // The swing faces east: a foe behind (west) on a lower level — e.g.
-    // the cp321 tower base guard uid30 stuck in its chase under the
-    // y919 step — is not in reach, so the route goes on instead.
-    if (foe != null && p.aZ &&
-        (foe.ak >= p.ak - 20 || Math.abs(foe.al - p.al) < 20))
+            Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) < 55 &&
+            (it.ak >= p.ak - 20 || Math.abs(it.al - p.al) < 20)
+    }.minByOrNull { Math.abs(it.ak - p.ak) }
+    val foeOpen = foe != null && foe.S != 85 && foe.S != 17
+    if (foe != null && foeOpen && p.aZ)
         mask = Pad.M_CONTEXT + Pad.M_RIGHT
     return mask
 }
@@ -27409,7 +27414,15 @@ class Slice289Test {
         w.kO = 1100; w.kP = 560
         var reached = false; var maxAk = 0
         for (t in 0..8000) {
-            val mask = chaseMask289(p, w)
+            var mask = chaseMask289(p, w)
+            // Slice 401: on the block2/3 tops (x >= 2560) two soldiers flank
+            // the run to cp555. A soldier facing the player is immune while it
+            // flinches (S85) and answers a swing in S17 with the player's i(8)
+            // stun, and the player's meter is 30 at this checkpoint — a duel
+            // there is a coin flip. Run past instead: soldiers pace at 2 px/tick
+            // against the player's 10, so the hop-run reaches cp555 first.
+            if (p.ak >= 2560 && mask == Pad.M_CONTEXT + Pad.M_RIGHT)
+                mask = Pad.M_RIGHT + Pad.M_UP
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120

@@ -337,12 +337,17 @@ class NpcFsm(val world: LevelCellSource) {
         // L777 tail flags (i.java:5221-5232, proven): r12 forces the
         // knockdown close, r13 gates aB() melee (default ON — an arm may
         // clear it), r14 gates j() intake, r15 gates k() kill driver.
-        // L256-L259: with the player ALIVE r14+r15 default ON for every
-        // tail-reaching state (unaware guards still take stealth kills;
-        // the per-arm overrides then narrow it).
+        // I() @2131-2146 (proven, raw bytes): `if (!r2.g(k.aS)) { r6 = r5 = 1 }`
+        // — `g(i o)` = "o is on my facing side" with the SOLDIER as the
+        // receiver, so r14+r15 default ON only while the soldier does NOT face
+        // the player (a hit / stealth kill from behind); a soldier facing the
+        // player in a state that leaves the flags alone (S85 flinch, S9, S25
+        // fall…) takes neither. The per-arm overrides then set them
+        // explicitly. (Slice 401: the port tested `g.g()` — "player alive" — so
+        // every default state stayed hittable and killable from the front.)
         // tail = [r12, r13, r14, r15]
         val tail = booleanArrayOf(false, true, false, false)
-        if (!world.gG()) { tail[2] = true; tail[3] = true }   // g(aS)==false
+        if (!e.faces(player)) { tail[2] = true; tail[3] = true }
         // L259-L261: `S!=24 → j = d()` sight priority; `e()` rebuilds
         // the Z[9..12] alert rect (ak+Z15, al+Z16, +Z17, +Z18).
         if (e.S != 24) e.j = sightPriorityD(e, player, world)
