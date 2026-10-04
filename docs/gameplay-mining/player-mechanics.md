@@ -138,6 +138,18 @@ leo S37: ô đầu phía trước còn trống) đọc **`k.g` thô** (@40), kh�
 trong S37 mọi ô `20` đọc thành `0` và người chơi đi xuyên tường; vì vậy shimmy dưới `'5'` dừng ở mặt
 tường và lối đi tiếp là **UP** ở tick S38 (vault `a(54,8)`).
 
+## Camera `k.m(int)` / `k.D()` và đồng hồ collect `k.s()` (slice 414, `proven`)
+
+Mọi phép kẹp camera trong `k.m(int)` là chuỗi **if / else-if** (javap `k.javap.txt` `m(I)V`): holder scroll-wall
+`ah.W` (@1954-2084), tường `R/S` và `T/U` (@2120-2235) và hộp tập trung (@1204-1277). Hệ quả: một
+bound hẹp hơn khung nhìn 400 × 240 (holder ax37 của level 0 chỉ 350 × 180) giữ **mép trái / mép trên**;
+nhánh dưới không bao giờ ghi đè nhánh trên. Nhánh gương của carrier ax43 (`ae.av == false`, @1666-1942):
+150 % khi `dx > 200` hoặc `100 < dx <= 200 && ag == z1<<8`, `z1` khi `50 < dx <= 100 && ag == z1<<8`, 50 %
+khi `dx <= 50 && ag <= z1<<8`, còn lại giữ tốc độ cũ. `g.c` (khác null) thắng dây `g.a` khi chọn `cA`
+(@349); override `ab` / `cd[3]` chạy cả sau nhánh snap (@2428-2499). Camera bay/đuổi `k.D()`: quét hàng
+của director dừng ở ô `22` **thứ hai** (@300 `goto 440`) và đặt `k.ae = k.aS` mỗi tick (@93). `k.s()`
+(chuỗi thu thập → tier đồng hồ máu `ax = 30 + 15·tier`) thoát ngay khi `ax >= 105` (@8-16).
+
 ## Flying machine — `g.n()` (player ax==25)
 
 - Heat/energy gauge: `k.aE` giảm 1 mỗi `k.aG`=6 tick; hết (`aE<=0` &&

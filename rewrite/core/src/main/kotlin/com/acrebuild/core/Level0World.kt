@@ -1772,13 +1772,15 @@ class Level0World(
     /** `k.s()` (k.java:5338 + `dE` at :8403, proven). */
     override fun kCollectStreak() {
         kAz++
-        if (kAx < 105 && kAx < 30) kAx = 30      // meter floor clamp
+        // k.javap.txt s() @8-16: `if (ax >= 105) return` right after the streak increment — a full
+        // meter never re-tiers (the port fell through and could LOWER the cap to 30 + tier * 15)
+        if (kAx >= 105) return
+        if (kAx < 30) kAx = 30                   // meter floor clamp
         val dE = intArrayOf(0, 100, 200, 400, 600, 800)
         var tier = dE.size - 1
         while (tier > 0 && kAz < dE[tier]) tier--
         if (tier == 0) return                    // streak < 100 → nothing
-        val old = kAx
-        if (kAx > 105) return                    // L28
+        val old = kAx                            // (@77-82 `ax > 105 → return` is dead after the head test)
         kAx = 30 + tier * 15
         player.x1 = minOf(player.x1, kAx)        // g.f(ax)
         if (old < kAx) player.x1 = kAx           // g.e(ax)
@@ -2022,10 +2024,12 @@ class Level0World(
                     val at = Entity.at
                     if (at != null && at.ax == 72) {                // L48 i.at rope mid
                         camA = p.ak + ((at.ak - p.ak) shr 1) - 200
-                    } else if (gc != null && gc!!.ax == 43) {       // L61 → target rope
-                        camA = gc!!.ak - 200
-                    } else if (ga != null && ga.ax == 43) {         // L64 → own rope
-                        camA = ga.ak - 200
+                    } else if ((gc != null && gc!!.ax == 43) ||
+                        (ga != null && ga.ax == 43)) {              // L315-L371 (slice 414)
+                        // @349-: a non-null `g.c` wins even when only `g.a` is the rope
+                        val gcv = gc
+                        if (gcv != null) camA = gcv.ak - 200
+                        else if (ga != null) camA = ga.ak - 200
                     } else if (p.S in CAM_CENTER_STATES || gj ||
                         (ga != null && ga.ax == 51) ||
                         (p.S == 38 && p.ac != null && p.ac!!.ax == 22)) {
@@ -2058,7 +2062,7 @@ class Level0World(
                 }
                 // L204-L207: keep the focus box 40px inside view
                 if (p.W[1] < camB + 40) camB = p.W[1] - 40
-                if (p.W[3] > camB + 240 - 40) camB = p.W[3] + 40 - 240
+                else if (p.W[3] > camB + 240 - 40) camB = p.W[3] + 40 - 240    // @1204-1277 else-if
                 // L214-L217: lookahead offsets
                 if (camAf != 0) camA = p.ak - 200 + camAf
                 if (camAg != 0) camB = p.al - 120 + camAg
@@ -2084,15 +2088,19 @@ class Level0World(
                             camCC = z1 * 50 / 100                   // L246
                         // else camCC sticky (verbatim L246→L280)
                     } else {                                        // L255 mirror
-                        if (!inView)                                // L276
+                        // @1666-1942 (raw bytes, slice 414): 150 % for `dx > 200` or
+                        // `100 < dx <= 200 && ag == z1 << 8`, `z1` for `50 < dx <= 100 &&
+                        // ag == z1 << 8`, 50 % for `dx <= 50 && ag <= z1 << 8`, else sticky
+                        // (the port read the 150 % arm as `dx <= 200` for any `ag`)
+                        if (!inView)                                // L1872
                             camCC = if (ae.Y[0] >= camRect[0]) z1 * 150 / 100
                                     else z1 * 50 / 100
+                        else if (dx > 200 || (dx > 100 && ae.ag == (z1 shl 8)))
+                            camCC = z1 * 150 / 100                  // L1732
+                        else if (dx > 50 && dx <= 100 && ae.ag == (z1 shl 8))
+                            camCC = z1                              // L1753
                         else if (dx <= 50 && ae.ag <= (z1 shl 8))
-                            camCC = z1 * 50 / 100                   // L271
-                        else if (dx <= 100 && ae.ag == (z1 shl 8))
-                            camCC = z1                              // L264
-                        else if (dx <= 200) camCC = z1 * 150 / 100  // L262
-                        else if (ae.ag == (z1 shl 8)) camCC = z1 * 150 / 100
+                            camCC = z1 * 50 / 100                   // L1817
                     }
                     camB = ae.al - 120                              // L280
                 } else {                                            // L279
@@ -2103,10 +2111,11 @@ class Level0World(
             // L282-L297: scroll-wall containment
             val wall = kAh
             if (wall != null && wall.W != null && wall.aF == 1) {
+                // @1954-2084 else-if chains: a holder narrower than the view keeps the LEFT / TOP edge
                 if (camA < wall.W[0]) camA = wall.W[0]
-                if (camA + 400 > wall.W[2]) camA = wall.W[2] - 400
+                else if (camA + 400 > wall.W[2]) camA = wall.W[2] - 400
                 if (camB < wall.W[1]) camB = wall.W[1]
-                if (camB + 240 > wall.W[3]) camB = wall.W[3] - 240
+                else if (camB + 240 > wall.W[3]) camB = wall.W[3] - 240
             }
             // L300-L305: focus-N watch → X lerp cap 20..40 (private
             // camXw — the original reuses k.X; see field note)
@@ -2116,9 +2125,9 @@ class Level0World(
             }
             // L311-L325: R/S/T/U bound walls (>0 = armed)
             if (kR > 0 && camA < kR) camA = kR
-            if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400
+            else if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400   // @2120-2182
             if (kT > 0 && camB < kT) camB = kT
-            if (kU > 0 && camB > kU - 240) camB = kU - 240
+            else if (kU > 0 && camB > kU - 240) camB = kU - 240                  // @2182-2235
             // ---- L325+ settle — inside the `!k.Z` arm: the original's
             // `if (k.Z != 0) goto L9cd` (k.java:5507) skips tracking AND
             // the settle lerp, so a claim script owning the camera gets
@@ -2137,12 +2146,13 @@ class Level0World(
                 camCD = lerpStep(camB - camY, 28)
                 camX += camCC / r6; camY += camCD / r6
             }
-            // L342-L357: ab / rope cd[3] snap-x override (clears kAb too)
+            }
+            // L2428-L2499 (slice 414: reached from the snap arm too): ab / rope cd[3] snap-x
+            // override (clears kAb)
             val gcx = gc; val ga2 = p.ga
             if (kAb || (gcx != null && gcx.ax == 43 && gcx.cd[3]) ||
                 (ga2 != null && ga2.ax == 43 && ga2.cd != null && ga2.cd[3])) {
                 kAb = false; camX = camA
-            }
             }
         }
         // L359: g.v full warp
@@ -2369,7 +2379,7 @@ class Level0World(
         }
     }
 
-    private fun kD() {
+    internal fun kD() {
         val c = kC                                                       // L7-L12
         if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
             camA = camX; camB = camY                                     // snap
@@ -2377,6 +2387,7 @@ class Level0World(
         }
         if (dialogModal) { camA = camX; camB = camY; return }            // j.c==21
         val ae = player                                                  // ae=aS
+        kAe = player                                                     // @93 `k.ae = k.aS` every tick
         if (kW != 0) { kX = kW; kW = 0 }                                 // L17 wind
         // kY = kX << 8 — the derived getter (k.java:2737)
         var r6 = ae.W[0] / 20                                            // L18-L21
@@ -2407,6 +2418,7 @@ class Level0World(
                                 }
                                 boundMaxX = s
                                 camCG = boundMinX; camCH = boundMaxX     // L35
+                                break                                    // @300 `goto 440`: the scan ends at the SECOND 22
                             }
                         }
                         r92++
