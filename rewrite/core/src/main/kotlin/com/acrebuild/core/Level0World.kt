@@ -4879,7 +4879,7 @@ class Level0World(
         if (e.ah <= 0 && (e.Y[1] shl 8) + e.ah <= (X[1] shl 8) && (m and 4) != 0) {
             e.ah = 0; e.aj = 0
             e.al = (e.al - e.Y[1]) + X[1]
-            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall()
+            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall(0, this)
         }
         if (e.ah >= 0 && (e.Y[3] shl 8) + e.ah >= (X[3] shl 8) && (m and 8) != 0) {
             e.ah = 0; e.aj = 0

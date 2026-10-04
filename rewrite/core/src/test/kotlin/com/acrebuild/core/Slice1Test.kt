@@ -2176,16 +2176,18 @@ class Level0WorldTest {
         assertEquals(29, d.S, "ax4 S30 → i(29) trigger")
     }
 
-    @Test fun `interactAction ax58 lever advances S to S plus 1`() {
+    @Test fun `interactAction ax58 lever gets i(player S plus 1) - not its own S plus 1`() {
         val w = world()
         w.npcs.clear()
         val p = w.player
         p.setPositionPx(300, 150); p.refreshBoxes(); p.S = 303; p.K = 6
-        val lever = Entity(58, null); lever.setPositionPx(330, 150)
+        val lever = Entity(58, w.clips[20]); lever.setPositionPx(330, 150)
         lever.refreshBoxes(); lever.S = 0
         w.npcs.add(lever); p.g = lever
         p.interactAction(w, Pad())
-        assertEquals(1, lever.S, "lever S0 → i(1)")
+        // g.ar @384-393 (proven): `g.g.i(this.S + 1)` — the PLAYER's S (aload_0 = the g), which is
+        // out of the lever clip's anim range, so a real lever ignores it (slice 413)
+        assertEquals(0, lever.S, "lever S0 stays: i(player S + 1) is not a lever anim")
     }
 
     @Test fun `interactAction ax58 lever S2 toggles to S3`() {
@@ -20945,9 +20947,9 @@ class Slice208Test {
     }
 
     @Test fun `enterFall clears the link once`() {
-        val p = Entity(0, null)
+        val w = world(); val p = w.player
         p.ga = Entity(66, null)
-        p.enterFall()
+        p.enterFall(0, w)
         assertNull(p.ga, "g.a = 0 on the fall arm")
         assertNull(p.standingOn)
     }
@@ -24537,9 +24539,11 @@ class Slice245Test {
                                                       // pulsed UP drives the
                                                       // lip-scan → S92 mantle
             else if (p.S == 37 || p.S == 38)
-                held = Pad.M_RIGHT                    // '5' shimmy east (UP
-                                                      // vault-out is dead on
-                                                      // '5' hangs — slice 228)
+                held = if (p.ak >= 4225) Pad.M_UP     // slice 413: `g.c(Z)` reads the RAW
+                                                      // `k.g`, so the '5' shimmy stops at
+                                                      // the '20' mass (x4260) — UP on an
+                                                      // S38 tick vaults onto the lip (S54)
+                       else Pad.M_RIGHT               // '5' shimmy east
             else if (p.aZ)
                 held = if (p.ak > 3900) Pad.M_RIGHT   // autorun the walkway
                           else held or Pad.M_UP       // hop approach
@@ -29549,6 +29553,9 @@ class Slice302Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
+                // slice 413: `g.c(Z)` reads the RAW `k.g` — the '5' shimmy under the x140-299 ledge
+                // stops at the '20' slab (x<140); UP on an S38 tick vaults onto the ledge (S54)
+                37, 38, 280 -> if (launched && !landed) mask = Pad.M_UP
                 56, 60, 61, 62 -> mask = Pad.M_LEFT + Pad.M_UP
                 27, 28, 29, 30, 31, 34, 35, 90, 315, 316, 319 -> mask = Pad.M_UP + Pad.M_LEFT
                 in 259..266 -> mask = Pad.M_RIGHT   // perch — drift east while arcs resolve
@@ -29574,7 +29581,7 @@ class Slice302Test {
             if (p.S == 280) launched = true
             if (w.kC != null && w.kC!!.aw == 252) kCFired = true
             if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
-            if (launched && !landed && p.aZ && p.al > 1340) { landed = true; landAk = p.ak; landAl = p.al }
+            if (launched && !landed && p.aZ && p.al > 1280) { landed = true; landAk = p.ak; landAl = p.al }
             if (w.jC == 15) break
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
             if (w.jC == 12 || w.jC == 13) {
@@ -29685,6 +29692,9 @@ class Slice303Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
+                // slice 413: `g.c(Z)` reads the RAW `k.g` — the '5' shimmy under the x140-299 ledge
+                // stops at the '20' slab (x<140); UP on an S38 tick vaults onto the ledge (S54)
+                37, 38, 280 -> if (launched && !landed) mask = Pad.M_UP
                 164 -> mask = 0
                 56, 60 -> mask = if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP  // tower face: release back to r87, else climb
                 61 -> mask = if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
@@ -29715,7 +29725,7 @@ class Slice303Test {
                 lastS = p.S
             }
             if (p.S == 280) launched = true
-            if (launched && !landed && p.aZ && p.al > 1340) landed = true
+            if (launched && !landed && p.aZ && p.al > 1280) landed = true
             if (w.kC != null) { kCFired = true
                 if (w.kC!!.aw == 252) u252Fired = true
                 if (w.kC!!.aw == 269) u269Fired = true }
@@ -29816,6 +29826,9 @@ class Slice304Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
+                // slice 413: `g.c(Z)` reads the RAW `k.g` — the '5' shimmy under the x140-299 ledge
+                // stops at the '20' slab (x<140); UP on an S38 tick vaults onto the ledge (S54)
+                37, 38, 280 -> if (launched && !landed) mask = Pad.M_UP
                 164 -> mask = 0
                 56, 60 -> mask = if (descended && !midCorridor) Pad.M_LEFT else if (chainDone && p.ak < 1110) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
                 61 -> mask = if (descended && !midCorridor) Pad.M_LEFT else if (chainDone && p.ak > 1300) Pad.M_DOWN else Pad.M_LEFT + Pad.M_UP
@@ -29847,7 +29860,7 @@ class Slice304Test {
                 lastS = p.S
             }
             if (p.S == 280) launched = true
-            if (launched && !landed && p.aZ && p.al > 1340) landed = true
+            if (launched && !landed && p.aZ && p.al > 1280) landed = true
             if (w.kC != null) { kCFired = true
                 if (w.kC!!.aw == 252) u252Fired = true
                 if (w.kC!!.aw == 269) u269Fired = true
@@ -30019,6 +30032,9 @@ class Slice306Test {
             when (p.S) {
                 65 -> mask = Pad.M_UP + Pad.M_TAP_L
                 63, 318 -> mask = Pad.M_UP
+                // slice 413: `g.c(Z)` reads the RAW `k.g` — the '5' shimmy under the x140-299 ledge
+                // stops at the '20' slab (x<140); UP on an S38 tick vaults onto the ledge (S54)
+                37, 38, 280 -> if (launched && !landed) mask = Pad.M_UP
                 164 -> mask = 0
                 243 -> if (catapult) mask = 0                           // catapult fling — hands off
                 235, 238 -> mask = 0                                    // release-lunge arc — hands off
@@ -30054,7 +30070,7 @@ class Slice306Test {
                 lastS = p.S
             }
             if (p.S == 280) launched = true
-            if (launched && !landed && p.aZ && p.al > 1340) landed = true
+            if (launched && !landed && p.aZ && p.al > 1280) landed = true
             if (w.kC != null) { kCFired = true
                 if (w.kC!!.aw == 252) u252Fired = true
                 if (w.kC!!.aw == 269) u269Fired = true
@@ -30119,9 +30135,18 @@ class Slice307Test {
      *  S10→8→4, auto-vault loop at x1449; passable only descending
      *  the chimney at y1259). West along the corridor floor y1280 →
      *  pit x1040-1219 → deep floor y1500 → west → claim-QTE kC=240
-     *  at x791 (mount S273-277 carries west to x637) → '5' ceiling
-     *  underside x34-270@y1310 shimmy (S280/38/37) → drop → west
-     *  region floor y1559. Remaining legs for the boss/win (next
+     *  at x791 (mount S273-277 carries west to x637) → hop up to the
+     *  '5' ledge x140-299@y1300 (S22 → S280 hang → S38) → UP vaults onto
+     *  its top (S54 → S0 @(270,1298)) → west along the slab top to the map
+     *  edge x18@y1299.
+     *  Slice 413 verdict — the far-west pocket (x0-99, floor y1559) is
+     *  sealed, so the old "west region floor" ending was an artifact. `g.c(Z)`
+     *  (g.javap.txt @40) tests the shimmy's facing cell with the RAW `k.g`
+     *  read, not `i.e()` (whose S37 pass-through let the old port walk the
+     *  shimmy through the slab): cols 0-6 of rows 65-66 are `20`, the wall
+     *  cols 5-6 run down rows 67-78, the floor row 78 closes the pocket —
+     *  the shimmy stops at x≈164 and the only way on is the UP vault.
+     *  Remaining legs for the boss/win (next
      *  slice): west floor → mid-block/lift chain (uid221-223@y940-976
      *  catch falling riders, dive `ag=±4864,ah=-6656` onto ledge
      *  x420-779@y820) → pillar x340-359 top y540 → band y560 →
@@ -30169,7 +30194,7 @@ class Slice307Test {
                 p.bM != null -> mask = Pad.M_UP                         // rope-bound — climb
                 p.S == 358 -> mask = if (!p.av) Pad.M_LEFT else Pad.M_UP // hang release: face-away + M_UP → S235 west ride
                 p.S in 259..266 || p.S == 235 || p.S == 238 -> mask = 0   // bound carries — hands off
-                p.S in listOf(37, 38, 280) -> mask = Pad.M_LEFT           // '5' underside shimmy — west
+                p.S in listOf(37, 38, 280) -> mask = if (p.ak < 300) Pad.M_UP else Pad.M_LEFT  // '5' underside shimmy — west, then UP onto the ledge (slice 413)
                 p.S in listOf(33, 34, 101, 102, 146, 147) -> mask = Pad.M_LEFT or Pad.M_UP
                 else -> mask = Pad.M_LEFT                                 // descent goes west throughout
             }
@@ -30199,7 +30224,7 @@ class Slice307Test {
             if (!cp339 && p.ak in 1200..1330 && p.al in 1200..1300) { cp339 = true; println("CP339 t=$t @(${p.ak},${p.al})") }
             if (!pitDeep && p.al in 1450..1520) { pitDeep = true; println("PITDEEP t=$t @(${p.ak},${p.al})") }
             if (!shimmyWest && p.ak < 300 && p.al in 1280..1360) { shimmyWest = true; println("SHIMMY t=$t @(${p.ak},${p.al})") }
-            if (!westEnd && p.ak < 60 && p.al in 1500..1600) { westEnd = true; println("WESTEND t=$t @(${p.ak},${p.al})"); break }
+            if (!westEnd && p.aZ && p.ak < 60 && p.al in 1280..1320) { westEnd = true; println("WESTEND t=$t @(${p.ak},${p.al})"); break }
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
             if (w.jC == 12 || w.jC == 13) {
                 deaths++
@@ -30219,6 +30244,10 @@ class Slice307Test {
             if (t % 500 == 0 || t < 400) println("POS t=$t @(${p.ak},${p.al}) S=${p.S} aZ=${p.aZ} mask=$mask kC=${w.kC?.aw} ga=${p.ga?.ax}#${p.ga?.aw} at=${Entity.at?.ax}#${Entity.at?.aw}")
         }
         println("END @(${p.ak},${p.al}) S=${p.S} westEnd=$westEnd deaths=$deaths cp339=$cp339 pit=$pitDeep shimmy=$shimmyWest trace tail=${trace.takeLast(15).joinToString(" ")}")
+        // the pocket below is sealed (slice 413): slab cols 0-6 on rows 65-66, wall cols 5-6, floor row 78
+        for (cx in 0..6) { assertEquals(20, w.collisionCell(cx, 65)); assertEquals(20, w.collisionCell(cx, 66)) }
+        for (cy in 67..77) { assertEquals(20, w.collisionCell(5, cy)); assertEquals(20, w.collisionCell(6, cy)) }
+        for (cx in 0..6) assertEquals(20, w.collisionCell(cx, 78))
         assertTrue(cp339 && pitDeep && shimmyWest && westEnd,
             "m7 west descent not completed — @(${p.ak},${p.al}) S=${p.S} deaths=$deaths cp339=$cp339 pit=$pitDeep shimmy=$shimmyWest westEnd=$westEnd trace tail=${trace.takeLast(15).joinToString(" ")}")
     }
@@ -30326,7 +30355,10 @@ class Slice309Test {
         // (b) releasing u248 (a direction-toward-av lunge) lets the player
         //     continue the perch chain / drop to the lower structures.
         var freed = false
-        for (t in 0..60) {
+        // slice 413: the scroll-holder ceiling's `k.aS.a(0)` (i.f(i) @354) now runs the masked
+        // `a(43, 32)` re-centre on the last a(Z) pass's box centre, so the release arc's bounce
+        // chain lands later (≈ tick 77 instead of 39) — timing only, same end state
+        for (t in 0..200) {
             w.pad.e(Pad.M_UP); w.tick(emptyList())
             if (p.ga !== u248 && p.aZ) { freed = true; break }
         }

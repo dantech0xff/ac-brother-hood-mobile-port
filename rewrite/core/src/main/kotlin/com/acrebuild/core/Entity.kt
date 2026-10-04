@@ -524,7 +524,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         when {
             t.ax == 4 -> if (t.S == 30) t.setAnim(29)
             t.ax == 58 -> when (t.S) {
-                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                // @384-393 (raw bytes, slice 413): `g.i(i.S + 1)` — the PLAYER's S plus one (the
+                // reach / throw anim picked above, 299-302 or 304-306), not the lever's own;
+                // that is not an anim of the lever's clip, so `i(int)` ignores it
+                0, 5, 7, 9, 11 -> t.setAnim(S + 1)
                 2 -> t.setAnim(3)
                 else -> {}
             }
@@ -1519,7 +1522,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         al -= 20
         probeCells(world)
         al += 20
-        if (aO >= 20) enterFall()                // a(0) — no return, verbatim
+        if (aO >= 20) enterFall(0, world)        // a(0) — no return, verbatim
         if (aO < 20 || ah >= 0 || entBq != 0) return
         refreshBoxes()
         val r0 = W[3]
@@ -1560,10 +1563,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `a(int)` — g.java `void a(int r5)` (proven): leave the ground into the
-     * shared fall state: `a(43,32); al += 10; ah = r5; aj = 1536`.
+     * shared fall state: `a(43,32); al += 10; ah = r5; aj = 1536`. The masked
+     * `a(43,32)` re-centres `al` on the box centre of the last cell probe, so
+     * every caller needs the world (g.javap.txt:1284-1312; slice 413 — three
+     * world-less sites skipped the re-centre).
      */
-    fun enterFall(vy: Int = 0, world: LevelCellSource? = null) {
-        if (world != null) enterStateMasked(43, 32, world) else setAnim(43)
+    fun enterFall(vy: Int, world: LevelCellSource) {
+        enterStateMasked(43, 32, world)
         al += 10
         ah = vy
         aj = 1536
@@ -1592,22 +1598,27 @@ open class Entity(val ax: Int, var clip: Clip?) {
             if (aR < 12 && (aS >= 12 || aS == 5)) al += 20
         }
         ah = 1
-        // d() fall-damage gate (g.java:4978-4981, proven): op21 fires
-        // only on a normal landing (not platform variant, not the S16/
-        // Q16 door-exit arms), >=20 cells below the apex, no iframes —
-        // `S==16||Q==16||z2||!z3||(al-y)/20<20||h() -> return`.
-        if (!platformVariant && S != 16 && Q != 16 &&
-            (al - gy) / 20 >= 20 && gt == 0) {
-            applyHit(21, 0, this, world)
-        }
+        // @88-211 (raw bytes, slice 413): the landing anim first — `r2` records "a real ground
+        // landing" (the S150 and plain arms; not the S16 / Q16 door-exit arm, not the platform
+        // variant) — then `if (I == 4) h(1)` (an equip-4 player is handed his sword back on
+        // touchdown), and only THEN the fall damage, which reads `S` / `Q` AFTER the switch.
+        var r2 = false
         if (platformVariant) {
             aj = 0; ai = 0; ah = 0; ag = 0; aC = 18; setAnim(102)
         } else {
             when {
                 S == 16 || Q == 16 -> { setAnim(5); ag = 0 }
-                S == 150 -> setAnim(152)
-                else -> { setAnim(5); ag = 0 }
+                S == 150 -> { setAnim(152); r2 = true }
+                else -> { setAnim(5); ag = 0; r2 = true }
             }
+        }
+        if (gI == 4) requestH(1, world)
+        // d() fall-damage gate (g.java:4978-4981, proven): op21 fires only on a normal landing
+        // (not platform variant, not the S16/Q16 door-exit arms), >=20 cells below the apex, no
+        // iframes — `S==16||Q==16||z2||!z3||(al-y)/20<20||h() -> return`.
+        if (!platformVariant && r2 && S != 16 && Q != 16 &&
+            (al - gy) / 20 >= 20 && gt == 0) {
+            applyHit(21, 0, this, world)
         }
         O = al shl 8
     }
@@ -2049,10 +2060,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `c(boolean)` (g.java:3779, proven): facing-side head cell is open —
      *  `av → (W[0]/20)-1 : (W[2]/20)+1` at `al/20`; cell `<12 → true`.
-     *  Gates the S37 grapple-climb step. */
+     *  Gates the S37 grapple-climb step. The read is the RAW `k.g(II)I` (@40, the only gameplay
+     *  `k.g` read outside `i.e()`), not the entity-aware `e()`: that one lets the player pass
+     *  through solid-20 cells while `S == 37` — and this is evaluated in the S37 arm (slice 413). */
     fun facingCellOpen(w: LevelCellSource): Boolean {
         val cx = if (av) (W[0] / 20) - 1 else (W[2] / 20) + 1
-        return e(w, cx, al / 20) < 12
+        return w.collisionCell(cx, al / 20) < 12
     }
 
     /** `i.bf()` (i.java:14608, proven): ax58 door-open query —
@@ -3112,7 +3125,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         when {
             t.ax == 4 -> if (t.S == 30) t.setAnim(29)
             t.ax == 58 -> when (t.S) {
-                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                // @384-393 (raw bytes, slice 413): `g.i(i.S + 1)` — the PLAYER's S plus one (the
+                // reach / throw anim picked above, 299-302 or 304-306), not the lever's own;
+                // that is not an anim of the lever's clip, so `i(int)` ignores it
+                0, 5, 7, 9, 11 -> t.setAnim(S + 1)
                 2 -> t.setAnim(3)
                 else -> {}
             }

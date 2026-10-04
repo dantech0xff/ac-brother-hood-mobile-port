@@ -1379,7 +1379,7 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 world.scrollWallClamp(p)
             }
             377 -> {
-                if (p.animFinished()) p.enterFall()             // a(0)
+                if (p.animFinished()) p.enterFall(0, world)     // a(0)
                 world.scrollWallClamp(p)
             }
             // ---- case 146/147 (g.java:2859-2918, proven) — wall/pass
@@ -1945,10 +1945,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
             else if (!p.av && p.aW < 12 && !p.bc) { p.setAnim(26); p.ag = 1280 }
             else runArm12(p)
         } else runArm12(p)
-        // L45: slope pull — aR 14/15 pull down, 17 pushes up
+        // L45: slope pull — aR 14/15 pull down, 16/17 push up (@224-250: `aR == 17 || aR == 16`;
+        // slice 413 — the port tested 17 only. No shipped level has cells 14-17.)
         when (p.aR) {
             14, 15 -> p.ah = p.ag shr 1
-            17 -> p.ah = (-p.ag) shr 1
+            17, 16 -> p.ah = (-p.ag) shr 1
         }
         if (p.ah < 0) p.ah = 0
         world.scrollWallClamp(p)               // g.java:5319 — i.f(this) tail

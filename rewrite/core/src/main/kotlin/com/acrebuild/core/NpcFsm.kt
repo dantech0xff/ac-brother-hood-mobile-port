@@ -6507,7 +6507,7 @@ fun NpcFsm.tickAx13(e: Entity, w: LevelCellSource, p: Entity) {
             }
         }
         if (r04 >= 0) {                                             // L89 latch
-            p.bindScript(1, w)                                      // aS.h(1)
+            p.requestH(1, w)                                        // aS.h(1) = g.h(I)Z, aW() @847
             w.clearLatches()                                        // k.v()
             e.bN = r04; e.ropeGrabSeg = r04
             e.aA = 1; e.bM = p; p.bM = e; p.az = 101
@@ -8296,7 +8296,7 @@ private fun NpcFsm.ax69Armed(e: Entity, w: Level0World, p: Entity) {
         p.P = p.P or 64
         p.al = (e.W[1] + e.W[3]) shr 1
         p.ak = e.W[2]
-        p.bindScript(1, w)                        // aS.h(1)
+        p.requestH(1, w)                          // aS.h(1) = g.h(I)Z, bC() @1014
         e.af!!.setAnim(117)                       // af.i(117)
         e.af!!.az = -1
         e.setAnim(2)
@@ -8581,7 +8581,7 @@ private fun ceilingAmbush73(e: Entity, w: LevelCellSource, p: Entity): Boolean {
         true
     } else {
         p.x1 = 0                                          // g.x[1] = 0
-        p.bindScript(1, w)                                // aS.h(1)
+        p.requestH(1, w)                                  // aS.h(1) = g.h(I)Z, aE() @129
         p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
         p.al = e.al
         e.setAnim(20)
@@ -8931,8 +8931,8 @@ fun NpcFsm.tickAx73(e: Entity, w: LevelCellSource, p: Entity) {
                 if (w.kBK) e.spawnFx8(w, 59, 2, e.av, e.ak, e.al, e.az - 1)
                 e.P = e.P and -17; e.P = e.P or 32; e.P = e.P or 64
                 if ((p.gJ and 2) == 0) {
-                    p.gJ = p.gJ or 2                       // g.g(2)
-                    p.bindScript(2, w)                     // aS.h(2)
+                    p.requestAction(2, w)                  // g.g(2): J |= 2; k.q()
+                    p.requestH(2, w)                       // aS.h(2) = g.h(I)Z, aJ() @2037
                 }
             }
             return                                         // @2041: S164 never reaches the L2042 tail

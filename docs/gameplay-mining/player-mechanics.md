@@ -127,6 +127,17 @@ bảng trên không/treo/leo (17 caller trong `i` + `k.m(int)` + `g.c(i)`), `g.b
 true trừ khi hộp nằm lọt hẳn trong `ah.W`, rồi đọc 4 ô góc W (`aT/aU/aV/aW`), true nếu có ô `>= 12`.
 `i.b()` có 2 caller: S85 hit-react (`I()` @3390) và carry của mover ax60 (`c(Z)` @613).
 
+**Method trùng tên giữa `i` và `g extends i`** (slice 413, `proven`): call site trong javap ghi rõ
+descriptor (`Method g.h:(I)Z` ≠ `Method h:(I)V`), nên phải đọc từng chỗ. `g.h(I)Z` = *yêu cầu đổi
+trang bị* (`I = n`, `k.at = 1`, consume link ax16) — gọi ở ax13 `aW()` @847 (**bắt dây = bỏ vũ khí**),
+ax69 `bC()` @1014, ceiling ambush `aE()` @129 và ax73 `aJ()` @2037 (sau `g.g(2)` = `J |= 2; k.q()`);
+còn `i.h(I)V` là bind claim-script private. `g.a(int)` luôn chạy `a(43,32)` (căn lại `al` theo tâm hộp
+của lần `i.a(Z)` cuối, `u`) rồi `al += 10; ah = r5; aj = 1536` — 22 caller ngoài `g`, nên một cú
+đụng trần scroll-holder (`i.f(i)` @354) hay `av()` dịch người chơi lên ≈ 25 px. `g.c(Z)` (bước
+leo S37: ô đầu phía trước còn trống) đọc **`k.g` thô** (@40), không qua `i.e()` — nếu qua `e()` thì
+trong S37 mọi ô `20` đọc thành `0` và người chơi đi xuyên tường; vì vậy shimmy dưới `'5'` dừng ở mặt
+tường và lối đi tiếp là **UP** ở tick S38 (vault `a(54,8)`).
+
 ## Flying machine — `g.n()` (player ax==25)
 
 - Heat/energy gauge: `k.aE` giảm 1 mỗi `k.aG`=6 tick; hết (`aE<=0` &&

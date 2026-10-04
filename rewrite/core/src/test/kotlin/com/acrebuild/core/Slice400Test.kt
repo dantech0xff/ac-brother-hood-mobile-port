@@ -203,6 +203,45 @@ class Slice400Test {
         assertEquals(pAk, w.player.ak, "…and neither does the a() push-past")
     }
 
+    @Test fun `S164 - the death grants bit 2 with g_g and requests it with g_h, no claim script (slice 413)`() {
+        // @2021-2040: `if ((g.J & 2) == 0) { g.g(2); k.aS.h(2) }` — `g.g(int)` is `J |= 2; k.q()`,
+        // `k.aS.h(2)` is `g.h(I)Z` (the equip request: I = 2, k.at = 1), NOT the claim-script bind
+        // `i.h(I)V` the port called
+        val w = world()
+        val (gx, gy) = flatGround(w)
+        val e = guard(w, gx, gy, 164)
+        w.kBK = false
+        val p = w.player
+        p.gJ = 0; p.gI = 4; p.ca = -1
+        w.equipList.fill(-1); w.equipCount = 0
+        place(w, e.ak, e.al)
+        finish(e)
+        w.npcFsm.tickAx73(e, w, p)
+        assertEquals(2, p.gJ and 2, "g.g(2): J |= 2")
+        assertEquals(2, p.gI, "g.h(2): I = 2")
+        assertEquals(2, w.equipList[0], "g.g's k.q(): the ar[] equip list now holds the new bit")
+        assertEquals(1, w.equipCount)
+        assertEquals(-1, p.ca, "no claim script is bound on the player")
+    }
+
+    @Test fun `S152 - the ceiling ambush drop-kill requests equip 1 with g_h, no claim script (slice 413)`() {
+        // aE() @129: `g.x[1] = 0; k.aS.h(1); ah = ag = aj = ai = 0; al = this.al; i(20)` — h is `g.h(I)Z`
+        val w = world()
+        val (gx, gy) = flatGround(w)
+        val e = guard(w, gx, gy, 152)
+        e.Z[14] = 1
+        val p = w.player
+        p.gJ = 1; p.gI = 4; p.ca = -1
+        place(w, e.ak, e.al - 45)                  // feet above the guard's mid-line, boxes overlap
+        p.setAnim(43); p.refreshBoxes()
+        p.gy = e.al - 400                          // a fall of 20+ cells → the drop-kill arm
+        w.npcFsm.tickAx73(e, w, p)
+        assertEquals(20, e.S, "the guard goes to S20")
+        assertEquals(1, p.gI, "g.h(1): I = 1")
+        assertEquals(-1, p.ca, "no claim script is bound on the player")
+        assertEquals(0, p.x1, "g.x[1] = 0")
+    }
+
     // ------------------------------------------------------------ S165
     @Test fun `S165 - the hand marker is offered while the guard faces the player, released when it does not`() {
         run {
