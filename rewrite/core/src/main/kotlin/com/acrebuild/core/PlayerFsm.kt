@@ -2687,9 +2687,10 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // `i.B()` (g.java:13907, proven): canyon-wall collide — the call's
         // return value is dead in n(); it runs for its side effects only.
         p.canyonCollide(world)
-        // B() (k.java:1619, proven): mission BGM — `aJ==1 → z(9)` else
-        // `z(ee[aj])`; per-tick in n(), audioPlay dedups the live track.
-        if (world.kAJ == 1) world.sfx(9) else { val t = world.kEE[world.kAj]; if (t != -1) world.sfx(t) }
+        // (Slice 411: `k.B()` — the mission BGM start — is NOT called from n(): its three
+        // callers in the bytes are `k.l(int)`, `k.Q()` and `k.a(boolean)` (k.javap.txt:9011,
+        // 19042, 25068), all of which the port reaches through `missionInit()`. The port
+        // requested the track again on every flight tick.)
         if (world.iBe) {
             world.kX = 0
             // g.n() @17-46: `if (r() || !v()) k.l(12); return` — the full
@@ -2726,14 +2727,15 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
         // L328 (S2/24) all funnel through it.
         when (p.S) {
             0, 4, 5, 17, 18 -> glideTail(p, pad, zFlags)        // →L141/L146
-            1, 9, 12, 27 -> {                                   // L130
+            1, 9, 12, 27 -> {                                   // L982
                 world.kAw = 20
                 if (p.animFinished()) {
                     if (world.iBB) { world.iBB = false; world.iBG = -1; p.az = 202 }
                     if (world.kAw == 20) world.kAw = 0          // aC()
+                    // @1022 `i(4)` then `goto 2262` (g.javap.txt n(), raw bytes, proven; slice
+                    // 411): the friction block only — no `av = 0` and no glide tail (steering
+                    // input) on the recovery tick. The port ran both.
                     p.setAnim(4)
-                    p.av = false                                // L139
-                    glideTail(p, pad, zFlags)                   // →L141
                 }
             }
             2, 24 -> {                                          // L325-L328
@@ -2748,9 +2750,11 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                 if (p.animFinished() || !p.inPlayV(world)) world.stateL(12)
                 // v() → @2262 (L346): arm skipped verbatim
             }
-            3 -> {                                              // L137
-                if (p.animFinished()) p.setAnim(4) else p.av = false
-                glideTail(p, pad, zFlags)
+            3 -> {                                              // L1028
+                // @1032-1043: `r() → i(4); goto 2262` (friction only); otherwise `av = 0` and
+                // the glide tail at L1048 (slice 411: the port ran the tail after `i(4)` too).
+                if (p.animFinished()) p.setAnim(4)
+                else { p.av = false; glideTail(p, pad, zFlags) }
             }
             20 -> {                                             // L331
                 if (world.iBk) {

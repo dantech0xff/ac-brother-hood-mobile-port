@@ -112,6 +112,14 @@ Mã nguồn gốc chỉ thực sự gửi op `{4, 6, 11, 18, 20, 21, 24, 32, 34,
 `invokevirtual a:(IIILi;)V` trong i/g.javap, slice 410); 8, 9, 19, 25, 28, 29, 30 có arm
 nhưng không có caller, 39/41 (cặp marker `k.Y`) chết và chưa port.
 
+**Mount lunge `g.c(i)`** (`g.javap.txt` `c(Li;)V` @138-160, `proven`, slice 411): chọn anim bằng
+`invokestatic g.b:(I)Z` — bảng state **trên không / treo / leo** — → S292; S298 giữ anim; còn lại
+(đứng đất, kể cả đang giữa combo) chọn cung dốc 272/273/274/275 theo tỷ lệ rise:run `r04/r03`
+(≤64 / ≤256 / ≤1024 / hơn; `r03 == 0` → 275, `r04 == 0` → 272). S292 không có rect W/X nên
+người chơi **đứng nguyên tại điểm bấm** và bán kính quỹ đạo `cB` là khoảng cách từ điểm bấm tới tâm
+bánh/cột; cung dốc nâng tay (X rect ≈ +21,−47) lên trên chân nên bán kính ngắn hơn. Bản port cũ
+dùng `g.b()` (bảng tấn công) — cùng kiểu nhầm overload với op 4.
+
 ## Flying machine — `g.n()` (player ax==25)
 
 - Heat/energy gauge: `k.aE` giảm 1 mỗi `k.aG`=6 tick; hết (`aE<=0` &&
@@ -123,6 +131,10 @@ nhưng không có caller, 39/41 (cặp marker `k.Y`) chết và chưa port.
   hoặc `k.Y<<1`).
 - `i.be` → win-check (`k.l(12)` — screen 12 = milestone).
 - `e(false)` fired khi `k.aI>=10` — periodic drop weapon (flaming pitch).
+- Recovery (`proven`, `g.javap.txt` `n()` @1022-1048, slice 411): S1/9/12/27 hết anim → (nhả `bB`/
+  `az=202`/`aC()`) `i(4)` rồi nhảy thẳng tới khối ma sát @2262 — không `av=0`, không steering;
+  S3 hết anim → `i(4)` + @2262, S3 chưa hết → `av=0` + glide tail @1048. `k.B()` (nhạc nền)
+  **không** được `n()` gọi (chỉ `k.l(int)`, `k.Q()`, `k.a(boolean)`).
 
 ## Cheat system (`k.java:740-790`)
 

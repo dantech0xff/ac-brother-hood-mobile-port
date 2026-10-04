@@ -27646,6 +27646,7 @@ class Slice289Test {
         // -> east to cp300.
         val m62 = w.npcs.first { it.aw == 62 }
         val e69 = w.npcs.first { it.aw == 69 }
+        val guard65 = w.npcs.firstOrNull { it.aw == 65 }
         p.setPositionPx(5318, 634); p.ak = 5318; p.al = 634; p.av = false
         p.S = 260; p.ga = m62; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
         w.kO = 5100; w.kP = 470
@@ -27664,11 +27665,20 @@ class Slice289Test {
                 Entity.at != null && p.ga == null -> Pad.M_CONTEXT // bound ax72 -> lunge
                 p.ga == m62 && upTicks < 6 -> Pad.M_UP             // mount-up -> bind
                 Entity.overlapI(p.W, e69.W) -> Pad.M_CONTEXT       // kill-prompt overlap
+                // Slice 411: the faithful S292 lunge (a hanging player, `g.b(int)`) keeps the
+                // orbit's full radius, so the launch no longer meets the seesaw uid76 (S297
+                // catch) — the arc drops onto the WEST slab guard uid77 instead (stab, S89/S90)
+                // and the east guard uid65 wakes and cycles S22 approach / S11 windup / S12
+                // strike / S23 back-off. Running on takes a strike every ~26 ticks (5 of them
+                // leave x1=5); fighting through at point-blank (the S67-69 combo staggers the
+                // guard before its windup completes) takes none.
+                guard65 != null && guard65.aB > 0 && guard65.S != 139 && p.aZ &&
+                    guard65.ak - p.ak in -10..56 -> Pad.M_RIGHT + Pad.M_CONTEXT
                 p.ak in 5560..5780 && p.al >= 480 -> Pad.M_UP or Pad.M_RIGHT
                 else -> Pad.M_RIGHT
             }
             if (mask == Pad.M_UP) upTicks++
-            w.pad.e(mask)
+            w.pad.e(if (p.S == 69 && p.T == 4) 0 else mask)      // legI: let go on the S69 last frame
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
             w.tick(emptyList())
@@ -27691,7 +27701,7 @@ class Slice289Test {
             }
             if (w.jC != 8) break
         }
-        println("D reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC}")
+        println("D reached=$reached maxAk=$maxAk p@(${p.ak},${p.al}) S${p.S} jC=${w.jC} x1=${p.x1}")
         assertTrue(reached,
             "legD cp321->launch-chain->block->cp300@(5868,174): got S${p.S} @(${p.ak},${p.al}) maxAk=$maxAk jC=${w.jC}")
     }
@@ -28137,28 +28147,27 @@ class Slice289Test {
             val foeOpen = foe != null && foe.S != 144 && foe.S != 17
             // ax72 swing-pole mount: Entity.at binds in the az() scan once
             // the pole is in 440 range (J&4 armed); the L1947 context press
-            // lunges onto it. Each pole's press has to land in its low-SW
-            // box so the lunge ends below-left of the head (cy>128) — the
-            // orbit then swings UP first and the cB radius decays before
-            // the launch throws east over the canal. Pressing above-left
-            // (cy<128) dips the swing bottom into the water (v=2 row 37,
-            // feet = al+41 >= 740): S50 death.
-            // pole-1 uid283@(14971,611): press ~(14844,726).
-            // pole-2 uid289@(15199,610): press ~(15100-15160,665-700) —
-            // probe-verified landing (15359-15386,699) on the east rim.
+            // lunges onto it. Slice 411: `g.c(i)` picks the lunge anim with
+            // `g.b(int)` (g.javap `c(Li;)V` @138) — an AIRBORNE press takes S292,
+            // which has no X/W rects: the player stays where he pressed and the
+            // CURRENT distance to the pole is the orbit radius (cB, which then
+            // decays 20/tick to the 75 floor while `cy` swings to the bottom
+            // band). The old slope arcs (S272-275, the grounded pick) lifted
+            // the hand 47px and shortened that radius, so the old low-SW boxes
+            // now start the swing in the water (v=2, feet = al+41 >= 740 →
+            // S50). The press has to be taken while the pole is within reach —
+            // scan: pole-1 passes for R in 140..200, pole-2 for R in 100..200
+            // (both press on the rising / apex part of the hop from the rim).
             val pole = Entity.at
             // Phase 2 (G12): the player's I() integrates BEFORE g.e()
             // (i.java:3889-3922), so the press is read one step further
-            // down the arc than the position seen here — test the windows
-            // on that next point (N+ag, O+ah), or the pole-1 press lands
-            // in the water.
+            // down the arc than the position seen here — test the reach on
+            // that next point (N+ag, O+ah).
             val nx = ((p.ak shl 8) + (p.N and 255) + p.ag) shr 8
             val ny = ((p.al shl 8) + (p.O and 255) + p.ah) shr 8
-            val poleSwing = pole != null && pole.ax == 72 && (
-                (pole.aw == 283 && nx - pole.ak in -135..-45 &&
-                    ny - pole.al in 114..135) ||
-                (pole.aw == 289 && nx - pole.ak in -110..-35 &&
-                    ny - pole.al in 55..95))
+            val poleSwing = pole != null && pole.ax == 72 && p.F == null && !p.aZ &&
+                (pole.aw == 283 || pole.aw == 289) &&
+                Math.hypot((nx - pole.ak).toDouble(), (ny - pole.al).toDouble()) <= 170.0
             val mask = when {
                 poleSwing -> Pad.M_CONTEXT + Pad.M_RIGHT + Pad.M_UP
                 p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
@@ -28739,6 +28748,16 @@ class Slice291Test {
 // top boss ax29 uid307@(1377,238); cps uid233@(1244,1470) uid347@(1131,489)
 // uid339@(1266,1244); ax5 intro uid7@(547,1692) script 8.
 
+/**
+ * Slice 411: `g.c(i)`'s lunge anim pick is `g.b(S)` (g.javap `c(Li;)V` @138) — an airborne / hanging
+ * player takes S292 (no W/X rects: the swing starts at the press point and the CURRENT distance to the
+ * wheel is its orbit radius); only a grounded one takes the 272–275 slope arcs. The capstone bots
+ * therefore press CONTEXT for the counterweight only once it is within reach, otherwise the orbit
+ * sweeps through the lift-row platforms and the mount drops (S277 → S0).
+ */
+private fun wheelInReach(wheel: Entity?, p: Entity, reach: Double = 140.0): Boolean =
+    wheel != null && Math.hypot((wheel.ak - p.ak).toDouble(), (wheel.al - p.al).toDouble()) <= reach
+
 private fun chaseMask297(p: Entity, w: Level0World): Int {
     // ax29 S7 grab-QTE escape (i.java:L314): `pad.v(16388)` while the
     // boss's T<=6 arms `iCj` → the T==7 `applyHit(4,…)` never lands.
@@ -29274,7 +29293,7 @@ class Slice301Test {
                 flung || p.S == 243 -> mask = 0
                 boundF != null && boundF.ax == 72 && p.S >= 270 -> mask = 0
                 mountT != null && mountT.ax == 72 && mountT.aw == 36 &&
-                    pressCd <= 0 && boundF == null ->
+                    pressCd <= 0 && boundF == null && wheelInReach(mountT, p) ->
                     { mask = Pad.M_CONTEXT; pressCd = 12 }        // lunge-mount the wheel
                 !p.aZ -> mask = Pad.M_LEFT + Pad.M_UP
                 else -> mask = Pad.M_LEFT
@@ -29355,7 +29374,8 @@ class Slice302Test {
                 !launched && (wheelFlung || p.S == 243) -> mask = 0
                 !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
                 !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
-                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
+                    wheelCd <= 0 && p.F == null && wheelInReach(Entity.at, p) ->
+                    { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !landed -> mask = if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                 // after the arc — hop up into the u242 claim box
                 // (x150-293, y1296-1322); once claimed, feed CONTEXT
@@ -29467,7 +29487,8 @@ class Slice303Test {
                 !launched && (wheelFlung || p.S == 243) -> mask = 0
                 !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
                 !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
-                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
+                    wheelCd <= 0 && p.F == null && wheelInReach(Entity.at, p) ->
+                    { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
                     !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                     w.kC != null -> Pad.M_CONTEXT
@@ -29534,7 +29555,9 @@ class Slice303Test {
             if (w.kC != null) { kCFired = true
                 if (w.kC!!.aw == 252) u252Fired = true
                 if (w.kC!!.aw == 269) u269Fired = true }
-            if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
+            // slice 411: standing on the crates, the faithful S292 lunge keeps the player
+            // grounded while mounted (S277+) — that is not the post-carry landing.
+            if (!chainDone && u252Fired && w.kC == null && p.aZ && !(p.F != null && p.S >= 270)) chainDone = true
             if (kCFired) { if (p.al < minAl) minAl = p.al; if (p.ak > maxAk) maxAk = p.ak }
             // the descent ends on r77's type-2 strip: S50 with the anchor
             // in a type-2 cell of row 77 and x[1] zeroed (g.e(0))
@@ -29606,7 +29629,8 @@ class Slice304Test {
                 !launched && (wheelFlung || p.S == 243) -> mask = 0
                 !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
                 !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
-                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
+                    wheelCd <= 0 && p.F == null && wheelInReach(Entity.at, p) ->
+                    { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 !chainDone -> mask = when {          // phase 0 — leg-G replay: west on shelf → spring → wing chain → u252 carry
                     !landed -> if (p.aZ) Pad.M_LEFT else Pad.M_LEFT + Pad.M_UP
                     w.kC != null -> Pad.M_CONTEXT
@@ -29665,7 +29689,9 @@ class Slice304Test {
                 if (w.kC!!.aw == 269) u269Fired = true
                 if (w.kC!!.aw == 306) { u306Fired = true; println("U306 t=$t ak=${p.ak} al=${p.al} S=${p.S}") }
                 if (w.kC!!.aw == 280) { u280Fired = true; println("U280 t=$t ak=${p.ak} al=${p.al} S=${p.S}") } }
-            if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
+            // slice 411: standing on the crates, the faithful S292 lunge keeps the player
+            // grounded while mounted (S277+) — that is not the post-carry landing.
+            if (!chainDone && u252Fired && w.kC == null && p.aZ && !(p.F != null && p.S >= 270)) chainDone = true
             if (!descended && chainDone && p.aZ && p.al > 1700) { descended = true; println("DESCENDED t=$t ak=${p.ak} al=${p.al}") }
             if (!midCorridor && descended && p.aZ && p.al > 1780) { midCorridor = true; println("MIDCORRIDOR t=$t ak=${p.ak} al=${p.al}") }
             if (!onSlab && ropeBound && !descended && p.aZ && p.al in 1400..1560 && p.ak > 1060) { onSlab = true; println("ONSLAB t=$t ak=${p.ak} al=${p.al}") }
@@ -29786,7 +29812,8 @@ class Slice306Test {
                 !launched && (wheelFlung || p.S == 243) -> mask = 0
                 !launched && p.F != null && p.F!!.ax == 72 && p.S >= 270 -> mask = 0
                 !launched && Entity.at?.ax == 72 && Entity.at?.aw == 36 &&
-                    wheelCd <= 0 && p.F == null -> { mask = Pad.M_CONTEXT; wheelCd = 12 }
+                    wheelCd <= 0 && p.F == null && wheelInReach(Entity.at, p) ->
+                    { mask = Pad.M_CONTEXT; wheelCd = 12 }
                 boundF != null && boundF.ax == 72 && p.S >= 270 -> mask = 0   // wheel mount/orbit states — hands off (F lingers post-fling, faithful)
                 p.S == 277 || p.S == 293 -> mask = 0                      // mount-on anim
                 p.S == 243 && catapult -> mask = 0                        // fling anim — hands off; the arc lands on the '2' shelf
@@ -29871,7 +29898,9 @@ class Slice306Test {
                 if (w.kC!!.aw == 256) { u256Fired = true; println("U256 t=$t ak=${p.ak} al=${p.al} S=${p.S}") }
                 if (w.kC!!.aw == 306) { u306Fired = true; println("U306 t=$t ak=${p.ak} al=${p.al} S=${p.S}") }
                 if (w.kC!!.aw == 280) { u280Fired = true; println("U280 t=$t ak=${p.ak} al=${p.al} S=${p.S}") } }
-            if (!chainDone && u252Fired && w.kC == null && p.aZ) chainDone = true
+            // slice 411: standing on the crates, the faithful S292 lunge keeps the player
+            // grounded while mounted (S277+) — that is not the post-carry landing.
+            if (!chainDone && u252Fired && w.kC == null && p.aZ && !(p.F != null && p.S >= 270)) chainDone = true
             if (!descended && chainDone && p.aZ && p.al > 1700) { descended = true; println("DESCENDED t=$t ak=${p.ak} al=${p.al}") }
             if (!midCorridor && descended && p.aZ && p.al > 1780) { midCorridor = true; println("MIDCORRIDOR t=$t ak=${p.ak} al=${p.al}") }
             if (!onSlab && ropeBound && !descended && p.aZ && p.al in 1400..1560 && p.ak > 1060) { onSlab = true; println("ONSLAB t=$t ak=${p.ak} al=${p.al}") }

@@ -539,7 +539,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `g.c(i r8)` (g.java:4115, proven) — zero velocity, pick the lunge
-     *  anim (attack state → 292; S==298 keeps anim; else by the 8.8
+     *  anim (airborne / hanging state, `g.b(int)` → 292; S==298 keeps anim; else by the 8.8
      *  rise:run ratio r04/r03 → 272/273/274/275 arcs), then compute the
      *  per-tick step (cC,cD) that carries the player onto the target
      *  over the anim's cE frames. `F = r8` links the target for the
@@ -560,7 +560,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         val r03 = Math.abs(r11 - r0)
         val r04 = Math.abs(r12 - r02) shl 8
-        if (PlayerFsm.isAttackState(S)) { setAnim(292); w.sfx(30) }
+        // @138-160 (raw bytes, slice 411): `invokestatic g.b:(I)Z` — the (I)Z overload, the
+        // airborne / hanging / climbing set, NOT the no-arg attack test (the same overload
+        // confusion as the hit intake's head, slice 410).
+        if (gB()) { setAnim(292); w.sfx(30) }
         else if (S == 298) w.sfx(30)         // L11: keeps current anim
         else if (r03 <= 0 || r04 <= 0) {     // L35/L38
             setAnim(if (r03 == 0) 275 else 272)
