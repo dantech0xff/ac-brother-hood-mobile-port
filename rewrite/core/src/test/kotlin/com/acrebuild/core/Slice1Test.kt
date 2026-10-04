@@ -4992,15 +4992,19 @@ class Slice43cTest {
         assertNull(t.ae, "r04=0 → G() drops ae")
     }
 
-    @Test fun `op100 sub0 skips when arg is 0, runs arg-switch otherwise`() {
+    @Test fun `op100 sub0 skips when arg is 0, sets az = arg otherwise (@256 joins @748)`() {
+        // slice 394: the sub-0 case is `arg == 0 → return; else az = arg` —
+        // the same store as sub 5. (The port ran the sub-1 arg switch here;
+        // the 38 shipped `(0, arg)` ops are z-order values 50-300 / -5 / -1.)
         val w = scriptedWorld(scriptBlock(0, 0,
             scriptGroup(0, op100(0, 0, 0)), scriptGroup(1, op100(0, 0, 5))))
         val e = claimer(w)
-        val before = e.P
+        val before = e.P; e.az = 33
         e.runClaimScript(w)                    // sub0 arg0 → no-op
-        assertEquals(before, e.P)
-        e.runClaimScript(w)                    // sub0 arg5 → P^=1024
-        assertTrue(e.P and 1024 != 0, "r04=5 → P^1024")
+        assertEquals(before, e.P); assertEquals(33, e.az)
+        e.runClaimScript(w)                    // sub0 arg5 → az = 5
+        assertEquals(5, e.az, "sub0 arg5 → az = 5")
+        assertEquals(before, e.P, "and NOT the arg-5 P^1024 toggle")
     }
 
     @Test fun `op100 sub2 removes the uid entity`() {
@@ -5021,7 +5025,7 @@ class Slice43cTest {
         w.npcs.add(t)
         e.runClaimScript(w)
         assertTrue(w.kAb, "sub4 → k.ab = true")
-        assertEquals(77, t.az, "sub4 → r05.az = r04")
+        assertEquals(0, t.az, "sub4 is `k.ab = true` ONLY (@741 returns before @748)")
         e.runClaimScript(w)
         assertEquals(55, e.az, "sub5 uid0 → this.az = r04")
     }

@@ -2186,7 +2186,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 if (r024 < 0) r024 += 256   // i16→u8 fixup
                                 if (r14 != null) {
                                     if (r14.ax == 11 && r024 == 139) {     // kill count
-                                        w.countKill(r14.aw); w.kCount(3)
+                                        // @883-892 `k.e(0, aw)` — THIS entity's
+                                        // uid (the script holder), not the
+                                        // target's; `k.o(3)` follows
+                                        w.countKill(aw); w.kCount(3)
                                     }
                                     r14.setAnim(r024)
                                 }
@@ -2319,7 +2322,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val r12 = r9; val r2 = r10
         if (r013 == 1) when (r12) {
             0 -> cd[2] = true                                              // L140
-            1 -> { w.screenL(15); if (w.kAj != 7) w.kCount(0) }             // L141
+            // L141 (@1414-1431): `k.l(15); if (k.aj != 7) skip; k.o(0)` — the
+            // extra ap[0] tick is the FINAL mission's only (the port had the
+            // gate inverted)
+            1 -> { w.screenL(15); if (w.kAj == 7) w.kCount(0) }
             2 -> { w.kBx = -1; w.screenL(12) }                             // L144
             3 -> cd[3] = true                                              // L145
             4 -> { val v = w.kAV; if (v != null) v.Z[0] = 1 }              // L146
@@ -2439,12 +2445,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 val r03 = i16(blk, pc); pc += 2
                 val r04 = i16(blk, pc); pc += 2
                 val r05 = if (r02 != 0) w.findByAw(r02) else this
+                // @210-753 (proven): 0 → `arg != 0 → az = arg` (@256-260 joins
+                // sub 5 at @748 — the port ran the sub-1 switch for it: all
+                // 38 shipped `(0, arg)` z-order ops did nothing); 1 → the
+                // arg switch; 2 → k.c; 3 → cz/cA; 4 → `k.ab = true` ONLY
+                // (@741 returns); 5 → `az = arg`
                 if (r05 != null) when (r03) {
-                    0, 1 -> if (r03 == 1 || r04 != 0)
-                        bigOp100Arg(r05, r04, w)
+                    0 -> if (r04 != 0) r05.az = r04
+                    1 -> bigOp100Arg(r05, r04, w)
                     2 -> w.removeEntity(r05)                             // L62 k.c
                     3 -> { r05.cz = r04; r05.cA = 0 }                    // L63
-                    4 -> { w.kAb = true; r05.az = r04 }                  // L64-65
+                    4 -> w.kAb = true                                    // L64
                     5 -> r05.az = r04                                    // L65
                     else -> {}
                 }
@@ -2524,22 +2535,31 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
                         pr.setState(1, 1)                                // hover
                     val c = cb ?: IntArray(4).also { cb = it }
-                    if (w.padHeld(c[0]) ||
+                    // @1652-1853 (proven): ACCEPT = the armed key (`cb[0]`) or,
+                    // unmounted, a press INSIDE the 70x70 prompt rect; REJECT =
+                    // mounted `k.v(1020)` (any other key) or, unmounted,
+                    // `k.j()` — a press anywhere else in the play area. The
+                    // port had `k.j()` in the accept set (every tap passed) and
+                    // no unmounted reject. `cb[1] != 0` (already decided) falls
+                    // to the reject tests, which then do nothing.
+                    val accepted = w.padHeld(c[0]) ||
                         (!w.mounted && pr != null &&
-                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
-                        (!w.mounted && w.pointerStrip())) {
-                        if (c[1] == 0) {
-                            c[1] = 1
-                            if (pr != null) {
-                                if (w.mounted)
-                                    pr.setState(CT[c[2]] + 1, 1)
-                                else pr.setState(-1, 1)
-                            }
-                            eventDisarm(w); unlockInput(w)               // O();k.p()
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70))
+                    if (accepted && c[1] == 0) {
+                        c[1] = 1
+                        if (pr != null) {
+                            if (w.mounted) pr.setState(CT[c[2]] + 1, 1)
+                            else pr.setState(-1, 1)
                         }
-                    } else if (w.mounted && w.padHeld(1020) && c[1] == 0) {
+                        eventDisarm(w); unlockInput(w)                   // O();k.p()
+                    } else if (c[1] == 0 &&
+                        ((w.mounted && w.padHeld(1020)) ||
+                         (!w.mounted && w.pointerStrip()))) {
                         c[1] = 2
-                        pr?.setState(CT[c[2]] + 2, 1)
+                        if (pr != null) {
+                            if (w.mounted) pr.setState(CT[c[2]] + 2, 1)
+                            else pr.setState(-1, 1)
+                        }
                         eventDisarm(w); unlockInput(w)
                     }
                 }
@@ -2563,8 +2583,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
             109 -> {
                 if (cf == null) cf = IntArray(5)
                 val f = cf!!
-                f[0] = i16(blk, pc); f[1] = i16(blk, pc + 2)
-                f[2] = i16(blk, pc + 4); f[3] = i16(blk, pc + 6); pc += 8
+                f[0] = u16(blk, pc); f[1] = u16(blk, pc + 2)               // @1939-2049:
+                f[2] = u16(blk, pc + 4); f[3] = u16(blk, pc + 6); pc += 8   // no (short) cast
                 var dx = f[2] - f[0]; val dy = f[3] - f[1]
                 if (dx == 0) dx = 1
                 f[4] = Trig.atan2(dy, -dx)
@@ -2628,10 +2648,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     if (pr != null && !w.mounted && pr.e != -1 &&
                         w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
                         pr.setState(1, 1)
+                    // @2862-3105 (proven): same accept / reject split as op 108 —
+                    // `k.j()` (unmounted press outside the rect) REJECTS the whole
+                    // sequence; the unmounted reject repaints `bA[r8]` (the
+                    // current prompt) once per live prompt, the mounted one each
+                    // `bA[r9]` with `ct[..]+2`
                     if (w.padHeld(r037) ||
                         (!w.mounted && pr != null &&
-                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
-                        (!w.mounted && w.pointerStrip())) {
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70))) {
                         if (pr != null) {
                             if (w.mounted)
                                 pr.setState(CT[cArr[1 + r038]] + 1, 1)
@@ -2641,12 +2665,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         if (cArr[4] == cArr[0]) {
                             eventDisarm(w); unlockInput(w)
                         }
-                    } else if (w.mounted && w.padHeld(1020)) {
+                    } else if ((w.mounted && w.padHeld(1020)) ||
+                               (!w.mounted && w.pointerStrip())) {
                         for (r174 in 0 until cArr[0])
-                            scriptPrompts[r174]?.let {
+                            if (scriptPrompts[r174] != null) {
                                 if (w.mounted)
-                                    it.setState(CT[cArr[1 + r174]] + 2, -1)
-                                else it.setState(-1, 1)
+                                    scriptPrompts[r174]!!.setState(
+                                        CT[cArr[1 + r174]] + 2, -1)
+                                else scriptPrompts[r038]?.setState(-1, 1)
                             }
                         cArr[4] = -1
                         eventDisarm(w); unlockInput(w)
