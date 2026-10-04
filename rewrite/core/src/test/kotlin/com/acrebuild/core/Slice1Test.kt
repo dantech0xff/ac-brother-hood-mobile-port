@@ -26336,6 +26336,11 @@ class Slice281Test {
             if ((p.S == 26 || p.S == 12 || p.S == 233 || p.S == 0) && p.aZ &&
                 p.al in 1930..1945 && p.ak in 2360..2419)
                 mask = Pad.M_RIGHT + Pad.M_UP
+            // Slice 405: the platform's last guard grabs the runner (S310 held by its
+            // S175 QTE) — mash the attack mask (edge presses fill the gauge +8 each,
+            // a full gauge counter-executes the soldier; an unmashed gauge throws
+            // the player back).
+            if (p.S == 310) mask = if (t % 2 == 0) Pad.M_CONTEXT else 0
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 160 < w.kP) w.kP = p.al + 160

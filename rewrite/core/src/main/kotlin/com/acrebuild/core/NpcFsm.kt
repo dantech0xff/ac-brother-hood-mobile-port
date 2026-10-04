@@ -323,13 +323,16 @@ class NpcFsm(val world: LevelCellSource) {
             pushL897(e, player)
             return
         }
-        // S25 runs WITHOUT a(true) in the original (i.java:4711-4736 — the
-        // arm carries no side-collide, so the feet penetrate the landing
-        // row until its own anchor-cell check snaps + resumes). The port's
-        // per-tick safety collide would strip-pull al back to the cell
-        // boundary every tick → the arm's `e(ak/20,al/20)` never reads a
-        // solid row → the soldier grounded forever in S25.
-        if (e.S != 25) e.collideSides(world, true)
+        // There is NO universal side-collide in `I()` (slice 405, raw bytes): the
+        // whole method has `a(Z)V` at exactly six offsets — 3085 (S142), 4574
+        // (S23), 4676 (S4/22), 5032 (S18), 5464 (S6), 6167 (S0/106/107/135) — and
+        // the arms below carry them. Every other state (patrol S2/3/92, S5, S11,
+        // S12, S16, S17, S25, S85, S144 …) integrates freely: its own probes
+        // (`am()`/`aG()`/`aF()`, the L777 open-cell fall gate, S25's anchor-cell
+        // landing) decide where it may go. The port ran `a(true)` here every tick
+        // (except S25) — it extruded knocked-back and patrolling soldiers out of
+        // walls and re-seated their feet on slopes, neither of which the original
+        // does.
         // `I()` head (i.java:4024, proven): aB<=0 on any live state →
         // i(0) death entry. Without this an S85/SC hurt soldier recovered
         // at aB=0 instead of dying.
