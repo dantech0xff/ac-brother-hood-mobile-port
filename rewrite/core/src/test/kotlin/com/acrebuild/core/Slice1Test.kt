@@ -22629,7 +22629,14 @@ class Slice245Test {
                     w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
                 }
             }
-            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            // Slice 372: the S62 mantle's ±10 step now ends ON the pillar
+            // top (x1730) — the pre-dispatch rescan used to push him 13px
+            // out over the channel, where he fell at once. Standing there
+            // an UP hops him straight back into the channel; walk east
+            // off the edge instead.
+            val onTop = (p.aZ || p.S == 62 || p.S == 0 || p.S == 79) &&
+                p.al in 500..525 && p.ak in 1700..1745
+            w.pad.e(if (onTop) Pad.M_RIGHT else Pad.M_RIGHT or Pad.M_UP)
             w.tick(emptyList())
             if ((p.S == 101 || p.S == 92) && p.S != lastS) {
                 kicks++; marks += "kick@${p.ak},${p.al} t=$t"
@@ -22641,7 +22648,7 @@ class Slice245Test {
             lastS = p.S
             if (p.ak > maxAk) maxAk = p.ak
             if (p.al < minAl) { minAl = p.al; marks += "al=$minAl@${p.ak} t=$t" }
-            if (p.aZ && p.al in 500..525 && p.ak in 1740..1770) sawPillarTop = true
+            if (p.aZ && p.al in 500..525 && p.ak in 1700..1770) sawPillarTop = true
             if (sawPin || (kicks >= 3 && t > 3000)) break
         }
         println("STAIR minAl=$minAl maxAk=$maxAk kicks=$kicks pillar=$sawPillarTop catch=$sawBoundCatch pin=$sawPin marks=${marks.takeLast(10)} trace=${trace.takeLast(20).joinToString(" ")}")
@@ -22703,7 +22710,10 @@ class Slice245Test {
                 continue
             }
             if (lastS == 89 && p.S != 89) { exits++; marks += "pin->${p.S} t=$t" }
-            w.pad.e(Pad.M_RIGHT or Pad.M_UP)
+            // Slice 372: walk east off the pillar top (see the zigzag leg).
+            val onTop = (p.aZ || p.S == 62 || p.S == 0 || p.S == 79) &&
+                p.al in 500..525 && p.ak in 1700..1745
+            w.pad.e(if (onTop) Pad.M_RIGHT else Pad.M_RIGHT or Pad.M_UP)
             w.tick(emptyList())
             lastS = p.S
             if (exits >= 2 || (pinTicks > 0 && t > 6000)) break
@@ -22718,7 +22728,9 @@ class Slice245Test {
         // so it paces forever with the player riding: a verbatim
         // standoff, resolvable in play either by pinning onto an
         // already-ALERTED guard (strikes → counter-kill window) or not
-        // falling on unaware ones.
+        // falling on unaware ones. (Slice 372: the faithful walk-off
+        // lands on the guard as it enters S24 — the offer fires and the
+        // pin releases after ~3 ticks; the leg only pins the pinner.)
         assertTrue(pinAx == 11,
             "pinner must be the ax11 tumbler — pinAx=$pinAx")
     }
@@ -24146,6 +24158,16 @@ class Slice245Test {
         // S37 monkey-bar shimmy carries east past the lip, S43 drops onto
         // '20'@580's east face and S79 slides down to the deep floor —
         // east to the ax2 checkpoint (4629,646).
+        //
+        // Slice 372: the slide ends on the rock's slope (cells 24/25, from
+        // x4541). There the S79 run-start (S32, `Q == 79` → back to S79)
+        // is a faithful pin: on a slope cell `x()` clears `v`, so `a(true)`
+        // skips its `bb == bc` clear (i.java:532-540) and the side strips
+        // — which read the slope cells 24/25 ≥ 18 — leave `bb`, `bc` both
+        // set; S32's `y() && ag != 0 → ag = 0` (g.javap e() 6553-6569)
+        // then zeroes every run-start. The pre-dispatch rescan used to
+        // push him out of it. A real player jumps: UP|RIGHT from the pin
+        // (S79/S32 → S21 pre-jump → S22) clears x4640.
         val w = world()
         w.stateL(8)
         settleIntro(w)
@@ -24190,7 +24212,10 @@ class Slice245Test {
             // lip east, drop to the floor. Direction is never held during
             // a landing tick (one grounded direction-tick → ax() → S12's
             // faithful dead-stall at the '20' face).
-            if (p.aZ && p.ak in 3870..3990 && p.al in 540..620)
+            if (p.aZ && p.ak > 4560 && (p.S == 79 || p.S == 32))
+                held = Pad.M_RIGHT or Pad.M_UP        // jump out of the slope
+                                                      // pin (slice 372)
+            else if (p.aZ && p.ak in 3870..3990 && p.al in 540..620)
                 held = held or Pad.M_DOWN             // drop through '5'
             else if (p.S == 33 || p.S == 34)
                 held = Pad.M_RIGHT or (if (t % 8 < 2) Pad.M_UP else 0)

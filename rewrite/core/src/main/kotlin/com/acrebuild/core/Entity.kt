@@ -1145,9 +1145,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
         aV = e(world, cx - 1, r02 / 20)
         aW = e(world, cx + 1, r02 / 20)
         if (aR < 10) {
-            // L9: only aR == 5 continues; others return early.
+            // x() @159-176 (bytecode, proven): only aR == 5 continues, and
+            // straight into `r8 = r02 % 20` — `bd` keeps its `ah != 0`
+            // value. (The simple decompile prints `L9: if (aR != 5) goto
+            // L69; L5: bd = false` — the block order, not a fall-through:
+            // the port used to clear `bd` here, so `a(true)` never took
+            // its ground pre-adjust on a '5' cell.)
             if (aR != 5) return r8
-            bd = false
         }
         r8 = r02 % 20
         if (aO < 12 || aP < 12) {

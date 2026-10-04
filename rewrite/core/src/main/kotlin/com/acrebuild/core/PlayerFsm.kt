@@ -60,9 +60,9 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
     var bn = false   // i.bn — blend/unlock flag (false in slice 2)
 
     /** One player tick: `g.e()` (or `g.n()` on bh3). Tests drive this;
-     *  the world splits it ([eHeadReturns] + [tickBody]) so that its
-     *  pre-dispatch `a(true)` superset runs after `k.l()`, as the
-     *  original's integrate → `e()` order has it. */
+     *  the world splits it ([eHeadReturns] + [tickBody]) so that the
+     *  integrate runs after `k.l()`'s head returns, as the original's
+     *  integrate → `e()` order has it. */
     fun tick(p: Entity, pad: Pad) {
         if (eHeadReturns(p)) return
         tickBody(p, pad)
@@ -885,11 +885,29 @@ class PlayerFsm(private val world: LevelCellSource, private val rng: Determinist
                     world.clearLatches()                               // k.v()
                 }
             }
-            32 -> {                           // case 32 — run-start end → settle
-                world.scrollWallClamp(p)      // g.java:1895 head — i.f(this)
-                if (p.animFinished()) {
-                    p.ag = 0
-                    p.setAnim(if (p.Q == 79) 79 else 0)
+            // `e()` case 32 (g.javap.txt 6512-6630, slice 372 — proven):
+            // the run-start slide. `i.f(this)`; airborne with no ride
+            // (`!aZ && g.a == null`) → `cq = 0; a(0)` fall; moving
+            // (`ag != 0`) → `a(true)` side rescan, and a wall in the
+            // direction of motion (`y()`) zeroes `ag`; anim end → `ag = 0;
+            // i(Q==79 ? 79 : 0)`, and a settled S0 re-probes (`x()`) and
+            // re-embeds into S79 when the head cell is solid (`aO > 12`).
+            32 -> {
+                world.scrollWallClamp(p)      // 6512 i.f(this)
+                if (!p.aZ && p.standingOn == null) {                 // 6516-6538
+                    p.cq = false
+                    p.flingAirborne(0, world)                       // a(0)
+                } else {
+                    if (p.ag != 0) p.collideSides(world, true)      // 6541-6550 a(true)
+                    if (p.hitWall() && p.ag != 0) p.ag = 0          // 6553-6569
+                    if (p.animFinished()) {                         // 6572
+                        p.ag = 0
+                        p.setAnim(if (p.Q == 79) 79 else 0)
+                        if (p.S == 0) {                             // 6603-6627
+                            p.probeCells(world)                     // x()
+                            if (p.aO > 12) p.setAnim(79)
+                        }
+                    }
                 }
             }
             // `e()` case 37 (L1560, proven — fallback g.java:6461+): the

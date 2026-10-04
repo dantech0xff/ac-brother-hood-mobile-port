@@ -5,9 +5,10 @@ package com.acrebuild.core
  * 62 ms tick through the ported `g.e()`/`i.I()` arm loops.
  *
  * Tick order (matches the original entity tick shape):
- *   input → Pad.commit → player collideSides(probe+resolve) → PlayerFsm
- *   dispatch (arms read the fresh probes) → integrate → s() anim advance →
- *   same for each NPC via NpcFsm.
+ *   input → Pad.commit → player s() anim advance → integrate → `g.e()`
+ *   (PlayerFsm: head `a(an())` rescan, then the arm — whose own
+ *   `a(true)`/`E()` calls are the only wall resolves, slice 372) → same
+ *   for each NPC via NpcFsm.
  *
  * Touch zones are the original's `j(x,y)` wheel (k.java:575-621, proven):
  * a 3×3 radial grid `c()` centered ON THE PLAYER (`ak-25..+25`,
@@ -5681,13 +5682,15 @@ class Level0World(
         // `g.e()` offsets 0-163 (slice 369): the `k.C` and `g.r` returns
         // and `k.l()` run on the integrated position, before anything
         // else in `e()` moves the player.
+        // No wall rescan here (slice 372, proven): the original's
+        // `i.I()` goes straight into `g.e()`, whose only side-collides are
+        // the head's `a(an())` (g.javap e() 494) and the nine arm sites
+        // (6328 grounded, 6550 S32, 8259 air, 10143/10187 stagger,
+        // 12334 S217, 12556 S242/243, 13425 S311/312) plus `E()`/`au()`.
+        // The slice-2 superset that used to run `a(true)` here pushed him
+        // out of walls in every state — including those whose arm
+        // deliberately leaves them embedded (S79's crawl, S12 at a face).
         if (!playerFsm.eHeadReturns(p)) {
-            // The wall rescan `a(an())` also runs inside `g.e()`'s head
-            // (g.java:1282, proven); this pre-dispatch `a(true)` is a
-            // slice-2 superset the bot legs were proven against — removing
-            // it stalls proven crossings (gate row, canyon shaft), so it
-            // stays until a proven arm covers those states.
-            p.collideSides(this, true)
             playerFsm.tickBody(p, pad)                          // g.e()
         }
         // L1f35 tail (i.java:18904-18922): every dispatched entity ends

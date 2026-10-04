@@ -69,6 +69,7 @@ and lands with unit tests that would have caught it.
 | sim neighbour scans walk `k.bd` (the last paint's list: on-screen, player, `ae`), not `bb[]`; renderer no longer rebuilds it; `W()` nulls it; per-method bytecode fixes (`n()` ax11 arm + self-match, `be()`/`c(Z)`/`bu()` first-hit ends, `bl()` cz, `br()` z2, `bQ()` S12) | done (Phase 2 branch) | [385](../261004-0630-slice385-bd-scans/plan.md) |
 | `k.c()` runs `p()` at once on pool members; `bt()` kills the ALIVE hostiles (the port skipped them); `bu()` S10 falls into the S6/S8 body (`z2` settle); `b()` ax21 S1 `ad.s()` unconditional | done (Phase 2 branch) | [387](../261004-0700-slice387-removal-sweeps/plan.md) |
 | the type-2 kill + type-6 hit at the head of `g.e()`'s shared tail (F1 of slice 365); `g.c(i)` ax72 orbit setup; capstone re-routes and three faithful-dead-end verdicts | done (Phase 2 branch) | [370](../261004-0800-slice370-type2-kill/plan.md) |
+| the player slot's pre-dispatch `a(true)` removed (no counterpart in `i.I()`/`g.e()` — every `a(Z)` site listed); the S32 run-start arm (6512-6630); `x()` keeps `bd` on a `5` cell; three capstone re-routes | done (Phase 2 branch) | [372](../261004-0900-slice372-no-prerescan/plan.md) |
 
 Slice 346 changed the m3 capstone route (legC/legD now traverse the
 sentinel chain and the upper path); both legs pass unchanged once slice 347

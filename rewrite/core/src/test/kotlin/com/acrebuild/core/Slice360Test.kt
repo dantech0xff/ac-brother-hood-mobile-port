@@ -62,6 +62,13 @@ class Slice360Test {
 
     private fun brakeTrace(dir: Int): List<Int> {
         val (w, p) = settled()
+        // Mid-floor: the spawn (x80) is 80px from the map edge, and the
+        // x360 block closes the east end of the span — a run into either
+        // is a wall run (S12's `co > 2` push-column arm → S33), which the
+        // pre-dispatch side rescan used to hide. Start far enough from
+        // the end the run heads for: 15 ticks cover 150px.
+        p.setPositionPx(if (dir == Pad.M_RIGHT) 40 else 250, p.al)
+        p.N = p.ak shl 8; p.O = p.al shl 8
         repeat(15) { w.pad.e(dir); w.tick(emptyList()) }
         assertEquals(12, p.S, "running")
         w.pad.releaseFlush()
