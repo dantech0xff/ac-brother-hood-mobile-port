@@ -25,7 +25,11 @@ sources:
    entity kept its boxes — and since slice 385 it also sits in `bd[]` until
    the next paint, where the original sees an inert one. `removeEntity` now
    calls `deactivate()` (= `p()`) on pool members (`npcs` / `pendingInsert`)
-   not already queued.
+   not already queued. A same-frame spawn removed before the frame-end drain
+   is also dequeued from `pendingInsert` (PR review): `k.b` had put it in
+   `bb[]` and `k.c` freed that slot, but the port drains `pendingRemove`
+   BEFORE `pendingInsert`, so the queued entity would have joined `npcs` and
+   run on.
 2. **`bt()` sweeps the ALIVE** (`i.bt()` @95-98 `P(); ifne next` — `P()` is
    `aB <= 0` + `G()`): ax∈{17,11,23,50} overlapping a moving block are
    killed (`as()`: `aB = 0`, ax11 `i(0)`, ax17 `i(69)`, ax23 `i(79)`). The

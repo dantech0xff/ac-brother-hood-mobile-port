@@ -317,6 +317,12 @@ class Level0World(
         // by others) sees an inert entity; a second `k.c` on the same one
         // finds no slot and does nothing (slice 387).
         if (e !in pendingRemove && (e in npcs || e in pendingInsert)) e.deactivate()
+        // `k.b(i)` inserts at once, so the original's `k.c` finds a same-frame
+        // spawn in `bb[]`, frees its slot and the entity never ticks again.
+        // The port queues spawns in `pendingInsert` and drains it AFTER
+        // `pendingRemove` — a queued entity removed before the drain would
+        // join `npcs` and run on. Dequeue it.
+        pendingInsert.remove(e)
         pendingRemove += e
         // k.c(iVar) (k.java:4576): `bg[as]=-99` — the record's save-image
         // slot tombstones immediately; the next aY() propagates it to bf.

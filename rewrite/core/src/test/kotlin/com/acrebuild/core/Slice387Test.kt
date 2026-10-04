@@ -79,6 +79,18 @@ class Slice387Test {
         assertEquals(listOf(10, 10, 30, 30), marker.W.toList())
     }
 
+    @Test fun `k-c() on a same-frame spawn dequeues it so the drain never inserts it`() {
+        val w = world(); w.npcs.clear()
+        val e = Entity(11, null)
+        intArrayOf(10, 10, 30, 30).copyInto(e.W)
+        w.queueInsert(e)                                 // k.b(e): the port queues it for the drain
+        w.removeEntity(e)                                // k.c(e) in the same frame
+        assertEquals(listOf(0, 0, 0, 0), e.W.toList(), "p() ran on the queued spawn")
+        assertFalse(e in w.pendingInsert, "k.b put it in bb[]; k.c freed that slot")
+        w.tick(emptyList())                              // the frame-end drains
+        assertFalse(e in w.npcs, "a removed spawn must not reappear after the drain")
+    }
+
     @Test fun `a removed entity is inert in the rest of the frame's bd scans`() {
         val w = world(); w.npcs.clear()
         val sweeper = Entity(16, null)
