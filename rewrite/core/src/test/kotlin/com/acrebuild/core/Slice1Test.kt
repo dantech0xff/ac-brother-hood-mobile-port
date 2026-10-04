@@ -7515,18 +7515,32 @@ class Slice73Test {
         assertEquals(146, e.S, "r() → i(146)")
     }
 
+    /** A flat run of solid `20` cells with open air above, found in the level-0
+     *  collision map: `aF()` @93-236 reads the cell under the feet one column
+     *  behind the guard, and an edge (`c ∉ {20, 5}`) zeroes the S155 walk. */
+    private fun flatGround(w: Level0World): Pair<Int, Int> {
+        for (cy in 4 until 90) for (cx in 3 until 400) {
+            var ok = true
+            for (dx in -2..8) {
+                if (w.collisionCell(cx + dx, cy) != 20 || w.collisionCell(cx + dx, cy - 1) >= 12 ||
+                    w.collisionCell(cx + dx, cy - 2) >= 12 || w.collisionCell(cx + dx, cy - 3) >= 12) { ok = false; break }
+            }
+            if (ok) return (cx * 20 + 10) to (cy * 20 - 1)
+        }
+        error("no flat ground in the level-0 map")
+    }
+
     @Test fun `S155 — normal aC=20 and ag retreats backward, enraged aG`() {
         val w = world()
-        val e = ax73At(w, 100, 200, 0, 155)
-        e.s = Entity(51, null)                     // stub crate → probes false
+        val (gx, gy) = flatGround(w)
+        val e = ax73At(w, gx, gy, 0, 155)           // real ground: aF() sees no ledge
         e.av = false                               // facing right
         e.aq = 0; e.j = 0
         w.player.setPositionPx(e.ak + 1000, e.al)  // j==0 stalk, r7>180
         w.player.refreshBoxes(); w.player.S = 0
         w.npcFsm.tickAx73(e, w, w.player)
         assertEquals(-512, e.ag, "L76-L79: av==false → ag=-512")
-        val e2 = ax73At(w, 500, 200, 0, 155, 0, 0, 0, 0, 3)
-        e2.s = Entity(51, null)
+        val e2 = ax73At(w, gx + 80, gy, 0, 155, 0, 0, 0, 0, 3)
         e2.av = true; e2.Z[0] = 3; e2.aq = 0; e2.j = 0
         w.player.setPositionPx(e2.ak + 1000, e2.al); w.player.refreshBoxes()
         w.npcFsm.tickAx73(e2, w, w.player)
@@ -7541,7 +7555,10 @@ class Slice73Test {
         w.player.S = 67                            // windup anim 67
         w.player.gI = 1
         w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
-        w.player.av = false                        // faces AWAY — r11 gate
+        // r2 gate (aJ() @103-114 `this.g(aS)`): the GUARD must not face the
+        // player — it looks left, the player stands on its right (slice 400:
+        // this test set the PLAYER's facing, the wrong receiver)
+        e.av = true
         w.npcFsm.tickAx73(e, w, w.player)          // arms bf via S67
         assertTrue(w.iBf, "L48 engage latch armed on S67 windup")
         assertTrue(w.lockTarget === e, "aN = this")
@@ -7574,10 +7591,10 @@ class Slice73Test {
         val w = world()
         val e = ax73At(w, 100, 200, 0, 146)
         e.aB = 100
+        e.av = true                                // guard looks away: backstab angle
         w.player.S = 183                           // assassination anim
         w.player.gI = 1
         w.player.setPositionPx(e.ak + 10, e.al); w.player.refreshBoxes()
-        w.player.av = false                        // backstab angle
         w.player.X[0] = e.W[0] - 10; w.player.X[1] = e.W[1]
         w.player.X[2] = e.W[2] + 10; w.player.X[3] = e.W[3]
         w.npcFsm.tickAx73(e, w, w.player)
@@ -27999,6 +28016,12 @@ class Slice289Test {
                 p.S == 101 || p.S == 36 -> Pad.M_UP
                 foeWindup -> Pad.M_LEFT
                 !foeOpen && foe != null -> Pad.M_RIGHT + Pad.M_UP   // run past / hop over
+                // Slice 400: the soldier now faces the player while it spots
+                // it (spotB's flip is `!faces`), keeps its 50-90 px pacing
+                // distance and hits from range — an attack held in place
+                // never reached it. Close the gap first, swing in reach.
+                foeOpen && Math.abs(foe!!.ak - p.ak) > 45 ->
+                    if (foe.ak > p.ak) Pad.M_RIGHT else Pad.M_LEFT
                 foeOpen -> Pad.M_CONTEXT
                 p.aZ -> Pad.M_RIGHT + Pad.M_UP
                 else -> Pad.M_RIGHT + Pad.M_UP
