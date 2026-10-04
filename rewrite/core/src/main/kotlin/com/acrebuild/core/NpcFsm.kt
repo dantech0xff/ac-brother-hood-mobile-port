@@ -298,6 +298,38 @@ class NpcFsm(val world: LevelCellSource) {
         }
     }
 
+    /**
+     * `i.I()` @1700-1951 (raw bytes, slice 415) — the ax11 script-claim head, entered when
+     * `ca != -1`. The script holder is interrupted when it sees the player (`l()`, [losL]),
+     * or the player stands within 40 x 50 px with no hide bit (`aA & 8`) and no `i.bn` alert, or
+     * the player's attack box `X` reaches its `W` (@1714-1811); an interrupt only counts while the
+     * claim is allocated (`cd[7]`) and the player is not in S268 / S267 / S291 (@1814-1858) —
+     * then `P &= -17; d = false` (@1861-1876). While `d` holds: `P |= 16; aa()` and the caller
+     * skips the arms (returns true). Once it is gone: `bI()`, `ca = -1`, `i(2)` (unless S117),
+     * `aA = 0` when that left it in S2 (@1908-1947), and the arms run (returns false).
+     */
+    private fun soldierScriptHead(e: Entity, p: Entity): Boolean {
+        var interrupted = losL(e, p, world)                                  // @1716 l()
+        if (!interrupted) {
+            val near = kotlin.math.abs(p.ak - e.ak) < 40 && kotlin.math.abs(p.al - e.al) < 50 &&
+                (p.aA and 8) == 0 && !world.iBn                              // @1726-1793
+            interrupted = near || Entity.overlapStrict(p.X, e.W)             // @1797-1811
+        }
+        if (interrupted && e.cd[7] && p.S != 268 && p.S != 267 && p.S != 291) {
+            e.P = e.P and -17; e.scriptBound = false                         // @1861-1876
+        }
+        if (e.scriptBound) {                                                 // @1879-1904
+            e.P = e.P or 16
+            e.runClaimScript(world)
+            return true
+        }
+        e.releaseClaim(world)                                                // @1908 bI()
+        e.ca = -1
+        if (e.S != 117) e.setAnim(2)                                         // @1919-1932
+        if (e.S == 2) e.aA = 0                                               // @1935-1947
+        return false
+    }
+
     fun tick(e: Entity, player: Entity) {
         // `I()` covers only the shared soldier family {11,17,23,47,50,73}
         // (i.java dispatch :15493, proven); every other ax reaches the
@@ -312,6 +344,16 @@ class NpcFsm(val world: LevelCellSource) {
         if (!e.integratedThisTick) e.integrate(if (world.iAH) maxOf(1, world.iAI) else 1)
         familyHead(e, player)
         if (e.ax == 11) soldierClaimBid(e)
+        // @1700-1951 (raw bytes, slice 415): the ax11 script-claim head. A soldier bound to a
+        // claim script (record Z[13] → `ca != -1`, `d` latched at init) runs ONLY `aa()` each
+        // tick; the arms are skipped (`goto 7660` → `au()` → the shared tail @7691-7989).
+        if (e.ax == 11 && e.ca != -1 && soldierScriptHead(e, player)) {
+            corpseDrop(e)                                    // @7691 au()
+            e.refreshBoxes()                                 // t()
+            if (e.av) e.P = e.P or 1 else e.P = e.P and -2   // L900-902
+            pushL897(e, player)                              // a(k.aS,P,W)
+            return
+        }
         // `case 23: goto L849` (simple/i.java:5180, proven): ax23 shares
         // the family head but no arm — straight to the L849/L897 tail.
         // (Only the ax10 S30 wave grid spawns ax23, flavour Z[6]==2; no
@@ -2558,10 +2600,12 @@ class NpcFsm(val world: LevelCellSource) {
                 if (e.bb || e.bc) e.ag = -e.ag                        // @362-382
                 e.av = e.ag < 0                                       // L55-58
                 val moving = e.ag != 0 || e.ah != 0
-                if (knockOverlap(e, p)) {                             // @404-441
-                    if (moving) e.setAnim(4)
-                    return
-                }
+                // @404-441 (proven): a MOVING prop touching the player
+                // settles (S==6 → i(4)); a resting one (`ag == 0 && ah ==
+                // 0`) falls out to the scan below (@420-424 `ifeq 442`),
+                // where the same `moving` gate keeps it inert — so the
+                // fall-through is unobservable, kept literal.
+                if (knockOverlap(e, p) && moving) { e.setAnim(4); return }
                 // @442-551 (proven): the `k.bd` scan has no `this` skip —
                 // a drawn, moving prop meets itself (`i(this)`: dy 0,
                 // `a(W, W)`) and settles.
@@ -3021,15 +3065,6 @@ class NpcFsm(val world: LevelCellSource) {
     //   P|=128, Z[0..3]=r8[14..17]; Z[3]!=-1 → P|16; S==8 && aG!=-1 &&
     //   Z[1]<16 → h(k.s(aG)) pre-bind + P|512; S==9 → P|512. i(r8[5]) tail.
 
-    /** `i.j(i)` (i.java:7318, proven): linked-watch predicate — `r` null →
-     *  true; ax ∈ {11,17,29,27} && `!P()` (still alive) → true. */
-    private fun iJ(r: Entity?): Boolean {
-        if (r == null) return true
-        if ((r.ax == 11 || r.ax == 17 || r.ax == 29 || r.ax == 27) &&
-            !r.deadRelease()) return true
-        return false
-    }
-
     /** `i.ao()` (i.java:7249, proven): context bind — player-overlap +
      *  aG!=-1 + Z[0] gate (Z0==1 requires the 65568 edge); sets `aS.P`
      *  facing bit by `aS.av`, then the `k.C` slot claim = `N()` body. */
@@ -3141,7 +3176,7 @@ class NpcFsm(val world: LevelCellSource) {
                 val r0 = w.findByAw(e.Z[2])
                 when (e.Z[1]) {
                     0 -> {                                   // L22/L29
-                        if (r0 != null && !iJ(r0) && r0.animFinished())
+                        if (r0 != null && !Entity.isDeadCheck(r0) && r0.animFinished())
                             return                           // L22 fall-out
                         if (r0 == null || r0.ax == 73 || r0.ax == 17 ||
                             r0.ax == 11 || r0.ax == 29)
@@ -3163,7 +3198,7 @@ class NpcFsm(val world: LevelCellSource) {
                         if (r0 == null || r0.ax == 73 || r0.ax == 17 ||
                             r0.ax == 11 || r0.ax == 29 || r0.ax == 27) {
                             if (r0 == null ||
-                                (iJ(r0) && r0.animFinished()))  // L69/L71
+                                (Entity.isDeadCheck(r0) && r0.animFinished()))  // L69/L71
                                 eventBind(e, w, p)           // L72 ao()
                         }
                         return
@@ -3182,7 +3217,7 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                     10 -> {                                  // L91/L93
                         if (r0 != null &&
-                            (!iJ(r0) || !r0.animFinished()))
+                            (!Entity.isDeadCheck(r0) || !r0.animFinished()))
                             missionResolve(e, w, p)          // L169
                         return
                     }
@@ -3197,7 +3232,7 @@ class NpcFsm(val world: LevelCellSource) {
                         return
                     }
                     13 -> {                                  // L110/L118
-                        if (r0 == null || (iJ(r0) && r0.animFinished())) {
+                        if (r0 == null || (Entity.isDeadCheck(r0) && r0.animFinished())) {
                             if (e.claimActive()) e.releaseClaim(w)  // bI()
                         }
                         missionResolve(e, w, p)              // → L169
@@ -3216,7 +3251,7 @@ class NpcFsm(val world: LevelCellSource) {
                         return
                     }
                     17 -> {                                  // L135/L143
-                        if (r0 == null || (iJ(r0) && r0.animFinished())) {
+                        if (r0 == null || (Entity.isDeadCheck(r0) && r0.animFinished())) {
                             if (e.aG != -1 && e.Z[3] != -1)
                                 forwardScript(e, w)          // ap()
                         }
@@ -5728,31 +5763,26 @@ fun NpcFsm.tickAx61(e: Entity, w: Level0World, p: Entity) {
     }
 }
 
-/** `aR` L25-L46 (i.java:11330-11357, proven) — the shared contact-harm
- *  arm for S∈{2,4,5,17}: X-box overlap vs the player, skipped while the
- *  player is in {9,375,376,377}; player LEFT of the boss (`ak < aU.ak`)
- *  escapes unharmed with av=false (L39), else `a(4,0,0,this)` and —
- *  S2 only — the grab snap `i(375)` + vel0 + boss-y (L44); S17 instead
- *  lands at L39 after the hit (av=false, no snap). r() → P|=128|32. */
+/** `i.aR()` @335-551 (raw bytes, proven) — the shared contact-harm arm for
+ *  S∈{2,4,5,17}: X-box overlap vs the player (`X[0] != X[2]`), skipped while the
+ *  player is in {9,375,376,377}. The player is turned toward the boss
+ *  (`av = !(aS.ak < aU.ak)`, @413-442), then `aS.a(4,0,0,this)` lands on BOTH sides
+ *  (@445-452 — the two `av` stores join at 445), and for S2 / S17 the grab snap
+ *  follows: `i(375)`, `ag = ah = ai = aj = 0`, `al = aU.al` (@455-518). r() → P|=128|32.
+ *  (Slice 415: the port read the jadx labels as "a player LEFT of the boss escapes
+ *  unharmed" and gave S17 no snap — the bytes have neither exemption.) */
 fun NpcFsm.ax61HarmArm(e: Entity, w: Level0World, p: Entity) {
-    if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W)) {
-        if (p.S != 9 && p.S != 375 && p.S != 376 && p.S != 377) {
-            if (p.ak < (w.kAU?.ak ?: 0)) {
-                p.av = false                                       // L39
-            } else {
-                p.av = true                                        // L40
-                p.applyHit(4, 0, e, w)
-                if (e.S == 2) {                                    // L44
-                    p.setAnim(375)
-                    p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
-                    p.al = w.kAU?.al ?: p.al
-                } else if (e.S == 17) {                            // L43→L39
-                    p.av = false
-                }
-            }
+    if (e.X[0] != e.X[2] && Entity.overlapStrict(e.X, p.W) &&
+        p.S != 9 && p.S != 375 && p.S != 376 && p.S != 377) {
+        p.av = p.ak >= (w.kAU?.ak ?: 0)                            // @413-442
+        p.applyHit(4, 0, e, w)                                     // @445-452 — both sides
+        if (e.S == 2 || e.S == 17) {                               // @455-469
+            p.setAnim(375)
+            p.ah = 0; p.ag = 0; p.aj = 0; p.ai = 0
+            p.al = w.kAU?.al ?: p.al
         }
     }
-    if (e.animFinished()) e.P = e.P or 128 or 32                   // L46
+    if (e.animFinished()) e.P = e.P or 128 or 32                   // @521-551
 }
 
 

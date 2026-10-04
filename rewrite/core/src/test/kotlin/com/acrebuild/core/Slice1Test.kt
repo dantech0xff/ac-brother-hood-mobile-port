@@ -2926,7 +2926,9 @@ class Level0WorldTest {
         assertTrue(p.av, "av=true on the boss's right side")
     }
 
-    @Test fun `ax61 S2 harm skips a player left of the boss`() {
+    @Test fun `ax61 S2 harm also lands on a player left of the boss`() {
+        // aR() @413-452 (raw bytes, slice 415): the two `av` stores (`ak < aU.ak` → false, else
+        // true) JOIN at @445 — `aS.a(4,0,0,this)` runs on both sides, then S2's grab snap.
         val w = world(); w.npcs.clear()
         val boss = bossAt(w, 300, 150); w.kAU = boss
         val p = w.player
@@ -2937,9 +2939,10 @@ class Level0WorldTest {
         widenX(e, 190, 260, 130, 170)
         val before = w.sfxLog.size
         w.npcFsm.ax61HarmArm(e, w, p)
-        assertFalse(p.av, "L39: av=false")
-        assertEquals(0, p.S, "no harm applied")
-        assertEquals(before, w.sfxLog.size, "no hurt sfx")
+        assertFalse(p.av, "av = !(ak < aU.ak): turned toward the boss")
+        assertEquals(375, p.S, "S2: the grab snap follows the hit on either side")
+        assertEquals(boss.al, p.al)
+        assertTrue(w.sfxLog.size > before && 18 in w.sfxLog.drop(before), "the hit lands: hurt sfx")
     }
 
     @Test fun `ax61 S15 catch grabs the falling player and drains g u`() {

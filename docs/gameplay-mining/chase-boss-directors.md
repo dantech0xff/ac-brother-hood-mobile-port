@@ -87,7 +87,7 @@ Một type làm **3 vai**: aura-follower, projectile, grab-QTE overlay.
 |---:|---|
 | 0,6,15 | spawn/grow; S15 = damage-trap: `Y∩aS.Y` → player `i(375)` + `g.d(g.u[au])` (`g.u={5,10,15}`) |
 | 1 | aura follow `k.aU` pos |
-| 4,5 | warning ticks; T==9 → SFX 31 |
+| 2,4,5,17 | **tay đòn của boss** (arm dùng chung, `proven`, raw bytes `i.javap.txt` `aR()` @335-551, slice 415): `X[0]!=X[2] && X∩aS.W`, player không ở S9/375/376/377 → `aS.av = !(aS.ak < aU.ak)` (quay mặt về phía boss) rồi **`aS.a(4,0,0,this)` đánh trúng cả hai phía** (hai nhánh `av` hợp lại ở @445); S2 **và S17** thêm grab snap: `i(375)`, `ag=ah=ai=aj=0`, `al=aU.al`. S4/5: T==9 → SFX 31 (cảnh báo) rồi đi arm này; kết thúc `r()` → `P\|=128\|32` |
 | 8 | **projectile flight**: param-lerp `j.a(Z[0..5])` progress `Z[6]/Z[7]` → đích `Z[8,9]` → i(10)+SFX12 |
 | 10 | hitbox `X∩aS.W` → op4 damage → despawn |
 | 9,11→12 | struggle overlay lifecycle |

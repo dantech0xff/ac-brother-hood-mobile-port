@@ -2565,10 +2565,12 @@ class Level0World(
                     // `ap[1]` counts `a(true)` retries (`o(1)`, k.java:5175),
                     // not death screens; `deaths` is port instrumentation
                     if (i == 12 && ex != 12) deaths++
-                    if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
-                    kEc = 25; bannerK(3); kEb = 59   // L17 (simple decompile —
-                                                     // structured omits; high-confidence)
-                    z(7)                             // fail/win sting
+                    // @84-99 (raw bytes, slice 415): `this = 31; goto 0` — a win with a stats text
+                    // (`bx >= 0`) RE-ENTERS the method as screen 31, which has no arm here, so the
+                    // banner block and the sting below are skipped (the port ran both for 31 too).
+                    if (i == 13 && kBx >= 0) { i = 31; continue }
+                    kEc = 25; bannerK(3); kEb = 59   // @102-113 (the L17 tail)
+                    z(7)                             // @116-120 fail/win sting
                 }
                 i == 15 -> {                         // mission-complete stats
                     kEe = 0; kEf = 37                // j.g=0 — derived counter, no-op
