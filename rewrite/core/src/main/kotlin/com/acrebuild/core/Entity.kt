@@ -4269,13 +4269,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
             cJDone = false
             when (pv) {
                 0 -> {
-                    if (S != 28 && S != 14) setAnim(28)
-                    else if (animFinished() && S == 28) {
+                    // @60-133 (proven): `(S == 28 || S == 14) && r()` → fire;
+                    // otherwise `S != 28 → i(28)` — so the S14 fire frame lasts
+                    // ONE call, then the windup restarts (and a finished S14
+                    // fires again: six volleys, `g(2)` counts `j` to 6)
+                    if ((S == 28 || S == 14) && animFinished()) {
                         setAnim(14)
                         spawnBarrage(world, 0)
                         spawnBarrage(world, 1)
                         spawnBarrage(world, 2)
-                    }
+                    } else if (S != 28) setAnim(28)
                 }
                 2 -> {
                     if (S != 18 && S != 29) setAnim(29)
@@ -4345,11 +4348,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         return
                     }
                     if (j == 2) {
-                        // L64-L73 — knife-fan follow-through
+                        // @655-712 (proven): S27 finished → `i(24)` and FALL
+                        // THROUGH to the `aZ` toggle + the j==2 knife arm
+                        // below; every other state returns (S24/S27 wait,
+                        // anything else starts S27)
                         if (S == 27 && animFinished()) setAnim(24)
-                        if (S == 24) return
-                        if (S != 27) setAnim(27)
-                        return
+                        else {
+                            if (S != 24 && S != 27) setAnim(27)
+                            return
+                        }
                     }
                     run {
                         // L77 — aZ toggles the scatter vs boundary-fill arm
@@ -4376,9 +4383,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                         if (kB != null && pointInBox(
                                                 r04[r05][0], r04[r05][1],
                                                 kB.W)) {
+                                            // @951-993: `(nextInt & 1) == 0`
+                                            // jumps to the W[3] store
                                             if ((world.jNextInt() and 1) == 0)
-                                                r04[r05][1] = kB.W[1]
-                                            else r04[r05][1] = kB.W[3]
+                                                r04[r05][1] = kB.W[3]
+                                            else r04[r05][1] = kB.W[1]
                                         }
                                     } else if (kB == null || !pointInBox(
                                             r04[r05][0], r04[r05][1], kB.W)) {
@@ -4402,7 +4411,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                     aK.P = aK.P or 16
                                     aK.af = this
                                     world.queueInsert(aK)
-                                    r04[r05][0] = -1
+                                    // (the original never marks the pool cell
+                                    // used — @1070-1212 has no store to it — so
+                                    // the `== -1` re-roll above is dead code and
+                                    // a cell can be picked twice)
                                     r93++
                                 }
                                 nl = 30; j = 1; aC = 0
@@ -4439,8 +4451,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     }
                 }
                 4 -> {
+                    // @1483-1514 (proven): both `ifne`s jump OVER the clear —
+                    // it runs only when neither bit group is set
                     val kBl = world.kB?.l ?: 0
-                    if ((kBl and 2) != 0 || (kBl and 12) != 0)
+                    if ((kBl and 2) == 0 && (kBl and 12) == 0)
                         l = l and -2
                     if (S in 30..32 && T == 0) {
                         val r12 = S - 30

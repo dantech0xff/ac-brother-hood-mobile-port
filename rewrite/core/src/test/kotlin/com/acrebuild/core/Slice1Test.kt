@@ -2527,7 +2527,9 @@ class Level0WorldTest {
         assertTrue(w.iBT, "i.bT = true")
         assertEquals(16, d.P and 16, "P |= 16")
         assertEquals(-1, w.iCD); assertEquals(-1, w.iCE)
-        assertEquals(4, w.dirWp!!.f, "f &= 127 clears the consumed bit")
+        // slice 396 (i.javap bD() @496-534): arm 0's arming tail has NO
+        // `f &= 127` — only the node-advance sites (arms 3/6/8, `d()`) clear it
+        assertEquals(4 or 128, w.dirWp!!.f, "arm 0 leaves the consumed bit alone")
     }
 
     @Test fun `aA0 routes to the kill-bitmap router when bV=1`() {
@@ -27020,7 +27022,16 @@ class Slice288Test {
                     it.aw == 17 || it.aw == 154) &&
                     it.aB > 0 && (it.l and 1) != 0
             }
-            val txEff = if (wallT != null) (wallT.W[0] + wallT.W[2]) / 2 else tx
+            // slice 396: the faithful pv0 thrower fires six volleys with its
+            // box collapsed to a point (S28 windup, S14 is one call long) and
+            // only then recoils in S14/S13 with a real box. During the burst
+            // the centre knife (S17) falls down the thrower's own x line and
+            // the fans sweep its bottom edge: keep off the lane and low; in
+            // the recoil window fly the lane and shoot.
+            val burst = wallT != null && wallT.aw == 11 &&
+                wallT.W[2] - wallT.W[0] < 20
+            val txEff = if (burst) wallT!!.ak + (if (p.ak >= wallT.ak) 34 else -34)
+                else if (wallT != null) (wallT.W[0] + wallT.W[2]) / 2 else tx
             if (tag != "claim" && tag != "gate" &&
                 p.ak < txEff - 12) held = held or Pad.M_RIGHT
             else if (tag != "claim" && tag != "gate" &&
@@ -27030,8 +27041,10 @@ class Slice288Test {
             // (a wall-hit puff dies in S9, so the wall tanks its own
             // damage while covering us).
             if (wallT != null && tag != "claim" && tag != "gate") {
-                if (p.al < wallT.W[3] + 40) held = held or Pad.M_DOWN
-                else if (p.al > wallT.W[3] + 90) held = held or Pad.M_UP
+                val lo = if (burst) 110 else 40
+                val hi = if (burst) 160 else 90
+                if (p.al < wallT.W[3] + lo) held = held or Pad.M_DOWN
+                else if (p.al > wallT.W[3] + hi) held = held or Pad.M_UP
             }
             // Predictive dodge (slice 353): with the volleys aimed and
             // fanned as the bytecode has them, a live escort shot is
@@ -27039,6 +27052,7 @@ class Slice288Test {
             // of the drifting player, take the move that keeps the most
             // clearance.
             dodgeMask288(w, p)?.let { held = it }
+            knifeDodge288(w, p, held)?.let { held = it }
             val preAF = w.kAF
             prevS = p.S
             w.pad.e(held); w.tick(emptyList())
@@ -27069,6 +27083,53 @@ class Slice288Test {
  *  player's W-centre drifting at the scroll speed `kY`; inside 30px the
  *  bot picks the 8px/tick move (left/right, plus up/down while inside the
  *  view band) with the largest minimum clearance. */
+/** Mission-4 bot dodge for the pursuers' own knives (slice 396): the pv0
+ *  thrower's fan (`g(0..2)` = ax24 S16/S17/S18) and the pv4 gunner's shots
+ *  (S41-S43) are plain ax24 entities whose hit box is the tall `X` rect
+ *  (`~8 x 49`, hanging BELOW the knife) — the faithful `bG` fires the pv0
+ *  fan every ~13 ticks (six volleys; the S14 fire frame is one call long and
+ *  the recoil only follows the sixth). Each candidate move (8 px/tick, the
+ *  scroll drift added) is projected `h` ticks against every knife's `X` box
+ *  swept by its velocity; the bot keeps its own intent unless that collides
+ *  within 12 ticks, then takes the move that postpones the first collision
+ *  the most. Inputs only — no state is touched. */
+private fun knifeDodge288(w: Level0World, p: Entity, held: Int): Int? {
+    val knives = w.npcs.filter {
+        it.ax == 24 && (it.S in 16..18 || it.S in 41..43) &&
+            (it.P and 128) == 0 && it.af?.ax == 32
+    }
+    if (knives.isEmpty()) return null
+    val drift = w.kY / 256.0
+    val h = 18
+    fun firstHit(dx: Double, dy: Double): Int {
+        for (t in 1..h) {
+            val px0 = p.W[0] + dx * t - 3; val px1 = p.W[2] + dx * t + 3
+            val py0 = p.W[1] + (drift + dy) * t - 3; val py1 = p.W[3] + (drift + dy) * t + 3
+            for (k in knives) {
+                val kx = k.ag * t / 256.0; val ky = k.ah * t / 256.0
+                if (k.X[0] + kx <= px1 && k.X[2] + kx >= px0 &&
+                    k.X[1] + ky <= py1 && k.X[3] + ky >= py0) return t
+            }
+        }
+        return h + 1
+    }
+    val intentDx = (if ((held and Pad.M_LEFT) != 0) -8.0 else 0.0) +
+        (if ((held and Pad.M_RIGHT) != 0) 8.0 else 0.0)
+    val intentDy = (if ((held and Pad.M_UP) != 0) -8.0 else 0.0) +
+        (if ((held and Pad.M_DOWN) != 0) 8.0 else 0.0)
+    if (firstHit(intentDx, intentDy) > 12) return null
+    val q = p.al - w.kP
+    val moves = mutableListOf(
+        0 to (0.0 to 0.0),
+        Pad.M_LEFT to (-8.0 to 0.0), Pad.M_RIGHT to (8.0 to 0.0),
+        (Pad.M_LEFT + Pad.M_UP) to (-8.0 to -8.0), (Pad.M_RIGHT + Pad.M_UP) to (8.0 to -8.0),
+        (Pad.M_LEFT + Pad.M_DOWN) to (-8.0 to 8.0), (Pad.M_RIGHT + Pad.M_DOWN) to (8.0 to 8.0),
+        Pad.M_UP to (0.0 to -8.0), Pad.M_DOWN to (0.0 to 8.0))
+    if (q <= 90) moves.removeAll { it.second.second < 0 }
+    if (q >= 190) moves.removeAll { it.second.second > 0 }
+    return moves.maxByOrNull { firstHit(it.second.first, it.second.second) }?.first
+}
+
 private fun dodgeMask288(w: Level0World, p: Entity): Int? {
     val pool = w.projectilePool ?: return null
     val shots = pool.filter {

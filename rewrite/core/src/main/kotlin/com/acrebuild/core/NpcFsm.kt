@@ -4097,8 +4097,9 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
             }
             // L44-L50: shared arming tail — cB set → waypoint chase (8),
             // else the kill-bitmap router (6); bV>0 also lands on 6
+            // @496-534 (proven): NO `f &= 127` here — only the node advance
+            // sites (arm 8, arm 6, arm 3, `d()`) clear the consumed bit
             if (w.dirWp != null) {
-                w.dirWp!!.f = w.dirWp!!.f and 127
                 e.aq = w.dirWp!!.a; e.ar = w.dirWp!!.b
                 e.aA = 8
             } else e.aA = 6
@@ -4111,11 +4112,13 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
             var r92 = false
             val r04 = w.findByAw(e.Z[0])
             if (r04 == null) {
-                r92 = true
-            } else if (r04.aB > 0) {
-                r04.respawnAttack(w)
-            } else if (r04.S == 16) {
+                r92 = true                    // the original NPEs at `r1.l` (@814)
+            } else if (r04.aB <= 0 && r04.S == 16) {
                 r92 = true; r04.l = r04.l and -2
+            } else {
+                // @800-808: `aB > 0 || S != 16` — a dying pursuer (aB <= 0, the
+                // corpse anim not reached yet) keeps running its script
+                r04.respawnAttack(w)
             }
             if (r92) { e.l = e.l or 2; e.aA = 6 }
             else if (r04 != null && r04.cIDone && r04.cJDone) {
@@ -4168,14 +4171,16 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                 } else {
                     for (r94 in 0 until 2) {
                         val r08 = w.findByAw(e.Z[r94 + 13]) ?: continue
-                        if (r08.S == 10) {
-                            r08.P = r08.P and -17
-                            r08.P = r08.P and -33
-                            r08.iE = false; r08.aC = 100
-                        } else if (r08.inPlayV(w)) {
-                            if (r08.bs < 4 && r08.Z[r08.bs + 1] != -1) r08.bs++
+                        // @1191-1250 (proven): an S10 or off-screen pursuer skips
+                        // the `bs` walk; EVERY pursuer then falls into @1253 —
+                        // `P &= -17 & -33; E = 0; aC = 100`
+                        if (r08.S != 10 && r08.inPlayV(w)) {
+                            while (r08.bs < 4 && r08.Z[r08.bs + 1] != -1) r08.bs++
                             r08.bs--
                         }
+                        r08.P = r08.P and -17
+                        r08.P = r08.P and -33
+                        r08.iE = false; r08.aC = 100
                     }
                     e.aA = 6
                 }
@@ -4183,24 +4188,28 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
         }
         // ---- L137-L163: dual-pursuit monitor on Z[1],Z[2] ------------------
         4 -> {
+            // @1412-1583 (proven): `r2` is set ONLY by the first pursuer being
+            // gone and cleared by the second being alive-or-dying; a gone
+            // second one leaves it untouched. Both pursuers run `bG()` unless
+            // they are exactly (aB <= 0 && S == 20).
             var r95 = false
             val r09 = w.findByAw(e.Z[1])
-            if (r09 == null) { e.l = e.l or 4; r95 = true }
-            else if (r09.aB > 0) {
+            if (r09 == null) { e.l = e.l or 4; r95 = true }   // original NPEs @1481
+            else if (r09.aB <= 0 && r09.S == 20) {
+                e.l = e.l or 4; r95 = true; r09.l = r09.l and -2
+            } else {
                 r09.aG = 1
                 r09.respawnAttack(w)
                 if (r09.cIDone && r09.cJDone) {
                     r09.cIDone = false; e.aA = 6
                 }
-            } else if (r09.S == 20) {
-                e.l = e.l or 4; r95 = true; r09.l = r09.l and -2
             }
             val r010 = w.findByAw(e.Z[2])
-            if (r010 == null) { e.l = e.l or 8; r95 = true }
-            else if (r010.aB > 0) {
+            if (r010 == null) e.l = e.l or 8                   // original NPEs @1548
+            else if (r010.aB <= 0 && r010.S == 20) {
+                e.l = e.l or 8; r010.l = r010.l and -2
+            } else {
                 r95 = false; r010.aG = 2; r010.respawnAttack(w)
-            } else if (r010.S == 20) {
-                e.l = e.l or 8; r95 = true; r010.l = r010.l and -2
             }
             if (r95) e.aA = 6
             else if (r010 != null && r010.cIDone && r010.cJDone) {
@@ -4212,8 +4221,8 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
             var r96 = false
             val r011 = w.findByAw(e.Z[3])
             if (r011 == null) r96 = true
-            else if (r011.aB > 0) r011.respawnAttack(w)
-            else if (r011.S == 26) r96 = true
+            else if (r011.aB <= 0 && r011.S == 26) r96 = true
+            else r011.respawnAttack(w)               // @1636-1644: aB > 0 || S != 26
             if (r96) { e.l = e.l or 16; e.aA = 6 }
             else if (r011 != null && r011.cIDone && r011.cJDone) {
                 r011.cIDone = false; e.aA = 6
@@ -4331,15 +4340,15 @@ fun NpcFsm.tickDirector(e: Entity, player: Entity, pad: Pad) {
                 else r016.setAnim(21)
             }
             4 -> {
+                // @2523-2605: the `S == 37 → i(33)` test is the ELSE of the
+                // `k && P&128 → i(37)` arm (the `i(37)` path `goto @2609`s) —
+                // S37 plays out and the NEXT `r()` moves it on to S33
                 if (r016.aB <= 0) { r016.setAnim(36); e.l = e.l or 32 }
-                else {
-                    if (e.k && (r016.P and 128) != 0) {
-                        r016.P = r016.P and -129
-                        r016.setAnim(37)
-                        e.k = false
-                    }
-                    if (r016.S == 37) r016.setAnim(33)
-                }
+                else if (e.k && (r016.P and 128) != 0) {
+                    r016.P = r016.P and -129
+                    r016.setAnim(37)
+                    e.k = false
+                } else if (r016.S == 37) r016.setAnim(33)
             }
         }
     }
