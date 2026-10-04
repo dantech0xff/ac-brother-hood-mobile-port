@@ -1744,7 +1744,9 @@ class NpcFsm(val world: LevelCellSource) {
                                        it.setAnim(4)
                                        it.aB = Entity.WEAPON_DMG[w.weaponSlot]
                                        it.Z[0] = if (r8 != 0) 0 else 1  // Lc88
-                                       e.Z[5] = if (r8 >= 1) 0 else 1   // Lc96
+                                       // @3222-3243: `col >= 1 → Z[5] = 1`,
+                                       // col 0 → 0 (the port had it inverted)
+                                       e.Z[5] = if (r8 >= 1) 1 else 0    // Lc96
                                        e.aC = e.Z[7] }                  // Lcac
                                 else -> Entity(0, null)                 // Lcb7
                             }
@@ -1805,7 +1807,7 @@ class NpcFsm(val world: LevelCellSource) {
                                 m.setAnim(4)
                                 m.aB = Entity.WEAPON_DMG[w.weaponSlot]
                                 m.Z[0] = if (engaged) 0 else 1       // Lf90
-                                e.Z[5] = if (r9 >= 1) 0 else 1       // Lfa1
+                                e.Z[5] = if (r9 >= 1) 1 else 0       // Lfa1 (@4001-4022)
                                 m.az = 100
                                 m.P = m.P or 16
                                 m.Z[1] = 0; m.Z[2] = -1; m.Z[14] = 0
@@ -2148,15 +2150,25 @@ class NpcFsm(val world: LevelCellSource) {
                     }
                     if (w.kAo && w.kBI > 13) {                         // L17b0
                         r8?.setAnim(19)
-                        player.flingAirborne(0, w)                     // aS.a(0)
+                        // @6088-6092 (slice 397, proven): `aconst_null;
+                        // invokespecial g.a:(Li;)V` — the ENTITY-bind overload
+                        // (`i.a(i)`), i.e. the unbind. The port called the int
+                        // overload `a(0)` (the S43 fling): the player never
+                        // stood up out of the S285 door-emerge anim.
+                        player.bindAc(null)
                     }
                     return                                             // L17cf
                 }
                 if (e.oId == -1) return                                // L17d0
                 if (Entity.overlapStrict(player.W, e.W) && player.g == null) { // L17d9
-                    player.spawnMarker(w, 105,
-                        (e.W[0] + e.W[2]) shr 1, e.al)                 // aS.a(105,…)
-                    if (w.padHeld(16388) && !w.playerAttacking() &&
+                    // @6127-6149: the receiver is the ZONE (`aload_0`), not the
+                    // player — the door owns its 105 prompt (the G() below and
+                    // the leave arm release exactly this link)
+                    e.spawnMarker(w, 105, (e.W[0] + e.W[2]) shr 1, e.al)  // this.a(105,…)
+                    // @6161-6179: `!g.b(aS.S)` is the aerial/action anim set
+                    // `{18-20,22-25,35,36,43,150,157,165,233,242,243,263-266}`,
+                    // not the attack list
+                    if (w.padHeld(16388) && !PlayerFsm.isAirAction(player.S) &&
                         player.aZ) {
                         e.dropAeLink()                                 // G()
                         doorExitBh(e, w, player)                       // bh()

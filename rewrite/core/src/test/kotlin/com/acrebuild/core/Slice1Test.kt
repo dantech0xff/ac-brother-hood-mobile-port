@@ -11921,8 +11921,10 @@ class Slice99Test {
         p.refreshBoxes(); p.aZ = true; p.g = null; p.ga = null
         val (door, _) = doorPair(w)
         w.npcFsm.tickTrigger(door, w, p, w.pad)
-        assertNotNull(p.ae, "aS.a(105,…) spawned into player ae")
-        assertEquals(105, p.ae!!.S, "marker anim 105")
+        // slice 397 (i.javap aV() @6127-6149): `this.a(105,…)` — the DOOR owns it
+        assertNotNull(door.ae, "this.a(105,…) spawned into the door's ae")
+        assertEquals(105, door.ae!!.S, "marker anim 105")
+        assertNull(p.ae, "the player's own marker slot stays free")
         assertEquals(300, door.az, "az=300 marker TTL (L1784)")
         assertNull(p.ac, "no bind without the keypress")
     }
@@ -11999,12 +12001,16 @@ class Slice99Test {
         val w = world(); w.npcs.clear(); w.stateL(8)
         val p = w.player
         val (door, dest) = doorPair(w)
-        p.ac = door                                       // bound to EXIT
+        p.bindAc(door)                                    // bound to EXIT (P|256)
+        assertEquals(256, door.P and 256, "fixture: bind mark set")
         w.kAo = true; w.kBI = 20                          // ao && bI>13
         w.npcFsm.tickTrigger(door, w, p, w.pad)
         assertEquals(19, dest.S, "r8.i(19) dest open anim")
-        assertEquals(43, p.S, "aS.a(0) → enterStateMasked(43,32) fling")
-        assertEquals(1536, p.aj, "fling aj=1536")
+        // slice 397 (@6088-6092): `aS.a((i) null)` is the entity UNBIND, not the
+        // int-overload fling the old test pinned
+        assertNull(p.ac, "aS.a(null) unbinds")
+        assertEquals(0, door.P and 256, "…and releases the door's P|256 bind mark")
+        assertTrue(p.S != 43, "no S43 fling")
     }
 
     @Test fun `door unbound mid-fade-in opens dest`() {
@@ -15477,11 +15483,13 @@ class Slice146Test {
         assertEquals(1, cr.size); assertEquals(3, cr[0].size)
         assertEquals(-1, z.Z[1]); assertEquals(3, z.Z[2])
         assertEquals(1, cr[0][0].Z[0])                  // col0 engaged
-        assertTrue(cr[0][0].av)                         // leader faces left
-        assertEquals(0, cr[0][1].Z[0]); assertFalse(cr[0][1].av)
-        assertEquals(420, cr[0][0].ak)                  // Z5=1 → right
-        assertEquals(-40, cr[0][1].ak)                  // Z5=0 → left
-        assertEquals(-60, cr[0][2].ak)
+        // slice 397 (i.javap aV() @3222-3243): `col >= 1 → Z[5] = 1`, col 0 → 0 —
+        // the leader spawns LEFT (and faces right), the rest spawn right
+        assertFalse(cr[0][0].av)
+        assertEquals(0, cr[0][1].Z[0]); assertTrue(cr[0][1].av)
+        assertEquals(-20, cr[0][0].ak)                  // Z5=0 → left of the camera
+        assertEquals(440, cr[0][1].ak)                  // Z5=1 → right: 400 + 20*2
+        assertEquals(460, cr[0][2].ak)
     }
 
     @Test fun `S30 Z6=3 respawns dead member when cooldown clear`() {
@@ -15498,7 +15506,9 @@ class Slice146Test {
         assertEquals(Entity.WEAPON_DMG[0], nw.aB)
         assertEquals(5001, nw.aw)                        // 5000+aA*pv+col
         assertEquals(0, nw.Z[0])                         // col0 still engaged
-        assertEquals(-40, nw.ak)                         // r9>=1 → Z5=0
+        // slice 397 (@4001-4022): `r9 >= 1 → Z[5] = 1` → spawns right
+        assertEquals(440, nw.ak)
+        assertTrue(nw.av)
     }
 
     @Test fun `S30 Z6=3 cooldown gates respawn then ticks down`() {
@@ -28299,6 +28309,11 @@ class Slice291Test {
                 p.S == 65 || p.S == 228 || p.S == 358 -> Pad.M_UP
                 else -> {
                     when {
+                        // slice 397: door uid166 [9374,166,9429,251] — the S16 arm's
+                        // tap needs `aZ && !g.b(S)` (i.javap aV() @6152-6179): stand in
+                        // the box and tap UP from a standing state
+                        p.ak in 9374..9429 && p.al in 166..260 && p.ac == null ->
+                            if (p.aZ && !PlayerFsm.isAirAction(p.S)) Pad.M_UP else 0
                         // spring launch — ride it east
                         kotlin.math.abs(p.ag) > 5000 -> Pad.M_RIGHT
                         // gap-lift uid156 oscillation — drift off east into the gap
@@ -28392,14 +28407,20 @@ class Slice291Test {
                 foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 && p.aZ -> {
                     if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
                 }
-                (p.ac != null && p.ac!!.ax == 10) ||
-                (p.aZ && p.ak in 10590..10700 && p.al in 990..1040) -> Pad.M_UP
+                (p.ac != null && p.ac!!.ax == 10) -> Pad.M_UP
+                // slice 397: the S16 door arm's tap needs `aZ && !g.b(S)` (i.javap
+                // aV() @6152-6179) — stand inside door179's box and tap UP from a
+                // standing state; holding UP while hopping around only ever lands
+                // in the aerial/action anims the arm refuses
+                p.ak in 10645..10695 && p.al in 904..1040 ->
+                    if (p.aZ && !PlayerFsm.isAirAction(p.S)) Pad.M_UP else 0
                 p.ak in 10910..10960 && p.al > 1100 -> Pad.M_CONTEXT
                 p.S == 65 || p.S == 228 || p.S == 358 -> 16396
                 p.al < 880 && p.ak > 10560 -> Pad.M_LEFT
                 p.al < 880 && p.ak in 10540..10560 && p.S == 26 -> Pad.M_UP
                 p.al < 880 && p.ak > 10540 -> Pad.M_LEFT
-                p.ak in 10620..10700 && p.al in 880..1020 -> Pad.M_UP
+                p.ak in 10620..10644 && p.al in 880..1020 -> Pad.M_RIGHT
+                p.ak in 10696..10720 && p.al in 880..1020 -> Pad.M_LEFT
                 p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
                 else -> Pad.M_RIGHT
             }
@@ -28460,13 +28481,14 @@ class Slice291Test {
                 foe != null && kotlin.math.abs(foe.ak - p.ak) < 50 -> {
                     if (foe.ak < p.ak) Pad.M_LEFT or Pad.M_CONTEXT else Pad.M_RIGHT or Pad.M_CONTEXT
                 }
-                p.ak in 10645..10695 && p.al >= 900 -> Pad.M_UP
+                // slice 397: tap UP from a standing state (see leg E)
+                p.ak in 10645..10695 && p.al >= 900 ->
+                    if (p.aZ && !PlayerFsm.isAirAction(p.S)) Pad.M_UP else 0
                 p.S == 260 || p.S == 262 -> Pad.M_RIGHT
-                (p.ac != null && p.ac!!.ax == 10) ||
-                (p.aZ && p.ak in 10590..10700 && p.al in 990..1040) -> Pad.M_UP
+                (p.ac != null && p.ac!!.ax == 10) -> Pad.M_UP
                 p.ak in 10910..10960 && p.al > 1100 -> Pad.M_CONTEXT
                 p.al in 690..880 && p.ak in 10540..10560 && p.S == 26 -> Pad.M_UP
-                p.ak in 10620..10700 && p.al in 880..1020 -> Pad.M_UP
+                p.ak in 10620..10644 && p.al in 880..1020 -> Pad.M_RIGHT
                 p.al in 880..1020 && p.ak < 10620 -> Pad.M_RIGHT
                 p.al in 880..1020 && p.ak > 10700 -> Pad.M_LEFT
                 p.al in 690..880 && p.ak > 10540 -> Pad.M_LEFT
