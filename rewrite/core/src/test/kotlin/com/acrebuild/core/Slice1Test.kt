@@ -611,29 +611,32 @@ class Level0WorldTest {
             "hit on Z0==1 soldier should weaken: Z0=2+S144 (got Z0=${s.Z[0]}, S=${s.S})")
         assertTrue(w.lockTarget === s,
             "weakened soldier should hold the aN lock")
-        // The weakened soldier counter-engages further normal attacks:
-        // h() (i.java:1271) — S144 ∉{11,12,6} → i() forces the player to
-        // S8 and takes S17 (aC=16) itself, preempting j().
+        // The weakened soldier BLOCKS further normal attacks from S144: the
+        // arm's own counter (I() @5342-5451, slice 402) — `aS.i(8)` recoil +
+        // `k.E.P|=128`, the soldier stays in S144 (the `h()`/`i()` engage into
+        // S17 is the shared tail's @7479, which S144's `goto 7691` skips).
+        var recoiled = false
         for (i in 0 until 30) {
             w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             val (cx, cy) = w.cellPoint(4)
             w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
                           InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
-            if (s.S == 17) break
+            if (w.player.S == 8) { recoiled = true; break }
+            if (s.S != 144) break
         }
-        assertTrue(s.S == 17,
-            "weakened soldier should counter-engage the next attack (sS=${s.S})")
+        assertTrue(recoiled && s.S == 144,
+            "weakened soldier should block the next attack in place " +
+                "(player S${w.player.S}, soldier S${s.S})")
         // S216 is h()-exempt (i.java:1272): it reaches j()'s finisher arm
         // (i.java:1334) — aB=0 + diagonal launch (ag=±5120, ai=∓2560).
-        // Wait out S17: its counter arm (i.java:6036) force-S8s any attacking
-        // player — including the dive — so strike once the arm advances to
-        // S11 (Z0==2 → i(11)), where tail[2] arms j() intake instead.
-        for (i in 0 until 60) {
+        // Wait out S144 (r() → i(23)): the finisher lands in the shared
+        // tail's j() intake, which S23 arms (tail[2]).
+        for (i in 0 until 90) {
             w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
             w.tick(emptyList())
-            if (s.S != 17) break
+            if (s.S != 144) break
         }
-        assertTrue(s.S != 17, "counter-engage should resolve (sS=${s.S})")
+        assertTrue(s.S != 144, "the block should resolve (sS=${s.S})")
         w.player.setAnim(216)
         for (i in 0 until 60) {
             w.player.setPositionPx(s.ak - 20, s.al); w.player.refreshBoxes()
@@ -18219,7 +18222,12 @@ class Slice184Test {
         p.av = e.ak < p.ak
         w.npcFsm.tick(e, p)
         assertEquals(18, e.S, "bind still lands i(18)")
-        assertTrue(w.lockTarget !== e, "Z0==0 skips aN claim")
+        // I() @4870-4941 (slice 402): `Z0==2 || (Z0==0 && aB <= bu/2)` runs
+        // the `aN = this; g.E = 1; b(2)` bind (only the marker is Z0==2's)
+        assertSame(e, w.lockTarget, "half-HP Z0==0 still claims aN")
+        assertEquals(true, Entity.gE, "g.E = true")
+        assertEquals(true, w.iAH, "b(2) slowmo armed")
+        assertEquals(null, e.ae, "the offer marker is a Z0==2 extra")
         // On the last frame (T6) the strike box is an anchor point: no
         // bind, and the anim-end r() routes to i(23) (L495).
         val w2 = world(); w2.npcs.clear()
@@ -23824,6 +23832,12 @@ class Slice245Test {
                     w.player.N = w.player.ak shl 8; w.player.O = w.player.al shl 8
                     if (deaths > 8) break; continue
                 }
+                // Slice 402: `screenL(15)` stamps medal 0 once `ap[0] >= 7`
+                // kills and re-enters the MEDAL screen (jC=22) first
+                // (k.java L35-L64) — confirm it (`pad.v(327712)` after j.g>=10)
+                // and the stats screen follows. The bot used to kill < 7 on
+                // this leg; the faithful stab/finisher arms count more.
+                w.jC == 22 -> { w.pad.e(327712); w.tick(emptyList()); continue }
                 w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
                 p.S == 89 || p.S == 90 -> {
                     w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
@@ -23987,6 +24001,9 @@ class Slice245Test {
                             w.player.O = w.player.al shl 8
                             if (deaths > 8) break; continue
                         }
+                        // Slice 402: medal screen (jC=22) before the stats —
+                        // see the finale leg above.
+                        w.jC == 22 -> { w.pad.e(327712); w.tick(emptyList()); continue }
                         w.jC != 8 -> { w.pad.e(Pad.M_CYCLE); w.tick(emptyList()); continue }
                         p.S == 89 || p.S == 90 -> {
                             w.pad.e(Pad.M_CONTEXT); w.tick(emptyList()); continue
@@ -26403,7 +26420,13 @@ class Slice282Test {
             // falls past onto the y~700 street east of the gap. S297
             // (the balance pin at 980,563) and S295 keep their masks —
             // they need the TAP/CONTEXT edges to release.
-            if (!p.aZ && p.ak in 930..1040 && p.S != 297 && p.S != 295) mask = 0
+            // Slice 402: S89 (pinned over the guard on the pole-top, S24)
+            // keeps its CONTEXT mask too — the stab edge @ k() L699 kills
+            // the guard; left alone, S24's `aC` expires and the faithful
+            // drop arm (raw @6077-6125: the OPEN side, here the pit side
+            // `W[0]-pw`) throws him off the pole into the kill floor.
+            if (!p.aZ && p.ak in 930..1040 && p.S != 297 && p.S != 295 &&
+                p.S != 89) mask = 0
             w.pad.e(mask)
             if (p.al - 240 > w.kP) w.kP = p.al - 240
             if (p.al + 120 < w.kP) w.kP = p.al + 120
@@ -28184,7 +28207,18 @@ class Slice291Test {
                 (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
                     kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
             }
+            // Slice 402: back off the heavy guard (uid112, ax73) while it
+            // BLOCKS / winds up (S131 → S146 — its damage intake is closed
+            // there, `r11` stays false, and the strike box reaches ~60px past
+            // the player's own swing); trade blows only once it opens up
+            // (S154/S155/S171). The old route walked into every windup and was
+            // won on a lucky RNG phase.
+            val guard112 = w.npcs.firstOrNull { it.aw == 112 }
+            val guardBlocks = guard112 != null &&
+                (guard112.S == 131 || guard112.S == 146) &&
+                guard112.ak - p.ak in -20..90
             w.pad.e(when {
+                p.aZ && guardBlocks -> Pad.M_LEFT
                 // Slice 369 (F7): the S26 edge-walk off the y699 ledge now
                 // ends in S79 under its low lip (e() 6092-6116) and drops
                 // him on the y739 floor ~6 ticks sooner, so floor guard
@@ -28194,6 +28228,11 @@ class Slice291Test {
                 // through it with the attack instead.
                 p.aZ && p.al > 700 && threat != null && threat.ax == 73 &&
                     threat.ak - p.ak in 0..40 -> Pad.M_CONTEXT or Pad.M_RIGHT
+                // Slice 402: S89 (pinned over floor guard uid99, S24) — stab
+                // it from above (the k() L699 offer, raw @699-891). Left
+                // alone the guard's `aC` runs out and its drop arm throws
+                // him to the open side, by the heavy guard.
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
                 p.S == 28 || p.S == 318 -> Pad.M_DOWN
                 p.S == 65 -> Pad.M_UP
                 p.S == 228 || p.S == 358 -> Pad.M_UP
@@ -28254,8 +28293,15 @@ class Slice291Test {
                 (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
                     kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
             }
+            // Slice 402: same back-off from heavy guard uid112 while it blocks
+            // / winds up as leg B (see there).
+            val guard112 = w.npcs.firstOrNull { it.aw == 112 }
+            val guardBlocks = guard112 != null &&
+                (guard112.S == 131 || guard112.S == 146) &&
+                guard112.ak - p.ak in -20..90
             w.pad.e(when {
                 w.kC != null -> Pad.M_CONTEXT                  // uid240 QTE chain (op107/108 pairs): answer every prompt while a claim holds the player
+                p.aZ && guardBlocks -> Pad.M_LEFT
                 p.aZ && p.al > 500 && p.ak in 8000..8080 -> Pad.M_RIGHT or Pad.M_UP or Pad.M_TAP_R   // platform edge → vault east onto ax22@(8158,476)
                 !p.aZ && p.ag > 0 && p.ak in 8040..8200 -> Pad.M_TAP_R or Pad.M_UP                  // mid-flight: keep the arc
                 p.S == 361 -> Pad.M_CONTEXT
@@ -28263,6 +28309,11 @@ class Slice291Test {
                 // leg B (`f()` holds `cq` off while it stands in front).
                 p.aZ && p.al > 700 && threat != null && threat.ax == 73 &&
                     threat.ak - p.ak in 0..40 -> Pad.M_CONTEXT or Pad.M_RIGHT
+                // Slice 402: S89 (pinned over floor guard uid99, S24) — stab
+                // it from above (the k() L699 offer, raw @699-891). Left
+                // alone the guard's `aC` runs out and its drop arm throws
+                // him to the open side, by the heavy guard.
+                p.S == 89 || p.S == 90 -> Pad.M_CONTEXT
                 p.S == 28 || p.S == 318 -> Pad.M_DOWN
                 p.S == 65 -> Pad.M_UP
                 p.S == 228 || p.S == 358 -> Pad.M_UP

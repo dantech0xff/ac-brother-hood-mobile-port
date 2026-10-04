@@ -1846,31 +1846,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         else -> if (av) bb else bc
     }
 
-    /**
-     * `i.aF()` (i.java:9192-9219, proven): ledge-edge probe — true when
-     * `standingOn` is an ax51 crate (`crateEdge`), else the foot cell at
-     * the facing edge is `∈{20,5}`: `e(W[2]/20+1,(W[3]+10)/20)` when `av`,
-     * `e(W[0]/20-1,·)` when `!av`.
-     */
-    fun aF(w: LevelCellSource): Boolean {
-        if (standingOn?.ax == 51 || entBq != 0) return true
-        val cy = (W[3] + 10) / 20
-        val cx = if (av) W[2] / 20 + 1 else W[0] / 20 - 1
-        val c = e(w, cx, cy)
-        return c == 20 || c == 5
-    }
-
-    /**
-     * `i.aG()` (i.java:9221-9251, proven): `aF()` mirror — the off-facing
-     * edge (av polarity flipped).
-     */
-    fun aG(w: LevelCellSource): Boolean {
-        if (standingOn?.ax == 51 || entBq != 0) return true
-        val cy = (W[3] + 10) / 20
-        val cx = if (av) W[0] / 20 - 1 else W[2] / 20 + 1
-        val c = e(w, cx, cy)
-        return c == 20 || c == 5
-    }
+    // `i.aF()` / `i.aG()` live in NpcFsm.kt as `crateEdge73` / `edgeAhead73`
+    // (slice 400/402): an earlier copy of both sat here with the cell test
+    // inverted (true over GROUND) and a `standingOn`/`bq` crate gate the
+    // bytecode does not have — its only caller, the S6 grab lunge, now uses
+    // the faithful probe.
 
     /**
      * `i.aI()` (i.java:9284-9336, proven): victim throws the player out

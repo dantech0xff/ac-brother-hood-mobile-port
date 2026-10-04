@@ -378,8 +378,12 @@ class NpcFsm(val world: LevelCellSource) {
             4, 22 -> {
                 // L451-L474 (i.java:5536-5562, proven): edge → drop
                 // alert → L849; else L457 chase-continue → r14 → j().
+                // I() @4679-4685 (raw bytes): `r5 = 1; r6 = 0` — the chase
+                // turns the stealth-kill gate OFF (slice 402: the port left
+                // r15 at the head default, `!g(aS)`, so a chaser the player
+                // slipped behind could still be assassinated mid-chase).
                 if (!chaseArm(e, player)) return            // aG() → L849
-                tail[2] = true
+                tail[2] = true; tail[3] = false
             }
             5 -> {
                 // L438 (simple/i.java:5507-5517, proven): `aL=this` claim +
@@ -403,7 +407,7 @@ class NpcFsm(val world: LevelCellSource) {
                 e.collideSides(world, true)
                 e.dropHeld()                                    // H()
                 e.ag = if (e.av) 512 else -512
-                tail[2] = true
+                tail[2] = true; tail[3] = false                 // @4601-4606 r5=1; r6=0
                 attackSchedulerAC(e, world, player)             // aC()
                 if (crateEdge73(e, world)) { e.ai = 0; e.ag = 0 } // aF()
             }
@@ -416,20 +420,28 @@ class NpcFsm(val world: LevelCellSource) {
                 // L490 (aN=this + g.E=true + b(2) + marker) → L849;
                 // Z0==0 && aB>bu/2 → L849; Z0==0 && aB<=bu/2 → L495 tail.
                 // r() → g.g()? i(2) : i(23)+aC=10 → L777.
-                tail[2] = true
+                //
+                // Raw bytes @4807-4947 (slice 402): `r4 = r5 = 1; r6 = 0`
+                // (the stealth-kill gate is OFF in the strike), and the
+                // bind block @4905-4941 — `aN = this; g.E = 1; b(2)`, plus
+                // the marker only for Z0==2 — runs for `Z0==2 || (Z0==0 &&
+                // aB <= bu/2)`; EVERY counter-bind then ends `goto 7691`.
+                // The port skipped the bind for the Z0==0 half-HP case and
+                // fell on into the r() check and the shared tail.
+                tail[2] = true; tail[3] = false
                 if (Entity.overlapStrict(player.W, e.X) &&
                     player.inFrontOf(e) && player.S == 6) {
                     player.applyHit(34, 0, e, world)            // aS.a(34,0,0,this)
                     e.setAnim(18)
-                    if (e.Z[0] == 2) {
+                    if (e.Z[0] == 2 ||
+                        (e.Z[0] == 0 && e.aB <= BU73[world.weaponSlot] / 2)) {
                         world.lockTarget = e                    // aN = this
                         Entity.gE = true                        // g.E = true
                         e.eventArm(2, world)                    // b(2) slowmo
-                        e.spawnMarker(world, 8, e.ak, e.al - 85)
-                        return                                  // → L849
+                        if (e.Z[0] == 2)
+                            e.spawnMarker(world, 8, e.ak, e.al - 85)
                     }
-                    if (e.Z[0] != 0 || e.aB > BU73[world.weaponSlot] / 2)
-                        return                                  // → L849
+                    return                                      // → L849
                 }
                 if (e.animFinished()) {                         // L495 r()
                     if (world.gG()) e.setAnim(2)
@@ -452,9 +464,9 @@ class NpcFsm(val world: LevelCellSource) {
                 // victim drop; k() tail live. Holds the player pinned at own
                 // top-edge (aS.ah=ag=0, al=W[1], ak=W mid, O/N snap) while
                 // `aC-- > 0`; on expiry `aS.a(0)` airborne fling +
-                // `aS.G()`, then picks the nearer OPEN side edge:
-                // aT=e(W[0]-pw, W[1])>=12 → aS.ak=left open, av=false;
-                // aU=e(W[2]+pw, W[1])>=12 → aS.ak=right open, av=true;
+                // `aS.G()`, then picks the first OPEN side edge:
+                // aT=e(W[0]-pw, W[1])<12 → aS.ak=left, av=false;
+                // else aU=e(W[2]+pw, W[1])<12 → aS.ak=right, av=true;
                 // `aA=1` + `i(5)`. → L777.
                 tail[3] = true
                 world.kAA = 60                                  // k.aA = 60
@@ -474,9 +486,14 @@ class NpcFsm(val world: LevelCellSource) {
                     val ey = e.W[1]
                     e.aT = e.e(world, lx / 20, ey / 20)
                     e.aU = e.e(world, rx / 20, ey / 20)
-                    if (e.aT >= 12) {
+                    // raw @6077-6125 (slice 402): the SOLID test is the skip —
+                    // `aT >= 12 → 6104` (left blocked: try the right),
+                    // `aU >= 12 → 6128` (both blocked: leave the player where
+                    // `aS.a(0)` put him). The port had both compares inverted,
+                    // dropping the player INTO the wall side.
+                    if (e.aT < 12) {
                         player.ak = lx; player.av = false
-                    } else if (e.aU >= 12) {
+                    } else if (e.aU < 12) {
                         player.ak = rx; player.av = true
                     }
                     e.aA = 1
@@ -580,9 +597,14 @@ class NpcFsm(val world: LevelCellSource) {
                 // Z[2] fall-start marker) → m(43,0) = Z0==2 ? i(43) :
                 // i(0); soft → m(40,2) = Z0==2 ? i(40) : i(2). Z[2] tags
                 // the fall start on the first airborne tick (-1 → al).
-                // Falls through to the shared tail below (verbatim
-                // `break`) — the open-cell gate there re-arms i(25)
-                // while still airborne.
+                //
+                // Exits (raw bytes @5714-5877, slice 402): `aD() != 0 →
+                // goto 7292` (a crate/carrier under the soldier → the shared
+                // tail below); the free-fall branch ends `goto 7691` (L849,
+                // NO tail). The port ran the tail on every tick, so the
+                // open-cell gate there replayed `k.A(24)` each tick of a fall
+                // and `j()`/`k()`/`aB()`/the push could act on a falling
+                // soldier.
                 e.ab = null
                 e.ag = 0
                 e.aj = 1536
@@ -601,6 +623,7 @@ class NpcFsm(val world: LevelCellSource) {
                             e.setAnim(if (e.Z[0] == 2) 40 else 2)   // m(40,2)
                         e.Z[2] = -1
                     }
+                    return                                          // @5877 → L849
                 }
             }
             // case 9 → L777 (i.java:5249, proven): no arm — the stagger
@@ -649,7 +672,12 @@ class NpcFsm(val world: LevelCellSource) {
                 e.av = player.ak < e.ak                         // Q()
                 e.releaseAe()                                   // G()
                 e.collideSides(world, true)                     // a(true)
-                if (e.aF(world) || e.yWall()) e.ag = 0
+                // `aF()` @5468 is the trailing-side ledge probe the S23 arm
+                // calls (`crateEdge73`). Slice 402: the port used the
+                // `Entity.aF` copy with the cell test inverted (true over
+                // GROUND, so the lunge never left the spot) and a crate gate
+                // keyed on `standingOn`/`bq` instead of the edge band.
+                if (crateEdge73(e, world) || e.yWall()) e.ag = 0
                 if (e.ag != 0) e.ai = if (e.av) -1280 else 1280
                 if (e.T == 1) {
                     e.spawnFx8(world, 50, 1, e.av, e.ak, e.al - 40, 300)
@@ -669,13 +697,21 @@ class NpcFsm(val world: LevelCellSource) {
                 // L532-L546 (i.java:6036-6050, proven): counter-engage —
                 // aS.X non-degenerate ∩ W + g.b() → aS.i(8)+k.E.P|=128
                 // (aS.S==8 → L849); r() → Z0==2 ? i(11) : i(23).
+                //
+                // Raw bytes @5230-5339 (slice 402): the engage block ends at
+                // the label `5304: goto 7691` that BOTH the `aS.S == 8` skip
+                // and the fall-through from `k.E.P |= 128` reach — a counter
+                // always leaves the arm, never reaching the `r()` check or the
+                // shared tail. The port only returned for the S8 case.
                 val counter = player.X[0] != player.X[2] &&
                     Entity.overlapStrict(e.W, player.X) &&
                     world.playerAttacking()
                 if (counter) {
-                    if (player.S == 8) return                   // L849
-                    player.setAnim(8)
-                    world.kE?.let { it.P = it.P or 128 }
+                    if (player.S != 8) {
+                        player.setAnim(8)
+                        world.kE?.let { it.P = it.P or 128 }
+                    }
+                    return                                      // 5304 → L849
                 }
                 if (e.animFinished())
                     e.setAnim(if (e.Z[0] == 2) 11 else 23)      // L542→L777
@@ -683,15 +719,19 @@ class NpcFsm(val world: LevelCellSource) {
             18 -> {
                 // L506 (i.java:5546, proven): `a(true)` + `r14=true` —
                 // the offer arm runs j() intake in the shared tail.
+                // (`a(true)` @5030 runs once — `grabOfferArm18` no longer
+                // repeats it.)
                 e.collideSides(world, true)
                 tail[2] = true
                 grabOfferArm18(e, player, world)
             }
             20 -> {
-                // L728 (i.java:6195-6203, proven): r() → aB<=0→aB=0,
+                // L728 (i.java:6195-6203, proven): r() → `aB > 0 → aB=0`
+                // (raw @6893 `ifle 6901` skips the store for aB<=0 — the
+                // port tested the opposite way and its store was a no-op),
                 // H() consume, i(139) corpse, k.e(0,aw) tally. → L849.
                 if (e.animFinished()) {
-                    if (e.aB <= 0) e.aB = 0
+                    if (e.aB > 0) e.aB = 0
                     e.consumeH()                                // H()
                     e.setAnim(139)
                     world.countKill(e.aw)                       // k.e(0,aw)
@@ -701,9 +741,14 @@ class NpcFsm(val world: LevelCellSource) {
             27 -> {
                 // L734 (i.java:5753-5758, proven): ab=null; r() → i(25)
                 // + k.A(24) impact sfx. → L849.
+                // Raw @6923-6946: only the `r()` branch ends `goto 7691`;
+                // while the anim plays the arm exits `ifeq 7292` — the
+                // shared tail runs (slice 402; the port returned always).
                 e.ab = null
-                if (e.animFinished()) { e.setAnim(25); world.sfx(24) }
-                return
+                if (e.animFinished()) {
+                    e.setAnim(25); world.sfx(24)
+                    return                                      // @6946 → L849
+                }
             }
             96 -> {
                 // L737 (i.java:5759-5769, proven): P|=512; r() → release
@@ -735,21 +780,21 @@ class NpcFsm(val world: LevelCellSource) {
                 // L548-L559 (i.java:6048-6066, proven): weakened block —
                 // T==3 → c(1); aS.X ∩ W + g.b() + aS.S!=8 → counter
                 // aS.i(8)+k.E.P|=128; L559: a() body-push; r() → i(23) +
-                // aS.G(). Whole state → L849. Original ordering: h()→i()
-                // engage (i.java:4184) runs BEFORE the switch — when it
-                // applies, the soldier lands at i(17) and this arm's own
-                // counter is shadowed. Our hGate/iEngage run post-when,
-                // so reproduce the precedence: engage first, own counter
-                // only when h()'s posed-immunity excludes the engage.
+                // aS.G(). Whole state → L849.
+                //
+                // Slice 402 (raw @5342-5451): the arm is exactly that and
+                // nothing else — `goto 7691` skips the shared tail, and the
+                // only `h()`/`i()` call in `I()` is the tail's @7479. The
+                // port inserted a "precedence" `hGate`/`iEngage` here (its
+                // comment placed `h()→i()` "BEFORE the switch", which the
+                // bytes do not have), so an attack on a weakened soldier
+                // threw it into S17 (aC=16 → S11 → S12 counter-strike)
+                // instead of the arm's own `aS.i(8)` recoil.
                 if (e.T == 3) world.tutorialHint(1)             // c(1)
                 val counter = player.X[0] != player.X[2] &&
                     Entity.overlapStrict(e.W, player.X) &&
                     world.playerAttacking() && player.S != 8
                 if (counter) {
-                    if (e.Z[0] != 3 && hGate(e, player)) {
-                        iEngage(e, player, world)          // aS.i(8)+i(17)+aC=16
-                        return                           // → L849
-                    }
                     player.setAnim(8)
                     world.kE?.let { it.P = it.P or 128 }
                 }
@@ -782,7 +827,9 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 if (e.animFinished()) e.setAnim(140)            // L326→L777
             }
-            175 -> { grabHoldArm175(e, player, world); return }  // → L849
+            // S175 (raw @3709-3955): only the `g.g()` dead exit `goto 7691`s;
+            // every other path ends `goto 7292` (the shared tail runs).
+            175 -> { if (grabHoldArm175(e, player, world)) return }  // → L849
             176 -> {
                 // L348 (i.java:5907-5911, proven): counter-execute wind —
                 // r() → i(139) corpse + k.e(0,aw). → L777.
@@ -805,14 +852,18 @@ class NpcFsm(val world: LevelCellSource) {
             180, 181 -> {
                 // L756 (i.java:6209-6213, proven): mount lunge — r() →
                 // i(S+2) (→182/183); every tick aI() throw attempt.
-                // Falls into L777.
+                // Raw @7048-7070: `goto 7691` — no shared tail (slice 402;
+                // the port fell into L777, where the open-cell gate could
+                // flip a lunging soldier to S25 and j()/k() could strike it).
                 if (e.animFinished()) e.setAnim(e.S + 2)
                 e.throwFromGrab(world)                          // aI()
+                return                                          // @7070 → L849
             }
             182, 183 -> {
                 // L759 (i.java:5777-5778, proven): aI() throw attempt.
-                // Falls into L777.
+                // Raw @7073-7078: `goto 7691` (slice 402, as above).
                 e.throwFromGrab(world)                          // aI()
+                return                                          // @7078 → L849
             }
             184 -> {
                 // L760 (i.java:5780-5802, proven): post-throw landing —
@@ -846,10 +897,38 @@ class NpcFsm(val world: LevelCellSource) {
                 }
                 return                                          // → L849
             }
+            // S21 = the stealth-kill victim (`k()` L169 `i(r11=21)`), raw
+            // @6699-6879 (slice 402 — the port had NO arm, so a stabbed
+            // soldier looped S21 forever at full HP): the blood puff at
+            // `T==2 && U==0` (59 on k.bK), crate-ride velocity, and at the
+            // anim's end `aB=0; aA=2; P&=-17; P|=64|32` + the pool puff
+            // `a(8,59,2,av,ak,al+2,az-1)`. → L849 (no tally — the kill was
+            // counted at the stab, and no corpse state follows).
+            21 -> {
+                if (e.T == 2 && e.U == 0 && world.kBK)
+                    e.spawnFx8(world, 59, 1, e.av, e.ak, e.al - 40, 300)
+                val s21 = e.s
+                if (s21 != null && s21.ax == 51 && s21.ag != 0) e.ag = s21.ag
+                if (e.animFinished()) {
+                    if (e.aB > 0) e.aB = 0
+                    e.aA = 2
+                    e.P = e.P and -17; e.P = e.P or 64; e.P = e.P or 32
+                    if (world.kBK) e.spawnFx8(world, 59, 2, e.av,
+                        e.ak, e.al + 2, e.az - 1)
+                }
+                return                                          // @6879 → L849
+            }
             0, 106, 107, 135 -> {
                 // Shared death/dormant arm (i.java:4044-4096, proven):
                 // a(true), G(), P|=512, ab=null, ag=ah=0 (+crate ride),
                 // aA=2, hit-frame blood fx on 106/107, r() → corpse or freeze.
+                // Head @6141-6162 (slice 402): wave members (`aw >= 5000`, the
+                // ax10 S30 grid) are simply removed when the death anim ends
+                // — `k.c(this)`, no tally, no corpse state.
+                if (e.aw >= 5000 && e.animFinished()) {
+                    world.removeEntity(e)
+                    return                                      // @6162 → L849
+                }
                 e.collideSides(world, true)                  // a(true)
                 e.releaseAe()                                // G()
                 e.P = e.P or 512
@@ -9039,11 +9118,12 @@ private fun wispBurst(e: Entity, w: LevelCellSource) {
  *    else `aS.i(183|184)` (|nextInt|%2) then L527 `k.o();G();g.E=false;O()`
  *    → L529.
  *  - L529: `r()==false` → exit to L777; else `g.E=false;i(23);G();O()` and
- *    falls through into L513 (one more offer pass; exits via L777 since the
- *    fresh clip's r() is false, or re-arms the finisher edge).
+ *    exit to L777 (raw bytes @5203-5227 `goto 7292` — there is no second
+ *    offer pass).
  */
 private fun grabOfferArm18(e: Entity, p: Entity, w: LevelCellSource) {
-    e.collideSides(w, true)                              // a(true)
+    // `a(true)` @5030 runs once, in the dispatch arm (slice 402: it used to
+    // run a second time here).
     var label = when {
         e.Z[0] == 2 -> 513
         e.Z[0] != 0 -> 529
@@ -9053,12 +9133,15 @@ private fun grabOfferArm18(e: Entity, p: Entity, w: LevelCellSource) {
     while (label != 777) {
         when (label) {
             529 -> {
-                if (!e.animFinished()) label = 777
-                else {
+                // raw @5203-5227: `r() → g.E=0; i(23); G(); O(); goto 7292` —
+                // the arm ENDS there (slice 402: the port looped back into
+                // L513, so a press landing on the anim's last tick ran the
+                // finisher offer twice and drew a second `nextInt()`).
+                if (e.animFinished()) {
                     Entity.gE = false; e.setAnim(23)
                     e.releaseAe(); e.eventDisarm(w)
-                    label = 513                        // L529 → L513
                 }
+                label = 777
             }
             513 -> {
                 if (e.Z[0] == 2 && e.T == 3) w.tutorialHint(2)   // c(2)
@@ -9084,14 +9167,21 @@ private fun grabOfferArm18(e: Entity, p: Entity, w: LevelCellSource) {
  * execute (`bl=0; G(); aB=0; i(176); k.A(24); S() wisps; aS.i(311);
  * aN=null; az=100; k.o(); bx=null`); EMPTY (`bl==0`) → i(177) + aS.i(312)
  * throw + `aS.ag=∓1280` (aS.av polarity); MID → L341: hold while
- * `aS.S∈{310,311,312}`, else i(177)+G()+az=100+bx=null. All paths → L849.
+ * `aS.S∈{310,311,312}`, else i(177)+G()+az=100+bx=null.
+ *
+ * Exits (raw bytes @3709-3955, slice 402): the `g.g()` dead release alone
+ * ends `goto 7691` (L849, returns true here); every live path — filled,
+ * emptied, held, released — ends `goto 7292`, i.e. falls into the shared
+ * tail (returns false). The prompt marker is `r2.a(8, …)` — the SOLDIER's
+ * `ae` (the receiver is `aload_2`), so the later `G()` calls release it; the
+ * port spawned it on the player, where nothing ever freed it.
  */
-private fun grabHoldArm175(e: Entity, p: Entity, w: LevelCellSource) {
+private fun grabHoldArm175(e: Entity, p: Entity, w: LevelCellSource): Boolean {
     if (w.playerDead()) {                                // L329 g.g()
         e.setAnim(177); e.releaseAe(); e.az = 100
-        return
+        return true                                      // @3732 → L849
     }
-    p.spawnMarker(w, 8, p.ak, p.al - 85)                 // L331 a(8,·)
+    e.spawnMarker(w, 8, p.ak, p.al - 85)                 // L331 r2.a(8,·)
     if (e.mashGauge(65568, w)) {                         // g(65568,80) filled
         e.bl = 0; e.releaseAe(); e.aB = 0                // L331
         e.setAnim(176); w.sfx(24)                        // k.A(24)
@@ -9106,8 +9196,9 @@ private fun grabHoldArm175(e: Entity, p: Entity, w: LevelCellSource) {
         p.ag = if (p.av) 1280 else -1280                 // throw fling
     }
     // L341: hold while the player sits in a grab state, else release.
-    if (p.S == 310 || p.S == 311 || p.S == 312) return   // → L777 hold
+    if (p.S == 310 || p.S == 311 || p.S == 312) return false   // → L777 hold
     e.setAnim(177); e.releaseAe(); e.az = 100; w.iBx = null
+    return false                                         // @3955 → L777
 }
 
 /** `i.k()` (i.java:2057-2255, proven): the shared stealth-kill driver.
@@ -9118,7 +9209,7 @@ private fun grabHoldArm175(e: Entity, p: Entity, w: LevelCellSource) {
  *
  *  Distance gate L63: `|p.ak-ak|>=80 || |dy|>=r9 (5, or 20 for p.S==38)`
  *  or p.S∈{203,204,310,311} → L120 (G() unless S∈{203,89,271,297}) → L129.
- *  L81 backstab window: `p.faces(me) && !me.faces(p)` → prompt + edge:
+ *  L81 backstab window: `(p.faces(me) && !me.faces(p)) || p.S==38` → prompt + edge:
  *  kill → `r11=21`, S38 face-sync, `S()` burst, op6 victim anim
  *  (49 when `40<|dx|<80` or p.S==38; 283 when |dx|<40; |dx|==40 skips).
  *  L129 per-ax grab-kill arms + L172 tail (`ag=0; ax11→i(r11)`;
@@ -9142,14 +9233,22 @@ private fun contextK(e: Entity, w: LevelCellSource, p: Entity): Boolean {
     var r11 = -1
     if ((p.aA and 8) != 0 && w.iBn) return false          // L47-L54
     if (p.S == 284) return false                          // L54
-    // L58-L61: player not facing me → release my marker link.
-    if (!p.faces(e)) e.releaseAe()
+    // Raw @260-284 (slice 402): `aS.g(this) == 0 → G()`, else `this.g(aS)
+    // != 0 → G()` — the marker link drops when the player does NOT face me
+    // OR I face the player (the port only tested the first half).
+    val pFaces = p.faces(e)                               // aS.g(this)
+    val eFaces = e.faces(p)                               // this.g(aS)
+    if (!pFaces || eFaces) e.releaseAe()
     // L63-L120: out-of-range / busy-state arm → marker clear then L129.
     val outOfRange = r10 >= 80 || r82 >= r9 || p.S in KILL_SKIP
-    val facingBlocked = !p.faces(e) || e.faces(p)
-    if (outOfRange || (facingBlocked && p.S == 38)) {     // L79/L120
+    // The stab window @344-375: `aS.g(this) && !this.g(aS)` (player behind,
+    // soldier looking away) — OR the player hanging at S38, whatever the
+    // facing (@364 `aS.S != 38 → skip`, S38 falls into @375). The port sent
+    // the S38 / facing-blocked combination to the marker release instead,
+    // so a ledge kill only offered itself on the lucky side.
+    if (outOfRange) {                                     // L648
         if (p.S !in KILL_HOLD) e.releaseAe()
-    } else if (!facingBlocked) {
+    } else if ((pFaces && !eFaces) || p.S == 38) {
         // L81 backstab window — player behind, within reach.
         if (e.j == 0 && p.S !in KILL_ANIM) {
             w.showPrompt(e.ak, e.al - 85, e.aw)           // k.c(x,y,aw)
