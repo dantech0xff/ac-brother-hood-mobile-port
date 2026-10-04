@@ -5394,15 +5394,20 @@ class Slice48Test {
         assertEquals(0, p.ag, "L63 zeroes ag")
     }
 
-    @Test fun `L57 right-block snaps player right and sets ag 1`() {
+    @Test fun `L57 right-block snaps player right and ends on the shared a(true) ag=0 tail`() {
+        // slice 393: the right arm joins the left arm at @463 (`aS.a(true);
+        // aS.ag = 0`) — the port's "falls into L25" loop was the simple
+        // decompile's displaced S131/146 gate, not a branch of this arm.
         val w = world(); w.npcs.clear()
         val p = w.player
         val e = ax9At(w, p.ak - 4, p.al, 0)
         p.ag = -1; p.refreshBoxes()
         e.W[0] = p.ak - 40; e.W[1] = p.al - 40
         e.W[2] = p.ak + 40; e.W[3] = p.al + 40
+        val before = p.ak
         e.pushContact(w)
-        assertEquals(1, p.ag, "L57 sets ag=1 then falls to L25")
+        assertTrue(p.ak > before, "snapped to the right edge")
+        assertEquals(0, p.ag, "@463-470: aS.ag = 0 after a(true)")
     }
 
     @Test fun `S139 corpse skips push entirely`() {

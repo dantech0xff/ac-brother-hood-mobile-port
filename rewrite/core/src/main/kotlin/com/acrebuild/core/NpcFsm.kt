@@ -2311,7 +2311,7 @@ class NpcFsm(val world: LevelCellSource) {
                         world.claim(e, 5, e.W)
                         world.showPrompt(e.ak, e.al - 85, e.aw)
                     }
-                    pushOut(e, player, world) // L18: a() solid-side helper
+                    e.pushContact(world)                  // L18: a()
                 }
                 // L24: the player's attack hitbox reaching W also arms it.
                 if (Entity.overlapStrict(player.X, e.W)) {
@@ -2402,35 +2402,9 @@ class NpcFsm(val world: LevelCellSource) {
     // angle aD (aF = aD*256/360 table index), anchored at (aq,ar); once the
     // radius saturates, aC drains then i(2) (sfx 15 when af.aG!=0).
     // S2 (L43): anchor on the player's head; die on anim end.
-    /** `a()` side-push (i.java:914+, L48-63 ax4 path, proven): while the
-     *  player is grounded (S<=43) and overlapping the volume, clamp their
-     *  `ak` to its edge (dead ±1 `ag` nudge kept verbatim, L63 zeroes it).
-     *  Guards that can't fire here omitted; `aS.y()` → `hitWall()`
-     *  false (proven — S12→S12 arm calls `aS.y()` at i.java:970;
-     *  y()==hitWall at i.java:2318-2339). */
-    private fun pushOut(e: Entity, p: Entity, w: LevelCellSource) {
-        if (e.S == 139) return
-        if (e.S == 18 && p.S != 12) return           // L16-21: player S12
-                                                   // proceeds (i.java:926)
-        if (e.S == 131 || e.S == 146) return
-        if (!Entity.overlapStrict(p.W, e.W)) return
-        if (p.ga != null) return
-        if (p.S > 43) return
-        val pw = p.W[2] - p.W[0]; val ew = e.W[2] - e.W[0]
-        // i.java:749-758 (proven): the push only fires when the player is
-        // NOT wall-blocked on the travel side — `!aS.y()`.
-        if (p.ak <= e.ak && p.ag >= 0 && !p.hitWall()) {
-            p.ak = e.ak - pw / 2 - ew / 2; p.ai = 0; p.ag = -1
-        } else if (p.ak > e.ak && p.ag <= 0 && !p.hitWall()) {
-            p.ak = e.ak + pw / 2 + ew / 2; p.ai = 0; p.ag = 1
-        }
-        p.collideSides(w, true)      // a(true) side-strip rescan + snap
-        p.ag = 0                     // L63: aS.ag = 0 every overlapping tick
-    }
-
     // ============================================================ ax41 = n()
     // Knockable prop (i.java:6414, proven): vases/crates the player knocks
-    // into enemies. S3 → shared a() interact (pushOut); S4 settle — vel0,
+    // into enemies. S3 → shared a() interact (pushContact); S4 settle — vel0,
     // sweep touching entities {0→i(9), 11→s-chain, 51→i(2)}, k.ae = aS at
     // T==frames-2, r() → k.c; S6 tumble — aj=1536, ah<=2560, wall-bounce,
     // entity impact → i(4); S5/default → L92 dropped label → no-op.
@@ -2450,7 +2424,7 @@ class NpcFsm(val world: LevelCellSource) {
 
     fun tickKnockable(e: Entity, w: Level0World, p: Entity) {
         when (e.S) {
-            3 -> pushOut(e, p, w)                                     // L44 a()
+            3 -> e.pushContact(w)                                     // L44 a()
             4 -> {                                                    // L4 settle
                 e.aj = 0; e.ai = 0; e.ah = 0; e.ag = 0
                 // n() @56-277 (proven): the `k.bd` scan — the player is
@@ -4737,7 +4711,7 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
     // L133 — a() (push-past/mount check) skipped for attack states
     if (e.S != 2 && e.S != 38 && e.S != 4 && e.S != 5 && e.S != 40 &&
         e.S != 13 && e.S != 26 && e.S != 17 && e.S != 8 && e.S != 39) {
-        bossPushPast(e)
+        e.pushContact(w)                                   // a()
     }
     // L154-L169 — by3 exhaust: cp>=48 → S28 i(0) / S20 i(16)+e(5)
     if (w.iBy == 3 && (e.S == 28 || e.S == 20)) {
@@ -5065,39 +5039,6 @@ fun NpcFsm.tickBoss(e: Entity, player: Entity, pad: Pad) {
         // L495 — all other states inert
         else -> {}
     }
-}
-
-/** `i.a()` (i.java:914, reachable subset for ax29): the push-past arm —
- *  `W∩aS.W` while `aS.S<=43` and the player walks into the boss pushes
- *  the player out to the box edge (`ai=0`, `ag=0` via the L63 tail).
- *  The ax15-mount / S131/146 / `g.a` / `S==139` guards stay as
- *  early-outs; `k.aS.S==6&&ax==11` and `S==18&&aS.S==12` are proven
- *  skips. `y()` = wall-in-motion-direction. */
-private fun NpcFsm.bossPushPast(e: Entity) {
-    val w = world
-    val p = w.player
-    if (e.S == 139) return
-    if (p.S == 6 && e.ax == 11) return
-    if (e.S == 18 && p.S != 12) return           // L16-21: player S12
-                                                   // proceeds (i.java:926)
-    if (e.S == 131 || e.S == 146) return
-    if (!Entity.overlapStrict(p.W, e.W)) return
-    if (p.S > 43) return
-    val pHalf = (p.W[2] - p.W[0]) / 2
-    val eHalf = (e.W[2] - e.W[0]) / 2
-    if (p.ak < e.ak && p.ag < 0 && !p.forwardWall()) {
-        p.ak = e.ak - pHalf - eHalf
-        p.ai = 0
-        p.ag = -1
-    } else if (p.ak > e.ak && p.ag > 0 && !p.forwardWall()) {
-        p.ak = e.ak + pHalf + eHalf
-        p.ai = 0
-        p.ag = 1
-    } else {
-        return
-    }
-    p.collideSides(w, true)                      // aS.a(1)
-    p.ag = 0
 }
 
 // ---------------------------------------------------------------------------
