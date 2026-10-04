@@ -82,9 +82,12 @@ fall-site snap, S92, S375, `ap()` gates `g.E` / `i.bn`, knife arm, lunge `bq`, t
 `i.J()`, flying head / level-out, raw `ac`, S90 flush, S38 exit, S199, the `D()` reset, ax21 `t()`, canyon left / right slides + L36).
 Misread unit tests corrected to the bytes: `Slice130Test` (S375 sign), `Slice135Test` (S184 side), `Slice195Test` (S92 aO 20),
 `Slice369Test` (S184 keeps the lock only with a live victim), `Slice180Test` (the bank blip), the weapon-corner / `kAt`
-tests. `Slice415Test` +2 (gauge point, one anchor). Mutation-checked: 36 mutants (`mut416.py`, each old behaviour put back) — 36 killed
-(the first pass left the right slide alive: only the left one had a test; the mirror test killed it). Gates: verifier `ok:true`, 57 unittests,
-`:core:test` 2265, `:gdx:test` 18, `:android:assembleDebug`.
+tests. `Slice415Test` +2 (gauge point, one anchor). Mutation-checked: 36 mutants (each old behaviour put back; now
+`scripts/mutants/slice416.py` run by `scripts/mutation-check.py`) — 36 killed
+(the first pass left the right slide alive: only the left one had a test; the mirror test killed it). The harness that produced the
+first pass counted any red build as a kill; the 36 were therefore re-run with the committed harness, which takes the kills from the
+JUnit XML and reports a compile error as `ERROR`: 35 are killed by named `Slice416Test` testcases and one (G2, the S184 drag side)
+by `Slice135Test`. Gates: verifier `ok:true`, 57 unittests, `:core:test` 2265, `:gdx:test` 18, `:android:assembleDebug`.
 
 ## Verified equal / data-checked (no change)
 

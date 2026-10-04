@@ -53,3 +53,6 @@ index), entity dispatch ax 0–80, 8 mission, flying/chase/boss — dùng assets
 - `rewrite/README.md` — trạng thái game port, cách build/chạy/test.
 - `plans/261003-0700-parity-gap-closure-android-hardening/plan.md` — kế hoạch
   hiện hành (parity + hardening, phát hành nội bộ).
+- `plans/261008-2000-handoff-after-slice416/plan.md` — **đọc trước khi tiếp tục
+  audit parity**: luật làm việc, công cụ tĩnh (`scripts/rawm.py`, `bcdec.py`,
+  `xref.py`, `mutation-check.py`), danh mục bẫy đã gặp, backlog.
