@@ -1121,9 +1121,12 @@ class Level0WorldTest {
         settleIntro(w)                 // I() L108 gate: tests run post-intro
         val d = w.npcs.first { it.ax == 4 && it.S == 5 }
         d.refreshBoxes()
-        // mid-attack body overlap → i(S+1) + k.A(14)
+        // the attack hitbox reaching W → i(S+1) + k.A(14) (aj() @217-248; the
+        // S67 swing has a real X box only on T1 — slice 364). A body overlap
+        // arms it only for the g.b(I) aerial set, not for the attack list
+        // (slice 398: this test read the first branch as "mid-attack").
         w.player.setPositionPx(d.W[0] + 1, d.W[3] - 1)
-        w.player.setAnim(67)
+        w.player.setAnim(67); w.player.T = 1
         w.player.refreshBoxes()
         w.npcFsm.tickDestructible(d, w.player)
         assertEquals(6, d.S)
@@ -26102,6 +26105,13 @@ class Slice281Test {
                 164, 52, 280, 209, 211, 260, 259, 263, 265 -> mask = Pad.M_UP
                 else -> if (!p.aZ) mask = Pad.M_RIGHT + Pad.M_UP
             }
+            // Slice 398: the prop-hop below now cracks aw4 open in mid-air
+            // (aj() @72-248: a body overlap in the g.b(I) aerial set smashes
+            // the crate instead of bouncing off it) and lands PAST it at
+            // x≈1116 in the S5 landing recovery, where the generic airborne
+            // rule above holds UP and re-hops too early — walk instead, to
+            // the block's east edge for the S26 jump below.
+            if (p.S == 5 && p.ak in 1090..1200) mask = Pad.M_RIGHT
             // fight nearby soldiers — the `20`-block guard (aw38) and
             // strays attack on approach; strike toward the nearest live
             // ax11 within melee range.

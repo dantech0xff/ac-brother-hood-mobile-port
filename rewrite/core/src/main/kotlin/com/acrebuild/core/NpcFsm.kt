@@ -2304,8 +2304,16 @@ class NpcFsm(val world: LevelCellSource) {
         e.refreshBoxes()
         when (e.S) {
             5, 7 -> {
-                // L5 (i.java:6733): player mid-attack + body overlap arms it.
-                if (PlayerFsm.isAttackState(player.S)) {
+                // aj() @72-248 (proven, raw bytecode): the gate is the STATIC
+                // `g.b(k.aS.S)` @78 — the aerial/action set {18-20,22-25,35,
+                // 36,43,150,157,165,233,242,243,263-266} (jump / fall / dive /
+                // leap anims), NOT the no-arg attack list; a player in it whose
+                // BODY overlaps W cracks the crate open (`i(S+1); k.A(14)`
+                // @185-248), otherwise the context bubble + the a() push-past
+                // run. (Slice 398: the port tested `isAttackState`, so a diving
+                // player bounced off the crate and an attack-combo player
+                // skipped the prompt + push-past.)
+                if (PlayerFsm.isAirAction(player.S)) {
                     if (Entity.overlapStrict(player.W, e.W)) {
                         e.setAnim(e.S + 1); world.sfx(14); return
                     }
@@ -2331,14 +2339,19 @@ class NpcFsm(val world: LevelCellSource) {
                 }
             }
             6, 8 -> {
-                // L28 (i.java:6760): on anim end, up to two `m(-1)` wisp
-                // bursts per tick while m>0 (+k.o(5) stat, +k.s() shake),
-                // then release the claim if we hold it and k.c(self).
+                // aj() @249-352 (proven, raw bytecode): on anim end the FIRST
+                // wisp `m(-1); m--; k.o(5); k.s()` @263-283 and then a
+                // `while (m > 0) { m(-1); k.o(5); k.s(); m--; }` loop @293-323
+                // — EVERY remaining wisp spawns in this one tick (a crate with
+                // m=7 drops seven). Then release the claim if we hold it and
+                // k.c(self). (Slice 398: the port stopped after two, so the
+                // m>2 crates of missions 2/3/5/6 never dropped the rest while
+                // `k.aq += m` had already counted them in the HUD total.)
                 if (!e.animFinished()) return
                 if (e.m > 0) {
                     world.spawnWisp(e); e.m--
                     world.kCount(5); world.kCollectStreak()
-                    if (e.m > 0) {
+                    while (e.m > 0) {
                         world.spawnWisp(e)
                         world.kCount(5); world.kCollectStreak()
                         e.m--

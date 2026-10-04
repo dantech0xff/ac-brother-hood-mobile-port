@@ -532,8 +532,14 @@ class Level0World(
             aD = jRand(0, 360); aE = jRand(70, 90)
             aA = 0; j = 0; aC = 2
             aq = src.ak; ar = src.al
-            P = 528; af = src; aG = 1
+            P = 528; af = src
         }
+        // m(int) @107-109 (proven, raw bytecode): `aload_0; iconst_1; putfield
+        // aG` — the flag lands on the SPAWNER (`this`), not on the wisp; the
+        // wisp's collect/orbit-end arms read it back as `af.aG != 0` → the
+        // second `k.A(15)` (slice 398: the port set it on the wisp itself, so
+        // `af.aG` stayed 0 unless the spawner's own record had one).
+        src.aG = 1
         pendingInsert += w                        // k.b(aK)
     }
 
