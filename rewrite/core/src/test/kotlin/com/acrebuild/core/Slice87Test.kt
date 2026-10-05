@@ -41,8 +41,10 @@ class Slice87Test {
         assertEquals(listOf(93, 30, 214), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ3())
         w.stateL(19)
-        assertEquals(listOf(93, 47, 214), w.menuPanelRect().toList())
+        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
         assertFalse(w.menuPanelZ2())                     // d() → z2=false
+        w.stateL(3)
+        assertEquals(listOf(14, 47, 180), w.menuPanelRect().toList())
     }
 
     @Test fun `footer right pill tap arms the back bit`() {
