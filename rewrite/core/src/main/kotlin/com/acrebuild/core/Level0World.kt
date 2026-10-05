@@ -331,9 +331,15 @@ class Level0World(
     override var kO: Int get() = camX; set(v) { camX = v }
     /** `k.P` — camera top edge (u()'s view-center operand; writable). */
     override var kP: Int get() = camY; set(v) { camY = v }
-    /** `k.ac` — camera view rect [x1,y1,x2,y2] (v() on-screen check). */
-    override val camRect: IntArray get() =
-        intArrayOf(camX, camY, camX + VIEW_W, camY + VIEW_H)
+    /** `k.ac` — camera view rect [x1,y1,x2,y2] **snapshot** (i.v()/i.w()
+     *  cull edge): a real array the camera phase rebuilds — `k.m(int)`'s
+     *  tail (`ac={O,P,O+400,P+240}`, k.javap @2680-2719) and `k.D()`'s
+     *  snap arm (@52-91) + tail (@651-690) are the ONLY `k.ac` writers
+     *  (iastore xref). A mid-tick `k.O/k.P` write — the group-script
+     *  camera lerp `r04==1` arm, the `kDU` world-shift, claim-camera
+     *  writes — therefore does not move the cull edge until the next
+     *  camera pass; `i.u()` still reads live `k.O/k.P` (u() @4/@17). */
+    override val camRect: IntArray get() = ac
     /** `k.al == false` (i.I() entity gate): the real world-run condition
      *  — false on states {12,13,16,17,31} and {21 when dlgU∉{8,9}}. NOT
      *  `k.bh[k.aj]==3` (that is `missionBh() == 3`): v() @206-214 and
@@ -548,6 +554,17 @@ class Level0World(
         private set
     var camY = 0                              // k.P — camera y
         private set
+    /** `k.ac` — the camera-rect snapshot `camRect` exposes (see its doc).
+     *  Rebuilt verbatim only where the original `iastore`s into `k.ac`:
+     *  `k.m(int)` tail and `k.D()`'s snap arm + tail. */
+    private val ac = intArrayOf(0, 0, VIEW_W, VIEW_H)
+    /** `internal` for tests: staging `kO`/`kP` directly models "a camera
+     *  phase already ran", so the staging must be followed by this
+     *  rebuild — the original reaches the same end-state via `m(I)`/`D()`. */
+    internal fun rebuildCamRect() {             // `ac[] = {O,P,O+400,P+240}`
+        ac[0] = camX; ac[1] = camY
+        ac[2] = camX + VIEW_W; ac[3] = camY + VIEW_H
+    }
     // -- k.m(int) tracker state (k.java:2346-2703, proven) -------------
     private var camA = 0                      // cA — x target (static, sticky)
     private var camB = 0                      // cB — y target (static, sticky)
@@ -2202,6 +2219,7 @@ class Level0World(
             ae.ax == 10 && ae.S == 52) {
             kAw = 0; kAv = false; kDz = 120                         // k.r()
         }
+        rebuildCamRect()                          // m(I) tail @2680-2719
     }
     /** `i.X()` (i.java:18631, proven): writes the checkpoint slot into
      *  `bA` — `bA[16]=aw` is the checkpoint POINTER d(z2) reads
@@ -2411,9 +2429,14 @@ class Level0World(
         val c = kC                                                       // L7-L12
         if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
             camA = camX; camB = camY                                     // snap
+            rebuildCamRect()                // D() snap arm @52-91 (proven)
             return
         }
-        if (dialogModal) { camA = camX; camB = camY; return }            // j.c==21
+        if (dialogModal) {                                              // j.c==21
+            camA = camX; camB = camY
+            rebuildCamRect()                // same snap arm @52-91
+            return
+        }
         val ae = player                                                  // ae=aS
         kAe = player                                                     // @93 `k.ae = k.aS` every tick
         if (kW != 0) { kX = kW; kW = 0 }                                 // L17 wind
@@ -2489,7 +2512,7 @@ class Level0World(
         }
         camX += lerpStep(camA - camX, 4)                                 // L83-L86
         camY += lerpStep(camB - camY, 30)
-        // ac[] = {camX, camY, +400, +240} — the camRect getter derives it
+        rebuildCamRect()                  // D() tail @651-690 (proven)
     }
 
     /**

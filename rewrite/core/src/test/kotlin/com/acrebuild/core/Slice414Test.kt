@@ -85,7 +85,7 @@ class Slice414Test {
         p.setPositionPx(1100, 620); p.setAnim(0); p.aZ = true; p.refreshBoxes()
         w.kAe = p
         w.kAh = holder(1000, 500, 1350, 680, wall = true)       // 350 x 180 < the 400 x 240 view
-        w.kO = 900; w.kP = 450
+        w.kO = 900; w.kP = 450; w.rebuildCamRect()
         try {
             settle(w)
             assertTrue(w.kO in 999..1000, "@1954-2049 cA < W0 → cA = W0 (the lerp settles 1 short), the right clamp is the else: ${w.kO}")
@@ -100,7 +100,7 @@ class Slice414Test {
         w.kAe = p
         w.kAh = holder(0, 0, 100000, 100000, wall = false)      // keeps R/S/T/U alive (n() runs when ah == null)
         w.kR = 1000; w.kSBound = 1350                           // S - 400 = 950 < R
-        w.kO = 900
+        w.kO = 900; w.rebuildCamRect()
         try {
             settle(w)
             assertTrue(w.kO in 999..1000, "@2120-2182 cA < R → cA = R; `cA > S - 400` is the else: ${w.kO}")
@@ -115,7 +115,7 @@ class Slice414Test {
             val car = Entity(43, null).apply {
                 setPositionPx(dx, 400); S = 1; av = false; Z[1] = 8; this.ag = ag
             }
-            w.kO = 0; w.kP = 300
+            w.kO = 0; w.kP = 300; w.rebuildCamRect()
             System.arraycopy(intArrayOf(10, 310, 390, 500), 0, p.Y, 0, 4)      // inside the view: i.b(aS.Y, ac)
             w.kAe = car
             w.kM(0)
@@ -141,7 +141,7 @@ class Slice414Test {
         w.kAe = p
         val saved = Entity.at
         Entity.at = null
-        w.kO = 0
+        w.kO = 0; w.rebuildCamRect()
         try {
             settle(w)
             assertTrue(w.kO in 699..700, "@349-: `g.c != null → cA = g.c.ak - 200` (the rope would give 1300): ${w.kO}")
