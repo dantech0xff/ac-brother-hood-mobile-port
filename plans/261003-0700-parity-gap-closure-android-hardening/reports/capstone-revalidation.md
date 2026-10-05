@@ -83,3 +83,49 @@ không teleport. Kết quả: **seam legA→legC không nối được liên t�
   giữ nguyên. Test giữ assertion bound `maxAk >= 2450` (spawn → pillar →
   mass top → deck → shaft mouth) thay cho win, kèm comment seam trong
   header.
+
+### m3 — `Slice282Test.mission3CapstoneFull` (bounded, documented seam)
+
+Union policy (legA + generic position-keyed) không teleport. Kết quả:
+union **vượt cp1 aw157** và mount được 3/4 carrier của kill-pit `02`@900
+(x2360-3020): ax66 uid238@(2405,659) → uid240@(2502,640) → uid241@(2603,619),
+hop chain đạt maxAk=2734. Seam còn lại là **chuỗi stunt đường trên**:
+rope ax19@2272, ledge `14`@540 x2320-2600, spring ax46@2721 launch(40,-30),
+arc trace ax14 lên (2662,484) — cần rope-climb + spring-timing policy mà
+position-keyed bot không biểu đạt. Assert bound `maxAk >= 2700` (qua 3
+carrier mount) thay cho win.
+
+### m5 — `Slice289Test.mission5CapstoneFull` (bounded, documented seam)
+
+Union trên `chaseMask289` (mask chung legA/legB/legC2) không teleport.
+Kết quả: union clear legA tới cp180@(1256,590) rồi kẹt tại tunnel mouth —
+slab top y620 là ngõ cụt; route thật là **descent shaft `02`@880**
+(x1020-1240) bằng ax66 uid512@(1088,712) / uid316@(1168,691) với marker
+descent ax14 @(1061,587)/(1292,651), hoặc hang-drop mặt tây vào mouth
+band x1240-1260 (mở y640-740, floor `14`@760 từ x1260). Bot thử cả hai
+hướng đều rơi vào `02` (died@~1160,899 lặp lại) — timed-mount/hang-release
+ngoài khả năng position-policy. Assert bound `maxAk >= 1256`.
+
+### m6 — `Slice291Test.mission6CapstoneFull` (bounded, documented seam)
+
+Union trên `chaseMask291` không teleport. Kết quả: qua điểm recon legA
+(x790+) tới maxAk=1259, kẹt ở vùng wall-kick S36 x1232 — cần mask
+vùng-riêng của các leg sau (mỗi leg B-F đều dùng custom state mask riêng
+cho stunt chain của mình). Assert bound `maxAk >= 790`.
+
+### m7 — không có leg chain để nối
+
+Các test mission-7 là **scenario-level proofs**, không phải leg chain:
+mỗi test pin vào checkpoint bằng `driveDuelWin300`/`driveRopeClimb300`
+và chứng minh một milestone (post-duel climb, shelf run, spring launch,
+west wing, under chamber, catapult, west descent, arena approach,
+post-arena win). Vùng traversal giữa các scenario không thuộc phạm vi
+test nào — không tồn tại leg chain để union. Đây là kết quả documented
+cho m7.
+
+### m7 — bot-survival accommodation (re-eval)
+
+Đã thử bỏ `if (p.x1 < 40) p.x1 = 60` trong `mission7PostArenaWin`:
+bot **thua duel boss-3 uid251** (aB không về 0, x1 cạn dần) → test fail.
+Accommodation giữ nguyên — đây là giới hạn kỹ năng bot, không phải độ
+đúng của engine; comment trong test đã cập nhật.
