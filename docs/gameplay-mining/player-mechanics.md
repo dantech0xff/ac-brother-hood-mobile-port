@@ -237,3 +237,38 @@ bytecode trước khi sửa (jadx/structured đảo điều kiện, làm phẳng
 | `i.t()` ax21 | @1103-1172 | `W[0] += bY - k.O; W[1] += bZ` — hộp trong không gian camera |
 | `i.B()` | `b(III)V` @33-83, `c(III)V` @33-84, @278 | các lần trượt kênh đọc lại `W[0]/W[2]` sau mỗi `t()` (lượt thứ 2+ trượt cả ô 20px); nhánh góc nhúng L36 trả về **không** gọi `t()` cuối |
 
+
+## `player` tái dùng vs `g` tạo mới mỗi spawn (slice 417, `proven` — byte `g/i/k.javap.txt`, bẫy T16/P1a)
+
+`k.d(Z)V` chạy `i.D()` rồi `new g(r)` (k.javap @614): **bản gốc dựng object người chơi mới tinh mỗi lần spawn**
+(respawn record, restore checkpoint, retry màn). Port giữ một `Entity` duy nhất nên `resetPlayerToSpawn` phải
+tái vũ trang toàn bộ trạng thái ctor — giờ gói trong `Entity.resetToFreshSpawn()`.
+
+| Pha | Bytecode | Nội dung |
+|---|---|---|
+| `i.<init>()V` | i.javap @4-198 | `Q=R=S=-1, aq=ar=0, d=false, au=10, i=1, k=false, y=0, bs=0, C=0, bz=false, cr=bM=null, bN=1, bO=bP=0, bR=false, cG=0, cH=null, cI=cJ=false, ca=-1, cM=cN=cP=-1, cR="", cS=cT=cU=null, cV=false, cW=0`; còn lại JVM-zero |
+| `i.<init>([S)V` record load | @201-274 | `aw=r[1], ak=r[2], al=r[3], N=ak<<8, O=al<<8, ax=r[0], av=(r[6]&1)!=0, P=r[6]` — **`P` chở cả flag word record** (P&64 giữ anim, P&16 ẩn, P&256 đóng băng) |
+| clip bind | @283-468 | `aa = k.r(bi[ax])` — luôn rebind theo record, ax25 → clip 16 |
+| đuôi ctor | @7146-7199 | `i(r[5])` rồi `ax==0 → E()` — **E() chạy cả trên đường checkpoint**, ở vị trí record (aR/aZ/b mô tả nền ở spawn, không phải chỗ restore) |
+| `g.<init>([S)V` | g.javap @5-121 | `cl=false, cx=(8*j.m)/360, cy..cE=0, cF=5120, **`cG = i.av`** (@66-70 — chốt hướng MẶT TỪ RECORD, đọc trước khi arm restore ghi đè `av`), cH..cM=0, K=0, cN=0, L=0, M=0` |
+| `k.a(Z)V` restore arm | k.javap @206-243 | `ak=bA[18], al=bA[20], av=bA[22]==1` — **không ghi N/O**: vị trí logic nhảy tới checkpoint nhưng neo 8.8 giữ ở record spawn (quirk desync — port từng `setPositionPx` đồng bộ cả đôi) |
+
+`i.D()` (i.javap @0-406) xoá static `g.{b,a,h,c,e,g,d,l,m,j,q,r,A,F,k,x,E}` + các static `i`/`k`. **Không** xoá:
+`g.{B,C,D,G,H,I,J,ci..cw,f,i,n,o,p,s,t,u,v,w,y,z}` — port từng xoá nhầm `g.t` (iframes), `g.n/g.o` (vùng S36),
+`g.B`, `g.f` (FX marker); `g.I/g.J` cũng không xoá nhưng `I(aj)`→`F(aj)` ghi lại `g.I=1`, `g.J|=f0do[aj]` trên
+đường loadMission (không phải persist). `g.y` bị `i(r[5])` ghi `= al` ở vị trí record mỗi spawn — không phải
+field persist. Hai bản copy của `g.b` (`gb` + `playerLinkB`) đều phải chết theo spawn.
+
+## `i.v()` cull theo SNAPSHOT `k.ac` (slice 418, `proven` — byte `i/k.javap.txt`, P1b)
+
+`k.ac` là mảng `int[4]` thật — **không phải rect suy diễn live**. Chỉ hai method ghi (`iastore`):
+`k.m(int)` ở đuôi (@2680-2719, sau latch `ai()`) và `k.D()` ở cả arm snap (`@52-91`: `cA=O; cB=P;
+ac={O,P,O+400,P+240}; return`) lẫn đuôi autoscroll (@651-690); `k.<clinit>` alloc `{0,0,400,240}`.
+Trong tick `k.I()`, mười lần dispatch `i.I()` + `i.v()` của player (@318) đều chạy **TRƯỚC** camera
+phase (@1020 `D()` / @1029 `m(I)`); `i.w()` @1089 chạy sau nên thấy rect MỚI — hỗn hợp cố ý.
+
+Hệ quả: mọi ghi `k.O/k.P` giữa tick — arm lerp camera `r04==1` của group-script (`w.kO += …`,
+Entity.kt:2342), shift `kDU` (`camY = camB`, simI), claim-camera `k.Z` — **không** đổi mép cull của
+`v()` cho tới phase camera kế tiếp. `i.u()` (chấm khoảng cách `au`) vẫn đọc `k.O/k.P` LIVE (@4/@17)
+— chỉ phép overlap `a(k.ac, W/Y)` là stale một tick. Port giờ giữ `ac` thật + `rebuildCamRect()` tại
+đúng 3 site trên; test stage `kO/kP` phải gọi rebuild sau staging (= "camera phase đã chạy xong").

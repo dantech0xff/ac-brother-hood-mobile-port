@@ -548,6 +548,92 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
     }
 
+    /**
+     * Fresh-object state for the reused player (slice 417, trap T16 —
+     * proven): `k.d(Z)V` runs `new g(r)` on every spawn (k.javap @614), so
+     * each respawn must re-arm everything `i.<init>` / `g.<init>` write.
+     * Covers the `i.<init>()V` block (i.javap @4-198), the `g.<init>([S)V`
+     * tail (g.javap @5-121), and the JVM-zero fields a fresh object carries.
+     * The caller then performs the record load, clip bind, ax arms, `i(r[5])`
+     * and `E()` — ctor tail ordering (i.javap @7146-7199) — plus `cG = av`
+     * (g.javap @66-70: reads the record-facing BEFORE `a(Z)V` rewrites it).
+     * NOT touched here: the `g` statics outside `i.D()`'s clear list
+     * ({B,C,D,G,H,I,J,ci..cw,f,i,n,o,p,s,t,u,v,w,y,z} → gB/gD/gI/gJ/cFlag/
+     * gcm/ci/cp/cq/ct/cw/cv/cu/z/gt/gy/gn/go + Entity.gf) persist across
+     * respawns; `x1`/`clip`/`P`/`av`/position belong to the record-load/caller
+     * phase; `asSlot`/`oId` keep their port sentinels.
+     */
+    fun resetToFreshSpawn() {
+        // i.<init>()V explicit block (i.javap @4-198, proven)
+        Q = -1; R = -1; S = -1
+        aq = 0; ar = 0
+        scriptBound = false            // i.d
+        au = 10
+        i = 1
+        k = false
+        y = 0
+        bs = 0
+        runnerC = 0                    // i.C — runner sweep counter
+        runnerBz = false               // i.bz
+        cr = null                      // i.cr [[Li
+        bM = null                      // i.bM — context icon slot
+        bN = 1
+        bO = 0; bP = 0; bR = false
+        cGCount = 0                    // i.cG
+        cHWaypoints = null; cHGrid = null   // i.cH [[I — waypoint grid
+        cIDone = false; cJDone = false // i.cI/cJ — claim-script done flags
+        ca = -1
+        claimLatchX = -1; claimLatchY = -1  // i.cM/cN
+        cP = -1
+        cR = ""
+        cS = null; cT = null; cU = null     // i.cS [S / cT / cU [La
+        cV = false; cW = 0
+        // g.<init>([S)V tail (g.javap @5-121, proven)
+        cl = false
+        cx = (8 * Trig.M) / 360        // g.cx — grab step, (8*j.m)/360
+        cy = 0; cz = 0; cA = 0; cB = 0; cC = 0; cD = 0; cE = 0
+        cF = 5120                      // g.cF — 20.0 in 8.8
+        cH = 0; cI = 0; cJ = 0; cK = 0; cL = 0; cM = 0
+        K = 0; cN = 0
+        gQL = 0; gQM = 0               // g.L/g.M — interact-gauge target
+        // JVM-zero fields a fresh object carries
+        aw = 0
+        T = 0; U = 0; a = 0; V = 0
+        ag = 0; ah = 0; ai = 0; aj = 0
+        az = 0; aA = 0; aB = 0
+        aC = 0; aD = 0; aE = 0; aF = 0; aG = 0
+        ay = 0; nl = 0; eventN = 0; pv = 0
+        m = 0; j = 0; l = 0
+        am = 0; an = 0; ao = 0; ap = 0
+        bY = 0; bZ = 0; bl = 0
+        co = 0; tc = 0; uc = 0; bm = 0
+        aO = 0; aP = 0; aQ = 0; aR = 0; aS = 0; aT = 0
+        aU = 0; aV = 0; aW = 0; aX = 0; aY = 0
+        aZ = false; ba = false; bb = false; bc = false; bd = false
+        v = false; b = false
+        runnerB = false; runnerD = 0; iE = false; runnerG = false
+        scriptStep = 0; scriptOps = null
+        cb = null; cc = null; cf = null; cQ = null   // i.cb/cc/cf/cQ — lazily
+        // allocated by script ops; a fresh object carries null and null is
+        // itself a semantic flag (`cb == null` gates claim state, `cc != null`
+        // fans the op112/113 choice cards), so the arrays must die with the
+        // body — zeroing them keeps the "allocated" observable state alive
+        cd.fill(false); cdAllocated = false          // i.cd — h() re-arms cd[7]
+                                                     // on the next first-bind
+        standingOn = null; ac = null
+        af = null; ab = null; ad = null; ae = null; s = null; c = null
+        cg = null; ch = null; F = null
+        g = null; gg = null            // g.g interact-target / marker links
+        wpBt = null; wpF = null
+        Z.fill(0); W.fill(0); X.fill(0); Y.fill(0)
+        ga = null; gb = null; ge = null; gh = null; gd = null
+        gk = -1; gL = 0; gA = false
+        homeX = 0; homeY = 0
+        palette = 0; remapTable = -1; paletteAlpha = 255; j0Frame = -1
+        hitsTaken = 0; trailAnim = -1; ropeGrabSeg = 1
+        bh = 0                         // i.bh — also a D() clear-list entry
+    }
+
     // -- g.c(i) the grab lunge --------------------------------------------
 
     /**

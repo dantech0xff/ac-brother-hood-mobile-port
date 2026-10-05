@@ -78,7 +78,7 @@ class Slice403Test {
 
     private fun civilianWorld(): Level0World {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         return w
     }
 
@@ -277,7 +277,7 @@ class Slice403Test {
         val e50 = Entity(50, w.clips[7]); e50.setPositionPx(100, 200)
         w.npcFsm.initAx50(e50, r50)
         w.npcs.add(e50)
-        w.kO = e50.ak - 200; w.kP = e50.al - 120
+        w.kO = e50.ak - 200; w.kP = e50.al - 120; w.rebuildCamRect()
         e50.aB = 50
         strike(w, e50, 67)
         w.npcFsm.tickAx50(e50, w, w.player)

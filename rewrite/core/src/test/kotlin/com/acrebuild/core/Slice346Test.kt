@@ -25,7 +25,7 @@ class Slice346Test {
      *  au/park gate ticks it regardless of LOD. */
     private fun watch(w: Level0World, e: Entity) {
         e.P = e.P or 16
-        w.kO = e.ak - 200; w.kP = e.al - 120
+        w.kO = e.ak - 200; w.kP = e.al - 120; w.rebuildCamRect()
     }
 
     @Test fun `mission-3 retype — sentinels spawn at S93, pouncers at S120`() {

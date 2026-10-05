@@ -345,7 +345,7 @@ class Slice371Test {
         val p = w.player
         p.setPositionPx(1500, 900); p.refreshBoxes()
         p.canyonCollide(w)                                  // i.w latch
-        w.kP = 0
+        w.kP = 0; w.rebuildCamRect()
         // a tall Y still overlaps k.ac, but |dy| = 780 → au > i → !v()
         intArrayOf(w.camX + 100, 200, w.camX + 200, 950).copyInto(p.Y)
         assertFalse(p.canyonCollide(w))

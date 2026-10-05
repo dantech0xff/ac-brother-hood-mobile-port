@@ -135,7 +135,7 @@ class Slice364Test {
     @Test fun `k-m rope camera tests containment, not overlap`() {
         fun step(yBox: IntArray): Int {
             val w = world()
-            w.kO = 1_000; w.kP = 500
+            w.kO = 1_000; w.kP = 500; w.rebuildCamRect()
             yBox.copyInto(w.player.Y)
             val rope = Entity(43, null)
             rope.S = 1; rope.av = true; rope.ak = 1_100; rope.al = 600

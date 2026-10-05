@@ -62,8 +62,8 @@ class Slice350Test {
         val p = w.player
         p.setAnim(0); p.aA = 0
         centreIn(p, c + 2, r)
-        w.kO = minOf(e.W[0], p.W[0]) - 20
-        w.kP = minOf(e.W[1], p.W[1]) - 20
+        w.kO = minOf(e.W[0], p.W[0]) - 20; w.rebuildCamRect()
+        w.kP = minOf(e.W[1], p.W[1]) - 20; w.rebuildCamRect()
         assertTrue(Entity.overlapI(e.W, w.camRect))
         return e
     }
@@ -89,7 +89,7 @@ class Slice350Test {
     @Test fun `ax17 - half on camera is not seen (b() containment)`() {
         val w = world(); w.npcs.clear()
         val e = stage(w, solidMid = false, ::civilian)
-        w.kO = ((e.W[0] + e.W[2]) shr 1) - 400          // right edge cuts W
+        w.kO = ((e.W[0] + e.W[2]) shr 1) - 400; w.rebuildCamRect() // right edge cuts W
         assertTrue(Entity.overlapI(e.W, w.camRect))
         w.npcFsm.tickAx17(e, w, w.player)
         assertEquals(57, e.S, "W not inside k.ac → L70 false")
@@ -109,7 +109,7 @@ class Slice350Test {
     @Test fun `ax17 - the ai() camera-focus zone alerts even off camera`() {
         val w = world(); w.npcs.clear()
         val e = stage(w, solidMid = false, ::civilian)
-        w.kO = 50_000                                   // civilian off the view
+        w.kO = 50_000; w.rebuildCamRect() // civilian off the view
         val zone = Entity(10, null); zone.S = 52
         w.kAe = zone
         w.npcFsm.tickAx17(e, w, w.player)
@@ -131,7 +131,7 @@ class Slice350Test {
 
         val w2 = world(); w2.npcs.clear()
         val e2 = stage(w2, solidMid = false, ::patroller)
-        w2.kO = ((e2.W[0] + e2.W[2]) shr 1) - 400      // half on camera
+        w2.kO = ((e2.W[0] + e2.W[2]) shr 1) - 400; w2.rebuildCamRect() // half on camera
         assertFalse(losL(e2, w2.player, w2), "overlap is not b(W, k.ac)")
     }
 
