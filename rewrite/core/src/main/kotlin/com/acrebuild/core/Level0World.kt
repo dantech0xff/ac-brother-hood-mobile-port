@@ -595,41 +595,31 @@ class Level0World(
     }
 
     private fun resetPlayerToSpawn() {
-        // aY() snapshot (bA[18..24]) when a checkpoint fired, else level spawn
-        val s = checkpointSnap
-        if (s != null) {
-            // k.java:5182-5184 (proven, the a(true) restore arm):
-            // `ak = bA[18]; al = bA[20]; av = bA[22]==1` — the rest of
-            // that arm runs in [reload].
-            player.setPositionPx(s.ak, s.al)
-            player.av = s.av
-            // `k.G` rides the snapshot — the reload's q(G) arm re-fires
-            // the checkpoint's linked ax5 director (k.java:5177).
-            kG = s.kG
-        } else {
-            val spawn = level.playerSpawn() ?: (100 to 200)
-            player.setPositionPx(spawn.first, spawn.second)
-            player.av = false
-            player.x1 = 90
-            // grounded packs: the ax0 player keeps clip0 (undoes an
-            // earlier ax25 clip16 slot on mission switch).
-            player.clip = clips[0]
-        }
-        // k.java:5990-6017 (proven, d(z2) respawn): the ax0/ax25 record
-        // skips the bf[] image restore (L78) — `aS` is always a FRESH
-        // `new i(r0)`, so its S is the record's own f[5] (0 grounded,
-        // 4 for the ax25 flyer). S0 here latched z4=false and killed the
-        // auto-flap (`p.S != 0` gate, PlayerFsm.kt:2424) — refills died.
+        // Slice 417 (trap T16, proven): `k.d(Z)V` builds a FRESH `g` on every
+        // spawn (k.javap @614) — the reused `player` re-arms the full ctor
+        // state first: i.<init>()V block (@4-198), g.<init>([S)V tail
+        // (@5-121), and every JVM-zero field. `g` statics outside i.D()'s
+        // clear list persist (see Entity.resetToFreshSpawn).
+        player.resetToFreshSpawn()
+        // i.<init>([S)V record load (i.javap @201-274, proven):
+        // `aw=r[1]`, `ak=r[2]`, `al=r[3]`, `N=ak<<8`, `O=al<<8`,
+        // `av=(r[6]&1)!=0`, `P=r[6]` — the port never wrote P on respawn,
+        // so the stale flag word (P&64 anim-hold, P&16 hidden, P&256
+        // freeze) survived onto the fresh body.
         val rec = level.playerRecord()
-        player.setAnim(if (rec != null && rec.size > 5) rec[5] else 0)
-        player.ag = 0; player.ah = 0; player.ai = 0; player.aj = 0
+        if (rec != null && rec.size > 1) player.aw = rec[1]
+        if (rec != null && rec.size > 3) player.setPositionPx(rec[2], rec[3])
+        else player.setPositionPx(100, 200)
+        if (rec != null && rec.size > 6) {
+            player.av = rec[6] and 1 != 0
+            player.P = rec[6]
+        } else {
+            player.av = false
+        }
+        // clip bind `aa = k.r(bi[ax])` (i.javap @283-468, proven) — inside
+        // the ctor, before the ax arms; ax25's record gives bi[25]=16.
+        player.clip = clips[entityClipIndex(rec?.get(0) ?: 0, rec ?: intArrayOf()) ?: 0]
         run {
-            // The original's record-spawn makes `k.aS` the entity built
-            // from the ax0/ax25 record (k.java:17204-17223, proven) — the
-            // shared init's `aw = r8[1]` gives the player the record's
-            // uid. Claim scripts then reach it via `findByAw(uid)`
-            // (script 250 blk1 tgt=5 walks the player onto the road).
-            if (rec != null && rec.size > 1) player.aw = rec[1]
             // i.java:2415-2427 (proven) — the ax25 flying player-slot
             // init (runs after the shared vel-clear): `az=202`,
             // `g.e(90)` (x1), `aA=2`, `aB=3`, `ah=-2560`, `aq=ar=-1`,
@@ -642,9 +632,6 @@ class Level0World(
                 player.aA = 2; player.aB = 3
                 player.ah = -2560
                 player.aq = -1; player.ar = -1
-                // bi[25]=16 (proven): the ax25 player slots the
-                // glider-suit clip, not the grounded clip0.
-                player.clip = clips[ENTITY_CLIP[25] ?: 16]
                 // `sArr[0]=26; ad=new i(sArr)` — the companion inits as a
                 // full entity from the mutated record: ax26 → `az=201`
                 // (i.java:2429) and `i(r8[5])` (mirrored to the player S
@@ -657,7 +644,6 @@ class Level0World(
                                   if (rec.size > 3) rec[3] else player.al)
                 }
             } else {
-                player.ad = null
                 // i.java:1971-1981 (proven) — the ax0 arm of the fresh
                 // `aS`'s init: `az=100` (its draw depth — the port kept
                 // the default 0, drawing the player under every NPC),
@@ -668,16 +654,39 @@ class Level0World(
                 player.Z[0] = 0; player.Z[1] = 0
             }
         }
-        // ctor tail `if (ax == 0) { E(); return }` (i.javap L7188, proven —
-        // slice 389 oracle: aj0 940→939, aj2 1840→1839, aj5 582→579, aj6
-        // 740→739, aj7 1740→1739): the fresh grounded player settles on the
-        // ground line. The checkpoint-restore arm overwrites ak/al after the
-        // ctor, so it keeps the snapshot untouched; ax25 (flyer) has no E().
-        if (s == null && (rec == null || rec[0] != 25)) player.eSettle(this)
-        player.gt = 0; player.bh = 0
-        // ax10-published player statics (i.java:2492-2512 level-init clears)
-        player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
-        player.gB = false; player.gL = 0; player.gA = false
+        // ctor tail (i.javap @7146-7199, proven): `i(r[5])` then
+        // `ax==0 → E()`. k.java:5990-6017: the ax0/ax25 record skips the
+        // bf[] image restore — S is the record's own f[5] (0 grounded, 4
+        // for the ax25 flyer). S0 here latched z4=false and killed the
+        // auto-flap (`p.S != 0` gate, PlayerFsm.kt:2424) — refills died.
+        player.setAnim(if (rec != null && rec.size > 5) rec[5] else 0)
+        // E() (i.javap L7188, proven — slice 389 oracle: aj0 940→939, aj2
+        // 1840→1839, aj5 582→579, aj6 740→739, aj7 1740→1739): the fresh
+        // grounded player settles on the ground line AT THE RECORD
+        // POSITION — it runs inside the ctor, before the a(Z)V arm moves
+        // ak/al to the checkpoint (probe side-effects like `b`/aR/aZ then
+        // describe the record spawn's ground — verified quirk).
+        if (rec == null || rec[0] != 25) player.eSettle(this)
+        // g.<init> tail @66-70 (proven): `cG = i.av` — latches the
+        // RECORD-facing, read before the restore arm rewrites `av`.
+        player.cG = player.av
+        // k.a(Z)V restore arm (k.javap @206-243, proven):
+        // `ak = bA[18]; al = bA[20]; av = bA[22]==1` — writes ak/al/av
+        // ONLY; the fresh object's N/O keep the record-spawn 8.8 position
+        // (desync quirk — the port's setPositionPx wrongly synced them).
+        val s = checkpointSnap
+        if (s != null) {
+            player.ak = s.ak
+            player.al = s.al
+            player.av = s.av
+            // `k.G` rides the snapshot — the reload's q(G) arm re-fires
+            // the checkpoint's linked ax5 director (k.java:5177).
+            kG = s.kG
+        } else {
+            // g.x[] was nulled by i.D(); callers overwrite via g.e(k.ax)
+            // (reload :4830, menuJc9 :4005) — 90 is the port stand-in.
+            player.x1 = 90
+        }
     }
 
     private fun spawnEntities(restoreFromImage: Boolean = false) {
@@ -721,7 +730,12 @@ class Level0World(
         player.gL = 0                               //   D() order here)
         player.gA = false                           // g.m (unported), g.j,
         Entity.grabLatch = false; Entity.gq = false //   g.q, g.r(stub),
-        Entity.gf = null                            //   g.A, g.F
+        playerLinkB = null                          //   g.b — the second
+                                                    //   live copy; g.g/g.F
+                                                    //   fall in the ctor
+                                                    //   reset. g.f (Entity.gf)
+                                                    //   PERSISTS — not in
+                                                    //   D()'s clear list
         kAD = null                                  // k.aD
         volPaintRect = null                         // k.aQ (i.java:1888 —
                                                     //   D() @388; also nulled
