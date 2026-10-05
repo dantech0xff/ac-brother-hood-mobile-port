@@ -56,3 +56,30 @@ Gate @ 1e7bb59d: verifier `ok:true`; unittest 57/57; `:core:test`
   làm; các leg hiện vẫn stitched như trước.
 - Step 4–7 (Run-31 write-up, device Run-32/Run-33) — cần emulator host;
   container cloud không có `/dev/kvm`. Chưa chạy.
+
+## Step 3 — stitch attempts (P4, branch `devin/land`)
+
+### m2 — `Slice281Test.mission2CapstoneFull` (bounded, documented seam)
+
+Đã viết một bot policy union position/state-keyed gộp legA→legC→legWin,
+không teleport. Kết quả: **seam legA→legC không nối được liên tục** —
+
+- Đường trên (mass top y1540 → chimney x2220-2340 → tower top): descent
+  của legA luôn đặt player ở x2214-2216 đang rơi (S74 leap-dash +40
+  của game tự fling qua mép) — không bao giờ grounded trong gap để bắt
+  đầu chuỗi wall-kick; rơi dọc mặt ngoài xuống deck.
+- Đường dưới (deck `20`@1940): cặp ax11 S89 pin-guard ở (2215,1938)
+  nằm đúng đường rơi — pin sống sót được nhưng mất HP; fight zone
+  x2220-2400 QTE được nhưng cộng dồn sát thương.
+- Shaft strip-gap x2420-2540 có đáy `02`@2040 — **type-2 = kill-cell**
+  (`g.e()` head: `aR==2 || aO==2 || L()` trên player không mount →
+  `x1=0`, `i(50)`). Vault môi-động S22/23 của chính game bắn ~40px
+  trước mép và luôn đáp x2477-2508 — `02` trần → chết tức thì.
+  Door-tops ax44 (2434/2469/2497, mount → né kill) chỉ qua được bằng
+  độ chính xác <10px mà policy bot không biểu đạt; ax10 uid22 S43 là
+  ledge-mount helper cho route hang-shimmy — cũng ngoài khả năng
+  position-policy.
+- Các leg riêng lẻ (legA, legC, legWin) vẫn pass — evidence capstone
+  giữ nguyên. Test giữ assertion bound `maxAk >= 2450` (spawn → pillar →
+  mass top → deck → shaft mouth) thay cho win, kèm comment seam trong
+  header.
