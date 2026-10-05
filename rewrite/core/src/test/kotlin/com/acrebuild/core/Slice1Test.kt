@@ -493,7 +493,7 @@ class Level0WorldTest {
         // b() (i.java:1546) gates the spot on v() → au<=i, i.e. the
         // entity must be near the CAMERA — teleporting the player leaves
         // the cam behind; snap it like a real scroll would.
-        w.kO = s.ak - 200; w.kP = s.al - 120
+        w.kO = s.ak - 200; w.kP = s.al - 120; w.rebuildCamRect()
         var alerted = false
         repeat(90) {
             // the aA==0 → a() body-push (i.java:6246) shoves the player
@@ -587,7 +587,7 @@ class Level0WorldTest {
         // the player is about to stand next to this soldier — put the
         // camera where it would be (k.O/k.P) so u() scores it in-play;
         // ax11's own arm clears P|16 when aA==0 so keep-live can't help.
-        w.kO = s.ak - 200; w.kP = s.al - 120
+        w.kO = s.ak - 200; w.kP = s.al - 120; w.rebuildCamRect()
         repeat(5) { w.tick(emptyList()) }
         // Verbatim weaken chain (i.java:1955): Z[0]==1 marks the soldier
         // weaken-eligible; a hit leaving aB<=bu → C() flips Z0=2 + S144.
@@ -4776,7 +4776,7 @@ class Slice44Test {
             z = intArrayOf(0,0,20,20,0,125,10,0,0,777))
         e.af = af
         e.Z[8] = 300; e.Z[9] = 100; e.aC = 1
-        w.kP = 40                      // kP: march endpoint stays in-map
+        w.kP = 40; w.rebuildCamRect() // kP: march endpoint stays in-map
         finish(e)
         w.npcFsm.tickAx35(e, w, w.player)
         assertTrue(w.pendingInsert.size >= 2,
@@ -7452,7 +7452,7 @@ class Slice17Test {
 
     @Test fun `S57 on-screen notice — sfx 16, faces player, panic pick`() {
         val w = world()
-        w.kO = 0; w.kP = 0                          // camera [0,0,400,240]
+        w.kO = 0; w.kP = 0; w.rebuildCamRect() // camera [0,0,400,240]
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)                        // same spot → overlap
         w.npcFsm.tickAx17(e, w, w.player)
@@ -7463,7 +7463,7 @@ class Slice17Test {
 
     @Test fun `S57 civilian off camera stays idle, no sfx`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 2000, 150)                    // W outside [0,400]
         placePlayer(w, 2100, 150)
         w.npcFsm.tickAx17(e, w, w.player)
@@ -7473,7 +7473,7 @@ class Slice17Test {
 
     @Test fun `S57 alert flag bn suppresses the panic`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         w.iBn = true                                    // bA[79] checkpoint flag
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)
@@ -7484,7 +7484,7 @@ class Slice17Test {
 
     @Test fun `S57 player S9 or S50 suppresses the panic`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)
         w.player.S = 9
@@ -7501,7 +7501,7 @@ class Slice17Test {
         // placements stay inside level0's open top-left block (cells
         // 0..28 x 0..24); y=120 put the "above" player off the map (y<0,
         // OOB cells read solid). Camera kP=100 keeps W inside k.ac.
-        w.kO = 0; w.kP = 100
+        w.kO = 0; w.kP = 100; w.rebuildCamRect()
         val e = ax17At(w, 150, 320)
         // player fully right of W (X-separated) and well below/above it —
         // p.W carries large anim-box offsets so the margin must clear them
@@ -7516,7 +7516,7 @@ class Slice17Test {
 
     @Test fun `S57 quadrant pick — below+overlap 63, above+overlap 62`() {
         val w = world()
-        w.kO = 0; w.kP = 100                         // see the X-sep case
+        w.kO = 0; w.kP = 100; w.rebuildCamRect() // see the X-sep case
         val e = ax17At(w, 150, 320)
         placePlayer(w, e.ak, e.W[3] + 200)
         w.npcFsm.tickAx17(e, w, w.player)
@@ -7529,7 +7529,7 @@ class Slice17Test {
 
     @Test fun `panic flail strikes the player at T==3 (op4 sfx 18)`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)
         e.setAnim(61); e.T = 3
@@ -7539,7 +7539,7 @@ class Slice17Test {
 
     @Test fun `panic flail r returns to S57 — S68 also returns`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 300, 150)
         e.setAnim(61); finish(e)
@@ -7552,7 +7552,7 @@ class Slice17Test {
 
     @Test fun `sword intake — normal hit aB-=50, finisher aB-=100`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)
         // p.X non-degenerate, overlapping W; player in attack anim 67
@@ -7570,7 +7570,7 @@ class Slice17Test {
 
     @Test fun `dead-check routes to S69 collapse on the next tick`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 200, 150)
         e.aB = 0
@@ -7580,7 +7580,7 @@ class Slice17Test {
 
     @Test fun `S69 collapse — finish releases locks and drops flags`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         placePlayer(w, 300, 150)
         e.aB = 0
@@ -7598,7 +7598,7 @@ class Slice17Test {
 
     @Test fun `S129 dead-on-spot — r() zeroes aB and drops flags`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         e.aB = 1
         e.setAnim(129); finish(e)
@@ -7610,7 +7610,7 @@ class Slice17Test {
 
     @Test fun `S170 knockdown — al+=10, wall probe, aZ → S129`() {
         val w = world()
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         val e = ax17At(w, 200, 150)
         val y0 = e.al
         e.setAnim(170)
@@ -7924,7 +7924,7 @@ class Slice64Test {
     /** Centre the camera on [e] so its W sits inside `k.ac` — aK's `l()`
      *  takes the ax50 arm L77, `b(W,k.ac)`: W ⊆ camera rect (i.java:665). */
     private fun camOn(w: Level0World, e: Entity) {
-        w.kO = e.ak - 200; w.kP = e.al - 120
+        w.kO = e.ak - 200; w.kP = e.al - 120; w.rebuildCamRect()
     }
     /** Player standing in the pouncer's column, mid-point at its anchor. */
     private fun playerUnder(w: Level0World, e: Entity) {
@@ -7989,7 +7989,7 @@ class Slice64Test {
     @Test fun `aK S120 — W only partly inside the camera stays blind`() {
         val w = world()
         val e = ax50At(w, 100, 200, 0, 120)
-        w.kO = e.W[0] + 1; w.kP = e.al - 120          // left edge cuts W
+        w.kO = e.W[0] + 1; w.kP = e.al - 120; w.rebuildCamRect() // left edge cuts W
         playerUnder(w, e)
         assertTrue(Entity.overlapI(e.W, w.camRect), "W still overlaps the view")
         w.npcFsm.tickAx50(e, w, w.player)
@@ -7999,7 +7999,7 @@ class Slice64Test {
     @Test fun `aK S120 — off-camera perch stays put`() {
         val w = world()
         val e = ax50At(w, 100, 200, 0, 120)
-        w.kO = 5000; w.kP = 5000
+        w.kO = 5000; w.kP = 5000; w.rebuildCamRect()
         playerUnder(w, e)
         w.npcFsm.tickAx50(e, w, w.player)
         assertEquals(120, e.S, "r7=false → no pounce")
@@ -8055,7 +8055,7 @@ class Slice64Test {
     @Test fun `aK S121 pounce — lost sight reverts to S120`() {
         val w = world()
         val e = ax50At(w, 100, 200, 0, 121)
-        w.kO = 5000; w.kP = 5000                // W off the view → l() false
+        w.kO = 5000; w.kP = 5000; w.rebuildCamRect() // W off the view → l() false
         playerUnder(w, e)
         w.npcFsm.tickAx50(e, w, w.player)
         assertEquals(120, e.S, "r7==false → i(120)")
@@ -9147,7 +9147,7 @@ class Slice69AdTest {
         val w = world(); val e = bubbler()
         val q = e.cQ!!
         q[5] = 7; q[6] = 7; q[2] = -1; q[3] = 30
-        w.kO = 60; w.kP = 40
+        w.kO = 60; w.kP = 40; w.rebuildCamRect()
         w.npcFsm.tickBubble(e, w)
         // bK(): cR = k.d(1+aj, 7) + '\n'; 2 wrapped lines at 20 ch/line →
         // q[4]=2 clamped to q[1]-q[0]=1 (verbatim L10 quirk)
@@ -9202,7 +9202,7 @@ class Slice69AdTest {
         val q = e.cQ!!
         q[5] = 7; q[6] = 7; q[2] = -1; q[3] = 30
         e.av = true                                   // facing flip (suppressed by bh3)
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         e.setPositionPx(200, 40)                      // al-kP-70-h < 0 → tailUp
         w.npcFsm.tickBubble(e, w)
         val d = w.bubbleDraw!!
@@ -13159,7 +13159,7 @@ class Slice116Test {
 
     @Test fun `jc9 exit C() non-bh3 arm resets scroll and camera`() {
         val w = world()
-        w.kAR = 4; w.kAk = 9; w.kX = 12; w.kO = 500; w.kP = 700
+        w.kAR = 4; w.kAk = 9; w.kX = 12; w.kO = 500; w.kP = 700; w.rebuildCamRect()
         // cam ends re-tracked by m(ad) — assert the reset fields only
         w.kZ = true; w.kAb = true; w.kQ = 55
         driveJc9Exit(w)
@@ -21393,7 +21393,7 @@ class Slice217Test {
         settleIntro(w)
         val p = w.player
         p.setPositionPx(2147, 470)
-        w.kO = 2147 - 200; w.kP = 470 - 120
+        w.kO = 2147 - 200; w.kP = 470 - 120; w.rebuildCamRect()
         var fallSeen = false; var failAt = -1
         repeat(240) { t ->
             w.tick(emptyList())
@@ -21431,14 +21431,14 @@ class Slice218Test {
         // (g.javap.txt e() 6092-6116, slice 369) — no context dispatch.
         p.setPositionPx(d.ak + 40, d.al)
         p.av = true
-        w.kO = p.ak - 200; w.kP = p.al - 120
+        w.kO = p.ak - 200; w.kP = p.al - 120; w.rebuildCamRect()
         // context tap -> 65568 -> ap() I==1 -> i(67) sword swing
         var brokenAt = -1
         repeat(120) { t ->
             val (cx, cy) = w.cellPoint(4)
             w.tick(listOf(InputQueue.Event(0, InputQueue.Type.DOWN, cx, cy),
                           InputQueue.Event(1, InputQueue.Type.UP, cx, cy)))
-            w.kO = p.ak - 200; w.kP = p.al - 120
+            w.kO = p.ak - 200; w.kP = p.al - 120; w.rebuildCamRect()
             if (brokenAt < 0 && !w.npcs.contains(d)) brokenAt = t
         }
         assertTrue(brokenAt > 0, "uid16 crate should arm S5→S6, burst, and remove (brokenAt=$brokenAt, dS=${d.S})")
@@ -21473,11 +21473,11 @@ class Slice219Test {
         // now bring the camera (and player) to it — au<2 releases the
         // freeze; the FSM runs on the very next tick.
         w.player.setPositionPx(s.ak - 40, s.al)
-        w.kO = s.ak - 200; w.kP = s.al - 120
+        w.kO = s.ak - 200; w.kP = s.al - 120; w.rebuildCamRect()
         var ticked = false
         repeat(60) {
             w.tick(emptyList())
-            w.kO = s.ak - 200; w.kP = s.al - 120
+            w.kO = s.ak - 200; w.kP = s.al - 120; w.rebuildCamRect()
             if (s.T != 0 || s.S != s0) { ticked = true; return@repeat }
         }
         assertTrue(ticked, "soldier wakes when camera makes au<2 (au=${s.au}, S=${s.S}, T=${s.T})")
@@ -21517,7 +21517,7 @@ class Slice220Test {
     @Test fun `visible window tracks the camera in et cells`() {
         val w = world()
         settleIntro(w)
-        w.kO = 420; w.kP = 260                     // k.O/k.P writable cam
+        w.kO = 420; w.kP = 260; w.rebuildCamRect() // k.O/k.P writable cam
         w.stateL(12)
         assertEquals(21, w.visX0)                  // 420/20
         assertEquals(40, w.visX1)                  // (420+399)/20
@@ -21528,7 +21528,7 @@ class Slice220Test {
     @Test fun `negative camera y clamps on grounded missions`() {
         val w = world()
         settleIntro(w)
-        w.kP = -30
+        w.kP = -30; w.rebuildCamRect()
         w.stateL(12)
         assertEquals(0, w.visY0, "bh[aj]!=3 clamps vy0 at 0")
     }
@@ -21536,7 +21536,7 @@ class Slice220Test {
     @Test fun `flying missions keep a negative window top`() {
         val w = world(aj = 1)                      // kBh[1]==3 → bh3
         settleIntro(w)
-        w.kP = -30
+        w.kP = -30; w.rebuildCamRect()
         w.stateL(12)
         // :9084 bias: sy = -30-20 = -50 → vy0 = -50/20 = -2, kept verbatim
         assertTrue(w.visY0 < 0, "bh3 leaves vy0 unclamped")
@@ -21546,10 +21546,10 @@ class Slice220Test {
     @Test fun `window reset flags visDirty when the camera jumps`() {
         val w = world()
         settleIntro(w)
-        w.kO = 0; w.kP = 0
+        w.kO = 0; w.kP = 0; w.rebuildCamRect()
         w.stateL(12)
         val x0 = w.visX0
-        w.kO = 2000                                // disjoint jump → dM
+        w.kO = 2000; w.rebuildCamRect() // disjoint jump → dM
         w.stateL(12)
         assertTrue(w.visX0 > x0 + 1, "window follows a disjoint camera jump")
         assertFalse(w.visDirty, "dM self-clears after the (dead) h() arm")
@@ -21830,7 +21830,7 @@ class Slice238Test {
         val p = w.player
         p.canyonCollide(w)                           // latch
         w.kAi = true                                 // L36 gate
-        w.kO = 1000
+        w.kO = 1000; w.rebuildCamRect()
         p.setPositionPx(1600, 400); p.refreshBoxes()
         p.canyonCollide(w)
         assertEquals(1400, p.ak, "ak >= kO+400 clamps to kO+400 (L59)")
@@ -21859,7 +21859,7 @@ class Slice238Test {
         val w = flyWorld()
         val p = w.player
         p.canyonCollide(w)                           // latch
-        w.kP = 0
+        w.kP = 0; w.rebuildCamRect()
         p.setPositionPx(5000, 500); p.refreshBoxes() // Y outside cam rect
         assertFalse(p.canyonCollide(w))
         assertEquals(12, w.jC, "L1f7: !v() && al > k.P+240 → k.l(12)")
@@ -23391,7 +23391,7 @@ class Slice245Test {
         sb.append("guard@${guard!!.ak},${guard.al} S=${guard.S} j=${guard.j} " +
             "zone@${zoneE!!.ak},${zoneE.al} W=${zoneE.W.toList()}\n")
         // camera on the pit so both entities tick
-        w.kO = 4900; w.kP = 700
+        w.kO = 4900; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         // drop the player onto the guard's top: falling state + feet above
@@ -23473,7 +23473,7 @@ class Slice245Test {
         p.setPositionPx(5000, 850)
         p.N = p.ak shl 8; p.O = p.al shl 8
         // keep the rope + wall entities ticking: camera over the trench
-        w.kO = 5200; w.kP = 700
+        w.kO = 5200; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0
@@ -23673,7 +23673,7 @@ class Slice245Test {
         }
         p.setPositionPx(7110, 718)
         p.N = p.ak shl 8; p.O = p.al shl 8
-        w.kO = 7300; w.kP = 700
+        w.kO = 7300; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0; var checkpoint = false
@@ -23744,7 +23744,7 @@ class Slice245Test {
         val p = w.player
         p.setPositionPx(8780, 265)
         p.N = p.ak shl 8; p.O = p.al shl 8
-        w.kO = 9100; w.kP = 700
+        w.kO = 9100; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0; var checkpoint = false
@@ -23847,7 +23847,7 @@ class Slice245Test {
         var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
-        w.kO = 10000; w.kP = 700
+        w.kO = 10000; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0; var goal = false
@@ -23984,7 +23984,7 @@ class Slice245Test {
         var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
-        w.kO = 10000; w.kP = 700
+        w.kO = 10000; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0; var goal = false
@@ -24157,7 +24157,7 @@ class Slice245Test {
         var strikes571 = 0                       // slice 388
         p.setPositionPx(10016, 715)
         p.N = p.ak shl 8; p.O = p.al shl 8
-        w.kO = 10000; w.kP = 700
+        w.kO = 10000; w.kP = 700; w.rebuildCamRect()
         for (e in w.npcs) e.recomputeAu(w.kO, w.kP, w::kBk)
         if (w.jC == 12) w.stateL(8)
         var t = 0; var deaths = 0
@@ -24427,7 +24427,7 @@ class Slice245Test {
             // (|ak-(kO+200)|/400 + |al-(kP+120)|/120) — pinning to the
             // player keeps au≈0 AND lets the et stamp ring roll the
             // way it does in real flight (walls follow camY).
-            w.kP = p.al - 120; w.kO = p.ak - 200
+            w.kP = p.al - 120; w.kO = p.ak - 200; w.rebuildCamRect()
             // Lane prompt CS[2]=16388 (UP) — press every tick; the live
             // lane consumes one edge, later presses are no-ops.
             w.pad.e(16388); w.tick(emptyList()); w.pad.releaseFlush()
@@ -24657,7 +24657,7 @@ class Slice245Test {
             // drew — so the probe holds the camera on the S19 column
             // until it arms (the teleport left the drift camera ~600px
             // below it; a real pilot reaches it with the camera).
-            if (shrinesArmed == 0) { w.kO = 397 - 200; w.kP = 8437 - 120 }
+            if (shrinesArmed == 0) { w.kO = 397 - 200; w.kP = 8437 - 120; w.rebuildCamRect() }
             w.pad.e(mask)
             w.tick(emptyList())
             for (n in w.npcs) {
@@ -24673,7 +24673,7 @@ class Slice245Test {
                         // Snap the camera to the shrine (via the k.O/k.P
                         // projections): au recompute parks the entity
                         // while the cam is far away.
-                        w.kO = n.ak - 200; w.kP = n.al - 230
+                        w.kO = n.ak - 200; w.kP = n.al - 230; w.rebuildCamRect()
                     }
                     if (!shrineFired) {
                         // Pin the player inside the shrine box
@@ -24745,7 +24745,7 @@ class Slice245Test {
         // Recreate the respawn state: player inside the 6016 box, fresh
         // tank, camera snapped (k.C() — `camB=camY=al-230` verified).
         p.ak = 223; p.al = 6007; p.setAnim(4); p.ah = 0; p.ag = 0
-        w.kP = 6007 - 230; w.kO = 0; w.kAE = 100; w.kAF = 0
+        w.kP = 6007 - 230; w.kO = 0; w.kAE = 100; w.kAF = 0; w.rebuildCamRect()
         var t = 0; var arrived = false; var deadCamY = -1; var deadAe = -1
         while (t++ < 40000) {
             var mask = 0
@@ -26414,8 +26414,8 @@ class Slice281Test {
                     Math.abs(it.ak - p.ak) < 80 && Math.abs(it.al - p.al) <= 5
                 }) mask = Pad.M_CONTEXT
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak >= 1900 && p.al <= 1560 && p.aZ) { legReached = true; break }
@@ -26438,7 +26438,7 @@ class Slice281Test {
         // is entered at its designed start exactly like prior capstone
         // legs entered from checkpoint starts).
         p.setPositionPx(2080, 1338); p.ak = 2080; p.al = 1338; p.av = false
-        w.kO = 1900; w.kP = 1100
+        w.kO = 1900; w.kP = 1100; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         var stripKill = false
         for (t in 0..1200) {
@@ -26458,8 +26458,8 @@ class Slice281Test {
             if (p.S == 5 && p.ak in 1960..2010 && p.al in 1290..1305)
                 mask = Pad.M_LEFT + Pad.M_UP
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             // tower C region: west of x1950 at y<=1300 (spring aw27's
@@ -26487,7 +26487,7 @@ class Slice281Test {
         w.stateL(8); settleIntro(w)
         val p = w.player
         p.setPositionPx(2100, 1520); p.ak = 2100; p.al = 1520; p.av = false
-        w.kO = 1850; w.kP = 1300
+        w.kO = 1850; w.kP = 1300; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..4000) {
             var mask = Pad.M_RIGHT
@@ -26528,8 +26528,8 @@ class Slice281Test {
             // the player back).
             if (p.S == 310) mask = if (t % 2 == 0) Pad.M_CONTEXT else 0
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 160 < w.kP) w.kP = p.al + 160
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 160 < w.kP) w.kP = p.al + 160; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             // past cp202 aw202 (2631,1806..2671,1934) on `20`@1940
@@ -26558,7 +26558,7 @@ class Slice281Test {
         val p = w.player
         p.setPositionPx(2930, 1939); p.ak = 2930; p.al = 1939; p.av = true
         p.setAnim(5); p.aZ = true
-        w.kO = 2850; w.kP = 1650
+        w.kO = 2850; w.kP = 1650; w.rebuildCamRect()
         var maxAk = 0; var sawKick = false; var saw1880 = false
         for (t in 0..420) {
             var mask = Pad.M_RIGHT + Pad.M_UP
@@ -26582,8 +26582,8 @@ class Slice281Test {
             }
             if (foe != null && p.aZ && mask == Pad.M_RIGHT + Pad.M_UP) mask = Pad.M_CONTEXT
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 160 < w.kP) w.kP = p.al + 160
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 160 < w.kP) w.kP = p.al + 160; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.S == 101) sawKick = true
@@ -26687,8 +26687,8 @@ class Slice282Test {
             if (!p.aZ && p.ak in 930..1040 && p.S != 297 && p.S != 295 &&
                 p.S != 89) mask = 0
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak >= 2229) { legReached = true; break }
@@ -26713,7 +26713,7 @@ class Slice282Test {
         val p = w.player
         p.setPositionPx(3980, 160); p.ak = 3980; p.al = 160; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 4080; w.kP = 700
+        w.kO = 4080; w.kP = 700; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..3600) {
             var mask = Pad.M_RIGHT
@@ -26750,8 +26750,8 @@ class Slice282Test {
             }
             if (foe2 != null) mask = Pad.M_CONTEXT + Pad.M_RIGHT
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak >= 4400 && p.aZ) { legReached = true; break }
@@ -26767,7 +26767,7 @@ class Slice282Test {
         val p = w.player
         p.setPositionPx(4400, 279); p.ak = 4400; p.al = 279; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 4620; w.kP = 800
+        w.kO = 4620; w.kP = 800; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..3600) {
             var mask = Pad.M_RIGHT
@@ -26807,8 +26807,8 @@ class Slice282Test {
                 }
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak >= 5310 && p.aZ) { legReached = true; break }
@@ -26838,7 +26838,7 @@ class Slice282Test {
         // unavoidable civ au<2 panic hits (range-free T==3 flails).
         p.setPositionPx(6520, 939); p.ak = 6520; p.al = 939; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 6320; w.kP = 940
+        w.kO = 6320; w.kP = 940; w.rebuildCamRect()
         // legD — the carrier-QTE crossing, verified end-to-end:
         // zone aw674-S8 @(6548,802) → script 693 boards carrier aw594
         // (UP prompt+QTE) → bound ride east at 150% through the civ
@@ -26916,7 +26916,7 @@ class Slice282Test {
         // landing. Start checkpoint-style on the tower top (leg D's end).
         p.setPositionPx(8260, 739); p.ak = 8260; p.al = 739; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 8060; w.kP = 740
+        w.kO = 8060; w.kP = 740; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..4000) {
             var mask = Pad.M_RIGHT
@@ -26981,7 +26981,7 @@ class Slice282Test {
         // Target: the y820 shelf east of the crest (x12100+).
         p.setPositionPx(10969, 839); p.ak = 10969; p.al = 839; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 10769; w.kP = 720
+        w.kO = 10769; w.kP = 720; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..4000) {
             var mask = Pad.M_RIGHT
@@ -27032,7 +27032,7 @@ class Slice282Test {
         // landing on the east mass top ~y540-660 at x13080+.
         p.setPositionPx(12000, 679); p.ak = 12000; p.al = 679; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 11800; w.kP = 560
+        w.kO = 11800; w.kP = 560; w.rebuildCamRect()
         var legReached = false; var maxAk = 0
         for (t in 0..6000) {
             var mask = Pad.M_RIGHT + Pad.M_UP
@@ -27082,7 +27082,7 @@ class Slice282Test {
         // M_CONTEXT → S277 mount → S317 ride east → screenL(15) WIN.
         p.setPositionPx(13090, 545); p.ak = 13090; p.al = 545; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 12800; w.kP = 420
+        w.kO = 12800; w.kP = 420; w.rebuildCamRect()
         for (e in w.npcs) if (e.aw == 925 || e.aw == 924 || e.aw == 606 ||
             e.aw == 409 || e.aw == 613 || e.aw == 620 || e.aw == 910 ||
             e.aw == 912 || e.aw == 263 || e.aw == 780 || e.aw == 610 ||
@@ -27670,8 +27670,8 @@ class Slice289Test {
         for (t in 0..8000) {
             val mask = chaseMask289(p, w)
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             val m = chaseMask289(p, w)
@@ -27718,7 +27718,7 @@ class Slice289Test {
         // S32 marker @(1953,289) refuses to arm without J&2
         // (NpcFsm.kt:3882).
         p.gJ = p.gJ or 2
-        w.kO = 1100; w.kP = 560
+        w.kO = 1100; w.kP = 560; w.rebuildCamRect()
         var reached = false; var maxAk = 0
         for (t in 0..8000) {
             // Slice 404: on the block2/3 tops (x >= 2560) two soldiers flank the
@@ -27728,8 +27728,8 @@ class Slice289Test {
             // blocked and the duel is the route: chaseMask289's melee override.
             val mask = chaseMask289(p, w)
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak >= 3043 && p.al <= 410 && p.aZ) { reached = true; break }
@@ -27804,7 +27804,7 @@ class Slice289Test {
         // @(5135,797).
         p.setPositionPx(4880, 930); p.ak = 4880; p.al = 930; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 4700; w.kP = 800
+        w.kO = 4700; w.kP = 800; w.rebuildCamRect()
         var reached = false; var maxAk = 4880; var prevS = -1
         for (t in 0..3000) {
             var mask = chaseMask289(p, w)
@@ -27823,8 +27823,8 @@ class Slice289Test {
                     else -> Pad.M_UP
                 }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.S != prevS || t % 60 == 0 || (p.ak > 5050 && t % 12 == 0))
@@ -27864,7 +27864,7 @@ class Slice289Test {
         val guard65 = w.npcs.firstOrNull { it.aw == 65 }
         p.setPositionPx(5318, 634); p.ak = 5318; p.al = 634; p.av = false
         p.S = 260; p.ga = m62; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 5100; w.kP = 470
+        w.kO = 5100; w.kP = 470; w.rebuildCamRect()
         var reached = false; var maxAk = 5318; var upTicks = 0
         var prevS = -1; var stall = 0; var lastAk = 5318
         for (t in 0..7000) {
@@ -27894,8 +27894,8 @@ class Slice289Test {
             }
             if (mask == Pad.M_UP) upTicks++
             w.pad.e(if (p.S == 69 && p.T == 4) 0 else mask)      // legI: let go on the S69 last frame
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -27931,7 +27931,7 @@ class Slice289Test {
         // chain across the lethal floor to the right bridge -> cp303.
         p.setPositionPx(5870, 219); p.ak = 5870; p.al = 219; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 5700; w.kP = 100
+        w.kO = 5700; w.kP = 100; w.rebuildCamRect()
         var reached = false; var maxAk = 5870; var prevS = -1; var stall = 0; var lastAk = 5870
         for (t in 0..7000) {
             p.gJ = 7
@@ -27964,8 +27964,8 @@ class Slice289Test {
                 else -> Pad.M_RIGHT                          // airborne: drift east
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -27999,7 +27999,7 @@ class Slice289Test {
         // the x7380+ roof (y640), then east on the roof to cp404.
         p.setPositionPx(7105, 1050); p.ak = 7105; p.al = 1050; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 6900; w.kP = 890
+        w.kO = 6900; w.kP = 890; w.rebuildCamRect()
         var reached = false; var maxAk = 7105; var prevS = -1; var stall = 0; var lastAk = 7105
         for (t in 0..7000) {
             p.gJ = 7
@@ -28010,8 +28010,8 @@ class Slice289Test {
                 else -> Pad.M_RIGHT
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -28045,7 +28045,7 @@ class Slice289Test {
         // via the ax15 grapple-block chain @x8795-9454 to cp408.
         p.setPositionPx(8090, 600); p.ak = 8090; p.al = 600; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 7900; w.kP = 440
+        w.kO = 7900; w.kP = 440; w.rebuildCamRect()
         var reached = false; var maxAk = 8090; var prevS = -1; var stall = 0; var lastAk = 8090
         for (t in 0..9000) {
             p.gJ = 7
@@ -28075,8 +28075,8 @@ class Slice289Test {
                 else -> Pad.M_RIGHT
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -28116,7 +28116,7 @@ class Slice289Test {
         p.gJ = 7
         p.setPositionPx(11135, 985); p.ak = 11135; p.al = 985; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 10900; w.kP = 800
+        w.kO = 10900; w.kP = 800; w.rebuildCamRect()
         var reached = false; var maxAk = 11135; var prevS = -1; var stall = 0; var lastAk = 11135
         for (t in 0..9000) {
             p.gJ = 7
@@ -28148,8 +28148,8 @@ class Slice289Test {
                 else -> Pad.M_RIGHT + Pad.M_UP
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -28185,7 +28185,7 @@ class Slice289Test {
         p.gJ = 7
         p.setPositionPx(12280, 939); p.ak = 12280; p.al = 939; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 12080; w.kP = 780
+        w.kO = 12080; w.kP = 780; w.rebuildCamRect()
         var reached = false; var maxAk = 12280; var prevS = -1; var stall = 0; var lastAk = 12280
         var settle = 0; var wasS90 = false
         for (t in 0..60000) {
@@ -28307,8 +28307,8 @@ class Slice289Test {
             // (worn down at x12600-12680). Let go on the S69 last frame
             // (T4): the next combo then restarts from S0 a tick later.
             w.pad.e(if (p.S == 69 && p.T == 4) 0 else mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -28347,7 +28347,7 @@ class Slice289Test {
         p.gJ = 7
         p.setPositionPx(13564, 699); p.ak = 13564; p.al = 699; p.av = false
         p.S = 0; p.Q = -1; p.ah = 0; p.aj = 0; p.refreshBoxes()
-        w.kO = 13380; w.kP = 520
+        w.kO = 13380; w.kP = 520; w.rebuildCamRect()
         var reached = false; var maxAk = 13564; var prevS = -1; var stall = 0; var lastAk = 13564
         for (t in 0..30000) {
             p.gJ = 7
@@ -28405,8 +28405,8 @@ class Slice289Test {
                 else -> Pad.M_RIGHT + Pad.M_UP
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.ak == lastAk && p.aZ) stall++ else { stall = 0; lastAk = p.ak }
@@ -28497,8 +28497,8 @@ class Slice291Test {
         val marks = mutableListOf<String>()
         for (t in 0..12000) {
             w.pad.e(chaseMask291(p, w))
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.ak > maxAk) maxAk = p.ak
             if (p.al < minAl) minAl = p.al
@@ -28540,11 +28540,11 @@ class Slice291Test {
         w.stateL(8); settleIntro(w)
         val p = w.player
         p.setPositionPx(6060, 219); p.refreshBoxes()
-        w.kP = 700
+        w.kP = 700; w.rebuildCamRect()
         for (t in 0..160) { w.pad.e(0); w.tick(emptyList()) }
         var maxAk = p.ak; var cp113 = false; var died = false
         for (t in 0..900) {
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
             val threat = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
                     kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
@@ -28626,11 +28626,11 @@ class Slice291Test {
         w.stateL(8); settleIntro(w)
         val p = w.player
         p.setPositionPx(6060, 219); p.refreshBoxes()
-        w.kP = 700
+        w.kP = 700; w.rebuildCamRect()
         for (t in 0..160) { w.pad.e(0); w.tick(emptyList()) }
         var maxAk = p.ak; var released = false
         for (t in 0..1600) {
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
             val threat = w.npcs.firstOrNull {
                 (it.ax == 11 || it.ax == 73) && it.x1 > 0 && it.S != 139 && (it.P and 32) == 0 &&
                     kotlin.math.abs(it.ak - p.ak) < 120 && kotlin.math.abs(it.al - p.al) < 90
@@ -28712,7 +28712,7 @@ class Slice291Test {
         // pin standing where leg C's perch uid139 rise deposits the player —
         // on lift uid410@(8293,304)'s top (probe: lands at (8312,304)).
         p.setPositionPx(8312, 296); p.refreshBoxes()
-        w.kO = 8000; w.kP = 150
+        w.kO = 8000; w.kP = 150; w.rebuildCamRect()
         for (t in 0..60) { w.pad.e(0); w.tick(emptyList()) }
         val wps = listOf(
             intArrayOf(8178, 304, 143), intArrayOf(8079, 240, 0),
@@ -28727,7 +28727,7 @@ class Slice291Test {
         )
         var wp = 0; var bindT = 0; var maxAk = 0; var maxAl = 0; var died = false
         for (t in 0..2400) {
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
             // Slice 369 (F8): the special-case arms above carry him over
             // the gap and the pillar without ever passing within reach of
             // waypoints 8-11, so after door uid166's S284/S285 transfer
@@ -28823,12 +28823,12 @@ class Slice291Test {
         w.stateL(8); settleIntro(w)
         val p = w.player
         p.setPositionPx(10700, 800); p.refreshBoxes()
-        w.kO = 10560; w.kP = 700
+        w.kO = 10560; w.kP = 700; w.rebuildCamRect()
         var maxAk = 0; var minAl = 9999; var won = false
         for (t in 0..3000) {
             if (w.jC == 15) { won = true; break }
-            if (p.ak - 200 > w.kO) w.kO = p.ak - 200
-            if (p.al - 120 > w.kP) w.kP = p.al - 120
+            if (p.ak - 200 > w.kO) w.kO = p.ak - 200; w.rebuildCamRect()
+            if (p.al - 120 > w.kP) w.kP = p.al - 120; w.rebuildCamRect()
             // Slice 388: the two patrol guards on the lower mass wake as he
             // drops in (aA = 1) and az() keeps `g` bound to them (LOS-gated
             // rebinding only — the old unbind flicker is gone), which blocks
@@ -28886,7 +28886,7 @@ class Slice291Test {
         w.stateL(8); settleIntro(w)
         val p = w.player
         p.setPositionPx(10160, 560); p.refreshBoxes()
-        w.kO = 10080; w.kP = 400
+        w.kO = 10080; w.kP = 400; w.rebuildCamRect()
         var maxAk = 0; var won = false; var died = false
         for (t in 0..3000) {
             // l(15) re-enters as l(22) the same tick when a medal stamps
@@ -28894,8 +28894,8 @@ class Slice291Test {
             // slice 382 counts every k.e(0,aw) site
             if (w.jC == 15 || w.jC == 22) { won = true; break }
             if (w.jC == 12 || w.jC == 13) { died = true; break }
-            if (p.ak - 200 > w.kO) w.kO = p.ak - 200
-            if (p.al - 120 > w.kP) w.kP = p.al - 120
+            if (p.ak - 200 > w.kO) w.kO = p.ak - 200; w.rebuildCamRect()
+            if (p.al - 120 > w.kP) w.kP = p.al - 120; w.rebuildCamRect()
             val foe = w.npcs.filter { it.ax == 11 && it.aB > 0 && it.S != 139 &&
                 kotlin.math.abs(it.ak - p.ak) < 130 && kotlin.math.abs(it.al - p.al) < 80 }
                 .minByOrNull { kotlin.math.abs(it.ak - p.ak) }
@@ -29078,8 +29078,8 @@ class Slice297Test {
             if (foe != null && kotlin.math.abs(foe.ak - p.ak) < 70)
                 mask = if (foe.ak < p.ak) Pad.M_LEFT + Pad.M_CONTEXT else Pad.M_RIGHT + Pad.M_CONTEXT
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (boss != null) {
                 assertTrue(boss.ak > -50,
@@ -29155,8 +29155,8 @@ class Slice297Test {
                 bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (w.jC == 15) break
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
@@ -29211,8 +29211,8 @@ class Slice298Test {
                 bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (w.jC == 15) break
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
@@ -29269,8 +29269,8 @@ class Slice298Test {
             }
             jumpCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
@@ -29324,8 +29324,8 @@ private fun driveDuelWin300(w: Level0World, p: Entity) {
                 bossDodge297(p, w, boss)?.let { mask = it }       // slice 410
             }
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (w.jC == 15) return
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
@@ -29370,8 +29370,8 @@ private fun driveRopeClimb300(w: Level0World, p: Entity) {
             }
             jumpCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (w.jC == 15) return
             if (w.jC == 21) { if (t % 40 == 0) { w.pad.e(Pad.M_CONTEXT); w.pad.releaseFlush() }; continue }
@@ -29434,8 +29434,8 @@ class Slice300Test {
             }
             jumpCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S != lastS) {
                 if (trace.size == 60) trace.removeFirst()
@@ -29525,8 +29525,8 @@ class Slice301Test {
             }
             jumpCd--; pressCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S == 243) flung = true
             if (p.S != lastS) {
@@ -29616,8 +29616,8 @@ class Slice302Test {
             }
             jumpCd--; wheelCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
@@ -29762,8 +29762,8 @@ class Slice303Test {
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release beats every nudge
             jumpCd--; wheelCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
@@ -29897,8 +29897,8 @@ class Slice304Test {
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN   // gap rims: hang release
             jumpCd--; wheelCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {
@@ -30107,8 +30107,8 @@ class Slice306Test {
             if (chainDone && (p.S == 61 || p.S == 62 || p.S == 60) && p.ak > 1300) mask = Pad.M_DOWN
             jumpCd--; wheelCd--; pressCd--
             w.pad.e(mask)
-            if (p.al - 240 > w.kP) w.kP = p.al - 240
-            if (p.al + 120 < w.kP) w.kP = p.al + 120
+            if (p.al - 240 > w.kP) w.kP = p.al - 240; w.rebuildCamRect()
+            if (p.al + 120 < w.kP) w.kP = p.al + 120; w.rebuildCamRect()
             w.tick(emptyList())
             if (p.S == 243 && !launched) wheelFlung = true
             if (p.S != lastS) {

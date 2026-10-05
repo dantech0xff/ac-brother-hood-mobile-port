@@ -258,3 +258,17 @@ tái vũ trang toàn bộ trạng thái ctor — giờ gói trong `Entity.resetT
 `g.B`, `g.f` (FX marker); `g.I/g.J` cũng không xoá nhưng `I(aj)`→`F(aj)` ghi lại `g.I=1`, `g.J|=f0do[aj]` trên
 đường loadMission (không phải persist). `g.y` bị `i(r[5])` ghi `= al` ở vị trí record mỗi spawn — không phải
 field persist. Hai bản copy của `g.b` (`gb` + `playerLinkB`) đều phải chết theo spawn.
+
+## `i.v()` cull theo SNAPSHOT `k.ac` (slice 418, `proven` — byte `i/k.javap.txt`, P1b)
+
+`k.ac` là mảng `int[4]` thật — **không phải rect suy diễn live**. Chỉ hai method ghi (`iastore`):
+`k.m(int)` ở đuôi (@2680-2719, sau latch `ai()`) và `k.D()` ở cả arm snap (`@52-91`: `cA=O; cB=P;
+ac={O,P,O+400,P+240}; return`) lẫn đuôi autoscroll (@651-690); `k.<clinit>` alloc `{0,0,400,240}`.
+Trong tick `k.I()`, mười lần dispatch `i.I()` + `i.v()` của player (@318) đều chạy **TRƯỚC** camera
+phase (@1020 `D()` / @1029 `m(I)`); `i.w()` @1089 chạy sau nên thấy rect MỚI — hỗn hợp cố ý.
+
+Hệ quả: mọi ghi `k.O/k.P` giữa tick — arm lerp camera `r04==1` của group-script (`w.kO += …`,
+Entity.kt:2342), shift `kDU` (`camY = camB`, simI), claim-camera `k.Z` — **không** đổi mép cull của
+`v()` cho tới phase camera kế tiếp. `i.u()` (chấm khoảng cách `au`) vẫn đọc `k.O/k.P` LIVE (@4/@17)
+— chỉ phép overlap `a(k.ac, W/Y)` là stale một tick. Port giờ giữ `ac` thật + `rebuildCamRect()` tại
+đúng 3 site trên; test stage `kO/kP` phải gọi rebuild sau staging (= "camera phase đã chạy xong").

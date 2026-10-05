@@ -94,7 +94,7 @@ class Slice400Test {
         error("no wall in the level-0 map")
     }
 
-    private fun camOn(w: Level0World, x: Int, y: Int) { w.kO = x - 200; w.kP = y - 120 }
+    private fun camOn(w: Level0World, x: Int, y: Int) { w.kO = x - 200; w.kP = y - 120; w.rebuildCamRect() }
 
     private fun place(w: Level0World, x: Int, y: Int) {
         w.player.setPositionPx(x, y); w.player.refreshBoxes(); w.player.S = 0

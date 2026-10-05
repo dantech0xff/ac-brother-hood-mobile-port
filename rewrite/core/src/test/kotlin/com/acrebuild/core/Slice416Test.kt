@@ -413,7 +413,7 @@ class Slice416Test {
 
     @Test fun `the ax21 director's W is translated by bY minus the camera and bZ - not by its own ak al`() {
         val w = world(); w.stateL(8); settleIntro(w)
-        w.kO = 300
+        w.kO = 300; w.rebuildCamRect()
         val d = Entity(21, w.clips[13]); d.setPositionPx(700, 90); d.bY = 500; d.bZ = 40
         d.refreshBoxes()
         val ref = Entity(23, w.clips[13]); ref.setPositionPx(500 - 300, 40)    // a generic box at (bY - k.O, bZ)
@@ -442,7 +442,7 @@ class Slice416Test {
         val p = w.player
         p.setAnim(0)
         p.setPositionPx(1000, 500); p.refreshBoxes()
-        w.kO = 700; w.kP = 300                                  // in view
+        w.kO = 700; w.kP = 300; w.rebuildCamRect() // in view
         val dx0 = p.W[0] - p.ak; val dx2 = p.W[2] - p.ak
         solidBlock(w, p, (p.W[0] - 30) / 20 - 1, p.W[2] / 20 + 8)   // free ring only on the left
         // the byte-exact model: r2 = W[2] re-read after each t(); up to four passes
@@ -470,7 +470,7 @@ class Slice416Test {
             if (p.W[0] % 20 == 19) break
             x++
         }
-        w.kO = 700; w.kP = 300                                  // in view
+        w.kO = 700; w.kP = 300; w.rebuildCamRect() // in view
         val dx0 = p.W[0] - p.ak; val dx2 = p.W[2] - p.ak
         val row = (p.W[1] % 260 + 260) / 20
         solidBlock(w, p, p.W[0] / 20 - 8, p.W[2] / 20 + 2)      // free ring only on the right
@@ -491,7 +491,7 @@ class Slice416Test {
         val p = w.player
         p.setAnim(0)
         p.setPositionPx(1600, 500); p.refreshBoxes()
-        w.kAi = true; w.kO = 1000; w.kP = 300
+        w.kAi = true; w.kO = 1000; w.kP = 300; w.rebuildCamRect()
         solidBlock(w, p, (p.W[0] - 30) / 20 - 1, p.W[2] / 20 + 8)
         val staleW0 = p.W[0]
         assertTrue(p.canyonCollide(w))
