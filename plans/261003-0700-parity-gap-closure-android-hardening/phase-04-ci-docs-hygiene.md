@@ -26,8 +26,8 @@ repo debris.
 
 - 4.1 CI: `.github/workflows/ci.yml` (static / jvm / android jobs, Temurin 17,
   UTF-8 locale). The verifier also passes with JDK 17's `javap` (checked
-  locally). Not yet exercised on GitHub — it runs on the next PR or push to
-  `main`.
+  locally). Exercised on GitHub since: PRs #385 and #386 ran all three jobs green
+  (about 3 minutes each).
 - 4.2 `rewrite/tools/bootstrap-dev-env.sh` (idempotent; `--no-install` audit
   mode); SDK pins fixed in `rewrite/README.md` (`build-tools;35.0.0` is AGP
   8.13.2's default, read from its `ToolsRevisionUtils`).

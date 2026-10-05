@@ -159,6 +159,16 @@ class Level0Game : ApplicationAdapter() {
         clips[23] = Clip.load(Gdx.files.internal("clips/clip23/clip.acpk").readBytes())   // ax66 platform
         clips[28] = Clip.load(Gdx.files.internal("clips/clip28/clip.acpk").readBytes())   // ax51 crate
         clips[44] = Clip.load(Gdx.files.internal("clips/clip44/clip.acpk").readBytes())   // ax31
+        // slice 390: the per-record clip tables' pack-3 entries (k.bk/bm/bn)
+        // and the converted clips this loader had never listed — the unit
+        // tests' `world()` carried them, the app did not, so those entities
+        // spawned clipless (invisible, no hitbox) on a device: ax6 markers
+        // (4), the ax54/ax56 flyers (19), ax67 springboards (27) and
+        // interactives (35), ax30/ax32 runners (36), every `a(24, 40, …)`
+        // projectile/floatie/burst (40) and ax61 (71).
+        // ClipLoadParityTest keeps this list == generated/clips/.
+        for (id in intArrayOf(4, 19, 24, 27, 34, 35, 36, 37, 40, 41, 65, 66, 67, 69, 71, 72))
+            clips[id] = Clip.load(Gdx.files.internal("clips/clip$id/clip.acpk").readBytes())
         audio.create()
         boot()
     }

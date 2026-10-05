@@ -40,6 +40,7 @@ I() → case {11,17,23,47,50,73}:
 | `aE()` | **ceiling ambush** (Z[14]∈{1,6,7}): player dưới trong S∈{24,22,43,150,35,157} → player `i(89)` knockdown, self `i(24)` pin (aC=30); player quá xa (≥20 tile)→`i(20)` |
 | `aF()`/`aG()` | edge detection (tile `e()==20/5` = void, crate edge) |
 | `aH()` | inert/dead set {0,20,21,106,107,117,139,168,169,176} |
+| `j(i)` **static** (`proven`, `i.javap.txt` @0-71, slice 415) | "gone hoặc đã chết": `r==null` → true; `ax∈{11,17,29,27} && r.P()` → true (`P()` = `aB<=0 → G(); true`, tức **dead**); loại khác → false. Dùng bởi ax5 `aq()` S8 (Z[1]=0/3/10/13/17) và ax37 `al()` (link mode 0/3). **Không** trùng `i.j()` private (soldier intake) |
 | `aI()` | **stomp-pad**: overlap player→player `i(243)` launch (±3328/−6656), self `i(184)`+`aB=0` — bounce-kill |
 | `e(iVar)` | Bresenham LOS tile `e()>=12` chắn tầm nhìn |
 | `Q()` | face player (`av = aS.ak<ak`) |
@@ -126,6 +127,18 @@ S=0 idle return; 81 timer→82→80; 83 fall M()→84→0; 93 cùng pounce-check
 Không có inner case → chạy preamble + `au()` thôi: vẫn đếm kill (`dv`,
 có trong killable list), điều khiển bởi level-script/`d(i)` reset `i(79)`.
 Khớp vai trò dân/hostage/prop-người.
+
+## ax==11 — đầu script-claim (`I()` @1700-1951, `proven`, slice 415)
+
+Soldier ax11 được gắn script khi record có `Z[13]` hợp lệ (`ca != -1`, `d=true` lúc init). Mỗi tick, **trước** các arm:
+
+1. `l()` thấy player, **hoặc** player trong 40×50px (`aS.aA&8==0`, không `i.bn`), **hoặc** attack-box `aS.X` chạm `W`
+   → ngắt (chỉ khi `cd[7]` và player không ở S268/267/291): `P&=-17; d=false`.
+2. `d` còn → `P|=16; aa()` và **bỏ qua toàn bộ arm** (`goto 7660` → `au()` → tail chung).
+3. `d` hết → `bI()`; `ca=-1`; `i(2)` (trừ S117); `S==2 → aA=0`; arm chạy bình thường.
+
+Shipped data: mission 6 có 2 sentry như vậy (`Z[13]`=97/112, script **không có block** nên `aa()` là no-op) —
+đứng yên tại chỗ cho tới khi player lại gần / tấn công / bị thấy.
 
 ## Constants mới xác nhận
 

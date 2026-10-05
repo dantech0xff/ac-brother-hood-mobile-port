@@ -106,14 +106,20 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var standingOn: Entity?
         get() = ga
         set(v) { ga = v }
-    /** `ac` — resolved link target; writes run `i.a(i)` (i.java:229,
-     *  proven): clear `P|256` on the old target, set it on the new. */
-    var ac: Entity? = null
+    private var acRef: Entity? = null
+    /** `ac` — resolved link target; a plain write is `i.a(i)` (i.java:229, proven): clear `P|256` on
+     *  the old target, set it on the new. The original has exactly FOUR raw `putfield ac` sites
+     *  outside that setter — `g.a(I)V` @31-37, `g.e()` @12688 (S228/358 release), `g.as()` @248 and
+     *  `g.au()` @1431 (raw bytes, slice 416) — which leave `P&256` alone: those use [putAc]. */
+    var ac: Entity?
+        get() = acRef
         set(o) {
-            field?.P = field!!.P and -257
-            field = o
-            o?.P = o.P or 256
+            acRef?.let { it.P = it.P and -257 }
+            acRef = o
+            o?.let { it.P = it.P or 256 }
         }
+    /** A raw `putfield i.ac` — no `P&256` bookkeeping (see [ac]). */
+    fun putAc(o: Entity?) { acRef = o }
     var l = 0                        // attack level fed to a(op,l,..)
     var hitsTaken = 0                // slice-3 instrumentation (inferred counter)
     var gt = 0                       // g.t iframe timer: 10 after drain, 5 after
@@ -241,8 +247,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
     var wpBt: Waypoint? = null     // i.bt — current chain waypoint (c.a)
     var wpF: Waypoint? = null      // i.F — bound companion waypoint (c.a(Z[5]))
     var runnerG = false            // i.G — ax56 pattern-done flag (ay())
-    var projB = false              // i.b — explode-on-contact flag (ba())
-    var projK = false              // i.k — lobbed-arc phase flag (ba())
     var cHWaypoints: Array<IntArray>? = null  // i.cH — homing waypoint
                                               // table on the owner (af)
     var cIDone = false             // i.cI — attack-script done (bool)
@@ -411,14 +415,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
     /** `i.J()` (i.java:7002-7020, proven): the ax71 companion overlay
      *  (`k.E`) — mirrors the player's `ak`/`al` + facing bit each tick,
      *  then hides (`P|128`) once its anim has finished; while the anim
-     *  still runs it stays visible unless the `j.c==21` dialog is up
-     *  without the `k.u==8` skip key held. */
+     *  still runs it stays visible unless the `j.c==21` dialog is up and
+     *  its kind `k.u` is not 8. Raw bytes @60-79 (slice 416): `k.u:I` is
+     *  the dialog kind written only by `k.b(IIII)Z` (`u = n`) and `ag()`
+     *  (`u = 8`) = [LevelCellSource.dlgU] — the port compared the pad's
+     *  held-key word (`bC`) against 8 instead. */
     fun followJ(p: Entity, world: LevelCellSource) {
         ak = p.ak
         al = p.al
         if (p.av) P = P or 1 else P = P and -2
         if (!animFinished()) {
-            if (world.jC != 21 || world.padHeldWord() == 8) return
+            if (world.jC != 21 || world.dlgU == 8) return
         }
         P = P or 128
     }
@@ -449,7 +456,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         if (ax == 11 && Z[0] == 1 && aB <= WEAPON_DMG[w.weaponSlot]) {
             Z[0] = 2; setAnim(144)
-            p.spawnMarker(w, 45, ak, al - 85)   // aS.a(45, ak, al-85)
+            // C() @54-74: `aS.a(45, aS.ak, aS.al - 85)` — receiver AND coordinates
+            // are the PLAYER's (getstatic aS ×3); the port used the soldier's.
+            p.spawnMarker(w, 45, p.ak, p.al - 85)
             return true
         }
         if (ax == 73 && Z[0] == 0 && aB <= WEAPON_DMG[w.weaponSlot]) {
@@ -520,11 +529,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         val r07 = WEAPON_DMG[w.weaponSlot] shl 1 // i.bu[k.au] << 1
         if (K <= 3) return
-        w.spawnProjectile(av, L, M)              // i.a(8,5,14,av,L,M,300)
+        w.spawnProjectile(av, gQL, gQM)          // i.a(8,5,14,av,L,M,300) — g.L/g.M = the PLAYER's instance
+                                                 // fields (`aload_0; getfield L`, raw bytes @254-263), set by aB()
         when {
             t.ax == 4 -> if (t.S == 30) t.setAnim(29)
             t.ax == 58 -> when (t.S) {
-                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                // @384-393 (raw bytes, slice 413): `g.i(i.S + 1)` — the PLAYER's S plus one (the
+                // reach / throw anim picked above, 299-302 or 304-306), not the lever's own;
+                // that is not an anim of the lever's clip, so `i(int)` ignores it
+                0, 5, 7, 9, 11 -> t.setAnim(S + 1)
                 2 -> t.setAnim(3)
                 else -> {}
             }
@@ -539,7 +552,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `g.c(i r8)` (g.java:4115, proven) — zero velocity, pick the lunge
-     *  anim (attack state → 292; S==298 keeps anim; else by the 8.8
+     *  anim (airborne / hanging state, `g.b(int)` → 292; S==298 keeps anim; else by the 8.8
      *  rise:run ratio r04/r03 → 272/273/274/275 arcs), then compute the
      *  per-tick step (cC,cD) that carries the player onto the target
      *  over the anim's cE frames. `F = r8` links the target for the
@@ -549,7 +562,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      */
     fun grabLunge(t: Entity, w: LevelCellSource) {
         refreshBoxes()
-        bq = 0                       // i.bq static — cleared on grab
+        entBq = 0                    // @5-6 `putstatic i.bq` (slice 416): the ONE crate-top static `g.m()` reads
         aj = 0; ai = 0; ah = 0; ag = 0
         val r0 = (W[0] + W[2]) shr 1
         val r02 = (W[1] + W[3]) shr 1
@@ -560,7 +573,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         }
         val r03 = Math.abs(r11 - r0)
         val r04 = Math.abs(r12 - r02) shl 8
-        if (PlayerFsm.isAttackState(S)) { setAnim(292); w.sfx(30) }
+        // @138-160 (raw bytes, slice 411): `invokestatic g.b:(I)Z` — the (I)Z overload, the
+        // airborne / hanging / climbing set, NOT the no-arg attack test (the same overload
+        // confusion as the hit intake's head, slice 410).
+        if (gB()) { setAnim(292); w.sfx(30) }
         else if (S == 298) w.sfx(30)         // L11: keeps current anim
         else if (r03 <= 0 || r04 <= 0) {     // L35/L38
             setAnim(if (r03 == 0) 275 else 272)
@@ -619,7 +635,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         enterStateMasked(43, 32, w)
         al += 10; ah = r5; aj = 1536
         standingOn = null
-        ac = null
+        putAc(null)                    // raw `putfield ac` @31-37: the old link target keeps its P|256
     }
 
     /**
@@ -657,7 +673,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 if (f.Z[4] >= 0) {
                     val r0 = w.findByAw(f.Z[4])
                     if (r0 != null) {
-                        f.ac = r0
+                        f.putAc(r0)                              // g.as() @248 raw `F.ac = k.q(..)`
                         r0.aq = f.ak - r0.ak; r0.ar = f.al - r0.al
                     }
                 }
@@ -705,7 +721,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (aO >= 20) flingAirborne(0, w)
         if (aO < 20) return
         if (ah >= 0) return
-        if (bq != 0) return                       // L27 (proven: i.java:7527
+        if (entBq != 0) return                    // L27 (proven: i.java:7527
                                                 // — first structural guard, while
                                                 // b(lVar) is a pre-despawn unit)
         refreshBoxes()
@@ -731,8 +747,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
         var r6 = clip.frameCount(41)
         if (S == 295) r6 = clip.frameCount(29)
         if (K >= r6) K = 0                          // L17/L19
-        L = (t.W[0] + t.W[2]) shr 1
-        M = ((t.W[1] + t.W[3]) shr 1) - 10
+        // @117-152 (raw bytes, slice 415): `putfield g.L` / `putfield g.M` — the PLAYER's instance
+        // fields (`aload_0`), which `k.b()` draws the gauge at; NOT the statics `i.L/i.M` (the
+        // touch-anchor point `o(x,y)` parks). The port wrote the statics and left `gQL/gQM` at 0,
+        // so the gauge was blitted at (-camX, -camY).
+        gQL = (t.W[0] + t.W[2]) shr 1
+        gQM = ((t.W[1] + t.W[3]) shr 1) - 10
     }
 
     // -- g.au() the mounted-orbit FSM (g.java:4389) -------------------------
@@ -889,7 +909,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         f.al = cK + r04
         val ac = f.ac ?: run { wallProbe(w); return }           // L186
         if (ac.S == 2 || ac.S == 3 || cB < 20) {                // L178→L181
-            f.ac = null
+            f.putAc(null)                                       // g.au() @1431 raw `F.ac = null`
             f.P = f.P or 160
             f.Z[4] = -1
             F = null
@@ -1025,8 +1045,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     // ==================================================================
-    // `t()` — i.java `public final int[] t()` (proven transcription of the
-    // main path; ax66/13/21/60 special cases and the Y bounds rect omitted).
+    // `t()` — i.java `public final int[] t()` (proven transcription: the main
+    // path plus the ax66 / ax13 / ax21 / ax60 special cases and the Y bounds).
     // W = clip rect(which=0) shifted by frame dx/dy, then + ak/al.
     // X = same for which=1. Facing flips the dx sign.
     // ==================================================================
@@ -1088,7 +1108,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
         // absolute translate (L102 X, L103 Y, L91 W)
         X[0] += ak; X[1] += al; X[2] += X[0]; X[3] += X[1]
         Y[0] += ak; Y[1] += al; Y[2] += ak; Y[3] += al
-        W[0] += ak; W[1] += al; W[2] += W[0]; W[3] += W[1]
+        if (ax == 21) {
+            // @1103-1172 (raw bytes, slice 416): the director's W is translated by `bY - k.O` / `bZ`
+            // (`bY`/`bZ` = the SCREEN-relative waypoint point) — a camera-space rect, not a world one.
+            W[0] += bY - (hostWorld?.kO ?: 0); W[1] += bZ
+        } else {
+            W[0] += ak; W[1] += al
+        }
+        W[2] += W[0]; W[3] += W[1]
         // ax60 tail (i.java:543-581, proven): the lift's travel-bound edge
         // is stretched to Z[5] — the init-probed solid. S9/10 → top,
         // S16/17 → bottom, S13/15 → left, S11/14 → right. Most clip-71
@@ -1288,11 +1315,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
             if (aT >= 10 && aV >= 10) {                           // L118 gate
                 if (freeSideC(world)) { if (!world.kAi) slideLeftB(i7, i8, i9, world) }
                 else slideRightC(i7, i8, i9, world)               // L10f
+                // @278 `iconst_1; ireturn` (raw bytes, slice 416): this arm leaves WITHOUT the
+                // trailing `t()` — only the else-arm and the no-embed path reach @322 `t()`.
+                return true
             } else if (aU >= 10 && aW >= 10) {                    // L118→L13b
                 if (freeSideC(world)) slideLeftB(i7, i8, i9, world)
                 else slideRightC(i7, i8, i9, world)
             }
-            refreshBoxes()                                        // L142 t()
+            refreshBoxes()                                        // L142 t() (@322)
             return true
         }
         // L149 — quiet path: kill/fail checks + extrude.
@@ -1325,12 +1355,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  free — up to 4 slides (r10 = 3,2,1,0), `ag=0` at the end. */
     private fun slideLeftB(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
         bb = true; aT = 10
+        var r2 = i8
         var r10 = 3
         while (aT >= 10) {
             if (r10 < 0) break
             r10--
-            ak -= (i8 % 20) + 1
+            ak -= (r2 % 20) + 1
             refreshBoxes()                                        // t()
+            // @53-66 (raw bytes, slice 416): `r1 = W[0]; r2 = W[2]` are re-read after EVERY t() — the
+            // first pass lands the right edge on a cell boundary, so passes 2-4 step a whole 20 px
+            // (the port repeated the first pass's `(W2 % 20) + 1` step).
+            r2 = W[2]
             aT = e(world, W[0] / 20, i9 / 20)
         }
         ag = 0
@@ -1341,12 +1376,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  free — same 4-slide bound, `ag=0` at the end. */
     private fun slideRightC(i7: Int, i8: Int, i9: Int, world: LevelCellSource) {
         bc = true; aU = 10
+        var r1 = i7
         var r10 = 3
         while (aU >= 10) {
             if (r10 < 0) break
             r10--
-            ak += 20 - ((i7 + 20) % 20)
+            ak += 20 - ((r1 + 20) % 20)
             refreshBoxes()                                        // t()
+            r1 = W[0]                                             // @57-70 (slice 416): re-read after t()
             aU = e(world, W[2] / 20, i9 / 20)
         }
         ag = 0
@@ -1369,20 +1406,24 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `a()` — i.java `private void a()` :914-993 (proven). The push/contact
-     * resolution run by ax9 (and S131/146 callers) against `k.aS`:
+     * `a()` — i.javap `private void a()` @0-477 (proven, slice 393: the
+     * port had modelled the simple decompile's displaced S131/146 block as
+     * an `aS.S == 12 && aS.g(this)` LOOP and left the right-push arm
+     * without its tail). The push/contact resolution against `k.aS`, one
+     * straight line:
      *  - early-outs: S139 corpse; player S6 roll vs ax11; `g.a.ax==43`
      *    grapple claim; S18 without a crouching player (S12);
-     *  - S131/146 jump straight to the L25 tail;
-     *  - L29: `W` vs `aS.W` overlap gate → `g.a != null` out →
-     *  - L34/L40: ax15 grapple anchor — `g.b(aS.S)` free-anim gate, snap
+     *  - S131/146 continue only for `aS.S == 12 && aS.g(this)` (@71-112 —
+     *    the player is crouched facing us);
+     *  - @113-131: `W` vs `aS.W` overlap gate → `g.a != null` out;
+     *  - @137-264: ax15 grapple anchor — `g.b(aS.S)` free-anim gate, snap
      *    `aS` onto the nearer edge (`ak = W[2]|W[0]`, `al = W[1]+1`),
-     *    `aS.i(209)`, release `ac`, `aC=0`, `g.a = this`;
-     *  - `aS.S > 43` (airborne) skips the push arms;
-     *  - L50 left-block: player at-or-left not moving left and no wall →
-     *    snap to the entity's left edge, `ai=0`, `ag=-1`, `a(true)`, `ag=0`;
-     *  - L57 right-block mirrors it with `ag=1`, then falls into L25;
-     *  - L25/L27: while `aS.S==12 && aS.g(this)` re-eval the L29 body.
+     *    `aS.i(209)`, release `ac`, `aC=0`, `g.a = this`, return;
+     *  - `aS.S > 43` (airborne) → return;
+     *  - @276 left-block: player at-or-left, not moving left, no wall in
+     *    the travel direction → snap to our left edge, `ai=0`, `ag=-1`;
+     *  - @371 right-block mirrors it with `ag=1`;
+     *  - @463 BOTH arms — and the no-push case — end `aS.a(true); aS.ag=0`.
      */
     fun pushContact(world: LevelCellSource) {
         val p = world.player
@@ -1390,38 +1431,29 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (p.S == 6 && ax == 11) return
         if (p.ga != null && p.ga!!.ax == 43) return            // g.a claim
         if (S == 18 && p.S != 12) return
-        fun body(): Boolean {                                  // L29-L63
-            if (!overlapStrict(p.W, W)) return false
-            if (p.ga != null) return false                     // L32
-            if (ax == 15 && (S == 6 || S == 8) && p.gB()) {    // L40
-                p.ag = 0; p.ah = 0
-                p.setAnim(209)
-                p.ac = null                                    // aS.a(null)
-                aC = 0
-                p.ak = if (p.ak - ak > 0) W[2] else W[0]       // L44/L45
-                p.al = W[1] + 1
-                p.ga = this                                    // g.a = this
-                return false
-            }
-            if (p.S > 43) return false                         // L48
-            if (p.ak <= ak && p.ag >= 0 && !p.hitWall()) {     // L50
-                p.ak = ak - ((p.W[2] - p.W[0]) / 2) - ((W[2] - W[0]) / 2)
-                p.ai = 0; p.ag = 0; p.ag = -1
-                p.collideSides(world, true); p.ag = 0          // L63
-                return false
-            }
-            if (p.ak > ak && p.ag <= 0 && !p.hitWall()) {      // L57
-                p.ak = ak + ((p.W[2] - p.W[0]) / 2) + ((W[2] - W[0]) / 2)
-                p.ai = 0; p.ag = 0; p.ag = 1
-                return true                                    // → L25
-            }
-            p.collideSides(world, true); p.ag = 0              // L63
-            return false
+        if ((S == 131 || S == 146) && !(p.S == 12 && p.inFrontOf(this))) return
+        if (!overlapStrict(p.W, W)) return                     // @118 a(aS.W, W)
+        if (p.ga != null) return                               // @131
+        if (ax == 15 && (S == 6 || S == 8) && p.gB()) {        // @137-173
+            p.ag = 0; p.ah = 0
+            p.setAnim(209)
+            p.ac = null                                        // aS.a(null)
+            aC = 0
+            p.ak = if (p.ak - ak > 0) W[2] else W[0]           // @211-243
+            p.al = W[1] + 1
+            p.ga = this                                        // g.a = this
+            return
         }
-        val reachedL25 = if (S == 131 || S == 146) true else body()
-        while (reachedL25 && p.S == 12 && p.inFrontOf(this)) { // L25/L27
-            if (!body()) return
+        if (p.S > 43) return                                   // @265
+        if (p.ak <= ak && p.ag >= 0 && !p.hitWall()) {         // @276-304
+            p.ak = ak - ((p.W[2] - p.W[0]) / 2) - ((W[2] - W[0]) / 2)
+            p.ai = 0; p.ag = 0; p.ag = -1
+        } else if (p.ak > ak && p.ag <= 0 && !p.hitWall()) {   // @371-399
+            p.ak = ak + ((p.W[2] - p.W[0]) / 2) + ((W[2] - W[0]) / 2)
+            p.ai = 0; p.ag = 0; p.ag = 1
         }
+        p.collideSides(world, true)                            // @463 aS.a(1)
+        p.ag = 0
     }
 
     /**
@@ -1521,7 +1553,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         al -= 20
         probeCells(world)
         al += 20
-        if (aO >= 20) enterFall()                // a(0) — no return, verbatim
+        if (aO >= 20) enterFall(0, world)        // a(0) — no return, verbatim
         if (aO < 20 || ah >= 0 || entBq != 0) return
         refreshBoxes()
         val r0 = W[3]
@@ -1562,15 +1594,18 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /**
      * `a(int)` — g.java `void a(int r5)` (proven): leave the ground into the
-     * shared fall state: `a(43,32); al += 10; ah = r5; aj = 1536`.
+     * shared fall state: `a(43,32); al += 10; ah = r5; aj = 1536`. The masked
+     * `a(43,32)` re-centres `al` on the box centre of the last cell probe, so
+     * every caller needs the world (g.javap.txt:1284-1312; slice 413 — three
+     * world-less sites skipped the re-centre).
      */
-    fun enterFall(vy: Int = 0, world: LevelCellSource? = null) {
-        if (world != null) enterStateMasked(43, 32, world) else setAnim(43)
+    fun enterFall(vy: Int, world: LevelCellSource) {
+        enterStateMasked(43, 32, world)
         al += 10
         ah = vy
         aj = 1536
         standingOn = null
-        ac = null    // g.java:126 — `a = null; ac = null`
+        putAc(null)    // g.java:126 — `a = null; ac = null` (raw putfield: no P&256 release)
     }
 
     /**
@@ -1594,22 +1629,27 @@ open class Entity(val ax: Int, var clip: Clip?) {
             if (aR < 12 && (aS >= 12 || aS == 5)) al += 20
         }
         ah = 1
-        // d() fall-damage gate (g.java:4978-4981, proven): op21 fires
-        // only on a normal landing (not platform variant, not the S16/
-        // Q16 door-exit arms), >=20 cells below the apex, no iframes —
-        // `S==16||Q==16||z2||!z3||(al-y)/20<20||h() -> return`.
-        if (!platformVariant && S != 16 && Q != 16 &&
-            (al - gy) / 20 >= 20 && gt == 0) {
-            applyHit(21, 0, this, world)
-        }
+        // @88-211 (raw bytes, slice 413): the landing anim first — `r2` records "a real ground
+        // landing" (the S150 and plain arms; not the S16 / Q16 door-exit arm, not the platform
+        // variant) — then `if (I == 4) h(1)` (an equip-4 player is handed his sword back on
+        // touchdown), and only THEN the fall damage, which reads `S` / `Q` AFTER the switch.
+        var r2 = false
         if (platformVariant) {
             aj = 0; ai = 0; ah = 0; ag = 0; aC = 18; setAnim(102)
         } else {
             when {
                 S == 16 || Q == 16 -> { setAnim(5); ag = 0 }
-                S == 150 -> setAnim(152)
-                else -> { setAnim(5); ag = 0 }
+                S == 150 -> { setAnim(152); r2 = true }
+                else -> { setAnim(5); ag = 0; r2 = true }
             }
+        }
+        if (gI == 4) requestH(1, world)
+        // d() fall-damage gate (g.java:4978-4981, proven): op21 fires only on a normal landing
+        // (not platform variant, not the S16/Q16 door-exit arms), >=20 cells below the apex, no
+        // iframes — `S==16||Q==16||z2||!z3||(al-y)/20<20||h() -> return`.
+        if (!platformVariant && r2 && S != 16 && Q != 16 &&
+            (al - gy) / 20 >= 20 && gt == 0) {
+            applyHit(21, 0, this, world)
         }
         O = al shl 8
     }
@@ -1659,20 +1699,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (ak + (ag shr 8) <= i3 && w.kR > 0) { ag = 0; ak = i3 }
         else if (ak + (ag shr 8) >= i4 && w.kSBound > 0) { ag = 0; ak = i4 }
         if (attacker.ax == 61 && Q == 6) setAnim(6) else setAnim(9)
-    }
-
-    /**
-     * `g.d(int)` meter drain (proven, g.java:3884): skips while `s`
-     * (cheat/debug toggle — deliberately unported), `t != 0` iframes,
-     * `c()` linked-carry, or
-     * `S in {67,183,184,205}`; else `i.bh = 8` flash + `x[1] -= amt`
-     * clamped at 0; survival sets `t = 10`.
-     */
-    fun drainMeter(amt: Int) {
-        if (gt > 0 || S == 67 || S == 183 || S == 184 || S == 205) return
-        bh = 8
-        x1 = (x1 - amt).coerceAtLeast(0)
-        if (x1 > 0) gt = 10
     }
 
     /**
@@ -1813,16 +1839,22 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `i.b()` (i.java:1268-1279, proven): corner-support probe — refresh
-     * boxes (`t()`) then read the four W-corner cells into the scratch
-     * fields `aT` (top-left) / `aU` (top-right) / `aV` (bottom-left) /
-     * `aW` (bottom-right); true iff ANY corner cell `>= 12` (solid). The
-     * S85 hit-react uses it to skip the freeze+kick when fully over a pit.
-     * NOT a LOS/attack probe — misnamed in older notes.
+     * `i.b()` (i.javap `private boolean b()` @0-196, raw bytes, proven): corner-support probe —
+     * refresh boxes (`t()`), then — slice 412 — `k.ah != null` (the active scroll-wall holder,
+     * an ax37 with walls) answers TRUE at once unless the box lies strictly inside the holder's
+     * `W` (`W0 <= ah.W0 || W2 >= ah.W2 || W1 <= ah.W1 || W3 >= ah.W3`, @40-89; the scratch
+     * fields are left alone then), else read the four W-corner cells into the scratch fields
+     * `aT` (top-left) / `aU` (top-right) / `aV` (bottom-left) / `aW` (bottom-right); true iff ANY
+     * corner cell `>= 12` (solid). Callers: the S85 hit-react (`I()` @3390) and the ax60 mover's
+     * carry push-back (`c(Z)` @613). NOT the static attack test `g.b()` — that overload
+     * confusion was the port's `c(Z)` carry (slice 412).
      */
     fun cornerSupported(w: LevelCellSource): Boolean {
         refreshBoxes()
         val left = W[0]; val right = W[2]; val top = W[1]; val bot = W[3]
+        val ah = w.kAh
+        if (ah != null &&
+            (left <= ah.W[0] || right >= ah.W[2] || top <= ah.W[1] || bot >= ah.W[3])) return true
         aT = e(w, left / 20, top / 20)
         aU = e(w, right / 20, top / 20)
         aV = e(w, left / 20, bot / 20)
@@ -1853,31 +1885,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
         else -> if (av) bb else bc
     }
 
-    /**
-     * `i.aF()` (i.java:9192-9219, proven): ledge-edge probe — true when
-     * `standingOn` is an ax51 crate (`crateEdge`), else the foot cell at
-     * the facing edge is `∈{20,5}`: `e(W[2]/20+1,(W[3]+10)/20)` when `av`,
-     * `e(W[0]/20-1,·)` when `!av`.
-     */
-    fun aF(w: LevelCellSource): Boolean {
-        if (standingOn?.ax == 51 || entBq != 0) return true
-        val cy = (W[3] + 10) / 20
-        val cx = if (av) W[2] / 20 + 1 else W[0] / 20 - 1
-        val c = e(w, cx, cy)
-        return c == 20 || c == 5
-    }
-
-    /**
-     * `i.aG()` (i.java:9221-9251, proven): `aF()` mirror — the off-facing
-     * edge (av polarity flipped).
-     */
-    fun aG(w: LevelCellSource): Boolean {
-        if (standingOn?.ax == 51 || entBq != 0) return true
-        val cy = (W[3] + 10) / 20
-        val cx = if (av) W[0] / 20 - 1 else W[2] / 20 + 1
-        val c = e(w, cx, cy)
-        return c == 20 || c == 5
-    }
+    // `i.aF()` / `i.aG()` live in NpcFsm.kt as `crateEdge73` / `edgeAhead73`
+    // (slice 400/402): an earlier copy of both sat here with the cell test
+    // inverted (true over GROUND) and a `standingOn`/`bq` crate gate the
+    // bytecode does not have — its only caller, the S6 grab lunge, now uses
+    // the faithful probe.
 
     /**
      * `i.aI()` (i.java:9284-9336, proven): victim throws the player out
@@ -1915,9 +1927,9 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *  `indicatorIsHand`. */
     fun markerAlive(w: LevelCellSource): Boolean = indicatorIsHand(w)
 
-    /** `i.o(int,int)` (i.java:9825, proven): park the last marker point —
-     *  class statics `L`/`M` consumed by `b(x,y)` (:9829). */
-    fun markerPoint(x: Int, y: Int) { markerLx = x; markerLy = y }
+    /** `i.o(int,int)` (i.java:9825, proven): park the last marker point — the ONE pair of class
+     *  statics `L`/`M` (`Entity.L/M`) consumed by `b(x,y)` (:9829) = [Level0World.anchorZoneHit]. */
+    fun markerPoint(x: Int, y: Int) { L = x; M = y }
 
     /**
      * `i.d(int,int)` (i.java:9856, proven): move the `ae` marker to (x,y);
@@ -1994,16 +2006,19 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `g.k()` (g.java:4821, proven): mounted-rope input handler — runs
-     * from the bound ax13's `aW()` tick (`bM == k.aS`), not the player
-     * loop. aG==4 → climb `i(82)`/`bN--` (`bN-2<0 → j()` dismount);
-     * else held-D-pad pumps the pendulum (±512 clamp ±1280, `/80` feed)
-     * with anim picks {84,85}; `u(16388)` zeroes the swing → `i(82)`→
-     * `r()→i(326)` hang; `u(65568) → i(86)` let-go cue; `u(2)/u(8)` →
-     * `av` + `j()`.
+     * `g.k()` (g.javap @14261-14640, proven; raw bytes): mounted-rope input
+     * handler — runs from the bound ax13's `aW()` tick (`bM == k.aS`), not
+     * the player loop. `bM == null || bM.aG == 1` → return (@0-25). aG==4 →
+     * climb `i(82)`/`bN--` (`bN-2<0 → j()` dismount); else held-D-pad pumps
+     * the pendulum — each arm is `clamp-to-±1280` **or** `±512` (never both,
+     * @183-212/@284-313), then the `/80` feed — with anim picks {84,85};
+     * `u(16388)` zeroes the swing (`bO != 0 || bP != 0`) → `i(82)`→`r()→i(326)`
+     * hang; `u(33024)` zeroes only when `bO != 0` (@485-499 tests bO twice);
+     * `u(65568) → i(86)` let-go cue; `u(2)/u(8)` → `av` + `j()`.
      */
     fun ropeInput(w: LevelCellSource) {
         val r0 = bM ?: return
+        if (r0.aG == 1) return                                        // @14-25: bM.aG == 1 → return
         if (r0.aG == 4) {
             if (r0.bN - 2 < 0) { releaseRope(w); return }
             r0.bN--; setAnim(82); return
@@ -2015,16 +2030,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (w.padDown(8)) { av = false; releaseRope(w); return }      // u(8)
         if (w.padDown(8256)) {                                        // L38 pump
             if (r0.bP <= 0 && r0.bO >= 0) {
-                if (r0.bP > -1280) r0.bP = -1280
-                r0.bP += 512
+                if (r0.bP > -1280) r0.bP = -1280                      // @183-200 → goto 215
+                else r0.bP += 512                                     // @203-212: bP <= -1280
                 r0.bO += (20480 + r0.bP) / 80
             }
             setAnim(if (av) 85 else 84); return
         }
         if (w.padDown(4112)) {                                        // L57 pump
             if (r0.bP >= 0 && r0.bO <= 0) {
-                if (r0.bP < 1280) r0.bP = 1280
-                r0.bP -= 512
+                if (r0.bP < 1280) r0.bP = 1280                        // @284-301 → goto 316
+                else r0.bP -= 512                                     // @304-313: bP >= 1280
                 r0.bO -= (20480 - r0.bP) / 80
             }
             setAnim(if (av) 84 else 85); return
@@ -2040,7 +2055,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
             setAnim(326); return
         }
         if (w.padDown(33024)) {                                       // L103 descend
-            if (r0.bO != 0 || r0.bP != 0) { r0.bP = 0; r0.bO = 0; return }
+            if (r0.bO != 0) { r0.bP = 0; r0.bO = 0; return }          // @485-509 tests bO twice, never bP
             if (r0.bN + 2 > r0.Z[1] - 2) {
                 setAnim(43); ag = 0; ah = 2560                        // L113
                 if (r0.aG == 2) consumeH()                                 // k.aS.H()
@@ -2062,10 +2077,12 @@ open class Entity(val ax: Int, var clip: Clip?) {
 
     /** `c(boolean)` (g.java:3779, proven): facing-side head cell is open —
      *  `av → (W[0]/20)-1 : (W[2]/20)+1` at `al/20`; cell `<12 → true`.
-     *  Gates the S37 grapple-climb step. */
+     *  Gates the S37 grapple-climb step. The read is the RAW `k.g(II)I` (@40, the only gameplay
+     *  `k.g` read outside `i.e()`), not the entity-aware `e()`: that one lets the player pass
+     *  through solid-20 cells while `S == 37` — and this is evaluated in the S37 arm (slice 413). */
     fun facingCellOpen(w: LevelCellSource): Boolean {
         val cx = if (av) (W[0] / 20) - 1 else (W[2] / 20) + 1
-        return e(w, cx, al / 20) < 12
+        return w.collisionCell(cx, al / 20) < 12
     }
 
     /** `i.bf()` (i.java:14608, proven): ax58 door-open query —
@@ -2193,7 +2210,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 if (r024 < 0) r024 += 256   // i16→u8 fixup
                                 if (r14 != null) {
                                     if (r14.ax == 11 && r024 == 139) {     // kill count
-                                        w.countKill(r14.aw); w.kCount(3)
+                                        // @883-892 `k.e(0, aw)` — THIS entity's
+                                        // uid (the script holder), not the
+                                        // target's; `k.o(3)` follows
+                                        w.countKill(aw); w.kCount(3)
                                     }
                                     r14.setAnim(r024)
                                 }
@@ -2326,7 +2346,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
         val r12 = r9; val r2 = r10
         if (r013 == 1) when (r12) {
             0 -> cd[2] = true                                              // L140
-            1 -> { w.screenL(15); if (w.kAj != 7) w.kCount(0) }             // L141
+            // L141 (@1414-1431): `k.l(15); if (k.aj != 7) skip; k.o(0)` — the
+            // extra ap[0] tick is the FINAL mission's only (the port had the
+            // gate inverted)
+            1 -> { w.screenL(15); if (w.kAj == 7) w.kCount(0) }
             2 -> { w.kBx = -1; w.screenL(12) }                             // L144
             3 -> cd[3] = true                                              // L145
             4 -> { val v = w.kAV; if (v != null) v.Z[0] = 1 }              // L146
@@ -2446,12 +2469,17 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 val r03 = i16(blk, pc); pc += 2
                 val r04 = i16(blk, pc); pc += 2
                 val r05 = if (r02 != 0) w.findByAw(r02) else this
+                // @210-753 (proven): 0 → `arg != 0 → az = arg` (@256-260 joins
+                // sub 5 at @748 — the port ran the sub-1 switch for it: all
+                // 38 shipped `(0, arg)` z-order ops did nothing); 1 → the
+                // arg switch; 2 → k.c; 3 → cz/cA; 4 → `k.ab = true` ONLY
+                // (@741 returns); 5 → `az = arg`
                 if (r05 != null) when (r03) {
-                    0, 1 -> if (r03 == 1 || r04 != 0)
-                        bigOp100Arg(r05, r04, w)
+                    0 -> if (r04 != 0) r05.az = r04
+                    1 -> bigOp100Arg(r05, r04, w)
                     2 -> w.removeEntity(r05)                             // L62 k.c
                     3 -> { r05.cz = r04; r05.cA = 0 }                    // L63
-                    4 -> { w.kAb = true; r05.az = r04 }                  // L64-65
+                    4 -> w.kAb = true                                    // L64
                     5 -> r05.az = r04                                    // L65
                     else -> {}
                 }
@@ -2531,22 +2559,31 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
                         pr.setState(1, 1)                                // hover
                     val c = cb ?: IntArray(4).also { cb = it }
-                    if (w.padHeld(c[0]) ||
+                    // @1652-1853 (proven): ACCEPT = the armed key (`cb[0]`) or,
+                    // unmounted, a press INSIDE the 70x70 prompt rect; REJECT =
+                    // mounted `k.v(1020)` (any other key) or, unmounted,
+                    // `k.j()` — a press anywhere else in the play area. The
+                    // port had `k.j()` in the accept set (every tap passed) and
+                    // no unmounted reject. `cb[1] != 0` (already decided) falls
+                    // to the reject tests, which then do nothing.
+                    val accepted = w.padHeld(c[0]) ||
                         (!w.mounted && pr != null &&
-                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
-                        (!w.mounted && w.pointerStrip())) {
-                        if (c[1] == 0) {
-                            c[1] = 1
-                            if (pr != null) {
-                                if (w.mounted)
-                                    pr.setState(CT[c[2]] + 1, 1)
-                                else pr.setState(-1, 1)
-                            }
-                            eventDisarm(w); unlockInput(w)               // O();k.p()
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70))
+                    if (accepted && c[1] == 0) {
+                        c[1] = 1
+                        if (pr != null) {
+                            if (w.mounted) pr.setState(CT[c[2]] + 1, 1)
+                            else pr.setState(-1, 1)
                         }
-                    } else if (w.mounted && w.padHeld(1020) && c[1] == 0) {
+                        eventDisarm(w); unlockInput(w)                   // O();k.p()
+                    } else if (c[1] == 0 &&
+                        ((w.mounted && w.padHeld(1020)) ||
+                         (!w.mounted && w.pointerStrip()))) {
                         c[1] = 2
-                        pr?.setState(CT[c[2]] + 2, 1)
+                        if (pr != null) {
+                            if (w.mounted) pr.setState(CT[c[2]] + 2, 1)
+                            else pr.setState(-1, 1)
+                        }
                         eventDisarm(w); unlockInput(w)
                     }
                 }
@@ -2570,8 +2607,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
             109 -> {
                 if (cf == null) cf = IntArray(5)
                 val f = cf!!
-                f[0] = i16(blk, pc); f[1] = i16(blk, pc + 2)
-                f[2] = i16(blk, pc + 4); f[3] = i16(blk, pc + 6); pc += 8
+                f[0] = u16(blk, pc); f[1] = u16(blk, pc + 2)               // @1939-2049:
+                f[2] = u16(blk, pc + 4); f[3] = u16(blk, pc + 6); pc += 8   // no (short) cast
                 var dx = f[2] - f[0]; val dy = f[3] - f[1]
                 if (dx == 0) dx = 1
                 f[4] = Trig.atan2(dy, -dx)
@@ -2635,10 +2672,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     if (pr != null && !w.mounted && pr.e != -1 &&
                         w.pointerMoveIn(pr.a - 35, pr.b - 35, 70, 70))
                         pr.setState(1, 1)
+                    // @2862-3105 (proven): same accept / reject split as op 108 —
+                    // `k.j()` (unmounted press outside the rect) REJECTS the whole
+                    // sequence; the unmounted reject repaints `bA[r8]` (the
+                    // current prompt) once per live prompt, the mounted one each
+                    // `bA[r9]` with `ct[..]+2`
                     if (w.padHeld(r037) ||
                         (!w.mounted && pr != null &&
-                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70)) ||
-                        (!w.mounted && w.pointerStrip())) {
+                         w.pointerDownIn(pr.a - 35, pr.b - 35, 70, 70))) {
                         if (pr != null) {
                             if (w.mounted)
                                 pr.setState(CT[cArr[1 + r038]] + 1, 1)
@@ -2648,12 +2689,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         if (cArr[4] == cArr[0]) {
                             eventDisarm(w); unlockInput(w)
                         }
-                    } else if (w.mounted && w.padHeld(1020)) {
+                    } else if ((w.mounted && w.padHeld(1020)) ||
+                               (!w.mounted && w.pointerStrip())) {
                         for (r174 in 0 until cArr[0])
-                            scriptPrompts[r174]?.let {
+                            if (scriptPrompts[r174] != null) {
                                 if (w.mounted)
-                                    it.setState(CT[cArr[1 + r174]] + 2, -1)
-                                else it.setState(-1, 1)
+                                    scriptPrompts[r174]!!.setState(
+                                        CT[cArr[1 + r174]] + 2, -1)
+                                else scriptPrompts[r038]?.setState(-1, 1)
                             }
                         cArr[4] = -1
                         eventDisarm(w); unlockInput(w)
@@ -3035,7 +3078,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
      *       g.a.aD!=0`, g.java:8488-8497) → `i(S==79?81:67)` sword swing;
      *       `k.E.K()` = `heldRelease` (ported slice 125);
      *   8 → `S!=79` → `ai=ag=0; K=0; cN=0; i(303)` standing gauge;
-     *   2 → `i(286)` + sfx 29 knife anim.
+     *   2 → `S!=79` → `ai=ag=0; i(286)` + sfx 29 knife anim.
      *  `g.a` = the grapple/ride link field `ga` (g.java:249+, proven). */
     fun contextDispatch(w: LevelCellSource, pad: Pad) {
         if (gI == 4 && aA < 2) requestH(1, w)
@@ -3060,7 +3103,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     setAnim(303)
                 }
             }
-            2 -> { setAnim(286); w.sfx(29) }
+            2 -> {
+                // raw bytes @200-235 (slice 416): `I == 2 && S != 79 → ai = ag = 0; i(286); k.A(29)` — the
+                // knife is ignored in the S79 stance and a running player stops dead to throw
+                if (S != 79) { ai = 0; ag = 0; setAnim(286); w.sfx(29) }
+            }
         }
     }
 
@@ -3095,11 +3142,14 @@ open class Entity(val ax: Int, var clip: Clip?) {
         K = 6                                            // forced full gauge
         val r08 = WEAPON_DMG[w.weaponSlot]               // i.bu[k.au] — no <<1
         if (K <= 3) return
-        w.spawnProjectile(av, L, M + 30)                 // i.a(_,5,14,av,L,M+30,300)
+        w.spawnProjectile(av, gQL, gQM + 30)             // i.a(_,5,14,av,L,M+30,300) — g.L/g.M (@230-235)
         when {
             t.ax == 4 -> if (t.S == 30) t.setAnim(29)
             t.ax == 58 -> when (t.S) {
-                0, 5, 7, 9, 11 -> t.setAnim(t.S + 1)
+                // @384-393 (raw bytes, slice 413): `g.i(i.S + 1)` — the PLAYER's S plus one (the
+                // reach / throw anim picked above, 299-302 or 304-306), not the lever's own;
+                // that is not an anim of the lever's clip, so `i(int)` ignores it
+                0, 5, 7, 9, 11 -> t.setAnim(S + 1)
                 2 -> t.setAnim(3)
                 else -> {}
             }
@@ -3111,36 +3161,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
     }
 
     /**
-     * `g.E()` tail — the consume call after `i(91)`/`A(15)` in ax16's
-     *  hurt arms is `k.aS.E()` = `i.E()` = `settleToGround` (i.java:3760),
-     *  already ported below. Kept as a named alias for call-site clarity.
-     */
-
-    /** `i.E()` (i.java:3760, proven shape): settle loop — sink `al` in
-     *  10px steps until the below-feet cell is standable
-     *  (`aR >= 12 || aR == 5 || aR == 3`). Guarded against missing floor. */
-    fun settleToGround(world: LevelCellSource) {
-        refreshBoxes()
-        var below = e(world, ak / 20, (W[3] + 1) / 20)
-        var guard = 0
-        while (below < 12 && below != 5 && below != 3 && guard++ < 400) {
-            al += 10
-            refreshBoxes()
-            below = e(world, ak / 20, (W[3] + 1) / 20)
-        }
-        aR = below
-    }
-
-    /**
      * `i.E()` (i.java:2929, proven): settle-sink — each pass pins
      * `ah=1`, sets `b`, rescans sides (`a(true)`), unpins `ah`; if
      * `aR∈{3,5,12}` the entity has found footing and returns, else it
-     * sinks `al+=10` and loops. Used by the S54 dismount settle
-     * (g.java:2226).
+     * sinks `al+=10` and loops. The original calls it from 19 sites:
+     * `g.e()` ×6, `g.d(int)` (death release), `i.s()` (jc21 wrap tail),
+     * the constructor tail (ax0 / ax11 / ax73), `aU()` ×2 (zip-line
+     * exits), `aV()` ×3, `bb()` ×2 (S30/38 pickups), `bC()` (S244 kill
+     * landing). Every other spawn / follower / box-refresh site ends in
+     * `t()` only (`i.a(IIII)`, `i.p(II)`, `i.g(I)`, `i.b(Z)`, the `bG()`
+     * knives) — slice 391 retired the sinking `settleToGround` stub.
      */
     fun eSettle(world: LevelCellSource) {
+        // The original loop has no counter — it ends when `e()` reads the
+        // OOB-20 row below the map (`cy >= k.bq`), i.e. after at most
+        // `(rows*20 - al)/10 + 2` passes; the guard only stops a runaway.
         var guard = 0
-        while (guard++ < 400) {
+        while (guard++ < 5000) {
             ah = 1; b = true
             collideSides(world, true)
             ah = 0
@@ -3276,10 +3313,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  (`{{0,-1},{3,1},{5,2},{6,3}}`). */
         val K_BO = arrayOf(intArrayOf(0, -1), intArrayOf(3, 1),
                            intArrayOf(5, 2), intArrayOf(6, 3))
-        /** `i.L`/`i.M` (i.java statics, proven) — last parked marker point
-         *  (written by `o()`, read by `b(x,y)` :9829). */
-        var markerLx = -1
-        var markerLy = -1
         /** `i.bu[]` (i.java:166, proven) — dual use: per-weapon damage
          *  by weapon slot `I` in `j()`, and soldier max-HP by difficulty
          *  `k.au` for the draw-pass HP bar (`i.bu[au]`, k.java:2945). */
@@ -3369,8 +3402,6 @@ open class Entity(val ax: Int, var clip: Clip?) {
          *  point; -1 = unset (cleared by `U()`). */
         var L = -1
         var M = -1
-        /** `i.bq` — static cleared on grab (`c()` head, g.java:4118). */
-        var bq = 0
         /** `g.j` (g.java:60, proven) — static grab/pass latch: set by the
          *  S146/S147 wall-sequence arms (g.java:2865/:2898), cleared by
          *  `i.D()` entity-pool init (i.java:1817/:1977), and read by the
@@ -3440,12 +3471,23 @@ open class Entity(val ax: Int, var clip: Clip?) {
             150, 157, 165, 233, 242, 243, 263, 264, 265, 266)
     }
 
+    /**
+     * `i.a(IIILi;)V` (i.javap.txt:18292, raw bytes, proven): the hit intake. Slice 410 re-read
+     * every arm. The shipped code only ever sends ops 4, 6 (see [applyHit6]), 11, 18, 20, 21,
+     * 24, 32, 34, 38 and 40 (an enumeration of every `invokevirtual a:(IIILi;)V` in i/g.javap);
+     * 8, 9, 19, 25, 28, 29 and 30 are ported for completeness, 17 is a bare `return`, and 39 / 41
+     * (the `k.Y` marker-engage pair) are dead and not ported. `g.s`, the cheat flag in the
+     * head's gate, is always false here (`LevelCellSource.godMode`).
+     */
     fun applyHit(op: Int, arg: Int, attacker: Entity?, world: LevelCellSource) {
         var r10 = op
-        // i.java:4446 head (proven): op4 upgraded to op18 when the struck
-        // entity is the player mid-attack-anim without iframes/cutscene;
-        // the upgrade also zeroes the victim's vx.
-        if (r10 == 4 && PlayerFsm.isAttackState(S) && gt == 0) {
+        // i.javap a(IIILi;)V @0-37 (raw bytes, proven): op4 is upgraded to op18 when
+        // `g.b(aS.S)` — the (I)Z overload, the airborne / hanging / climbing set
+        // {18,19,20,22..25,35,36,43,150,157,165,233,242,243,263..266}, NOT the no-arg
+        // `g.b()` attack test — and `g.t == 0` (no hit lock) and `!g.s` (the cheat
+        // flag): a hit on a player who is off the ground knocks him down; the upgrade also
+        // zeroes the victim's vx. (Slice 410: the port tested the attack anims here.)
+        if (r10 == 4 && PlayerFsm.isAirAction(S) && gt == 0) {
             r10 = 18; ag = 0
         }
         when (r10) {
@@ -3473,7 +3515,8 @@ open class Entity(val ax: Int, var clip: Clip?) {
             // gates apply (S67 clash drains nothing) — then `i(43)`
             // unconditionally.
             18 -> { playerDamageable(g, world); setAnim(43) }
-            20 -> setAnim(43)
+            // @622: `g.b = null; i(43)` (ops 20 and 28)
+            20, 28 -> { world.playerLinkB = null; setAnim(43) }
             // op21 fall damage (i.java:4535 L55, proven): raw drain —
             // bypasses d() gates; caller (land) already checked h()+the
             // 20-cell gate
@@ -3484,12 +3527,26 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 ah = -4096; aj = 1536
                 enterStateMasked(43, 32, world)
             }
+            // @348-391 (raw bytes): `av = !r4.av` (the victim turns to the attacker), i(10),
+            // `ag = av ? 1536 : -1536`; no shipped caller uses op 29 / 30 (kept exact).
             29 -> {
-                if (attacker != null) av = attacker.av
+                if (attacker != null) av = !attacker.av
                 setAnim(10)
                 ag = if (av) 1536 else -1536
             }
-            34 -> { aj = 0; ah = 0; ag = 0; hitsTaken++ }
+            30 -> {
+                setAnim(arg)
+                ag = if (ag > 0) 1792 else -1792                // @322-347
+            }
+            // @204-262 (raw bytes): the parried-hit feedback — velocities zeroed, the clip-5
+            // anim-14 spark `a(8, 5, 14, av, ak, midY + 30, 300)` and `k.A(11)`. (Slice 410:
+            // the port zeroed the velocities and counted a hit; no spark, no clash sound.)
+            34 -> {
+                aj = 0; ah = 0; ag = 0
+                hitsTaken++
+                spawnFx8(world, 5, 14, av, ak, ((W[1] + W[3]) shr 1) + 30, 300)
+                world.sfx(11)
+            }
             // op32 (i.java:4639-4652 L16, proven): stance-break — aA<=1
             // with the attacker within ±150px clears aA to 0; aA>1 with
             // the 16-flag sets Z[0]=3000 (counter-bleed reset). Ops from
@@ -3518,21 +3575,37 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     ag = attacker.Z[0]
                 }
             }
-            // op24 (i.java:4520 L49, proven): pin the player at the
-            // source's top-left corner playing anim r11, all velocities
-            // zeroed — the trap-grabbed pose (ax46 uses 330/110).
-            24 -> {
+            // op24 (i.java:4520 L49, proven; the same arm @444 serves op 8): pin the player at
+            // the source's top-left corner playing anim r11, all velocities zeroed — the
+            // trap-grabbed pose (ax46 uses 330/110).
+            8, 24 -> {
                 if (attacker != null) {
                     setAnim(arg); aj = 0; ah = 0; ag = 0
                     ak = attacker.W[0]; al = attacker.W[1]
                 }
             }
+            // @487-570 (raw bytes, ops 9 and 25): only while `S == arg` — slide to the source's
+            // top-left corner (`ag/ah = Δ << 8`, then snapped there), `aj = 1536`, `a(43, 32)`.
+            9, 25 -> {
+                if (attacker != null && S == arg) {
+                    ag = (attacker.W[0] - ak) shl 8
+                    ah = (attacker.W[1] - al) shl 8
+                    ak = attacker.W[0]; al = attacker.W[1]
+                    aj = 1536
+                    enterStateMasked(43, 32, world)
+                }
+            }
+            // @1413: `ah = aj = 0; az = 99` (op 19).
+            19 -> { ah = 0; aj = 0; az = 99 }
             // L75 (proven structure): marker-engage — `g.b = r13`, `aB=3`,
             // `o()?i(3)`, face + push ±512 toward the marker. The `g.a()`
             // damage-gate chain ported as `playerDamageable`.
+            // @703-798 (raw bytes): `S == 3 → return; if (!g.a()) return; S == 6 → return;
+            // S == 7 → return` — the damage gate (and its drain) runs BEFORE the S6/S7 exits.
             38 -> {
-                if (S == 3 || S == 6 || S == 7) return
+                if (S == 3) return
                 if (!playerDamageable(g, world)) return   // g.a() gate now
+                if (S == 6 || S == 7) return
                 world.playerLinkB = attacker               // ported
                 aB = 3
                 if (oState()) setAnim(3)
@@ -3651,7 +3724,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (x1 <= 0) {
             x1 = 0
             if (w.missionBh() == 3) return
-            if (!aZ && standingOn == null) settleToGround(w)
+            if (!aZ && standingOn == null) eSettle(w)      // k.aS.E()
             bl = 0
             releaseAe(); consumeH()                 // G() + H()
             standingOn = null
@@ -3835,7 +3908,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         if (d.av) d.P = d.P or 1 else d.P = d.P and -2
         d.ak = ak; d.al = al
         d.ag = ag; d.ah = ah; d.ai = ai; d.aj = aj
-        d.settleToGround(world)
+        d.refreshBoxes()                                  // ad.t()
     }
 
     /** `i.u()` (i.java:575-594, proven): `au` = coarse camera-distance
@@ -3942,15 +4015,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
         r0.setAnim(anim)
         r0.az = az
         r0.ak = ak; r0.al = al; r0.av = av
-        r0.settleToGround(world)
+        r0.refreshBoxes()                        // aK.t() — no E(): the child stays where it spawned
         return r0
     }
 
     /** `i.d(i,x,y)` (i.java:16745, proven): spawn the ax24/clip40 `S=i`
      *  score floatie at pixel (x,y) — `a(24,40,i,201)` child, then
      *  `av=false`, `N/O` = 8.8 pos, `ak/al` = pos, vel 0, `t()`, `k.b`
-     *  insert. (spawnChildFx's settleToGround runs before the pos
-     *  re-anchor, so it's a no-op vs the raw a() — flagged.) */
+     *  insert. (`a()` ends `t()` at the parent's position; the re-anchor
+     *  below ends with its own `t()`.) */
     fun spawnFloatie(world: LevelCellSource, i: Int, x: Int, y: Int) {
         val aK = spawnChildFx(world, 24, 40, i, 201)
         aK.av = false
@@ -4179,7 +4252,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
         aK.ak = ak + r8; aK.al = al + r9
         aK.ao = r8; aK.ap = r9
         aK.ag = 0; aK.ah = 0
-        aK.settleToGround(world)
+        aK.refreshBoxes()                        // aK.t()
         aK.P = aK.P or 16
         aK.af = this
         world.queueInsert(aK)
@@ -4213,7 +4286,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                 cIDone = true
             }
         }
-        aK.settleToGround(world)
+        aK.refreshBoxes()                        // aK.t()
         aK.P = aK.P or 16
         aK.af = this
         aK.bR = false
@@ -4263,13 +4336,16 @@ open class Entity(val ax: Int, var clip: Clip?) {
             cJDone = false
             when (pv) {
                 0 -> {
-                    if (S != 28 && S != 14) setAnim(28)
-                    else if (animFinished() && S == 28) {
+                    // @60-133 (proven): `(S == 28 || S == 14) && r()` → fire;
+                    // otherwise `S != 28 → i(28)` — so the S14 fire frame lasts
+                    // ONE call, then the windup restarts (and a finished S14
+                    // fires again: six volleys, `g(2)` counts `j` to 6)
+                    if ((S == 28 || S == 14) && animFinished()) {
                         setAnim(14)
                         spawnBarrage(world, 0)
                         spawnBarrage(world, 1)
                         spawnBarrage(world, 2)
-                    }
+                    } else if (S != 28) setAnim(28)
                 }
                 2 -> {
                     if (S != 18 && S != 29) setAnim(29)
@@ -4286,27 +4362,37 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                 world.playerRect()[2]) shr 1
                             var r9 = 240 - aK.bZ
                             if (r9 < 60) r9 = 60
-                            // proven: `j.a(0, j.c(0)>>8)` — `j.c(0)` =
-                            // Int.MAX_VALUE (j.java:798-804: `b(0)` null-arm
-                            // returns MAX) → range (0, MAX>>8)
+                            // bG @285-334 (proven): `r3 = (j.c(30 * j.m / 360)
+                            // * r2) >> 8` with `j.m = 256` (j.javap static{}
+                            // @62-65) → `j.c(21)`, tan(29.5°) in 8.8 — then
+                            // ONE `j.a(0, r3)` draw feeds `|draw| * (-512 - k.Y)
+                            // / |r2|`. (The port read `j.m` as 0 → `j.c(0)` =
+                            // Int.MAX_VALUE, a range of 8.4M: the knife's
+                            // launch speed overflowed into noise.)
+                            val rng = (Trig.tan(30 * Trig.M / 360) * r9) shr 8
                             val r02 = (kotlin.math.abs(
-                                world.jRand(0, Int.MAX_VALUE shr 8)) *
+                                world.jRand(0, rng)) *
                                 ((-512) - world.kY)) / kotlin.math.abs(r9)
                             aK.ap = aK.bZ + world.jRand(60, r9)
                             aK.ag = if ((world.jNextInt() and 1) == 0) r02
                                     else -r02
-                            aK.settleToGround(world)
+                            aK.refreshBoxes()                       // aK.t()
                             aK.P = aK.P or 16
                             aK.af = this
                             aK.bR = false
                             world.queueInsert(aK)
                             aK.j = (aK.ap shl 8) / (aK.ah - world.kY)
                             if (j == 3) {
-                                val r03 = aK.ag shr 2
+                                // @460-530 (proven): `ag >>= 2`, `k = true`,
+                                // the aG1/aG2 mirror flips `ag` (@511), and
+                                // `ah = k.Y + 128` closes the block on EVERY
+                                // path (@520 is the join of all three jumps).
+                                val r5 = aK.ag shr 2
                                 aK.k = true
-                                aK.ag = r03
-                                if (aG == 1 && r03 > 0) aK.ag = -r03
-                                if (aG == 2 && r03 < 0) aK.ah = world.kY + 128
+                                aK.ag = r5
+                                if ((aG == 1 && r5 > 0) || (aG == 2 && r5 < 0))
+                                    aK.ag = -r5
+                                aK.ah = world.kY + 128
                             }
                             j++
                             if (j >= 4) { j = 0; nl = 0; cIDone = true }
@@ -4329,11 +4415,15 @@ open class Entity(val ax: Int, var clip: Clip?) {
                         return
                     }
                     if (j == 2) {
-                        // L64-L73 — knife-fan follow-through
+                        // @655-712 (proven): S27 finished → `i(24)` and FALL
+                        // THROUGH to the `aZ` toggle + the j==2 knife arm
+                        // below; every other state returns (S24/S27 wait,
+                        // anything else starts S27)
                         if (S == 27 && animFinished()) setAnim(24)
-                        if (S == 24) return
-                        if (S != 27) setAnim(27)
-                        return
+                        else {
+                            if (S != 24 && S != 27) setAnim(27)
+                            return
+                        }
                     }
                     run {
                         // L77 — aZ toggles the scatter vs boundary-fill arm
@@ -4360,9 +4450,11 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                         if (kB != null && pointInBox(
                                                 r04[r05][0], r04[r05][1],
                                                 kB.W)) {
+                                            // @951-993: `(nextInt & 1) == 0`
+                                            // jumps to the W[3] store
                                             if ((world.jNextInt() and 1) == 0)
-                                                r04[r05][1] = kB.W[1]
-                                            else r04[r05][1] = kB.W[3]
+                                                r04[r05][1] = kB.W[3]
+                                            else r04[r05][1] = kB.W[1]
                                         }
                                     } else if (kB == null || !pointInBox(
                                             r04[r05][0], r04[r05][1], kB.W)) {
@@ -4386,7 +4478,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                     aK.P = aK.P or 16
                                     aK.af = this
                                     world.queueInsert(aK)
-                                    r04[r05][0] = -1
+                                    // (the original never marks the pool cell
+                                    // used — @1070-1212 has no store to it — so
+                                    // the `== -1` re-roll above is dead code and
+                                    // a cell can be picked twice)
                                     r93++
                                 }
                                 nl = 30; j = 1; aC = 0
@@ -4411,7 +4506,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                                         aK.bZ
                                     aK.ag = (r06 shl 8) / 20
                                     aK.ah = ((r07 shl 8) / 20) + world.kY
-                                    aK.settleToGround(world)
+                                    aK.refreshBoxes()                       // aK.t()
                                     aK.P = aK.P or 16
                                     aK.af = this
                                     aK.bR = false
@@ -4423,8 +4518,10 @@ open class Entity(val ax: Int, var clip: Clip?) {
                     }
                 }
                 4 -> {
+                    // @1483-1514 (proven): both `ifne`s jump OVER the clear —
+                    // it runs only when neither bit group is set
                     val kBl = world.kB?.l ?: 0
-                    if ((kBl and 2) != 0 || (kBl and 12) != 0)
+                    if ((kBl and 2) == 0 && (kBl and 12) == 0)
                         l = l and -2
                     if (S in 30..32 && T == 0) {
                         val r12 = S - 30
@@ -4456,7 +4553,7 @@ open class Entity(val ax: Int, var clip: Clip?) {
                             }
                         }
                         cIDone = true
-                        aK.settleToGround(world)
+                        aK.refreshBoxes()                       // aK.t()
                         aK.P = aK.P or 16
                         aK.af = this
                         aK.bR = false
@@ -4934,16 +5031,9 @@ interface LevelCellSource {
      *  (the original unlinks dead triggers rather than mutating mid-pass). */
     fun removeEntity(e: Entity)
 
-    // -- k.a(i,prio,rect) context claim (k.java:816): strictly-lower --
-    var claimPrio: Int                    // k.co (6 = unclaimed)
-    var claimed: Entity?                  // k.L
-    fun claim(e: Entity, prio: Int, w: IntArray)
-    fun clearClaim()                      // k.m()
-
     // -- k.c(x,y,aw)/k.k(aw) marker popup (k.java:870) -----------------
 
-    // -- k.aq / k.ap / k.s() / k.A(int) counters ----------------------
-    var aq: Int
+    // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq below) ----------
     val kAp: IntArray
     val sfxLog: List<Int>
     fun sfx(id: Int)
@@ -5068,8 +5158,6 @@ interface LevelCellSource {
     var vehicle: Entity?
     /** `g.i` — static control flag cleared by the L204 ledge-drop arm. */
     var iFlag: Boolean
-    /** `g.E` — static flag; `ap()` at L2057 requires it false. */
-    var eFlag: Boolean
     /** `k.q()` (k.java:~4600, proven): rebuild `equipList`/`equipCount` from
      *  `player.gJ` bits {1,2,8,16} — mask 4 is skipped; first empty slot
      *  fills in ascending bit order. */
@@ -5284,11 +5372,9 @@ interface LevelCellSource {
     /** `k.aG` — `k.aE` decay divider (n() head: `aH<0 → aG--`;
      *  `aG<=0 → aG=6; aE--`). */
     var kAG: Int get() = 0; set(_) {}
-    /** `k.bB`/`k.bC`/`k.bD` (k.java:119-123, proven) — burst-phase ints:
-     *  `bB==0 && bC==0` gates the glide-recovery `i(4)`; `bD>=15` picks
-     *  the heavy bank anims (30/31) over the light ones (33/32). */
-    var kBB: Int get() = 0; set(_) {}
-    var kBC: Int get() = 0; set(_) {}
+    /** `k.bD` (k.java:119-123, proven) — the input hold-duration counter:
+     *  `bD>=15` picks the heavy bank anims (30/31) over the light ones
+     *  (33/32). (`k.bB`/`k.bC` are the pad's edge / held words — `Pad.bB`/`Pad.bC`, slice 416.) */
     var kBD: Int get() = 0; set(_) {}
     /** `k.bh[k.aj]==3` — flying level; gates the `g.n()` flight arms. */
     val bh3: Boolean get() = false
@@ -5477,10 +5563,6 @@ interface LevelCellSource {
     /** `k.u(mask)` (k.java:7203, proven): held-input `(bC & mask) != 0`
      *  — distinct from `padHeld`/`k.v` which reads the edge set `bB`. */
     fun padDown(mask: Int): Boolean = false
-    /** `k.u` raw HELD word `bC` (k.java:119, proven) — `padDown(mask)`
-     *  answers masked tests; `k.u == <bits>` comparisons (i.java:7017
-     *  `k.u == 8`) need the raw value. */
-    fun padHeldWord(): Int = 0
     /** `j.c` (j.java static, proven) — the screen state (21 = dialog).
      *  Read-only interface view; `Level0World` owns the var. */
     val jC: Int get() = 0
@@ -5550,7 +5632,10 @@ interface LevelCellSource {
     /** `g.j` (g.java:15) — context latch, set on S145/S147 exits,
      *  cleared at g.java:6393 / k.java:6638. */
     var gj: Boolean get() = false; set(_) {}
-    /** `k.L` — the entity currently registered as the interact claim. */
+    /** `k.L` — the entity currently registered as the context/interact
+     *  claim (the ONE channel: ax4 crates, ax11/73 soldiers, ax47 sentinels,
+     *  `br()` grabs and the touch hit-test `k.j(II)` all share it — slice
+     *  399 retired the second, ax4-only copy). */
     var kL: Entity? get() = null; set(_) {}
     /** `k.au` — difficulty/medal-condition field (indexes `bu[]` HP table). */
     var kAu: Int get() = 0; set(_) {}
@@ -5561,7 +5646,7 @@ interface LevelCellSource {
     /** `k.m()` (k.java:863): reset the interact-claim channel. */
     fun claimReset() {}
     /** `k.a(i,int,int[])` (k.java:816): interact-claim registrar —
-     *  same-entity refresh else `prio<co || prio==1` steals it. */
+     *  same-entity refresh else `prio<co || (prio==1 && co==1)` takes it. */
     fun registerClaim(e: Entity, prio: Int, rect: IntArray) {}
     // -- ax73 aJ() statics (i.java:77/100/132/9825, k.aA, g.z) -----------
     /** `i.bf` (i.java:100) — engage-claim latch for the aN-lock sweep. */

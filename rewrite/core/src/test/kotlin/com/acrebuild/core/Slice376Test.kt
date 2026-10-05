@@ -141,9 +141,9 @@ class Slice376Test {
     @Test fun `b(true) leaves the weapon-corner latch alone`() {
         val w = world()
         settleIntro(w)
-        w.kAt = 1
+        w.actionLock = 1
         w.stateL(14)                                  // l(14) from play: b(true)
         assertEquals(14, w.jC)
-        assertEquals(1, w.kAt, "c(true) skips the `!z2` weapon-corner arm (k.java:4276)")
+        assertEquals(1, w.actionLock, "c(true) skips the `!z2` weapon-corner arm (k.java:4276)")
     }
 }

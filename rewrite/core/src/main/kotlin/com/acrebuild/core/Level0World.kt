@@ -66,72 +66,47 @@ class Level0World(
         const val VIEW_W = 400
         const val VIEW_H = 240
 
-        // Entity type -> clip index (k.bi[]; only decoded clips carried).
-        // ax67 is special: the record binds `aa = k.r(bk[kind])` per-kind
-        // (i.java:2633) — resolved in spawnEntities via NpcFsm.decorClip.
-        val ENTITY_CLIP = mapOf(
-            11 to 7, 17 to 7, 23 to 7, 47 to 7, 50 to 7, 73 to 7,
-            44 to 32,
-            4 to 3,       // ax4 destructible volumes (bi[4]=3, proven)
-            5 to 1,       // ax5 mission logic (bi[5]=1, invisible clip)
-            2 to 1,       // ax2 checkpoint (bi[2]=1 — same invisible clip;
-                          // its 40x128 rect gives aY() the real W box)
-            10 to 6,      // clip6 — load-valid, zero-pixel (nonrendering
-                          // modules, proven) — zones still draw nothing
-            29 to 52,     // ax29 Cesare boss (bi[29]=52, proven)
-            61 to 71,     // ax61 multi-tool (bi[61]=71, proven)
-            41 to 30,     // ax41 knockable prop (bi[41]=30, proven)
-            8 to 5,       // ax8 knife/param projectiles (bi[8]=5, proven);
-                          // bi[12]=8 has no pack-3 entry-008 → ax12 stays
-                          // clipless (J(8)=null in the original too)
-            14 to 9,      // ax14 pickups/markers (bi[14]=9; L88 record arm)
-            16 to 10,     // ax16 request markers (bi[16]=10; bb() S30/38/39)
-            71 to 26,     // generic a(ax) spawner pickups (bi[71]=26)
-            27 to 48,     // ax27 fuse/message entity (bi[27]=48, proven)
-            40 to 45,     // ax40 gondola/zipline (bi[40]=45, proven)
-            9 to 47,      // ax9 push/contact entity (bi[9]=47, proven)
-            15 to 25,     // ax15 grapple/hang volume (bi[15]=25, proven)
-            46 to 29,     // ax46 spring/trap (bi[46]=29, proven)
-            7 to 60,      // ax7 ejection slot (bi[7]=60, proven)
-            72 to 51,     // ax72 counterweight platform (bi[72]=51, proven)
-            78 to 63,     // ax78 counterweight (bi[78]=63, proven)
-            79 to 0,      // ax79 palette prop (bi[79]=0, proven)
-            6 to 4,       // ax6 overlap-trigger marker (bi[6]=4, proven)
-            19 to 11,     // ax19 meter-restore pickup (bi[19]=11, proven)
-            // ax74 maps at the end of the table (bi[74]=54).
-            80 to 57,     // ax80 static prop (bi[80]=57 — pack-3 has no
-                          // entry-057: J(57)=null → invisible/vestigial, proven)
-            54 to 19,     // ax54 waypoint runner (bi[54]=19, proven)
-            30 to 36,     // ax30 runner variant (bi[30]=36, proven)
-            24 to 40,     // ax24 projectile (bi[24]=40 — pool children only)
-            56 to 19,     // ax56 flyer (bi[56]=19 — same clip as ax54)
-            58 to 20,     // ax58 lever/counterweight (bi[58]=20, proven)
-            60 to 21,     // ax60 lift/piston platform (bi[60]=21, proven)
-            43 to 31,     // ax43 ride carrier (bi[43]=31, proven)
-            69 to 38,     // ax69 assassination-target zone (bi[69]=38, proven)
-            64 to 22,     // ax64 harrier — bi[64]=22; pack-3 has no
-                          // entry-022 → clipless (J(22)=null in the original)
-            13 to 61,     // ax13 rope/vine (bi[13]=61, proven)
-            35 to 62,     // ax35 scripted multi-tool (bi[35]=62, proven — the
-                          // level-0 record spawns S=6 at ak=5816 and self-culls
-                          // on its first tick via the L186 off-camera march arm
-                          // `ak > kO+420 -> k.c` — same as the original; only
-                          // the spawn entry was missing, bQ()/initAx35 ported)
-            32 to 36,     // ax32 (bi[32]=36 — same clip as ax30, proven)
-            68 to 26,     // ax68 (bi[68]=26 — generic small-item clip, proven)
-            22 to 14,     // ax22 capture zone (bi[22]=14, proven)
-            21 to 13,     // ax21 mission director (bi[21]=13, proven)
-            48 to 13,     // ax48 (bi[48]=13 — same clip, proven)
-            25 to 16,     // ax25 (bi[25]=16, proven)
-            26 to 15,     // ax26 (bi[26]=15, proven)
-            51 to 28,     // ax51 pushable crate (bi[51]=28, proven)
-            31 to 44,     // ax31 (bi[31]=44, proven)
-            66 to 23,     // ax66 moving platform (bi[66]=23, proven)
-            74 to 54,     // ax74 wisp (bi[74]=54, proven)
-            76 to 56,     // ax76 hazard volume — bi[76]=56 but pack-3 slot 56
-                          // is a zero-size entry (metadata, proven) → null
-                          // clip, invisible trigger
-        )
+        // Entity clip tables, verbatim from `k.<clinit>` (k.javap.txt
+        // static{} — evaluated, not retyped: `bi` 81 entries, -1 = none).
+        // `i(short[])` binds `aa = k.r(table[rec])` (i.javap ctor @270-470):
+        // ax67 → bk[r8[7]], ax46 → bl[r8[10]], ax7 → bm[r8[8]],
+        // ax56 → bj[r8[7]], ax9 → bn[r8[8]], everything else → bi[ax]
+        // when != -1. `k.r(n)` is null for an entry the pack lacks
+        // (pack-3 has no 2/8/17/22/33/43/49/53/55-57/68/70) — those spawn
+        // clipless in the original too. (Slice 390: the port bound ONE
+        // clip per type, so the per-record alternates — ax46 clip0, ax7
+        // clip66, ax9 clip72 — and the ax67 decor clips 24/34/37/41/65/67/69
+        // spawned wrong or invisible; `71 → 26` was a phantom, bi[71] = -1.)
+        private val K_BI = intArrayOf(
+            0, -1, 1, 2, 3, 1, 4, 60, 5, 47, 6, 7, 8, 61, 9, 25, 10, 7, -1, 11,
+            -1, 13, 14, 7, 40, 16, 15, 48, -1, 52, 36, 44, 36, -1, 42, 62, -1,
+            -1, -1, -1, 45, 30, -1, 31, 32, 33, 29, 7, 13, -1, 7, 28, -1, -1,
+            19, -1, 19, -1, 20, -1, 21, 71, -1, -1, 22, -1, 23, -1, 26, 38, 43,
+            -1, 51, 7, 54, 55, 56, -1, 63, 0, 57)
+        private val K_BJ = intArrayOf(19, 68)
+        private val K_BL = intArrayOf(29, 0)
+        private val K_BM = intArrayOf(60, 66)
+        private val K_BN = intArrayOf(47, 72)
+
+        /** `k.bi[]` entries that name a clip, keyed by actor type. */
+        val ENTITY_CLIP: Map<Int, Int> =
+            K_BI.withIndex().filter { it.value >= 0 }.associate { it.index to it.value }
+
+        /** The clip index `i(short[])` binds for record `f` of actor `ax`
+         *  (the PRE-retype type — ax11→47 / ax17→50 share `bi`'s clip 7),
+         *  or null when the type has none (`k.bi[ax] == -1`) / the table
+         *  index is out of range (the original would throw). */
+        fun entityClipIndex(ax: Int, f: IntArray): Int? {
+            fun tab(t: IntArray, i: Int) = if (i >= 0 && i < t.size) t[i] else null
+            return when (ax) {
+                67 -> NpcFsm.decorClip(f.getOrElse(7) { -1 }).takeIf { it >= 0 }
+                46 -> tab(K_BL, f.getOrElse(10) { -1 })
+                7 -> tab(K_BM, f.getOrElse(8) { -1 })
+                56 -> tab(K_BJ, f.getOrElse(7) { -1 })
+                9 -> tab(K_BN, f.getOrElse(8) { -1 })
+                else -> K_BI.getOrNull(ax)?.takeIf { it >= 0 }
+            }
+        }
     }
 
     override val cellPx: Int get() = level.cellPx
@@ -329,35 +304,22 @@ class Level0World(
         if (e.asSlot >= 0 && e.asSlot < slotFlags.size) slotFlags[e.asSlot] = -99
         if (player.gd === e) player.gd = null
         if (lockTarget === e) lockTarget = null
-        if (claimed === e) clearClaim()
+        // Port-side safety net, NOT in `k.c(i)` (k.javap.txt:22384-22462 never
+        // touches k.L): the original's claimants all `k.m()` themselves before
+        // their own `k.c(this)`, so a removed owner never leaves a stale claim
+        // behind there; releasing it here only guards the port's other
+        // removal sites. `inferred`.
+        if (kL === e) claimReset()
     }
 
-    // -- k.a(i,prio,rect) context-claim system (k.java:816, proven) -------
-    // Strictly-lower priority wins (co starts at 6 = unclaimed); an equal
-    // bid only steals when prio==1&&co==1. Claim persists until released
-    // via k.m() (clearClaim) — there is no per-frame reset. cp = claimed
-    // rect padded ±10 (k.java:850). ax51's Y-swap unexercised (unspawned).
-    override var claimPrio = 6       // k.co — written only via claim()/
-                                     // clearClaim() (interface exposes set)
-    override var claimed: Entity? = null  // k.L
-    val claimPad = IntArray(4)       // k.cp
     // Hoisted above `init`: `spawnEntities` reads it via kSIndex during
     // ax5 record init — property order matters (backing field is null
     // until the initializer runs).
     override var kEh = scripts?.eH ?: IntArray(0)  // k.eH — script uids
     override val kBy = scripts?.by ?: emptyArray() // k.by — op blocks
     override val kBz = scripts?.bz ?: emptyArray() // k.bz — group offsets
-    override fun claim(e: Entity, prio: Int, w: IntArray) {
-        if (prio < 0 || prio >= 6) return
-        if (prio >= claimPrio && !(prio == 1 && claimPrio == 1)) return
-        claimPrio = prio; claimed = e
-        claimPad[0] = w[0] - 10; claimPad[1] = w[1] - 10
-        claimPad[2] = w[2] + 10; claimPad[3] = w[3] + 10
-    }
-    override fun clearClaim() { claimPrio = 6; claimed = null }
 
-    // -- k.aq / k.ap / k.s() / k.A(int) counters --------------------------
-    override var aq = 0              // k.aq — global tally (ax4 S5 += m)
+    // -- k.ap / k.s() / k.A(int) counters (k.aq = kAq: the one wisp total) --
     override val sfxLog = mutableListOf<Int>()  // k.A(int) request log
     /** `k.A(i) = z(i)` (k.java:5703, proven): log the request (test
      *  seam — pre-gate), then run the real `z()` (gates `kBE`/`kBF`, sets
@@ -435,9 +397,16 @@ class Level0World(
     override var dlgU = 0
     /** `i.L`/`i.M` (i.java:174-175, proven): entity-side touch anchor —
      *  `i.o(x,y)` writes it, `i.U()` clears when the anchor entity
-     *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space. */
-    var anchorLx = -1
-    var anchorLy = -1
+     *  deactivates; `i.b(x,y)` hit-tests ±70px radial in view space.
+     *  ONE pair of statics (slice 415: the port kept four disjoint copies — the hand / marker
+     *  writers parked their point where the touch hit-test never looked, so the anchor zone
+     *  was dead): `Entity.L/M`. */
+    var anchorLx: Int
+        get() = Entity.L
+        set(v) { Entity.L = v }
+    var anchorLy: Int
+        get() = Entity.M
+        set(v) { Entity.M = v }
     fun setInteractAnchor(x: Int, y: Int) { anchorLx = x; anchorLy = y }  // i.o()
     fun clearInteractAnchor() { anchorLx = -1; anchorLy = -1 }            // i.U() tail
     override fun clipFor(idx: Int): Clip? = clips[idx]
@@ -510,7 +479,6 @@ class Level0World(
     override var vehicle: Entity? = null        // g.a
     override var cv: Entity? = null             // i.cv — ax10-S51 rail zone
     override var iFlag = true                   // g.i
-    override var eFlag = false                  // g.E
 
     /** `k.q()` (k.java:13152, proven): rebuild `ar[]`/`as` from `player.gJ`
      *  — `as=0; at=0; ar[]=-1`, then bits 0..4 take set bits except
@@ -558,8 +526,14 @@ class Level0World(
             aD = jRand(0, 360); aE = jRand(70, 90)
             aA = 0; j = 0; aC = 2
             aq = src.ak; ar = src.al
-            P = 528; af = src; aG = 1
+            P = 528; af = src
         }
+        // m(int) @107-109 (proven, raw bytecode): `aload_0; iconst_1; putfield
+        // aG` — the flag lands on the SPAWNER (`this`), not on the wisp; the
+        // wisp's collect/orbit-end arms read it back as `af.aG != 0` → the
+        // second `k.A(15)` (slice 398: the port set it on the wisp itself, so
+        // `af.aG` stayed 0 unless the spawner's own record had one).
+        src.aG = 1
         pendingInsert += w                        // k.b(aK)
     }
 
@@ -694,6 +668,12 @@ class Level0World(
                 player.Z[0] = 0; player.Z[1] = 0
             }
         }
+        // ctor tail `if (ax == 0) { E(); return }` (i.javap L7188, proven —
+        // slice 389 oracle: aj0 940→939, aj2 1840→1839, aj5 582→579, aj6
+        // 740→739, aj7 1740→1739): the fresh grounded player settles on the
+        // ground line. The checkpoint-restore arm overwrites ak/al after the
+        // ctor, so it keeps the snapshot untouched; ax25 (flyer) has no E().
+        if (s == null && (rec == null || rec[0] != 25)) player.eSettle(this)
         player.gt = 0; player.bh = 0
         // ax10-published player statics (i.java:2492-2512 level-init clears)
         player.gn = 0; player.go = 0; player.gk = -1; player.gd = null
@@ -706,7 +686,7 @@ class Level0World(
         pendingInsert.clear()
         kD = null; kE = null                     // k.V() (k.java:6640-6641)
         lockTarget = null
-        clearClaim()
+        claimReset()                             // i.D() tail: k.m() (i.javap D() @…)
         // i.D() (i.java:1795-1865): g.* link sweep on entity-system reset —
         // vehicle/contact/carry links must not survive into the respawned set
         player.ga = null; player.ac = null; player.standingOn = null
@@ -728,6 +708,7 @@ class Level0World(
         //  prefill; `bW` staying armed re-fires `i.X()` every tick.
         iZ = true; iBy = 1                          // i.z, i.by
         iCm = false; iCl = null                     // i.cm, i.cl
+        kF = null                                   // k.F (D() @17)
         iAH = false; iAI = 1                        // i.aH, i.aI=1
         iBj = false; iBT = false                    // i.bj, i.bT
         cFFlag = false                              // i.cF (gauge-full)
@@ -758,6 +739,11 @@ class Level0World(
         iAK = null                                  // i.aK
         iBh = 0                                     // i.bh
         iBn = false                                 // i.bn
+        Entity.at = null                            // i.at (D() @173, slice 416)
+        hintPending.fill(true)                      // i.br[] re-armed (D() @192-211, slice 416): the
+                                                    //   mission-0 tutorial hints show again on a retry
+                                                    //   / re-entry; reload()'s checkpoint arm then
+                                                    //   restores the snapshot's copy (:5200-5202)
         iQ = false                                  // i.q (gauge-charge)
         kAZ = false                                 // k.aZ
         iCk = null                                  // i.ck
@@ -770,11 +756,14 @@ class Level0World(
         iF = null; iG = null; iH = null             // i.f/g/h sparkle fields
         iBQ = 0                                     // i.bQ
         // i.O() (i.java:7623): slow-mo/conveyor restore on bh3 packs —
+        kAw = 0                                     // i.O() @4-5 `k.aw = 0` (slice 416)
         if (Entity.MISSION_BH[kAj] == 3) {
             if (kW != 0) iAJ = kW
             if (iAJ != 0) kX = iAJ
             iAJ = 0
         }
+        player.unlockInput(this)                    // D() @338 k.p() (slice 416): a retry never keeps a
+                                                    //   stale input lock (the flying g.n() never releases)
         iBB = false                                 // i.bB
         iBF = -1; iBG = -1                          // i.bF/bG = -1
         iBk = false                                 // i.bk
@@ -784,7 +773,10 @@ class Level0World(
         kAv = false                                 // k.av (k.aQ = volPaintRect, nulled above)
         iCg = null; iCh = null                      // i.cg, i.ch
         kDz = 120                                   // k.dz (k.r() tail)
-        kN()                                        // k.n(-1) — wall release
+        kN()                                        // k.V() @49 `n()V` — the scroll-wall release
+        kNSet(-1)                                   // D() @299-300 `k.n(I)V` with -1 = the SHAKE
+                                                    //   overload (`cO = 1; cP = false`; slice 416), not
+                                                    //   the wall release the port called here
         rebuildRecordStructs()
 
         // d(z2) slot map (simple k.java:5941-6080, proven): every record
@@ -848,8 +840,7 @@ class Level0World(
             // ticks invisibly until a claim-script i(0) arms it). Entity
             // handles clip=null defensively. Other clipless/unmapped
             // types join as their clips + init arms get verified.
-            val clipIdx = if (type == 67) NpcFsm.decorClip(if (f.size > 7) f[7] else -1)
-                          else ENTITY_CLIP[type]
+            val clipIdx = entityClipIndex(f[0], f)
             // Every record spawns (proven, i.java:7600 dispatch): a null
             // clip means clipless (bi[ax]=-1 or missing pack-3 entry —
             // invisible but still ticking via i.I()). Entity handles
@@ -1118,7 +1109,6 @@ class Level0World(
         }
     }
     override fun kAyAt(i: Int): Entity? = kAY.getOrNull(i)
-    override fun padHeldWord(): Int = pad.bC    // k.u raw (k.java:119)
     override var kD: Entity? = null            // k.D — ax34 follower
     override var kC: Entity? = null            // k.C
     /** `k.M` — the player's front box, written at `g.e()` offset 154
@@ -1627,8 +1617,6 @@ class Level0World(
     override var iAK: Entity? = null             // i.aK — flap-puff child
     override var kAI = 0                         // k.aI — flap cooldown
     override var kAG = 0                         // k.aG — aE decay divider
-    override var kBB = 0                         // k.bB — burst-phase int
-    override var kBC = 0                         // k.bC
     /** `k.bD` — ONE static: the input commit's hold-duration counter
      *  (k.java:1599-1604), which `g.l()` reads for hold-to-turn and the
      *  flying bank anims read and bump (g.java:5701-5776). */
@@ -1691,7 +1679,6 @@ class Level0World(
         dlgZ()                                          // z() (:371)
         return true
     }
-    var kAt = 0                                // k.at — weapon-corner latch (k.java:4277)
     var kTimerMs = 0                           // derived `i8` = aL*1000 - aM
     var alertSlide = 0                         // derived `i3` = 30-aH slide
     var alertFill = 0                          // derived `i4` = min(aE,100)
@@ -1799,13 +1786,15 @@ class Level0World(
     /** `k.s()` (k.java:5338 + `dE` at :8403, proven). */
     override fun kCollectStreak() {
         kAz++
-        if (kAx < 105 && kAx < 30) kAx = 30      // meter floor clamp
+        // k.javap.txt s() @8-16: `if (ax >= 105) return` right after the streak increment — a full
+        // meter never re-tiers (the port fell through and could LOWER the cap to 30 + tier * 15)
+        if (kAx >= 105) return
+        if (kAx < 30) kAx = 30                   // meter floor clamp
         val dE = intArrayOf(0, 100, 200, 400, 600, 800)
         var tier = dE.size - 1
         while (tier > 0 && kAz < dE[tier]) tier--
         if (tier == 0) return                    // streak < 100 → nothing
-        val old = kAx
-        if (kAx > 105) return                    // L28
+        val old = kAx                            // (@77-82 `ax > 105 → return` is dead after the head test)
         kAx = 30 + tier * 15
         player.x1 = minOf(player.x1, kAx)        // g.f(ax)
         if (old < kAx) player.x1 = kAx           // g.e(ax)
@@ -2049,10 +2038,12 @@ class Level0World(
                     val at = Entity.at
                     if (at != null && at.ax == 72) {                // L48 i.at rope mid
                         camA = p.ak + ((at.ak - p.ak) shr 1) - 200
-                    } else if (gc != null && gc!!.ax == 43) {       // L61 → target rope
-                        camA = gc!!.ak - 200
-                    } else if (ga != null && ga.ax == 43) {         // L64 → own rope
-                        camA = ga.ak - 200
+                    } else if ((gc != null && gc!!.ax == 43) ||
+                        (ga != null && ga.ax == 43)) {              // L315-L371 (slice 414)
+                        // @349-: a non-null `g.c` wins even when only `g.a` is the rope
+                        val gcv = gc
+                        if (gcv != null) camA = gcv.ak - 200
+                        else if (ga != null) camA = ga.ak - 200
                     } else if (p.S in CAM_CENTER_STATES || gj ||
                         (ga != null && ga.ax == 51) ||
                         (p.S == 38 && p.ac != null && p.ac!!.ax == 22)) {
@@ -2085,7 +2076,7 @@ class Level0World(
                 }
                 // L204-L207: keep the focus box 40px inside view
                 if (p.W[1] < camB + 40) camB = p.W[1] - 40
-                if (p.W[3] > camB + 240 - 40) camB = p.W[3] + 40 - 240
+                else if (p.W[3] > camB + 240 - 40) camB = p.W[3] + 40 - 240    // @1204-1277 else-if
                 // L214-L217: lookahead offsets
                 if (camAf != 0) camA = p.ak - 200 + camAf
                 if (camAg != 0) camB = p.al - 120 + camAg
@@ -2111,15 +2102,19 @@ class Level0World(
                             camCC = z1 * 50 / 100                   // L246
                         // else camCC sticky (verbatim L246→L280)
                     } else {                                        // L255 mirror
-                        if (!inView)                                // L276
+                        // @1666-1942 (raw bytes, slice 414): 150 % for `dx > 200` or
+                        // `100 < dx <= 200 && ag == z1 << 8`, `z1` for `50 < dx <= 100 &&
+                        // ag == z1 << 8`, 50 % for `dx <= 50 && ag <= z1 << 8`, else sticky
+                        // (the port read the 150 % arm as `dx <= 200` for any `ag`)
+                        if (!inView)                                // L1872
                             camCC = if (ae.Y[0] >= camRect[0]) z1 * 150 / 100
                                     else z1 * 50 / 100
+                        else if (dx > 200 || (dx > 100 && ae.ag == (z1 shl 8)))
+                            camCC = z1 * 150 / 100                  // L1732
+                        else if (dx > 50 && dx <= 100 && ae.ag == (z1 shl 8))
+                            camCC = z1                              // L1753
                         else if (dx <= 50 && ae.ag <= (z1 shl 8))
-                            camCC = z1 * 50 / 100                   // L271
-                        else if (dx <= 100 && ae.ag == (z1 shl 8))
-                            camCC = z1                              // L264
-                        else if (dx <= 200) camCC = z1 * 150 / 100  // L262
-                        else if (ae.ag == (z1 shl 8)) camCC = z1 * 150 / 100
+                            camCC = z1 * 50 / 100                   // L1817
                     }
                     camB = ae.al - 120                              // L280
                 } else {                                            // L279
@@ -2130,10 +2125,11 @@ class Level0World(
             // L282-L297: scroll-wall containment
             val wall = kAh
             if (wall != null && wall.W != null && wall.aF == 1) {
+                // @1954-2084 else-if chains: a holder narrower than the view keeps the LEFT / TOP edge
                 if (camA < wall.W[0]) camA = wall.W[0]
-                if (camA + 400 > wall.W[2]) camA = wall.W[2] - 400
+                else if (camA + 400 > wall.W[2]) camA = wall.W[2] - 400
                 if (camB < wall.W[1]) camB = wall.W[1]
-                if (camB + 240 > wall.W[3]) camB = wall.W[3] - 240
+                else if (camB + 240 > wall.W[3]) camB = wall.W[3] - 240
             }
             // L300-L305: focus-N watch → X lerp cap 20..40 (private
             // camXw — the original reuses k.X; see field note)
@@ -2143,9 +2139,9 @@ class Level0World(
             }
             // L311-L325: R/S/T/U bound walls (>0 = armed)
             if (kR > 0 && camA < kR) camA = kR
-            if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400
+            else if (kSBound > 0 && camA > kSBound - 400) camA = kSBound - 400   // @2120-2182
             if (kT > 0 && camB < kT) camB = kT
-            if (kU > 0 && camB > kU - 240) camB = kU - 240
+            else if (kU > 0 && camB > kU - 240) camB = kU - 240                  // @2182-2235
             // ---- L325+ settle — inside the `!k.Z` arm: the original's
             // `if (k.Z != 0) goto L9cd` (k.java:5507) skips tracking AND
             // the settle lerp, so a claim script owning the camera gets
@@ -2164,12 +2160,13 @@ class Level0World(
                 camCD = lerpStep(camB - camY, 28)
                 camX += camCC / r6; camY += camCD / r6
             }
-            // L342-L357: ab / rope cd[3] snap-x override (clears kAb too)
+            }
+            // L2428-L2499 (slice 414: reached from the snap arm too): ab / rope cd[3] snap-x
+            // override (clears kAb)
             val gcx = gc; val ga2 = p.ga
             if (kAb || (gcx != null && gcx.ax == 43 && gcx.cd[3]) ||
                 (ga2 != null && ga2.ax == 43 && ga2.cd != null && ga2.cd[3])) {
                 kAb = false; camX = camA
-            }
             }
         }
         // L359: g.v full warp
@@ -2396,7 +2393,7 @@ class Level0World(
         }
     }
 
-    private fun kD() {
+    internal fun kD() {
         val c = kC                                                       // L7-L12
         if (c != null && (c.cd[0] || c.claimActive()) && kZ) {
             camA = camX; camB = camY                                     // snap
@@ -2404,6 +2401,7 @@ class Level0World(
         }
         if (dialogModal) { camA = camX; camB = camY; return }            // j.c==21
         val ae = player                                                  // ae=aS
+        kAe = player                                                     // @93 `k.ae = k.aS` every tick
         if (kW != 0) { kX = kW; kW = 0 }                                 // L17 wind
         // kY = kX << 8 — the derived getter (k.java:2737)
         var r6 = ae.W[0] / 20                                            // L18-L21
@@ -2434,6 +2432,7 @@ class Level0World(
                                 }
                                 boundMaxX = s
                                 camCG = boundMinX; camCH = boundMaxX     // L35
+                                break                                    // @300 `goto 440`: the scan ends at the SECOND 22
                             }
                         }
                         r92++
@@ -2580,10 +2579,12 @@ class Level0World(
                     // `ap[1]` counts `a(true)` retries (`o(1)`, k.java:5175),
                     // not death screens; `deaths` is port instrumentation
                     if (i == 12 && ex != 12) deaths++
-                    if (i == 13 && kBx >= 0) i = 31  // win → stats screen (proven)
-                    kEc = 25; bannerK(3); kEb = 59   // L17 (simple decompile —
-                                                     // structured omits; high-confidence)
-                    z(7)                             // fail/win sting
+                    // @84-99 (raw bytes, slice 415): `this = 31; goto 0` — a win with a stats text
+                    // (`bx >= 0`) RE-ENTERS the method as screen 31, which has no arm here, so the
+                    // banner block and the sting below are skipped (the port ran both for 31 too).
+                    if (i == 13 && kBx >= 0) { i = 31; continue }
+                    kEc = 25; bannerK(3); kEb = 59   // @102-113 (the L17 tail)
+                    z(7)                             // @116-120 fail/win sting
                 }
                 i == 15 -> {                         // mission-complete stats
                     kEe = 0; kEf = 37                // j.g=0 — derived counter, no-op
@@ -4177,7 +4178,7 @@ class Level0World(
             p.ag = 0; p.ah = 0
             if (!p.aZ && (p.gB() || p.S == 79)) {
                 if (p.S != 79) p.setAnim(0)
-                p.settleToGround(this)
+                p.eSettle(this)                            // k.aS.E()
             }
         }
         if (kC == null || e.ax == 67) return
@@ -4591,8 +4592,12 @@ class Level0World(
         set(v) { player.gh = v }
     override var kAA = 0                           // k.aA
     override var gZ = false                        // g.z
-    override var iL = -1                           // i.L
-    override var iM = -1                           // i.M
+    override var iL: Int                           // i.L — the one static pair (Entity.L/M)
+        get() = Entity.L
+        set(v) { Entity.L = v }
+    override var iM: Int                           // i.M
+        get() = Entity.M
+        set(v) { Entity.M = v }
     /** `aS.l()` (g.java:4968) — grab-release; bM=null first per the
      *  original head, then the shared `PlayerFsm.l` resolver. */
     override fun grabResolve(p: Entity): Boolean {
@@ -4664,23 +4669,38 @@ class Level0World(
     var gT = 0                                     // g.t transition int
     override fun gH(): Boolean = gs || gT != 0     // g.h() latch
 
-    /** `k.m()` (k.java:863, proven): reset the interact-claim channel. */
+    /** `k.m()` (k.java:863, proven — k.javap.txt:5112-5125): `co = 6; L =
+     *  null; cp = null; cp = new int[4]`. */
     override fun claimReset() {
         claimCo = 6; kL = null; claimRect = IntArray(4)
     }
 
-    /** `k.a(i,int,int[])` (k.java:816, proven): interact-claim registrar —
-     *  same-entity refresh, else `prio<co || prio==1` steals the claim
-     *  (`co=prio; L=e`); ax51 binds its Y rect not the passed rect. */
+    /** `k.a(int[])` (private static, k.javap.txt:5059-5110, proven): while a
+     *  claim is held, `cp` = the rect padded ±10 — a SNAPSHOT (the owner
+     *  re-bids every tick it stays in reach), not a live view of its `W`. */
+    private fun padClaim(r: IntArray) {
+        if (kL == null) return
+        val cp = claimRect ?: IntArray(4).also { claimRect = it }
+        cp[0] = r[0] - 10; cp[1] = r[1] - 10
+        cp[2] = r[2] + 10; cp[3] = r[3] + 10
+    }
+
+    /** `k.a(i,int,int[])` (k.java:816, proven — k.javap.txt:4990-5062): the
+     *  interact-claim registrar. The current owner (matched by `aw`, @6-16)
+     *  only refreshes `cp`; otherwise a valid bid (`0 <= prio < 6`) takes the
+     *  claim iff `prio < co || (prio == 1 && co == 1)` @54-70 — a prio-1 bid
+     *  does NOT steal from a prio-0 holder. ax51 binds its `Y` rect instead
+     *  of the passed one @19-34 / @82-94. */
     override fun registerClaim(e: Entity, prio: Int, rect: IntArray) {
-        if (kL != null && kL === e) {
-            claimRect = if (e.ax == 51) e.Y else rect
+        val l = kL
+        if (l != null && l.aw == e.aw) {
+            padClaim(if (l.ax == 51) e.Y else rect)
             return
         }
         if (prio < 0 || prio >= 6) return
-        if (prio < claimCo || prio == 1) {
+        if (prio < claimCo || (prio == 1 && claimCo == 1)) {
             claimCo = prio; kL = e
-            claimRect = if (e.ax == 51) e.Y else rect
+            padClaim(if (e.ax == 51) e.Y else rect)
         }
     }
 
@@ -4891,7 +4911,7 @@ class Level0World(
         if (e.ah <= 0 && (e.Y[1] shl 8) + e.ah <= (X[1] shl 8) && (m and 4) != 0) {
             e.ah = 0; e.aj = 0
             e.al = (e.al - e.Y[1]) + X[1]
-            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall()
+            if (e.ax == 0 && PlayerFsm.isAirAction(e.S)) e.enterFall(0, this)
         }
         if (e.ah >= 0 && (e.Y[3] shl 8) + e.ah >= (X[3] shl 8) && (m and 8) != 0) {
             e.ah = 0; e.aj = 0
@@ -5095,8 +5115,11 @@ class Level0World(
         // aO/aP timed line (k.java:4337-4343): expired or absent → null
         if (kAO < 0 || kAP == null) kAP = null
         // weapon-corner latch (k.java:4276-4279): at==1 → 0 inside the
-        // gate, which opens with `!z2` — b(true) never clears it
-        if (!z2 && weaponCornerArmed() && kAt == 1) kAt = 0
+        // gate, which opens with `!z2` — b(true) never clears it. `k.at` is the ONE cycle lock
+        // `g.ao()` / `g.h(I)Z` set (raw bytes @1159-1167, slice 416): the port reset a separate,
+        // never-written `kAt`, so the lock stayed 1 after the first weapon cycle until the next
+        // equip rebuild.
+        if (!z2 && weaponCornerArmed() && actionLock == 1) actionLock = 0
     }
 
     /** The `b(z2)` draw-tail counters (k.java:3166-3239, proven) — the
@@ -5167,16 +5190,13 @@ class Level0World(
      *  door-arrival arm (i.java:14448). */
     override fun fadeIn() { kAo = true; kAn = false; kBI = 255; kFk = 26 }
 
-    /** `i.o()` (i.java:5423): player alive-and-acting —
-     *  S ∉ {2,20..29}. */
-    fun playerAliveO(): Boolean = player.S !in
-        intArrayOf(2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29)
-
     /** The weapon-corner gate (k.java:4274-4276): `!z2 && !bh3 && aS.o()
      *  && (C==null || (aS.P&512)!=0) && ((jc==21&&u==8)||jc==8) &&
      *  z[12]!=null` (z12 is always loaded in the port). */
     fun weaponCornerArmed(): Boolean {
-        if (bh3 || !playerAliveO()) return false
+        // @1092-1098 `invokevirtual g.o:()Z` — the player's grounded-or-vehicle test (g.java:6090),
+        // not the private `i.o()Z` (S ∉ {2, 20..29}) the port tested (slice 416)
+        if (bh3 || !player.groundOrVehicle()) return false
         val c = kC
         if (c != null && (player.P and 512) == 0) return false
         return (jC == 21 && dlgU == 8) || jC == 8
