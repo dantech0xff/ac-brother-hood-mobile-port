@@ -9518,14 +9518,17 @@ private fun ax64Barrage(e: Entity, p: Entity, w: LevelCellSource) {
     w.sfx(16)                                        // L139: k.A(16)
 }
 
-/** `bl()` — the ax64 harrier FSM (i.java:15391-15897). Head arm runs only
- *  at S7; then the S-switch. */
+/** `bl()` — the ax64 harrier FSM (i.javap.txt @51572, proven). The S7
+ *  stalk head runs only at S7 (@12-18); the @747-815 marker-retract tail
+ *  runs on every NON-S7 tick (and again, vacuously, after a failed arm —
+ *  @679-680 jumps there). Then the S-switch @816+. */
 fun NpcFsm.tickAx64(e: Entity, w: LevelCellSource, p: Entity) {
-    if (e.aA < 0) e.aA = 0                           // L6
+    if (e.aA < 0) e.aA = 0                           // @0-11
 
-    if (e.S == 7) ax64StalkArm(e, w, p)              // L6-86 head
+    if (e.S == 7) ax64StalkArm(e, w, p)              // @12-744 head arm
+    else ax64MarkerRetract(e, p)                     // @18 → @747
 
-    when (e.S) {                                     // L87
+    when (e.S) {                                     // @816 tableswitch 0-7
         0 -> ax64S0(e, w, p)
         1 -> ax64S1(e, w, p)
         2 -> ax64S2(e, w, p)
@@ -9536,77 +9539,70 @@ fun NpcFsm.tickAx64(e: Entity, w: LevelCellSource, p: Entity) {
     }
 }
 
-/** L6-86 (proven): the S7 stalk head — latch a pad mask (`bl`) onto the
- *  directional grab marker (`p.ae`), then bind on `k.v(bl)` EDGE. The
- *  `ae.S==66 → L19` re-entry loop in the decompile (i.java:15863-15867)
- *  can only spin — collapsed to the same reposition arm as S60
- *  (proven — structured/i.java:14969-14972 groups S60 and S66 into
- *  the same `ae` reposition arm). */
+/** @12-744 (proven, i.javap.txt @51572): the S7 stalk head. On a
+ *  vulnerable player the harrier plants a directional grab marker on
+ *  `p.ae` (or follows a live S60/S66 one) and binds on the `k.v(bl)`
+ *  pad EDGE; the marker then stays pinned to the harrier. On a failed
+ *  gate it retracts the stale marker ({42,60} left / {48,66} right,
+ *  @582-676). The original NEVER releases `ae` on the armed path —
+ *  @744 `goto 816` skips the @747 tail entirely. */
 private fun ax64StalkArm(e: Entity, w: LevelCellSource, p: Entity) {
     val dx = abs(e.ak - p.ak)
     val dy = abs(e.al - p.al)
-    val dist = e.h(dx, dy)                           // k.h (k.java:6839)
-    // L11-29: vulnerable player anim, not already bound, harrier strictly
-    // below the player (L19 ax64 arm), then the range gates. The r02<=100
-    // check routes ax64 to the same L29 arm either way (proven).
-    var arm = false
+    val dist = e.h(dx, dy)                           // @57-62: k.h
+    // @89-329: vulnerable anim set (tableswitch @95 → {0,4,5,17,18,30-33}),
+    // !G, ax64 strictly below the player (@290-300 `e.al > aS.al`), dx>25,
+    // dist<200. The dy<=100 gate (@309-321) is bypassed by ax==64.
     if (p.S in AX64_VULN && !e.runnerG &&
         e.al > p.al && dx > 25 && dist < 200) {
         val m = p.ae
-        if (m == null) {
-            p.releaseAe()                            // L5/L11: G() on null
+        if (m == null) {                             // @332-338 → spawn
+            p.releaseAe()                            // @341: G() on null ae
             when {
-                // L33-37: above-side markers — dead code for ax64 (L19
+                // @357-425: above-side markers — dead for ax64 (the @290
                 // gate forces al>p.al) but kept verbatim.
                 e.al < p.al ->
                     if (e.ak < p.ak) { p.ae = w.spawnPickup(42, e.ak + 20, e.al); e.bl = 2 }
                     else { p.ae = w.spawnPickup(48, e.ak - 20, e.al); e.bl = 8 }
-                e.al > p.al ->                     // L39-43
+                e.al > p.al ->                       // @428-509: below-side
                     if (e.ak < p.ak) { p.ae = w.spawnPickup(60, e.ak, e.al - 40); e.bl = 128 }
                     else { p.ae = w.spawnPickup(66, e.ak, e.al - 40); e.bl = 512 }
-                else -> p.releaseAe()              // L39 equal-y arm
-            }
-            arm = true                               // L51
-        } else {                                     // L45 (ax64 arm)
-            if (m.S == 60 || m.S == 66) {            // L50 / L19-loop (see hdr)
-                m.ak = e.ak; m.al = e.al - 40
-            }
-            arm = true                               // L51
+                else -> {}                           // @438: equal-y — armed,
+            }                                        //   no marker (pin NPEs
+        } else if (m.S == 60 || m.S == 66) {         //   in the original)
+            m.ak = e.ak; m.al = e.al - 40            // @512-575: follow
         }
-    }
-    // L53-67 (proven): stale/mismatched marker cleanup — left side
-    // releases {42,60}, right side releases {48}; ak>p.ak && S==66 jumps
-    // L10→L76 (skips the bind/reposition block entirely).
-    var tailOnly = false
-    val m = p.ae
-    if (m == null) arm = false
-    else when {
-        e.ak < p.ak ->
-            if (m.S == 42 || m.S == 60) { p.releaseAe(); arm = false }
-            else arm = false                         // L61: ak<=p.ak → L67
-        e.ak == p.ak -> arm = false                  // L61 → L67
-        else ->                                      // ak > p.ak
-            if (m.S == 48) { p.releaseAe(); arm = false }
-            else if (m.S == 66) tailOnly = true      // → L10 → L76
-            else arm = false
-    }
-    if (!tailOnly) {
-        // L68-72 (proven): armed + unbound + pad EDGE on the latch mask →
-        // spawn the tether shot and latch G.
-        if (arm && !e.runnerG && w.padHeld(e.bl)) {
+        // @683-714: unbound + pad EDGE on the latch mask → tether shot
+        // (`a(aS,this,1,false)`) and latch G.
+        if (!e.runnerG && w.padHeld(e.bl)) {
             ax64Tether(e, p, w)
             e.runnerG = true
         }
-        // L74 (proven): pin the marker to (ak, al-20) every armed tick.
-        if (arm) p.ae?.let { it.ak = e.ak; it.al = e.al - 20 }
+        // @715-744: pin the marker to (ak, al-20) — unguarded getfield in
+        // the original (latent NPE on the equal-y arm); kept null-safe.
+        p.ae?.let { it.ak = e.ak; it.al = e.al - 20 }
+    } else {
+        // @582-676: gate failed — retract the stale directional marker:
+        // left {42,60} (@591-629), right {48,66} (@632-670); e.ak==p.ak
+        // releases nothing (@642 `if_icmple 679`).
+        val m = p.ae
+        if (m != null) {
+            if (e.ak < p.ak && (m.S == 42 || m.S == 60)) p.releaseAe()
+            else if (e.ak > p.ak && (m.S == 48 || m.S == 66)) p.releaseAe()
+        }
+        // @679-680 then falls into @747 — provably a no-op here (ae is
+        // either null or a marker S the @747 set can't match), so the
+        // retract is not run again.
     }
-    // L76-86 (proven): tail cleanup — left releases S60, right releases
-    // S66.
-    val m2 = p.ae
-    if (m2 != null) {
-        if (e.ak < p.ak && m2.S == 60) p.releaseAe()
-        else if (e.ak > p.ak && m2.S == 66) p.releaseAe()
-    }
+}
+
+/** @747-815 (proven): on every non-S7 tick the harrier retracts the
+ *  directional marker it planted — left releases S60, right releases
+ *  S66 — via `aS.G()` (`releaseAe`). */
+private fun ax64MarkerRetract(e: Entity, p: Entity) {
+    val m = p.ae ?: return                           // @750 ifnull 816
+    if (e.ak < p.ak && m.S == 60) p.releaseAe()      // @756-780
+    else if (e.ak > p.ak && m.S == 66) p.releaseAe() // @783-807
 }
 
 /** L88-183 (proven): S0 — lob-window check, then waypoint patrol crawl. */

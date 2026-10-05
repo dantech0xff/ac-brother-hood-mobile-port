@@ -8382,7 +8382,7 @@ class Slice65Test {
             inner.spawnPickup(anim, x, y).also { spawned += it }
     }
 
-    @Test fun `stalk — below-right arms, picks S66, releases same tick`() {
+    @Test fun `stalk — below-right arms, picks S66 and keeps it bound`() {
         val w = world()
         val e = ax64At(w, 260, 150, anim = 7)   // stalk head runs only in S7
         w.player.setPositionPx(200, 100)
@@ -8390,16 +8390,18 @@ class Slice65Test {
         w.pad.commit(0)
         val spy = SpawnSpy(w)
         w.npcFsm.tickAx64(e, spy, w.player)
-        // L39-43: right+below → anim 66 + bl=512; then the verbatim L76
-        // tail releases the just-spawned S66 on ak>p.ak → 1-tick flicker
-        // (the marker blink is the visible prompt).
+        // @428-509: right+below → anim 66 + bl=512; @744 `goto 816` SKIPS
+        // the @747 retract tail on the armed path — the marker stays
+        // bound (slice 420: the pre-audit port released it same tick).
         assertTrue(spy.spawned.any { it.ax == 14 && it.S == 66 },
             "S66 marker spawned")
         assertEquals(512, e.bl, "bl latch mask for anim 66")
-        assertNull(w.player.ae, "L76 tail released the just-picked marker")
+        assertEquals(66, w.player.ae?.S, "armed marker stays bound to p.ae")
+        assertEquals(e.al - 20, w.player.ae?.al,
+            "@715 pin: ae.al = e.al - 20")
     }
 
-    @Test fun `stalk — below-left picks S60 and releases it same tick`() {
+    @Test fun `stalk — below-left picks S60 and keeps it bound`() {
         val w = world()
         val e = ax64At(w, 160, 150, anim = 7)   // stalk head runs only in S7
         w.player.setPositionPx(200, 100)
@@ -8410,7 +8412,9 @@ class Slice65Test {
         assertTrue(spy.spawned.any { it.ax == 14 && it.S == 60 },
             "S60 marker spawned")
         assertEquals(128, e.bl)
-        assertNull(w.player.ae, "L53-67 released the matched-side marker")
+        assertEquals(60, w.player.ae?.S, "armed marker stays bound to p.ae")
+        assertEquals(e.al - 20, w.player.ae?.al,
+            "@715 pin: ae.al = e.al - 20")
     }
 
     @Test fun `S0 — waypoint crawl dominant axis at pace Z1 shl 8`() {
