@@ -175,10 +175,9 @@ class Slice417Test {
         // W/X/Y are the a()/refreshBoxes hitbox rects — E()'s probe
         // rewrites them at the spawn position (write-before-read)
         assertTrue(p.cd.all { !it }, "i.cd zeroed")
-        p.cb?.let { assertTrue(it.all { v -> v == 0 }, "i.cb zeroed") }
-        p.cc?.let { assertTrue(it.all { v -> v == 0 }, "i.cc zeroed") }
-        p.cf?.let { assertTrue(it.all { v -> v == 0 }, "i.cf zeroed") }
-        p.cQ?.let { assertTrue(it.all { v -> v == 0 }, "i.cQ zeroed") }
+        // i.cb/cc/cf/cQ are lazily allocated — a fresh object carries null
+        assertNull(p.cb, "i.cb = null"); assertNull(p.cc, "i.cc = null")
+        assertNull(p.cf, "i.cf = null"); assertNull(p.cQ, "i.cQ = null")
         assertEquals(0, p.bh, "i.bh = 0 (D() @181)")
         assertEquals(w.kAx, p.x1, "x1 = kAx (reload tail :4830)")
     }
@@ -260,5 +259,23 @@ class Slice417Test {
         assertFalse(Entity.gq, "g.q — D() cleared")
         assertFalse(Entity.grabLatch, "g.j — D() cleared")
         assertFalse(Entity.gE, "g.E — D() cleared")
+    }
+
+    @Test fun `claim-script lazy state dies with the body — re-bind re-arms cd7 and cb1 re-inits`() {
+        val w = world()
+        val p = w.player
+        p.bindScript(0, w)                        // h() first-alloc → cd[7]=true
+        assertTrue(p.cd[7], "first bind arms cd[7]")
+        p.scriptKeyStep(0, w)                     // k() first-alloc → cb[1]=-1
+        assertEquals(-1, p.cb!![1], "cb[1] = -1 on first alloc")
+        p.cb!![1] = 2                             // decided claim state
+        w.resetLevel(false)
+        assertNull(p.cb, "cb dies with the body")
+        assertNull(p.cc); assertNull(p.cf); assertNull(p.cQ)
+        assertFalse(p.cd[7], "cd[7] cleared until the next first-bind")
+        p.bindScript(0, w)
+        assertTrue(p.cd[7], "fresh bind re-arms cd[7] (h() alloc)")
+        p.scriptKeyStep(0, w)
+        assertEquals(-1, p.cb!![1], "fresh cb re-inits cb[1] = -1")
     }
 }
