@@ -613,10 +613,13 @@ open class Entity(val ax: Int, var clip: Clip?) {
         v = false; b = false
         runnerB = false; runnerD = 0; iE = false; runnerG = false
         scriptStep = 0; scriptOps = null
-        cb?.fill(0); cc?.fill(0); cf?.fill(0); cQ?.fill(0)   // lazily
-        // allocated claim-script arrays — the JVM ctor allocates them; the
-        // port's null-or-array contract is kept (zeroed when present)
-        cd.fill(false)
+        cb = null; cc = null; cf = null; cQ = null   // i.cb/cc/cf/cQ — lazily
+        // allocated by script ops; a fresh object carries null and null is
+        // itself a semantic flag (`cb == null` gates claim state, `cc != null`
+        // fans the op112/113 choice cards), so the arrays must die with the
+        // body — zeroing them keeps the "allocated" observable state alive
+        cd.fill(false); cdAllocated = false          // i.cd — h() re-arms cd[7]
+                                                     // on the next first-bind
         standingOn = null; ac = null
         af = null; ab = null; ad = null; ae = null; s = null; c = null
         cg = null; ch = null; F = null
