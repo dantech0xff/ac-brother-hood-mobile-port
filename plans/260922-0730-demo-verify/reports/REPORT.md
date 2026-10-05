@@ -1,10 +1,10 @@
 ---
 title: Device verification log — the Kotlin+LibGDX port on emulator-5554
 phase: demo-verify
-status: run-30-last-recorded; run-31-unrecorded; run-32/33-pending-emulator-host
+status: run-32-and-run-33-recorded-2026-10-05; run-31-unrecorded
 build: per run (each section names its commit/APK); last recorded APK = slice-330 build (aadfeac5 docs-HEAD)
 device: emulator-5554 (AVD `spike`, API 36, swiftshader_indirect, 2400×1080 landscape, scale=4 offset=(400,60))
-date: 2026-10-03 (header refreshed; runs dated in their sections, Run 2 = 2026-09-24)
+date: 2026-10-05 (Run-32/33 appended; header refreshed 2026-10-03)
 early_title: "Golden-path verification — devin/land (10a200ec → eb6516f5)"
 early_status: 46329a09-all-8-missions-load-render-no-crash-m5-spawn-wedge
 early_builds: rewrite/android-debug.apk @ 10a200ec (slice 204, TEMP fix) · eb6516f5 (slice 208) · 9ad6b723 (210) · 9584967a (213) · f9b486d7 (214) · 31289deb (222+223) · 8b2559cd (217-233) · 290d62c2 (through 244) — all stock
@@ -1622,11 +1622,130 @@ but nothing was archived: no screenshots, logcat or video exist under
   are queued for Run-32.
 - Status: `26940489-slice337-menu-audit-UNRECORDED-commit-message-only`
 
-## Pending device runs (2026-10-03)
+# Run-32 — menus/UI device evidence @ 75ff11e3 (devin/land, slice-420 HEAD) — emulator-5554
 
-Device evidence stops here. Queued for the next emulator host (no `/dev/kvm`
-in the cloud container): Run-32 (menus, slices 337–343) and Run-33
-(gameplay, Phase 1 slices 346–368: sentinels/pouncers, ax11 attack variety,
-S17→S18 wall-kick, springboard hit, Cesare grab QTE, the m0 intro SKIP pill
-and BACK key, pause icon on release). Checklist:
-`plans/261003-0700-parity-gap-closure-android-hardening/phase-02-capstone-revalidation-device-evidence.md`.
+status: `75ff11e3-MENUS-ALL-7-VERIFIED-jc23Chrome-pressedChrome-tickBoundary-twoCol-jc28-multiFinger`
+
+Phase-2 step-5 run (checklist `phase-02-capstone-revalidation-device-evidence.md`).
+AVD `klokk_aosp` (API 36 x86_64, swiftshader_indirect, 2400×1080, scale=4
+offset=(400,60)). Three `screenrecord` takes archived (`run32a/b/c.mp4`);
+all seven checklist items captured.
+
+## Verified on device
+
+- ✅ **jc23 sound-prompt row/pill chrome** (`run32-jc23a.png`): the
+  play-sound confirm screen draws its panel + YES/NO pills and the footer
+  strip; ident-frame probe (`run32-jc23-bar-tap.png`, pixel-identical to
+  the pre-tap frame) proves a tap in the top letterbox bar posts NO input
+  (slice-337 clamp fix).
+- ✅ **Pressed vs unpressed row chrome** (`run32-menu-pressed.png`,
+  `run32-jc23-pressed.png`): DOWN inside a row rect repaints the pill
+  pressed; release restores idle arm.
+- ✅ **62 ms tick boundary for row taps** (`run32-drag-release.png`): a
+  DOWN+UP that lands in the same tick commits the row; a press whose UP
+  crosses the tick boundary resolves as drag-release with NO commit —
+  `pressY` is the first DOWN's y, UP coordinates only feed
+  `lastTouchX/Y`.
+- ✅ **OPTIONS two-column split verbatim** (`run32-options-2col.png`):
+  jC=3 OPTIONS renders 2×4; col-2 rows start at view x=206 — the literal
+  that lands them half-off-panel, matching k.java:7706-7720. Pause
+  OPTIONS (jC=14, bv=4) stays single-column (`run32-options.png`, the
+  L153 `j.c==14` skip).
+- ✅ **jC=28 deleted-data screen** (`run32-jc28-deleted.png`): after
+  OPTIONS→RESET GAME→YES the wipe fires and the screen shows only the
+  message + BACK footer — no ghost YES/NO rows (slice-351 arm
+  `kEc==121`).
+- ✅ **Multi-finger / pointer-death parity** (`run32-mf-two.png`,
+  `mf-b-up`, `mf-all-up`, via `sendevent /dev/input/event2` ABS MT):
+  second finger down while finger-A is held is inert (the
+  `activePointer` single-slot — the J2ME original is single-touch);
+  lifting finger-B does not kill finger-A's run; lifting all frees the
+  slot.
+- ✅ **Footer strips**: left view −5..65 → M_PAUSE (pause menu opens),
+  right 385−kCf..405 → M_CYCLE (back), verified by state transitions on
+  tap.
+
+# Run-33 — gameplay device evidence @ 75ff11e3 — emulator-5554
+
+status: `75ff11e3-m0sentinel-m3sentinels-ax11variety-m1springboard-crash-jc19-m5fly-m7castle-QTE-not-reached`
+
+Phase-2 step-6 run. One `screenrecord` take (`run33a.mp4`, covers the m0
+sentinel approach + combat + KO). Mission hops via jdb (`kBA[14]=7` →
+`stateL(19)` + `kDa=8` → jc19 row tap → jc30 hero → TOUCH) — the
+mission-select menu is itself the other two-column case
+(`run33-jc19-menu.png`), on device.
+
+## Verified on device
+
+- ✅ **m0 ledge sentinels + ax11 guard combat** (`run33a.mp4`,
+  `run33-sent-approach2.png`, `run33-sent-alert2.png`,
+  `run33-atkvar4.png`): teleport to (7530,400) put the player next to
+  the f5=93 sentinel cluster (records 149-152, pack-6); run-right
+  approach → the guard detects, closes, and swings. Multiple attack
+  frames captured; Ezio took lethal damage → jC=12 KO → "DO YOU WANT
+  TO RESTART?" confirm (eA[3] YES/NO rows — row rects at
+  panel.y+10+40(z3)=view y117/150, i.e. dev ~(1200,588)/(1200,720), NOT
+  at the visual pills) → YES → checkpoint dialog → respawn
+  (`run33-after-yes3.png`, `m1-game.png` shows the m0 respawn UI).
+- ✅ **ax11 attack variety**: distinct swing/block frames across
+  `sent-alert2`/`atkvar*` (wind-up, thrust, recovery) — the shared FSM
+  drives real melee variety, not a single scripted clip.
+- ✅ **m3 ledge sentinels at their posts** (`run33-m3-sent3.png`):
+  three f5=93 sentinels (records 226-228, pack-9, x7415/7513/7614
+  y~690) stand on three tower balconies in lookout pose — distinct from
+  patrol guards; they animate in place while the player perches above.
+- ✅ **ax67 springboard — m1 flying variant** (`run33-m1-sb1.png`,
+  `run33-m1-hit2.png`, `run33-m1-sbhit.png`): pack-7 ax67 records
+  (f5=0, f8=200) render as scissor-lift launch pads on the m1 flight
+  route; approaching one raises the "UP" interaction prompt; a direct
+  teleport onto the prop (663,6940) fired the bounce-hazard arm —
+  glider destroyed → jC=12 restart prompt.
+- ✅ **jc19 SELECT LEVEL renders two-column** with 8 unlocked levels
+  (`run33-jc19-menu.png`) — device-visible confirmation of the
+  `(bv==4&&jc!=14)||jc==19` split's second arm.
+- ✅ **m5 flying mission renders** (soldier walls, fire hazard,
+  glider HUD — `run33-m5-game2.png`); **m7 castle rooftop spawns**
+  (`run33-m7-cesare3.png`).
+
+## Attempted, not reachable by teleport
+
+- ⚠️ **Pouncer pounce (ax17→ax50, m3/m5)**: pouncer records verified in
+  packs 9/11 ((12781,656),(12882,656),(12961,657) / (12620,820),
+  (12815,820),(14574,577),(11616,834),(14694,577)); the pounce is
+  triggered by the player passing BELOW the perch on the floor — every
+  teleport into the perch band left the player in a ledge-grab/fall
+  wedge (S=43 suspended, input-immune — the teleport-into-solid
+  artifact, not a gameplay bug). Not observed live.
+- ⚠️ **m4 ax67 ground props**: real records sit inside wall tiles
+  ((321,8020),(387,8384),(551,8846),(290,8845),(442,2377),(708,2382),
+  (585,8020),(648,8385),(345,11707),(322,11163),(381,11163),(471,9727)
+  — f5=27/19 arms); teleports to all four clusters put the player
+  inside geometry (invisible, input-dead). The m1 flying variant above
+  covers the prop family on-device.
+- ⚠️ **m5 pouncers/sentinels in the flying phase**: `player` is a
+  hidden anchor — `setPositionPx` moves it but the glider runs its rail
+  script; no sentinel/pouncer contact produced.
+- ⚠️ **S17→S18 wall-kick arc**: needs a run-into-wall jump at a
+  climbable face; teleport positions kept landing in non-walk pockets —
+  not captured this run.
+- ⚠️ **m7 Cesare grab QTE**: the ax61 records (uid313@(1574,2032),
+  uid317@(1711,660)) are scripted spawn points — the QTE only arms
+  inside the scripted boss sequence; teleports nearby left the player
+  on a non-walkable battlement perch (S=0 idle, directional input
+  ignored). Not reachable without playing the mission forward.
+
+## Ops notes (for the next run)
+
+- jdb `set`/`print` commands MUST be issued after "Breakpoint hit"
+  lands — queued early they run with "No current thread" and silently
+  no-op. Clear the bp before `resume`, and keep suspends <5 s: an armed
+  bp left during a swipe produced an ANR dialog that ate input until
+  force-stop/relaunch.
+- `input swipe x y x y <ms>` = press-hold-release (row/rect taps need
+  DOWN+UP in one 62 ms tick — ~80-150 ms holds work).
+- Multi-touch needs `adb root` + full ABS_MT event set
+  (TRACKING_ID/PRESSURE/TOOL/MAJOR/MINOR/TOUCH_MAJOR + BTN_TOUCH + SYN)
+  or the finger stays a hover.
+- Teleports only stick when the landing point is open floor: mid-air
+  drops resolve via ledge-grab into an input-immune wedge; inside-wall
+  drops leave the sprite invisible (S79-class wedge).

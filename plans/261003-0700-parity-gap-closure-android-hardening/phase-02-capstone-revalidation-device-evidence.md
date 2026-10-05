@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: Capstone Re-validation and Device Evidence
-status: in_progress
+status: done
 priority: P1
 dependencies: [1]
 ---
@@ -14,7 +14,7 @@ dependencies: [1]
 - Capstone legs: `rewrite/core/src/test/kotlin/com/acrebuild/core/Slice1Test.kt`
   (m0 continuous run ~`:24091`; stitched legs e.g. `:25520`, `:26563`,
   `:27251`, `:28914`; m7 HP top-up `:28929`)
-- Device log: `plans/260922-0730-demo-verify/reports/REPORT.md` (ends at Run-30)
+- Device log: `plans/260922-0730-demo-verify/reports/REPORT.md` (ends at Run-33)
 - Device recipes: `.agents/skills/android-emulator-testing/SKILL.md`
 
 ## Overview
@@ -39,15 +39,21 @@ corrected game and refreshes the device evidence that stopped at slice 330.
   (`:core:test` 1689/1689) — verdicts in
   [`reports/capstone-revalidation.md`](./reports/capstone-revalidation.md).
   Re-validation found four more parity bugs (slices 360–363), fixed.
-- Step 3 (connect the stitched legs) and steps 5–6 (device Run-32/33) are
-  open; the device steps need an emulator host. Step 3 waits for slices
-  369–371 to land (they change player/NPC behaviour and slice 370 re-routes
-  bots).
+- Step 3 done (2026-10-05): stitched legs re-evaluated — m2 LegA-C-Win
+  connected, m3/m5/m6 unions attempted with bounded budget and seams
+  documented, m7 x1 top-up accommodation re-checked (`8ef49c82`, merged
+  to `devin/land` @ `75ff11e3`).
+- Steps 5–6 done (2026-10-05): Run-32 (all 7 menu items verified with
+  screenshots + 3 screenrecord takes) and Run-33 (m0 sentinel combat + KO,
+  m3 sentinel trio, ax11 attack variety, m1 springboard UP-prompt + crash,
+  jc19 two-column, m5 flying render, m7 castle) appended to `REPORT.md`;
+  pouncer-pounce, m4 ground ax67s, wall-kick and the Cesare QTE were
+  attempted and are documented as teleport-unreachable (script-gated or
+  in-wall records), not as device-verified.
 - Step 4 done: Run-31 had no archived artifacts; `REPORT.md` now records it
   as UNRECORDED with what the slice-337 commit message says, and lists the
   queued Run-32/33 checks.
-- Step 7 (part): `REPORT.md` frontmatter refreshed (it described Run 2);
-  the run sections themselves are appended when Run-32/33 happen.
+- Step 7 done: `REPORT.md` frontmatter + Run-32/33 sections written.
 
 ## Implementation Steps
 
