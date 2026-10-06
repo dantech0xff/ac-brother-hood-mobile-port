@@ -62,6 +62,33 @@ class ClipContractTest {
         assertEquals(a[1], b[1])
     }
 
+    @Test fun `frameDraw returns the negated stored offset`() {
+        // b.javap a(g,anim,frame,x,y,flags,i6,i7) @35-156:
+        //   i10 = (flags&1)!=0 ? i6 + ax : i6 - ax ; drawX = i3 - i10
+        // Callers fold the i6 ref into x and do `x - dx`, so the returned dx
+        // is the NEGATED stored offset unflipped and the raw one flipped:
+        //   drawX = x + ax (flags&1==0) / x - ax (flags&1==1).
+        // clip93 anim 10 frame 0 is the menu-pill left cap with stored dx=+1
+        // (proven ACPK): it must draw at x+1 so it overlaps the fill run —
+        // the old sign put it at x-1 and opened the QUICK PLAY seam.
+        val c = Clip.load(asset("clips/clip93/clip.acpk"))
+        val fi = c.frameIndex(10, 0)
+        assertEquals(1, c.frameDx[fi], "clip93 anim10/f0 stored dx (cap anchor nudge)")
+        for (flags in intArrayOf(0, 1)) {
+            val fd = c.frameDraw(10, 0, flags)
+            val want = if (flags and 1 != 0) c.frameDx[fi] else -c.frameDx[fi]
+            assertEquals(want, fd.dx, "dx sign for flags=$flags")
+            val wantY = if (flags and 2 != 0) c.frameDy[fi] else -c.frameDy[fi]
+            val fd2 = c.frameDraw(10, 0, flags or (flags shl 1))
+            assertEquals(wantY, fd2.dy, "dy sign for flags=${flags or (flags shl 1)}")
+        }
+        // scratch overload agrees with the allocating one
+        val out = Clip.FrameDraw(0, 0, 0, 0)
+        c.frameDraw(10, 0, 0, out)
+        assertEquals(c.frameDraw(10, 0, 0).dx, out.dx)
+        assertEquals(c.frameDraw(10, 0, 0).dy, out.dy)
+    }
+
     @Test fun `tileset cells index the object space`() {
         assertEquals(119, tile11.objPlaceCount.size)
         // each tile object = one placement

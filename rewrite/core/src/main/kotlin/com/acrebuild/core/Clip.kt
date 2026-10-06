@@ -93,14 +93,15 @@ class Clip private constructor(
     /** Draw descriptor for one frame (`b.java:907`): module + anchor offset. */
     fun frameDraw(anim: Int, frame: Int, flags: Int): FrameDraw {
         val fi = frameIndex(anim, frame)
-        // (i5 & 1) ? x + ax : x - ax ; same for y — sign flips when mirrored.
-        // b.java:907 — draw pos = anchor - (cam + dx); with flags&1 the
-        // stored dx is subtracted the other way, i.e. draw pos flips sign.
-        // Returned dx is already sign-folded: screenX = anchorX - camX - dx.
+        // b.javap a(g,anim,frame,x,y,flags,i6,i7) @35-156:
+        //   i10 = (flags&1)!=0 ? i6 + ax : i6 - ax ; drawX = x - i10
+        // so with ref i6 folded into the caller's x the effective offset is
+        //   drawX = x + ax (unflipped) / x - ax (flags&1), and callers
+        // compute `x - dx` — hence dx must carry the NEGATED stored offset.
         val flipX = flags and 1 != 0
         val flipY = flags and 2 != 0
-        val dx = if (flipX) -frameDx[fi] else frameDx[fi]
-        val dy = if (flipY) -frameDy[fi] else frameDy[fi]
+        val dx = if (flipX) frameDx[fi] else -frameDx[fi]
+        val dy = if (flipY) frameDy[fi] else -frameDy[fi]
         return FrameDraw(frameModule[fi] or ((frameFlags[fi] and 0xC0) shl 2),
                          dx, dy, (flags xor (frameFlags[fi] and 15)) and 15)
     }
@@ -109,8 +110,10 @@ class Clip private constructor(
     fun frameDraw(anim: Int, frame: Int, flags: Int, out: FrameDraw) {
         val fi = frameIndex(anim, frame)
         out.module = frameModule[fi] or ((frameFlags[fi] and 0xC0) shl 2)
-        out.dx = if (flags and 1 != 0) -frameDx[fi] else frameDx[fi]
-        out.dy = if (flags and 2 != 0) -frameDy[fi] else frameDy[fi]
+        // same fold as the allocating overload: drawX = x ∓ ax → dx = ∓ax
+        // (callers do `x - dx`).
+        out.dx = if (flags and 1 != 0) frameDx[fi] else -frameDx[fi]
+        out.dy = if (flags and 2 != 0) frameDy[fi] else -frameDy[fi]
         out.transform = (flags xor (frameFlags[fi] and 15)) and 15
     }
 
