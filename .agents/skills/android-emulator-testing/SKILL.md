@@ -497,3 +497,48 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - jc3 (bv=4) is jdb-only: `print this.stateL(3)` + `print this.bannerK(4)` in the same suspend → 8 rows two-column on the (14,47,180) panel; no footer exit (verbatim dead-end) — `stateL(2)` to escape.
 - Boot legal pages for screencaps: splash ~3s → legal-1 ~3s → legal-2 ~5s → jC=23; grab at launch+4s and +8s.
 - jc21 dlgU=9 chain: jc9 briefing after jG>164 → strip tap → jc21; mid-screen taps advance pages (and complete the typewriter first). SKIP pill at view(349,198,56,47) → dev(1870,891) → jc8.
+
+### Run-32 notes (PR-389 jc5 HELP verify)
+
+
+## jc5 has TWO render arms selected by `kCy` (origin state), not by the screen itself
+- `helpScreen()` picks `kCy == 14` → framed translucent panel + black "HELP" title bar
+  over live gameplay (f(true)); otherwise → full-screen `drawFrame(97,1,0,0,0,0)`
+  light-gradient backdrop (f(false)). Both draw palette-1 BLACK wrapped text.
+- `stateL(i)` sets `kCy = old jC`, so the arm is decided by where you came from.
+- The ONLY real-UI entry is pause menu (jc14) HELP row → kCy=14 framed variant.
+  The else/backdrop arm is reachable in the harness ONLY via jdb:
+  breakpoint `Level0World.tick` → `print this.menuItem(6)` while jC==2 (or any
+  non-14 menu) → jC=5, kCy=2. Verified working.
+- Original JAR also had a hidden jc2 HELP button at view (10,167,36,27)
+  (`bw=0; l(5)`) — NOT ported; no equivalent exists in Level0World.kt.
+
+## HELP (jc5) navigation geometry — menuG() + footerQ()
+- Page model: `kBw` = page group (mod 4), `kCY` = current 8-line screen within
+  the page; counter text `"${globalScreen}/${kCZ}"` at view (200,220) — for
+  controls help kCZ=6 ("1/6" … "6/6").
+- Left chevron hit zone: view rect (45, iK-15, 50, 30); right chevron:
+  (305, iK-15, 50, 30), where `iK = menuGIK() = 47+(kEe-linesHeight(1))/2` —
+  in practice just click the visible cyan chevron art (~view 70,120 / 330,120).
+- Right chevron wraps: at last screen of a page it advances `kBw` (mod 4) and
+  resets `kCY=1` — the counter can go past N/N? No: counter tracks global
+  screen, reaching "6/6" then wrapping to the next page group's first screen.
+- Exit: footer for jC=5 is `Pair("", d0(17))` — no left pill, BACK pill
+  bottom-right zone `pointerDownIn(395-kCf-10, 198, kCf+20, 47)` (≈ view
+  330-400,198-245 → dev x 1720-1960, y 852-1040). M_CYCLE → `kCY=1;
+  stateL(kCy)` returns to the ORIGIN state (jc2 for backdrop arm, jc14 for
+  framed arm). The BACK pill is faint/invisible on the backdrop arm — the hit
+  zone is still armed; click the bottom-right corner anyway.
+
+## Real-UI chain to pause→HELP (framed variant)
+jc2 QUICK PLAY row0 → jc9 briefing card (wait ~11s for jG>164) → mid-screen
+strip tap → jc21 dialog → SKIP pill (dev 1870,891) → jc8 gameplay → blue
+pause icon top-right (dev ~1905,138) → jc14 → HELP row (4th of 6 rows,
+dev ~1200,676) → jc5 cy=14. Quit-to-menu from jc14 pops a YES/NO confirm —
+YES is the top pill.
+
+## Input note (still true)
+`adb input tap` can be kernel-dead across emulator reboots (zero events in
+`getevent -lt`). Real mouse clicks via the computer tool on the emulator
+window are the reliable fallback — all jc5 chevron/footer taps worked that
+way on the first try this run.
