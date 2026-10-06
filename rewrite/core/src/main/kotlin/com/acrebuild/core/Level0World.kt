@@ -3193,10 +3193,13 @@ class Level0World(
     fun menuI14(i: Int, i3: Int): Int =
         if (jC == 19) i + (((i3 - menuI5() shr 1) + 25 + 145) shr 1)
         else i + (i3 shr 1)
-    /** Row rect list mirroring b()'s `i9` walk: `i9 = y+10` (+40 under
-     *  z3), `i9 += i4+3` per row, `i13==1&&j.c==2` → +13 before row 1,
-     *  center split `(bv==4&&j.c!=14)||j.c==19` at `i16 = i10/2` (-1 even)
-     *  moves the rest to x=206 restarting at `i12` — L153
+    /** Row rect list mirroring b()'s `i9` walk — **modified by the
+     *  contiguous-rows DIVERGENCE**: draw and hit-test both stack rows
+     *  at pitch `i4` (the verbatim `i9 += i4+3` and the jc2 `+13` gap
+     *  are dropped — user wants buttons touching, no white stripes),
+     *  and the col-2 reset is `i9 = i12 - i4`. `i9 = y+10` (+40 under
+     *  z3); center split `(bv==4&&j.c!=14)||j.c==19` at `i16 = i10/2`
+     *  (-1 even) moves the rest to x=206 restarting at `i12` — L153
      *  (`bv != 4 → goto L157`, `j.c == 14 → L157`) skips the split, so
      *  ONLY bv==4 menus (and jc19) lay their rows in two columns
      *  (:7706-7720, proven); every other menu stacks vertically. */
@@ -3229,14 +3232,13 @@ class Level0World(
         var bottom = i9
         for (i13 in 0 until i10) {
             val i4 = menuI4(i13)
-            if (i13 == 1 && jC == 2) i9 += 13
             if (i9 + i4 > bottom) bottom = i9 + i4
             if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
-                if (i13 == i16 && i13 < i10 - 1) i9 = i12 - (i4 + 3)
+                if (i13 == i16 && i13 < i10 - 1) i9 = i12 - i4
             }
-            i9 += i4 + 3
+            i9 += i4   // contiguous pitch (divergence — matches draw)
         }
         return (bottom - 235).coerceAtLeast(0)
     }
@@ -3252,17 +3254,16 @@ class Level0World(
         val i10 = menuRowCount()
         for (i13 in 0 until i10) {
             val i4 = menuI4(i13)
-            if (i13 == 1 && jC == 2) i9 += 13
             out.add(intArrayOf(i, i9, i3, i4))
             if ((kBv == 4 && jC != 14) || jC == 19) {
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {
                     i = 206               // verbatim literal @1981-1984
-                    i9 = i12 - (i4 + 3)
+                    i9 = i12 - i4
                 }
             }
-            i9 += i4 + 3
+            i9 += i4   // contiguous pitch (divergence — matches draw)
         }
         return out
     }

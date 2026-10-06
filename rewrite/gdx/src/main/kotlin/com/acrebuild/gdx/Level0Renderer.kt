@@ -979,17 +979,28 @@ class Level0Renderer {
         var i9 = y + 10
         val i10 = world.menuRowCount()
         val i11 = if (z3) 40 else 0
-        if (z2) {
-            fillAr(x, y, w, i10 * 33 + 20 + i11, -856756498)
-            fillAr(x - 2, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
-            fillAr(x + w, y - 2, 2, i10 * 33 + 24 + i11, -2013265920)
-            fillAr(x, y - 2, 95, 2, -2013265920)
-            fillAr(x, y + i10 * 33 + 20 + i11, 95, 2, -2013265920)
-            fillAr(x + 108, y - 2, w - 108, 2, -2013265920)
-            fillAr(x + 108, y + i10 * 33 + 20 + i11, w - 108, 2, -2013265920)
-        }
+        // DIVERGENCE (user-requested, NOT verbatim): the original only
+        // draws the z2 band for jc12/13/14(-bv3) and leaves a +13/+3
+        // gap between every row (k.javap @5976/:1109, proven) — over
+        // the unenclosed strips that read as backdrop, but inside a
+        // light band it shows as white stripes between buttons. The
+        // user wants buttons contiguous, so every panel draws the
+        // band+borders AND rows stack with pitch `i4` (no gaps);
+        // two-column screens (jc19 / bv4) get a second band at x=206
+        // covering the right column once it actually has a row.
+        val twoCol = (world.kBv == 4 && world.jC != 14) || world.jC == 19
+        // col 2 only exists once its first row does (`i13==i16` split
+        // triggers only when `i16 < i10-1`, i.e. i10 ≥ 2).
+        val col2 = twoCol && i10 > (i10 + 1) / 2
+        var rowsSpan = 0
+        val col1Rows = if (twoCol) (i10 + 1) / 2 else i10
+        for (r in 0 until col1Rows) rowsSpan += world.menuI4(r)
+        val bandH = rowsSpan + 20 + i11
+        menuBand(x, y, w, bandH)
+        if (col2) menuBand(206, y, w, bandH)
+        fillAr(x + 95, y - 2, 13, 2, -2013265920)
+        if (col2) fillAr(206 + 95, y - 2, 13, 2, -2013265920)
         fillAr(x, y, w, 10, 805306368)
-        if (z2) fillAr(x + 95, y - 2, 13, 2, -2013265920)
         if (z3) { fillAr(x, i9, w, 40, 805306368); i9 += 40 }
         // Port-added bv4 overflow scroll (`menuScrollDy`, world-side):
         // shift the row window and clip rows to the region below the
@@ -1006,7 +1017,6 @@ class Level0Renderer {
         for (i13 in 0 until i10) {
             val i4 = world.menuI4(i13)
             val i5 = world.menuI5()
-            if (i13 == 1 && world.jC == 2) i9 += 13
             val zD = world.pointerMoveIn(i, i9, w, i4)
             if (zD) {
                 // pressed/hovered row (k.java:7816-7853): fJ arrow at the
@@ -1094,13 +1104,24 @@ class Level0Renderer {
                 if (i13 == i16 && i13 < i10 - 1) {
                     fillAr(i, i9 + i4, w, 10, 805306368)
                     i = 206
-                    i9 = i12 - (i4 + 3)
-                    fillAr(206, i9 + i4 + 3 - 10, w, 10, 805306368)
+                    i9 = i12 - i4          // contiguous pitch (divergence)
+                    fillAr(206, i9 + i4 - 10, w, 10, 805306368)
                 }
             }
-            i9 += i4 + 3
+            i9 += i4              // contiguous pitch (divergence)
         }
         if (scrolling) { clipViewport = null; clipReset() }
+    }
+
+    /** Verbatim z2 arm (k.java:5945-5970): band + 6 border rects. */
+    private fun menuBand(x: Int, y: Int, w: Int, h: Int) {
+        fillAr(x, y, w, h, -856756498)
+        fillAr(x - 2, y - 2, 2, h + 4, -2013265920)
+        fillAr(x + w, y - 2, 2, h + 4, -2013265920)
+        fillAr(x, y - 2, 95, 2, -2013265920)
+        fillAr(x, y + h, 95, 2, -2013265920)
+        fillAr(x + 108, y - 2, w - 108, 2, -2013265920)
+        fillAr(x + 108, y + h, w - 108, 2, -2013265920)
     }
 
     /** `b.java:915` composite-sprite draw for one tile cell. */

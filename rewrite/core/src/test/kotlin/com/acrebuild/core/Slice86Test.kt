@@ -22,9 +22,11 @@ class Slice86Test {
         assertEquals(2, r.size)
         // verbatim: jc12 arms eC=25 + K(3) (k.java:2287-2289) — bv!=4
         // takes `goto L157` at L153 (:7706-7708) so the x=206 split
-        // never runs; YES/NO stack on the row pitch (30 + 3).
+        // never runs; YES/NO stack on the row pitch. DIVERGENCE: pitch
+        // is now contiguous `i4` (the +3 gap was dropped with the band
+        // change — user-requested), so row 1 sits at 117+30 = 147.
         assertEquals(listOf(93, 117, 214, 30), r[0].toList())
-        assertEquals(listOf(93, 150, 214, 30), r[1].toList())
+        assertEquals(listOf(93, 147, 214, 30), r[1].toList())
     }
 
     @Test fun `jc19 rows render LEVEL n`() {

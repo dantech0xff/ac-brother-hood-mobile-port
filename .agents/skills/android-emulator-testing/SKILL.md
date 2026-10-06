@@ -542,3 +542,25 @@ YES is the top pill.
 `getevent -lt`). Real mouse clicks via the computer tool on the emulator
 window are the reliable fallback — all jc5 chevron/footer taps worked that
 way on the first try this run.
+
+## Run-33 notes (context): draw-vs-hit-test divergence trap
+- When menu DRAW geometry changes, the world-side hit-test mirror must
+  change in lockstep: renderer stacks rows in `menuPanel` (`i9 += i4`
+  contiguous) while world computes tap rects in `menuRowRects()` /
+  `menuScrollMax()`. Dropping gaps draw-side only drifted every row
+  below row 0 (drawn y(n) vs hit y(n)+13+3n on jc2): top ~15px of each
+  drawn row was DEAD, top ~18px of the next row committed the PREVIOUS
+  row (SELECT LEVEL tap → NEW GAME).
+- Test taps at row TOP/BOTTOM edges, not just centers — drift shows at
+  edges first. Confirm which row committed by the LANDING screen, not
+  the press highlight: pressed style uses draw-side `pointerMoveIn`
+  (drawn geometry) so a row can LOOK pressed yet commit wrong.
+- `pm clear` + `am start` changes the app PID — `adb forward
+  tcp:8888 jdwp:$PID` goes stale, jdb silently hangs. Re-resolve PID +
+  re-forward every relaunch.
+- Footer pills (BACK/OK) are hit-tested by `softKeys()` zones, NOT
+  `menuRowRects` — they keep working when row taps break; use them to
+  recover between probes.
+- jdb `set this.kBA[14] = 7` at jc2 then SELECT LEVEL → kDa=8 (two
+  bands); jc2 row0 flips to CONTINUE (save marker) after the set —
+  expected.
