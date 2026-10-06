@@ -1176,6 +1176,14 @@ class Level0Renderer {
             fillAr(342, 8, 2, world.kEf + 14, -2013265920)
             fontW.l(0)
             world.d0(6)?.let { drawText(it, 200, 20, 17, pack = 91) }
+        } else {
+            // `f(false)` (k.javap G() @181, proven): `A[1].a(cd,1,0,0,0,0,0)`
+            // — the light-gradient backdrop. REQUIRED here: the page body
+            // draws with `a(y,1,…)` which l(1)s fontY to palette-01 (black),
+            // so without the light backdrop the text is black-on-black.
+            // The cy==14 arm calls `f(true)` = no backdrop (own panel).
+            drawFrame(97, 1, 0, 0, 0, 0)
+            // `d(0,6)` (@184-189) is a dead call — result discarded.
         }
         val iK = world.menuGIK()
         val lf = if (world.pointerMoveIn(45, iK - 15, 50, 30)) 40 else 36  // d()
@@ -1199,7 +1207,9 @@ class Level0Renderer {
         }
         var i = 0
         for (i2 in 0 until world.kBw) i += world.kCX[i2]
-        fontY.l(0)
+        // No l(0) restore before the counter — G()'s only b.l is the
+        // cy==14 arm's bW.l(0) (@148); `a(y,1,…)` left fontY at palette-1,
+        // so the page counter is palette-1 (black) in the original too.
         drawText("${i + world.kCY}/${world.kCZ}", 200, 220, 33)
     }
 
