@@ -488,3 +488,12 @@ Tag `AcLevel0`: `level0: N records … npcs=M` on boot; `audio: play track=N` on
 - Real score entry without a win: `stateL(15)` + `set this.kAp[i]` seeds — kAp[0]=kills (×kDH[kAu]={100,200,300}), kAp[3]=silent-kills (×kDI), kAp[1]=deaths (−300 cap 4), kAp[4]/[5]=bonus/time — i4 recomputes each proc → `statsScore`. Persist needs jG>10 (reveal elapsed or one `v(458784)` tap to skip), then the NEXT/footer tap writes `baShortPut(81+(kAu<<4)+(kAj<<1), i4)` + kBA[14]=kAj+1 + PersistBA in the same arm.
 - File check: `run-as PKG od -A d -t u1 -j 162 -N 4 files/asbr-save.bin` → slot 81 pair at byte 162 (=2×81); LE-16 → lo,hi. Logcat "save: e(true) → 320B /ASBR" confirms PersistBA drain.
 - jC=15 footer: NEXT pill dev ~(566,940) = the v(458784) edge; arm also reads v(327712) confirm → routes stateL(30) when kEgFlags set.
+
+### Run-31 notes (PR-388 menu/dialog verify)
+- `input tap` can be dead at KERNEL level — diagnose with `getevent -lt`: zero EV_ABS/EV_SYN lines = dead for the whole boot; don't keep retrying taps. Worked around with real mouse clicks via the computer tool on the emulator window (virtio multi-touch works immediately).
+- Real-mouse calibration on a 3200×2400 display: `wmctrl -r "Android Emulator - klokk_aosp" -e 0,60,100,2700,1215`; game canvas ≈ (160,54)-(724,400) in 1024×768 space → `viewX=(sx-160)/1.41, viewY=(sy-54)/1.41`. `left_mouse_down` + `adb shell screencap` + `left_mouse_up` captures pressed states (pointerMoveIn → zD).
+- jC=23 YES/NO: a mid-screen tap (pointerStrip → M_CONTEXT) confirms — no footer needed; the left "OK" pill is a 19px sliver at view x -5..14.
+- jc19 8-row recipe via real UI: at jc2 jdb `set this.kBA[14]=7` → tap SELECT LEVEL → menuItem(3) computes kDa=8 → 8 rows. (Set kDa directly only when bypassing the menu.)
+- jc3 (bv=4) is jdb-only: `print this.stateL(3)` + `print this.bannerK(4)` in the same suspend → 8 rows two-column on the (14,47,180) panel; no footer exit (verbatim dead-end) — `stateL(2)` to escape.
+- Boot legal pages for screencaps: splash ~3s → legal-1 ~3s → legal-2 ~5s → jC=23; grab at launch+4s and +8s.
+- jc21 dlgU=9 chain: jc9 briefing after jG>164 → strip tap → jc21; mid-screen taps advance pages (and complete the typewriter first). SKIP pill at view(349,198,56,47) → dev(1870,891) → jc8.

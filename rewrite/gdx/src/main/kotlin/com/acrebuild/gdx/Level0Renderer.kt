@@ -481,12 +481,14 @@ class Level0Renderer {
         when (world.kCu) {
             in 0..2 -> drawFrame(0, 0, bootFrame(world, 0), 200, 120, 0)
             3 -> {
+                // R() @504-531: `a(y,2,d(0,63),200,140,400,240,0,17)`.
                 drawFrame(0, 1, bootFrame(world, 1), 200, 120, 0)
                 world.d0(63)?.let {
-                    dialogText(world, it, 10, 140, 380, 3, Int.MAX_VALUE) }
+                    dialogText(world, it, 200, 140, 400, 17, Int.MAX_VALUE) }
             }
             else -> world.d0(65)?.let {
-                dialogText(world, it, 10, 120, 380, 3, Int.MAX_VALUE) }
+                // R() @644-669: `a(y,2,d(0,65),200,120,380,240,0,3)`.
+                dialogText(world, it, 200, 120, 380, 3, Int.MAX_VALUE) }
         }
     }
 
@@ -1060,9 +1062,10 @@ class Level0Renderer {
             val i15 = if (world.jC == 19) -3 else 0
             val i14 = world.menuI14(i, w)
             if (zD) {
-                drawText(strA, i14, i9 + (i4 shr 1) + i15,
-                         3, palette = pal, pack = 91)
-            } else {
+                // pressed row (k.java:6075-6108): jc30 latches `bL=i10`;
+                // jc19 city sub `d(0,eX[eW[i10]])` on font y below the
+                // label; label clipped to the pill and scrolled by `ez`.
+                if (world.jC == 30) world.kBL = i13
                 world.menuRowSub(i13)?.let {
                     fontY.l(1)
                     drawText(it, i14 - menuEz,
@@ -1072,6 +1075,11 @@ class Level0Renderer {
                 drawText(strA, i14 - menuEz, i9 + (i4 shr 1) + i15,
                          3, palette = pal, pack = 91)
                 clipReset()
+            } else {
+                // idle row (k.java:6113-6118): plain centered label at
+                // `i13`, no clip/`ez`/sub-label.
+                drawText(strA, i14, i9 + (i4 shr 1) + i15,
+                         3, palette = pal, pack = 91)
             }
             // z[12] blink marker beside strings 32/33/34 (k.java:6080-6092,
             // proven): drawn only while `!eJ`, phase `j.g%10 > 5`, at

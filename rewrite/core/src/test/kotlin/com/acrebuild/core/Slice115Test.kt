@@ -83,9 +83,9 @@ class Slice115Test {
         val w = world()
         armMissionSelect(w)
         w.tick(emptyList())
-        // panel d(14,47,180) → (93,47,214) via the arg-drop: j.c==19
+        // panel d(14,47,180) → b(14,47,180,false,false): j.c==19
         // keeps the two-column split (k.java:5942-5947) — rows 0-3 at
-        // x=93, rows 4-7 at x=206,
+        // x=14 w=180, rows 4-7 at x=206 w=180,
         // each 30px from y=57. Tap row 5 at (250,100): the draw-loop
         // hit-test `c(i,i9,i3,i4)` → `bw=i13; E(32)` (:7699-7704) →
         // the case-19 `v(327712)` confirms with bw=5.

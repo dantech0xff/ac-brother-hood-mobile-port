@@ -3110,9 +3110,10 @@ class Level0World(
         val viewTop = menuPanelRect()[1] + 10 + (if (menuPanelZ3()) 40 else 0)
         // the b() draw loop hits every row in order and each hit writes
         // `bw` (k.java:7699-7704) — where two-column rects overlap (col-2
-        // starts at x=206 but col-1 rows run 214 wide on d(93,…,214)
-        // panels, so rows overlap x=206..307) the LAST drawn row wins —
-        // single-column menus just stack with no x overlap.
+        // starts at x=206 and col-1 rows run 214 wide on the bv==4
+        // d(93,…,214) panels, so rows overlap x=206..307) the LAST drawn
+        // row wins; jc19's 180-wide bands ([14,194]/[206,386]) don't
+        // overlap at all — single-column menus just stack.
         var hit = -1
         for (i in rects.indices) {
             val r = rects[i]
@@ -3135,17 +3136,21 @@ class Level0World(
      *  `b(93,67,214,true,true)` / bv4 `b(93,86,214,true)` / else
      *  `b(93,30,214,true)` (:1127-1135);
      *  jc2 `d(93,45,214)` (case-2 arm); jc3 + jc19 `d(14,47,180)`
-     *  (:833, :1180 — both become (93,47,214) via the arg-drop below);
+     *  (:2656, :844 — pass x/y/w through, see below);
      *  jc23/28 via ae() `d(93,120,214)` (:6221); jc29 `d(93,86,214)`
      *  (:1440); else (93,67,214) — proven coverage. */
-    /** `d(r6,r7,r8)` → `b(r6,r7,r8,false,false)` → `b(93,r7,214,true,
-     *  false)` (k.java:7570-7576, proven): the 4-arg `b` DROPS the first
-     *  and third args — every `d()` panel is always (93, r7, 214). */
+    /** `d(i,i2,i3)` → `b(i,i2,i3,false,false)` verbatim — args pass
+     *  through untouched (:27624-27629). Only the 4-arg
+     *  `b(i,i2,i3,z)` drops arg0/arg2 → `b(93,i2,214,true,false)`
+     *  (:27637-27645): jc14's bv3/bv4/else arms use that form. jc3 and
+     *  jc19 therefore render the narrow left panel (14,47,180) — col-2
+     *  x=206 is a literal, so jc19's two bands are [14,194] and
+     *  [206,386] with no pill overlap. */
     fun menuPanelRect(): IntArray = when (jC) {
         2 -> intArrayOf(93, 45, 214)
-        3 -> intArrayOf(93, 47, 214)    // `d(14,47,180)` → (93,47,214)
+        3 -> intArrayOf(14, 47, 180)    // `d(14,47,180)` (:2656)
         14 -> intArrayOf(93, if (kBv == 3) 67 else if (kBv == 4) 86 else 30, 214)
-        19 -> intArrayOf(93, 47, 214)   // `d(14,47,180)` → (93,47,214)
+        19 -> intArrayOf(14, 47, 180)   // `d(14,47,180)` (:844)
         23, 28 -> intArrayOf(93, 120, 214)
         29 -> intArrayOf(93, 86, 214)
         30 -> intArrayOf(93, 46, 214)   // af() `d(93,46,214)` (:6254)
@@ -3253,8 +3258,7 @@ class Level0World(
                 var i16 = i10 / 2
                 if (i10 % 2 == 0) i16--
                 if (i13 == i16 && i13 < i10 - 1) {
-                    i = 206               // verbatim literal (jc19 col-2
-                                          // lands off-panel — orig quirk)
+                    i = 206               // verbatim literal @1981-1984
                     i9 = i12 - (i4 + 3)
                 }
             }
